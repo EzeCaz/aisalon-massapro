@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "eze@massapro.com").toLowerCase();
@@ -25,12 +26,42 @@ export const authOptions: NextAuthOptions = {
         },
       },
     }),
-    // Developer fallback — lets you sign in with any email locally without Google.
-    // Disabled in production by checking NODE_ENV.
+    // Email + password login. Available in BOTH dev and production so
+    // members can sign up with email/name and receive their first-time
+    // password via email (see /api/auth/signup).
+    CredentialsProvider({
+      id: "email",
+      name: "Email & Password",
+      credentials: {
+        email: { label: "Email", type: "email", placeholder: "you@example.com" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(creds) {
+        const email = creds?.email?.trim().toLowerCase();
+        const password = creds?.password ?? "";
+        if (!email || !password) return null;
+
+        const user = await db.user.findUnique({ where: { email } });
+        if (!user || !user.passwordHash) return null;
+
+        const ok = await bcrypt.compare(password, user.passwordHash);
+        if (!ok) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name || user.email.split("@")[0],
+          image: user.photoUrl || user.image || null,
+        };
+      },
+    }),
+    // Developer fallback — lets you sign in with any email locally without
+    // a password. Disabled in production.
     ...(process.env.NODE_ENV !== "production"
       ? [
           CredentialsProvider({
-            name: "Dev Email",
+            id: "dev",
+            name: "Dev Email (any)",
             credentials: {
               email: { label: "Email", type: "email", placeholder: "you@example.com" },
               name: { label: "Name", type: "text", placeholder: "Your Name" },
@@ -67,14 +98,18 @@ export const authOptions: NextAuthOptions = {
               role,
             },
           });
-        } else if (existing.role !== role) {
-          // Keep role in sync (in case ADMIN_EMAIL was changed in env)
-          await db.user.update({
-            where: { id: existing.id },
-            data: { role },
-          });
+        } else {
+          // Keep role in sync (in case ADMIN_EMAIL was changed in env).
+          // Only patch fields that need patching — don't clobber the
+          // user's profile photo / bio / etc.
+          const patch: Record<string, unknown> = {};
+          if (existing.role !== role) patch.role = role;
+          if (!existing.name && user.name) patch.name = user.name;
+          if (!existing.image && user.image) patch.image = user.image;
+          if (Object.keys(patch).length > 0) {
+            await db.user.update({ where: { id: existing.id }, data: patch });
+          }
         }
-        // Stash the provider on the user object so session callback can read it
         (user as { provider?: string }).provider = account?.provider || "google";
         return true;
       } catch (err) {

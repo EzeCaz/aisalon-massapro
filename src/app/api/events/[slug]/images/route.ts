@@ -14,6 +14,16 @@ import sharp from "sharp";
  *
  * Saves files to /public/uploads/events/<eventId>/<cuid>.<ext>
  * Creates EventImage records with slideOrder = max+1, ...
+ *
+ * IMPORTANT: Mobile phones (iOS/Android) often save photos in a
+ * "sensor-native" orientation (landscape) and embed an EXIF orientation
+ * tag telling viewers to rotate for display. Browsers honor this for
+ * display, but `sharp` does NOT auto-apply EXIF orientation — you have
+ * to call `.rotate()` (no argument) explicitly. Without this, photos
+ * uploaded from a phone in portrait can come out sideways.
+ *
+ * Here we call `.rotate()` first to apply the EXIF orientation, THEN
+ * resize/re-encode, so the saved file is always visually upright.
  */
 export async function POST(
   req: NextRequest,
@@ -70,39 +80,36 @@ export async function POST(
     // Read file buffer
     const buf = Buffer.from(await file.arrayBuffer());
 
-    // Use sharp to get dimensions and (optionally) normalize to JPEG for size.
+    // Use sharp to apply EXIF orientation, get dimensions, and re-encode.
     let width: number | null = null;
     let height: number | null = null;
-    let savedSize = buf.length;
-    let savedMime = file.type;
     try {
-      const meta = await sharp(buf).metadata();
+      // .rotate() with no angle auto-applies EXIF orientation
+      const rotated = sharp(buf).rotate();
+      const meta = await rotated.metadata();
       width = meta.width ?? null;
       height = meta.height ?? null;
-      // Re-encode large photos to JPEG for storage efficiency (max 2200px)
-      if (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp") {
-        const normalized = await sharp(buf)
-          .resize({ width: 2200, height: 2200, fit: "inside", withoutEnlargement: true })
-          .jpeg({ quality: 86, mozjpeg: true })
-          .toBuffer();
-        await fs.writeFile(absPath.replace(/\.[^.]+$/, ".jpg"), normalized);
-        // Update filename + size + mime
-        const newName = fileName.replace(/\.[^.]+$/, ".jpg");
-        created.push({
-          fileName: file.name,
-          fileUrl: `/uploads/events/${event.id}/${newName}`,
-          fileSize: normalized.length,
-          width,
-          height,
-          mimeType: "image/jpeg",
-        });
-        savedSize = normalized.length;
-        savedMime = "image/jpeg";
-        // remove the old absPath reference if changed
-        continue;
-      }
+
+      // Re-encode as JPEG for storage efficiency + guaranteed browser support
+      const normalized = await rotated
+        .resize({ width: 2200, height: 2200, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 86, mozjpeg: true })
+        .toBuffer();
+
+      const newName = fileName.replace(/\.[^.]+$/, ".jpg");
+      const newPath = path.join(uploadDir, newName);
+      await fs.writeFile(newPath, normalized);
+      created.push({
+        fileName: file.name,
+        fileUrl: `/uploads/events/${event.id}/${newName}`,
+        fileSize: normalized.length,
+        width,
+        height,
+        mimeType: "image/jpeg",
+      });
+      continue;
     } catch (err) {
-      console.warn("[upload] sharp metadata failed:", err);
+      console.warn("[upload] sharp processing failed, falling back to original:", err);
     }
 
     // Fallback: write original file as-is
@@ -110,10 +117,10 @@ export async function POST(
     created.push({
       fileName: file.name,
       fileUrl: `/uploads/events/${event.id}/${fileName}`,
-      fileSize: savedSize,
+      fileSize: buf.length,
       width,
       height,
-      mimeType: savedMime,
+      mimeType: file.type,
     });
   }
 

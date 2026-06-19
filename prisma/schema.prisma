@@ -25,6 +25,11 @@ model User {
   portfolioUrl  String?  // personal site / portfolio
   photoUrl      String?  // user-uploaded photo (overrides Google `image` when set)
   // ----------------------------------------------------------------
+  // Email/password login: bcrypt-hashed password. Null when the user
+  // signed in via Google only. Set on first email sign-up, and on
+  // subsequent password resets.
+  passwordHash  String?
+  // ----------------------------------------------------------------
   role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]

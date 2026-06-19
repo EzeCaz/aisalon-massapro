@@ -26,6 +26,8 @@ import {
   Loader2,
   CheckCircle2,
   Tag,
+  RotateCw,
+  RotateCcw,
 } from "lucide-react";
 
 type Speaker = {
@@ -183,6 +185,35 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
     }
   }
 
+  async function handleRotate(imageIds: string[], direction: "cw" | "ccw") {
+    if (imageIds.length === 0) return;
+    const label = direction === "cw" ? "clockwise" : "counter-clockwise";
+    const t = toast.loading(
+      `Rotating ${imageIds.length} photo${imageIds.length === 1 ? "" : "s"} ${label}…`
+    );
+    try {
+      const res = await fetch("/api/images/rotate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageIds, direction }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed");
+      }
+      const data = await res.json();
+      toast.success(
+        `Rotated ${data.rotated.length} photo${data.rotated.length === 1 ? "" : "s"}${
+          data.skipped.length > 0 ? ` (${data.skipped.length} skipped)` : ""
+        }`,
+        { id: t }
+      );
+      await loadImages();
+    } catch (e) {
+      toast.error((e as Error).message || `Rotate failed`, { id: t });
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -213,6 +244,24 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
                   <Link2 className="h-4 w-4 mr-1.5" /> Link to speaker
                 </Button>
               </BulkLinkDialog>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleRotate(Array.from(selected), "cw")}
+                title="Rotate selected 90° clockwise"
+                className="border-black/20"
+              >
+                <RotateCw className="h-4 w-4 mr-1.5" /> Rotate CW
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleRotate(Array.from(selected), "ccw")}
+                title="Rotate selected 90° counter-clockwise"
+                className="border-black/20"
+              >
+                <RotateCcw className="h-4 w-4 mr-1.5" /> Rotate CCW
+              </Button>
               <Button size="sm" variant="ghost" onClick={clearSelection}>
                 <X className="h-4 w-4 mr-1.5" /> Clear
               </Button>
@@ -269,6 +318,7 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
               onToggle={() => toggleSelect(img.id)}
               onDelete={() => handleDelete(img.id)}
               onLink={(sids) => handleSingleLink(img.id, sids)}
+              onRotate={(dir) => handleRotate([img.id], dir)}
               canManage={isAdmin || img.uploader.id === me.id}
               uploaderName={img.uploader.name || img.uploader.email}
             />
@@ -294,6 +344,7 @@ function PhotoCard({
   onToggle,
   onDelete,
   onLink,
+  onRotate,
   canManage,
   uploaderName,
 }: {
@@ -303,6 +354,7 @@ function PhotoCard({
   onToggle: () => void;
   onDelete: () => void;
   onLink: (speakerIds: string[]) => void;
+  onRotate: (direction: "cw" | "ccw") => void;
   canManage: boolean;
   uploaderName: string;
 }) {
@@ -347,6 +399,26 @@ function PhotoCard({
       {/* Top-right actions (admin or owner only) */}
       {canManage && (
         <div className="absolute top-1.5 right-1.5 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotate("ccw");
+            }}
+            className="rounded-md bg-white/90 hover:bg-white p-1.5 text-black"
+            title="Rotate 90° counter-clockwise"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotate("cw");
+            }}
+            className="rounded-md bg-white/90 hover:bg-white p-1.5 text-black"
+            title="Rotate 90° clockwise"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+          </button>
           <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
             <DialogTrigger asChild>
               <button

@@ -36,7 +36,7 @@ export default async function LoginPage() {
 
         {/* Center: Falafel TLV brand image + chapter tagline */}
         <div className="relative z-10 text-white max-w-md">
-          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white/5">
+          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white">
             <Image
               src="/images/falafel-tlv-ai-salon.png"
               alt="AI Salon Tel Aviv — Falafel mascot"
@@ -96,15 +96,14 @@ export default async function LoginPage() {
 
           <h2 className="text-2xl font-extrabold text-black mb-1">Welcome</h2>
           <p className="text-sm text-black/60 mb-8">
-            Sign in with your Google account to join the AI Salon Tel Aviv community.
+            Sign in with Google or your email to join the AI Salon Tel Aviv community.
           </p>
 
           <LoginForm callbackUrl={callbackUrl ?? undefined} />
 
           <p className="mt-8 text-xs text-black/40 leading-relaxed">
             By signing in you agree to the AI Salon community guidelines. Only registered
-            members can attend events. The platform admin is{" "}
-            <span className="font-mono">eze@massapro.com</span>.
+            members can attend events.
           </p>
         </div>
       </section>

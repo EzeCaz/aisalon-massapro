@@ -62,8 +62,11 @@ export const metadata: Metadata = {
     images: ["/images/falafel-tlv-ai-salon.png"],
   },
   icons: {
-    icon: "/images/falafel-meerkat.png",
-    apple: "/images/falafel-meerkat.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/images/falafel-meerkat.png", type: "image/png" },
+    ],
+    apple: [{ url: "/images/falafel-meerkat.png" }],
   },
 };
 
