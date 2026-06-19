@@ -130,7 +130,9 @@ export async function POST(
   // (We don't have the speaker's email directly — Speaker has no
   // email field. The admin acts as the relay.)
   const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";
-  const eventUrl = `${process.env.NEXTAUTH_URL || "https://aisalon.massapro.com"}/events/${speaker.event.slug}`;
+  const eventUrl = `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://aisalon.massapro.com"}/events/${speaker.event.slug}`;
+  const chatFrom =
+    process.env.SMTP_FROM || "AI Salon Chat <chat@aisalon.massapro.com>";
   const subject = `New message for ${speaker.name} — ${speaker.event.title}`;
   const textEmail = `Hi,
 
@@ -166,7 +168,7 @@ Event page: ${eventUrl}
   </p>
 </div>`;
   try {
-    await sendMail({ to: adminEmail, subject, text: textEmail, html: htmlEmail });
+    await sendMail({ to: adminEmail, subject, text: textEmail, html: htmlEmail, from: chatFrom });
   } catch (err) {
     console.error("[speaker-message] email send failed:", err);
     // Don't fail the request — the message is already stored in the DB.

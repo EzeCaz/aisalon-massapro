@@ -476,9 +476,7 @@ function PhotoCard({
                 by agenda.
               </p>
               <div className="space-y-2 max-h-72 overflow-y-auto ais-scroll">
-                {speakers
-                  .filter((s) => s.name !== "Ezequiel Sznaider")
-                  .map((s) => (
+                {speakers.map((s) => (
                     <label
                       key={s.id}
                       className="flex items-start gap-3 p-2 rounded-md hover:bg-black/5 cursor-pointer"
@@ -714,9 +712,7 @@ function BulkLinkDialog({
           these photos will be replaced.
         </p>
         <div className="space-y-2 max-h-72 overflow-y-auto ais-scroll">
-          {speakers
-            .filter((s) => s.name !== "Ezequiel Sznaider")
-            .map((s) => (
+          {speakers.map((s) => (
               <label
                 key={s.id}
                 className="flex items-start gap-3 p-2 rounded-md hover:bg-black/5 cursor-pointer"

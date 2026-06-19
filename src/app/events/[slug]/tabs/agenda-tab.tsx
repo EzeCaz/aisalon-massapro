@@ -44,6 +44,17 @@ type SlimPresentation = {
   title: string | null;
 };
 
+type SlimUser = {
+  id: string;
+  name: string | null;
+  email: string;
+  photoUrl: string | null;
+  image: string | null;
+  company: string | null;
+  bio: string | null;
+  tags: { id: string; label: string; color: string | null }[];
+};
+
 type Speaker = {
   id: string;
   name: string;
@@ -53,6 +64,8 @@ type Speaker = {
   topic: string | null;
   photoUrl: string | null;
   order: number;
+  contactEmail?: string | null;
+  user?: SlimUser | null;
   images?: SlimImage[];
   presentations?: SlimPresentation[];
 };
@@ -165,6 +178,15 @@ function agendaItemHasAssets(item: AgendaItem): {
 
 // ============================================================================
 // Contact Speaker Dialog
+// ----------------------------------------------------------------------------
+// Two modes:
+//   1. Speaker is linked to a platform User (speaker.user is set) — use
+//      the proper ConversationMessage system (two-way in-app chat). Both
+//      directions are rendered as chat bubbles (mine right/PINK, partner's
+//      left/white). Messages auto-mark-as-read on load.
+//   2. Speaker is NOT linked — fall back to the legacy SpeakerMessage
+//      flow (one-way email relay via admin). Only this user's outgoing
+//      messages are shown.
 // ============================================================================
 
 type ContactMessage = {
@@ -174,6 +196,26 @@ type ContactMessage = {
   body: string;
   createdAt: string;
 };
+
+type DmMessage = {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+function fmtDateTime(iso: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jerusalem",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
 
 function ContactSpeakerDialog({
   speaker,
@@ -186,51 +228,136 @@ function ContactSpeakerDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const linkedUserId = speaker.user?.id ?? null;
+  const isLinked = !!linkedUserId;
+
+  // Legacy SpeakerMessage state
+  const [legacyMessages, setLegacyMessages] = useState<ContactMessage[]>([]);
+  // ConversationMessage state (linked-user mode)
+  const [dmMessages, setDmMessages] = useState<DmMessage[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState("");
 
+  // ------- Load thread -------
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/speakers/${speaker.id}/messages`);
-      if (!res.ok) throw new Error("Failed to load");
-      const data = await res.json();
-      setMessages(data.messages || []);
+      if (isLinked && linkedUserId) {
+        // Use the new ConversationMessage API
+        const res = await fetch(`/api/messages/${linkedUserId}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Failed to load");
+        const data = await res.json();
+        setDmMessages(data.messages || []);
+      } else {
+        // Fall back to the legacy SpeakerMessage API
+        const res = await fetch(`/api/speakers/${speaker.id}/messages`);
+        if (!res.ok) throw new Error("Failed to load");
+        const data = await res.json();
+        setLegacyMessages(data.messages || []);
+      }
     } catch {
       // silent — empty thread is fine
     } finally {
       setLoading(false);
     }
-  }, [speaker.id]);
+  }, [isLinked, linkedUserId, speaker.id]);
 
   useEffect(() => {
     if (open) load();
   }, [open, load]);
 
+  // Poll for new incoming DMs every 5s while the dialog is open (so live
+  // replies from the speaker appear without re-opening the dialog).
+  useEffect(() => {
+    if (!open || !isLinked || !linkedUserId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/messages/${linkedUserId}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setDmMessages(data.messages || []);
+      } catch {
+        /* ignore */
+      }
+    };
+    const t = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [open, isLinked, linkedUserId]);
+
+  // ------- Send message -------
   async function send() {
     const text = draft.trim();
     if (!text) return;
     setSending(true);
     const t = toast.loading("Sending message…");
     try {
-      const res = await fetch(`/api/speakers/${speaker.id}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: text }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Send failed");
+      if (isLinked && linkedUserId) {
+        // Optimistic append
+        const tempId = `tmp-${Date.now()}`;
+        const optimistic: DmMessage = {
+          id: tempId,
+          senderId: me.id,
+          recipientId: linkedUserId,
+          body: text,
+          readAt: null,
+          createdAt: new Date().toISOString(),
+        };
+        setDmMessages((prev) => [...prev, optimistic]);
+        setDraft("");
+
+        const res = await fetch(`/api/messages/${linkedUserId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: text }),
+        });
+        if (!res.ok) {
+          let msg = `HTTP ${res.status}`;
+          try {
+            const err = await res.json();
+            if (err?.error) msg = err.error;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(msg);
+        }
+        const data = await res.json();
+        // Replace the optimistic message with the real one
+        setDmMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? data.message : m))
+        );
+        toast.success("Message sent — you'll see their reply here.", {
+          id: t,
+          duration: 4000,
+        });
+      } else {
+        // Legacy SpeakerMessage flow (one-way via admin email relay)
+        const res = await fetch(`/api/speakers/${speaker.id}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: text }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Send failed");
+        }
+        const data = await res.json();
+        setLegacyMessages((prev) => [...prev, data.message]);
+        setDraft("");
+        toast.success(
+          "Message sent — the speaker will get back to you via email.",
+          { id: t, duration: 5000 }
+        );
       }
-      const data = await res.json();
-      setMessages((prev) => [...prev, data.message]);
-      setDraft("");
-      toast.success(
-        "Message sent — the speaker will get back to you via email.",
-        { id: t, duration: 5000 }
-      );
     } catch (e) {
       toast.error((e as Error).message, { id: t });
     } finally {
@@ -238,22 +365,33 @@ function ContactSpeakerDialog({
     }
   }
 
+  const speakerPhoto = speaker.photoUrl || speaker.user?.photoUrl || speaker.user?.image || undefined;
+  const speakerDisplayName = speaker.user?.name || speaker.name;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-[#FF005A]" />
-            Contact {speaker.name}
+            Contact {speakerDisplayName}
+            {isLinked && (
+              <span
+                className="ml-1 inline-flex items-center gap-1 rounded-full bg-[#007E72]/10 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-[#007E72]"
+                title="This speaker has a linked platform account — you can chat in real time."
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-[#007E72]" /> Live chat
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
         {/* Speaker mini-card */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-black/5">
           <Avatar className="h-10 w-10 border border-black/10">
-            <AvatarImage src={speaker.photoUrl || undefined} alt={speaker.name} />
+            <AvatarImage src={speakerPhoto} alt={speakerDisplayName} />
             <AvatarFallback className="bg-black text-white text-xs font-bold">
-              {speaker.name
+              {speakerDisplayName
                 .split(" ")
                 .slice(0, 2)
                 .map((p) => p[0])
@@ -261,54 +399,99 @@ function ContactSpeakerDialog({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-sm text-black truncate">{speaker.name}</div>
+            <div className="font-bold text-sm text-black truncate">
+              {speakerDisplayName}
+            </div>
             {speaker.role && (
               <div className="text-xs text-black/60 truncate">{speaker.role}</div>
             )}
           </div>
         </div>
 
-        {/* Message thread (this user's messages to this speaker) */}
+        {/* Mode notice */}
+        {!isLinked && (
+          <div className="text-[0.65rem] text-black/50 italic bg-black/[0.03] rounded px-2 py-1.5">
+            This speaker isn&apos;t linked to a platform account yet — your
+            message will be emailed to them via the admin. They&apos;ll reply
+            to you directly at <strong>{me.email}</strong>.
+          </div>
+        )}
+
+        {/* Message thread */}
         <div className="max-h-64 overflow-y-auto ais-scroll space-y-2">
           {loading ? (
             <div className="text-center py-6 text-xs text-black/40">
               <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
               Loading conversation…
             </div>
-          ) : messages.length === 0 ? (
-            <div className="text-center py-6 text-xs text-black/40">
-              No messages yet. Start the conversation below.
-            </div>
+          ) : isLinked ? (
+            // ---- Two-way chat bubbles (ConversationMessage mode) ----
+            dmMessages.length === 0 ? (
+              <div className="text-center py-6 text-xs text-black/40">
+                No messages yet. Start the conversation below.
+              </div>
+            ) : (
+              dmMessages.map((m) => {
+                const mine = m.senderId === me.id;
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-3 py-2 ${
+                        mine
+                          ? "bg-[#FF005A] text-white rounded-br-sm"
+                          : "bg-white border border-black/10 text-black rounded-bl-sm"
+                      }`}
+                    >
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        {m.body}
+                      </div>
+                      <div
+                        className={`mt-1 text-[0.6rem] text-right ${
+                          mine ? "text-white/70" : "text-black/40"
+                        }`}
+                      >
+                        {fmtDateTime(m.createdAt)}
+                        {mine && (
+                          <span className="ml-1">
+                            {m.readAt ? "· Read" : "· Sent"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )
           ) : (
-            messages.map((m) => (
-              <div
-                key={m.id}
-                className="flex flex-col items-end"
-              >
-                <div className="bg-[#FF005A] text-white rounded-2xl rounded-br-sm px-3 py-2 max-w-[85%]">
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {m.body}
+            // ---- One-way legacy bubbles (SpeakerMessage mode) ----
+            legacyMessages.length === 0 ? (
+              <div className="text-center py-6 text-xs text-black/40">
+                No messages yet. Start the conversation below.
+              </div>
+            ) : (
+              legacyMessages.map((m) => (
+                <div key={m.id} className="flex flex-col items-end">
+                  <div className="bg-[#FF005A] text-white rounded-2xl rounded-br-sm px-3 py-2 max-w-[85%]">
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {m.body}
+                    </div>
+                  </div>
+                  <div className="text-[0.6rem] text-black/40 mt-0.5 pr-1">
+                    {fmtDateTime(m.createdAt)}
                   </div>
                 </div>
-                <div className="text-[0.6rem] text-black/40 mt-0.5 pr-1">
-                  {new Intl.DateTimeFormat("en-GB", {
-                    timeZone: "Asia/Jerusalem",
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  }).format(new Date(m.createdAt))}
-                </div>
-              </div>
-            ))
+              ))
+            )
           )}
         </div>
 
         {/* Composer */}
         <div className="space-y-2">
           <Textarea
-            placeholder={`Hi ${speaker.name.split(" ")[0]}, I really enjoyed your talk and wanted to follow up on…`}
+            placeholder={`Hi ${speakerDisplayName.split(" ")[0]}, I really enjoyed your talk and wanted to follow up on…`}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={3}
@@ -318,7 +501,17 @@ function ContactSpeakerDialog({
           />
           <div className="flex items-center justify-between">
             <div className="text-[0.65rem] text-black/40">
-              From: <strong>{me.name || me.email}</strong> · The speaker will reply to your email.
+              {isLinked ? (
+                <>
+                  From: <strong>{me.name || me.email}</strong> · replies will
+                  appear here in real time.
+                </>
+              ) : (
+                <>
+                  From: <strong>{me.name || me.email}</strong> · the speaker
+                  will reply to your email.
+                </>
+              )}
             </div>
             <Button
               onClick={send}

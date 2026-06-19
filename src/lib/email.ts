@@ -45,19 +45,23 @@ export const emailConfigured = () => getTransport() !== null;
 
 export async function sendMail(opts: {
   to: string;
+  cc?: string;
   subject: string;
   text?: string;
   html?: string;
+  from?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const transport = getTransport();
-  const from = process.env.SMTP_FROM || "AI Salon Tel Aviv <no-reply@aisalon.massapro.com>";
+  const from = opts.from ||
+    process.env.SMTP_FROM ||
+    "AI Salon Chat <chat@aisalon.massapro.com>";
 
   if (!transport) {
     // Dev mode: log instead of sending. This is intentional — production
     // must set SMTP_* env vars for real delivery.
     console.log(
       "[email] (no SMTP configured — logging instead)\n" +
-        `To: ${opts.to}\nSubject: ${opts.subject}\n` +
+        `From: ${from}\nTo: ${opts.to}${opts.cc ? `\nCc: ${opts.cc}` : ""}\nSubject: ${opts.subject}\n` +
         `----\n${opts.text || opts.html}\n----`
     );
     return { ok: true };
@@ -67,6 +71,7 @@ export async function sendMail(opts: {
     await transport.sendMail({
       from,
       to: opts.to,
+      cc: opts.cc,
       subject: opts.subject,
       text: opts.text,
       html: opts.html,

@@ -24,12 +24,44 @@ export default async function EventDetailPage({ params }: Params) {
   const event = await db.event.findUnique({
     where: { slug },
     include: {
-      speakers: { orderBy: { order: "asc" } },
+      speakers: {
+        orderBy: { order: "asc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              photoUrl: true,
+              image: true,
+              company: true,
+              bio: true,
+              tags: { select: { id: true, label: true, color: true } },
+            },
+          },
+        },
+      },
       agenda: {
         orderBy: { startsAt: "asc" },
         include: {
           speaker: {
             include: {
+              // Include the linked User (if any) so the client can decide
+              // whether to route "Contact speaker" through the in-app chat
+              // (ConversationMessage) or fall back to the one-way email
+              // relay (SpeakerMessage).
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  photoUrl: true,
+                  image: true,
+                  company: true,
+                  bio: true,
+                  tags: { select: { id: true, label: true, color: true } },
+                },
+              },
               // Limit to first 4 images per speaker — just enough for
               // the "Pictures of the session" thumbnail preview in the
               // agenda box. We grab up to 4 so the dialog can show a

@@ -53,6 +53,8 @@ model User {
   // User-to-user direct messages (community chat)
   sentMessages     ConversationMessage[] @relation("SentMessages")
   receivedMessages ConversationMessage[] @relation("ReceivedMessages")
+  // Speakers linked to this user (for in-app chat with members)
+  speakers         Speaker[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -124,6 +126,15 @@ model Speaker {
   bio            String?
   topic          String?   // talk title
   photoUrl       String?
+  // Optional contact email — used to AUTO-LINK a Speaker to a platform User
+  // (by matching email). When linked, members can chat with the speaker
+  // via the in-app ConversationMessage system (two-way). When not linked,
+  // the old SpeakerMessage flow (one-way email relay via admin) is used.
+  contactEmail   String?
+  // Optional explicit link to a User account. Either set by the admin
+  // (rare) or auto-populated from contactEmail on speaker creation.
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   order          Int      @default(0)
   images         EventImage[] // images linked to this speaker
   presentations  PresentationFile[] // presentations linked to this speaker
@@ -132,6 +143,8 @@ model Speaker {
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([userId])
 }
 
 /// A message left by a community member for a speaker.

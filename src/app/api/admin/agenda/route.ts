@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
     resolvedSpeakerId = sp.id;
   } else if (newSpeakerRaw) {
     // Create a new speaker on the fly
-    let parsed: { name?: string; role?: string; company?: string; bio?: string; topic?: string; photoUrl?: string };
+    let parsed: { name?: string; role?: string; company?: string; bio?: string; topic?: string; photoUrl?: string; contactEmail?: string };
     try {
       parsed = JSON.parse(newSpeakerRaw);
     } catch {
@@ -166,6 +166,22 @@ export async function POST(req: NextRequest) {
       _max: { order: true },
     });
     const nextOrder = (maxOrder._max.order ?? -1) + 1;
+
+    // Normalize the contact email — lowercase + trim. We'll attempt to
+    // auto-link this speaker to a platform User with the same email so
+    // members can chat with the speaker via the in-app ConversationMessage
+    // system (two-way). If no matching user exists yet, the link is left
+    // null and members fall back to the one-way SpeakerMessage flow.
+    const contactEmail = parsed.contactEmail?.trim().toLowerCase() || null;
+    let linkedUserId: string | null = null;
+    if (contactEmail) {
+      const linkedUser = await db.user.findUnique({
+        where: { email: contactEmail },
+        select: { id: true },
+      });
+      if (linkedUser) linkedUserId = linkedUser.id;
+    }
+
     const sp = await db.speaker.create({
       data: {
         eventId,
@@ -175,6 +191,8 @@ export async function POST(req: NextRequest) {
         bio: parsed.bio?.trim() || null,
         topic: parsed.topic?.trim() || null,
         photoUrl: parsed.photoUrl?.trim() || null,
+        contactEmail,
+        userId: linkedUserId,
         order: nextOrder,
       },
     });

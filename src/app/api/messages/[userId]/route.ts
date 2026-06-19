@@ -140,17 +140,22 @@ export async function POST(
     },
   });
 
-  // Best-effort email notification to the recipient. We do NOT have the
-  // recipient's email-opt-in status, but every user signed up with an
-  // email — sending them a notification about a direct message is
-  // reasonable. Failures are logged and ignored.
+  // Best-effort email notification. We send to BOTH the recipient and
+  // the platform admin (ADMIN_EMAIL) — the admin gets CC'd on every
+  // DM so they can monitor the conversation flow on the platform.
+  // Failures are logged and ignored (the message is already stored).
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXTAUTH_URL ||
     "https://aisalon.massapro.com";
   const fromName = me.name || me.email.split("@")[0];
+  const recipientName = partner.name || partner.email.split("@")[0];
+  const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";
+  const chatFrom =
+    process.env.SMTP_FROM || "AI Salon Chat <chat@aisalon.massapro.com>";
+
   const subject = `New message from ${fromName} on AI Salon TLV`;
-  const textEmail = `Hi ${partner.name || partner.email.split("@")[0]},
+  const textEmail = `Hi ${recipientName},
 
 ${fromName} sent you a message on AI Salon Tel Aviv.
 
@@ -170,9 +175,20 @@ Reply on the platform: ${siteUrl}/events
   <p style="font-size: 13px; color: #666; margin: 16px 0 0;">
     <a href="${siteUrl}/events">Reply on the platform</a>
   </p>
+  <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
+  <p style="font-size: 11px; color: #999; margin: 0;">
+    Sent from <strong>${chatFrom}</strong> · AI Salon Tel Aviv
+  </p>
 </div>`;
   try {
-    await sendMail({ to: partner.email, subject, text: textEmail, html: htmlEmail });
+    await sendMail({
+      to: partner.email,
+      cc: adminEmail,
+      subject,
+      text: textEmail,
+      html: htmlEmail,
+      from: chatFrom,
+    });
   } catch (err) {
     console.error("[dm] email notification failed:", err);
   }

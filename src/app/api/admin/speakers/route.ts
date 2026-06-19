@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { eventId, name, role, company, bio, topic, photoUrl } = body as {
+  const { eventId, name, role, company, bio, topic, photoUrl, contactEmail } = body as {
     eventId?: string;
     name?: string;
     role?: string;
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     bio?: string;
     topic?: string;
     photoUrl?: string;
+    contactEmail?: string;
   };
 
   if (!eventId || !name || !name.trim()) {
@@ -59,6 +60,19 @@ export async function POST(req: NextRequest) {
   });
   const nextOrder = (maxOrder._max.order ?? -1) + 1;
 
+  // Normalize the contact email — used to AUTO-LINK the speaker to a
+  // platform User with the same email, so members can chat with the
+  // speaker in-platform via ConversationMessage (two-way).
+  const normalizedEmail = contactEmail?.trim().toLowerCase() || null;
+  let linkedUserId: string | null = null;
+  if (normalizedEmail) {
+    const linkedUser = await db.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+    if (linkedUser) linkedUserId = linkedUser.id;
+  }
+
   const speaker = await db.speaker.create({
     data: {
       eventId,
@@ -68,6 +82,8 @@ export async function POST(req: NextRequest) {
       bio: bio?.trim() || null,
       topic: topic?.trim() || null,
       photoUrl: photoUrl?.trim() || null,
+      contactEmail: normalizedEmail,
+      userId: linkedUserId,
       order: nextOrder,
     },
   });

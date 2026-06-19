@@ -400,6 +400,7 @@ function CreateAgendaItemDialog({
   const [newSpeakerCompany, setNewSpeakerCompany] = useState("");
   const [newSpeakerBio, setNewSpeakerBio] = useState("");
   const [newSpeakerTopic, setNewSpeakerTopic] = useState("");
+  const [newSpeakerContactEmail, setNewSpeakerContactEmail] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileTitle, setFileTitle] = useState("");
   const [fileDescription, setFileDescription] = useState("");
@@ -418,6 +419,7 @@ function CreateAgendaItemDialog({
     setNewSpeakerCompany("");
     setNewSpeakerBio("");
     setNewSpeakerTopic("");
+    setNewSpeakerContactEmail("");
     setFile(null);
     setFileTitle("");
     setFileDescription("");
@@ -471,6 +473,7 @@ function CreateAgendaItemDialog({
           company: newSpeakerCompany.trim() || undefined,
           bio: newSpeakerBio.trim() || undefined,
           topic: newSpeakerTopic.trim() || undefined,
+          contactEmail: newSpeakerContactEmail.trim() || undefined,
         })
       );
     }
@@ -699,6 +702,19 @@ function CreateAgendaItemDialog({
                   value={newSpeakerBio}
                   onChange={(e) => setNewSpeakerBio(e.target.value)}
                 />
+                <Input
+                  type="email"
+                  placeholder="Contact email (optional — used to auto-link this speaker to a platform user so members can chat with them in-app)"
+                  value={newSpeakerContactEmail}
+                  onChange={(e) => setNewSpeakerContactEmail(e.target.value)}
+                />
+                {newSpeakerContactEmail.trim() && (
+                  <p className="text-[0.65rem] text-black/50 leading-snug">
+                    💬 If a user with this email exists on the platform, the speaker will be
+                    auto-linked so community members can chat with them via the inbox.
+                    Otherwise the speaker will fall back to the one-way email-relay flow.
+                  </p>
+                )}
               </div>
             )}
 
