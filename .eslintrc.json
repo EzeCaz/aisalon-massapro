@@ -1,0 +1,17 @@
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "ignorePatterns": [
+    "upload/**",
+    "scripts/**",
+    "download/**",
+    "tool-results/**",
+    ".next/**",
+    "node_modules/**",
+    "*.mjs",
+    "skills/**",
+    "examples/**",
+    "prisma/**",
+    "public/**",
+    ".zscripts/**"
+  ]
+}

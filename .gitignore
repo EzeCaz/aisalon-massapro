@@ -1,2 +1,47 @@
+# deps
+node_modules
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# build
+.next
+out
+build
+dist
+
+# env (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# db (SQLite — not committed, regenerated via prisma + seed)
+*.db
+*.db-journal
+db/
+
+# uploads (user content)
+public/uploads/
+
+# logs
+*.log
+dev.log
+server.log
+
+# misc
+.DS_Store
+*.pem
+.vscode
+.idea
+.zscripts/
+bun.lock
+
+# Brand book extraction artifacts (internal — not part of the platform)
+download/
+tool-results/
+upload/
 skills/
-node_modules/
+scripts/extract_*
+
+# Next.js
+next-env.d.ts

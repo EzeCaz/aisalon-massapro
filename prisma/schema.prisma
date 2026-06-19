@@ -1,0 +1,125 @@
+// AI Salon Tel Aviv — MassaPro platform
+// Prisma schema (SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------- Users & Members ----------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  image         String?
+  role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
+  tags          MemberTag[] // tags assigned to this member (admin-managed)
+  images        EventImage[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// A tag the admin can assign to a member: "Speaker", "Builder", "Investor", etc.
+model MemberTag {
+  id        String   @id @default(cuid())
+  label     String   @unique // e.g. "Speaker", "Builder", "Investor"
+  color     String?  // optional AIS palette color hex
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------- Events ----------------------------
+
+model Event {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  subtitle      String?
+  chapter       String   @default("Tel Aviv") // e.g. "Tel Aviv"
+  venue         String?
+  address       String?
+  city          String?
+  country       String?  // e.g. "ISR"
+  mapUrl        String?
+  startsAt      DateTime
+  endsAt        DateTime
+  description   String?  // long-form description / "About Event"
+  takeaways     String?  // "What you'll take home"
+  intendedFor   String?  // "This event is built for: ..."
+  rsvpUrl       String?  // external RSVP form
+  coverImage    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  speakers      Speaker[]
+  agenda        EventAgendaItem[]
+  images        EventImage[]
+}
+
+/// Speaker at an event — has name, role, company, topic, photo.
+model Speaker {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name        String
+  role        String?   // e.g. "AI Product Lead, Amdocs"
+  company     String?
+  bio         String?
+  topic       String?   // talk title
+  photoUrl    String?
+  order       Int      @default(0)
+  images      EventImage[] // images linked to this speaker
+  agendaItems EventAgendaItem[] // agenda items featuring this speaker
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// One row in the event agenda — can be a talk, a break, fast pitch, etc.
+model EventAgendaItem {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  endsAt      DateTime?
+  title       String   // e.g. "Welcome by Ezequiel Sznaider"
+  type        String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME"
+  speakerId   String?
+  speaker     Speaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+// ---------------------------- Event Images ----------------------------
+
+/// One image uploaded by a community member for a specific event.
+/// Can be linked to one or more speakers (so members can tag
+/// "this photo is from Ohad's talk", "this photo is from Boris's talk", etc.)
+model EventImage {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId  String
+  uploader    User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String   // served from /uploads/events/<eventId>/<filename>
+  fileSize    Int      @default(0)
+  width       Int?
+  height      Int?
+  mimeType    String   @default("image/jpeg")
+  caption     String?
+  // Slideshow ordering — admin/member can reorder. Lower = earlier.
+  slideOrder  Int      @default(0)
+  // Linked speakers — many-to-many (an image can be from multiple talks/speakers)
+  speakers    Speaker[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([eventId, slideOrder])
+  @@index([uploaderId])
+}
