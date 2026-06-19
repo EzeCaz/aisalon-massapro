@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import fs from "fs/promises";
-import path from "path";
+import { put, del } from "@vercel/blob";
 import sharp from "sharp";
 
 /**
  * POST /api/profile/photo
  * Multipart upload. Form field: `file` (single image)
  *
- * Saves to /public/uploads/profiles/<userId>/<cuid>.<ext>
+ * Uploads the profile photo to Vercel Blob at `profiles/<userId>/<cuid>.webp`.
  * Resizes to a square 512x512 (cover) for consistent avatar rendering.
  * Sets `photoUrl` on the user (overrides Google `image` when present).
+ *
+ * On Vercel's serverless filesystem, public/ is READ-ONLY at runtime —
+ * we MUST use Vercel Blob for photo uploads. The old
+ * /public/uploads/profiles/... approach failed with EROFS/EACCES.
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -41,31 +44,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "File too large (max 8MB)" }, { status: 400 });
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "profiles", me.id);
-  await fs.mkdir(uploadDir, { recursive: true });
-
   const buf = Buffer.from(await file.arrayBuffer());
 
   // Normalize to 512x512 WebP (square, cover crop) — small, efficient, square avatar.
-  const outName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
-  const outPath = path.join(uploadDir, outName);
+  let outBuf: Buffer;
   try {
-    await sharp(buf)
+    outBuf = await sharp(buf)
+      .rotate() // apply EXIF orientation
       .resize(512, 512, { fit: "cover", position: "attention" })
       .webp({ quality: 85 })
-      .toFile(outPath);
+      .toBuffer();
   } catch (err) {
     console.error("[profile/photo] sharp error:", err);
     return NextResponse.json({ error: "Image processing failed" }, { status: 500 });
   }
 
-  const publicUrl = `/uploads/profiles/${me.id}/${outName}`;
+  const blobName = `profiles/${me.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
 
-  // Delete the previous photo (if it was a user-uploaded one)
-  if (me.photoUrl?.startsWith("/uploads/profiles/")) {
-    const oldPath = path.join(process.cwd(), "public", me.photoUrl);
+  let newUrl: string;
+  try {
+    const blob = await put(blobName, outBuf, {
+      access: "public",
+      contentType: "image/webp",
+      addRandomSuffix: false,
+    });
+    newUrl = blob.url;
+  } catch (err) {
+    console.error("[profile/photo] Vercel Blob put failed:", err);
+    return NextResponse.json(
+      { error: `Failed to upload photo: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 }
+    );
+  }
+
+  // Delete the previous photo (if it was a Blob URL — legacy /uploads/... paths
+  // are silently skipped since they don't exist on Vercel's serverless fs).
+  if (me.photoUrl?.startsWith("https://")) {
     try {
-      await fs.unlink(oldPath);
+      await del(me.photoUrl);
     } catch {
       /* ignore — old file may already be gone */
     }
@@ -73,7 +89,7 @@ export async function POST(req: NextRequest) {
 
   const updated = await db.user.update({
     where: { id: me.id },
-    data: { photoUrl: publicUrl },
+    data: { photoUrl: newUrl },
   });
 
   return NextResponse.json({ photoUrl: updated.photoUrl });
@@ -91,10 +107,10 @@ export async function DELETE() {
   const me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  if (me.photoUrl?.startsWith("/uploads/profiles/")) {
-    const oldPath = path.join(process.cwd(), "public", me.photoUrl);
+  // Only delete if it's a Vercel Blob URL
+  if (me.photoUrl?.startsWith("https://")) {
     try {
-      await fs.unlink(oldPath);
+      await del(me.photoUrl);
     } catch {
       /* ignore */
     }

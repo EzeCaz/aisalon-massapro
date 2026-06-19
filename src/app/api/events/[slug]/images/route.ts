@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import fs from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 import sharp from "sharp";
 
 /**
@@ -12,18 +11,20 @@ import sharp from "sharp";
  *   - files: File[] (one or more image files)
  *   - caption (optional, applied to all images in this request)
  *
- * Saves files to /public/uploads/events/<eventId>/<cuid>.<ext>
- * Creates EventImage records with slideOrder = max+1, ...
+ * Uploads files to Vercel Blob at `events/<eventId>/<cuid>.jpg`.
+ * Stores the returned Blob URL in EventImage.fileUrl.
  *
- * IMPORTANT: Mobile phones (iOS/Android) often save photos in a
- * "sensor-native" orientation (landscape) and embed an EXIF orientation
- * tag telling viewers to rotate for display. Browsers honor this for
- * display, but `sharp` does NOT auto-apply EXIF orientation — you have
- * to call `.rotate()` (no argument) explicitly. Without this, photos
- * uploaded from a phone in portrait can come out sideways.
+ * IMPORTANT: On Vercel's serverless filesystem, public/ is READ-ONLY at
+ * runtime — we MUST use Vercel Blob (or another object storage provider)
+ * for image uploads. Writing to public/uploads/... was the old approach
+ * and failed with EROFS/EACCES.
  *
- * Here we call `.rotate()` first to apply the EXIF orientation, THEN
- * resize/re-encode, so the saved file is always visually upright.
+ * EXIF: Mobile phones save photos in sensor-native orientation and embed
+ * an EXIF orientation tag. Browsers honor this for display but `sharp`
+ * does NOT auto-apply it — you have to call `.rotate()` (no argument)
+ * explicitly. Without this, photos uploaded from a phone in portrait
+ * come out sideways. Here we call `.rotate()` first, then resize/re-encode,
+ * so the saved file is always visually upright.
  */
 export async function POST(
   req: NextRequest,
@@ -60,10 +61,6 @@ export async function POST(
     }
   }
 
-  // Ensure upload dir exists
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "events", event.id);
-  await fs.mkdir(uploadDir, { recursive: true });
-
   // Compute starting slideOrder
   const maxOrder = await db.eventImage.aggregate({
     where: { eventId: event.id },
@@ -71,18 +68,27 @@ export async function POST(
   });
   let nextOrder = (maxOrder._max.slideOrder ?? -1) + 1;
 
-  const created = [];
-  for (const file of files) {
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const absPath = path.join(uploadDir, fileName);
+  type CreatedImage = {
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    width: number | null;
+    height: number | null;
+    mimeType: string;
+  };
 
+  const created: CreatedImage[] = [];
+  for (const file of files) {
     // Read file buffer
     const buf = Buffer.from(await file.arrayBuffer());
 
     // Use sharp to apply EXIF orientation, get dimensions, and re-encode.
     let width: number | null = null;
     let height: number | null = null;
+    let uploadBuf: Buffer = buf;
+    let uploadExt = (file.name.split(".").pop()?.toLowerCase() || "jpg");
+    let mimeType = file.type;
+
     try {
       // .rotate() with no angle auto-applies EXIF orientation
       const rotated = sharp(buf).rotate();
@@ -91,41 +97,45 @@ export async function POST(
       height = meta.height ?? null;
 
       // Re-encode as JPEG for storage efficiency + guaranteed browser support
-      const normalized = await rotated
+      uploadBuf = await rotated
         .resize({ width: 2200, height: 2200, fit: "inside", withoutEnlargement: true })
         .jpeg({ quality: 86, mozjpeg: true })
         .toBuffer();
-
-      const newName = fileName.replace(/\.[^.]+$/, ".jpg");
-      const newPath = path.join(uploadDir, newName);
-      await fs.writeFile(newPath, normalized);
-      created.push({
-        fileName: file.name,
-        fileUrl: `/uploads/events/${event.id}/${newName}`,
-        fileSize: normalized.length,
-        width,
-        height,
-        mimeType: "image/jpeg",
-      });
-      continue;
+      uploadExt = "jpg";
+      mimeType = "image/jpeg";
     } catch (err) {
-      console.warn("[upload] sharp processing failed, falling back to original:", err);
+      console.warn("[upload] sharp processing failed, uploading original:", err);
+      // uploadBuf and uploadExt remain as the original file
     }
 
-    // Fallback: write original file as-is
-    await fs.writeFile(absPath, buf);
-    created.push({
-      fileName: file.name,
-      fileUrl: `/uploads/events/${event.id}/${fileName}`,
-      fileSize: buf.length,
-      width,
-      height,
-      mimeType: file.type,
-    });
+    const blobName = `events/${event.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${uploadExt}`;
+
+    try {
+      const blob = await put(blobName, uploadBuf, {
+        access: "public",
+        contentType: mimeType,
+        addRandomSuffix: false,
+      });
+
+      created.push({
+        fileName: file.name,
+        fileUrl: blob.url,
+        fileSize: uploadBuf.length,
+        width,
+        height,
+        mimeType,
+      });
+    } catch (err) {
+      console.error("[upload] Vercel Blob put failed:", err);
+      return NextResponse.json(
+        { error: `Failed to upload ${file.name}: ${err instanceof Error ? err.message : String(err)}` },
+        { status: 500 }
+      );
+    }
   }
 
   // Insert DB rows
-  const images = [];
+  const images: Awaited<ReturnType<typeof db.eventImage.create>>[] = [];
   for (const c of created) {
     const img = await db.eventImage.create({
       data: {

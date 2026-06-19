@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import fs from "fs/promises";
-import path from "path";
+import { put, del } from "@vercel/blob";
 import sharp from "sharp";
 
 /**
  * POST /api/images/rotate
  * Body: { imageIds: string[], direction: "cw" | "ccw" }
  *
- * Rotates the on-disk JPEG file 90° clockwise (cw) or counter-clockwise
- * (ccw) for each provided image id. Updates width/height in the DB
- * (they swap on each 90° rotation). Re-encodes as JPEG.
+ * Rotates each image 90° clockwise (cw) or counter-clockwise (ccw).
+ * Fetches the image from Vercel Blob, rotates with sharp, re-uploads
+ * a new JPEG to Blob, updates the EventImage row with the new URL +
+ * swapped width/height, and deletes the old blob.
  *
  * Permission: uploader OR admin can rotate. Bulk mode rotates all
  * images whose ids pass the permission check; ids the caller can't
@@ -59,35 +59,61 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const absPath = path.join(process.cwd(), "public", img.fileUrl);
+    // Only Vercel Blob URLs (https://) are supported for rotation.
+    // Legacy /uploads/... paths from the old filesystem approach can't
+    // be rotated server-side on Vercel (read-only filesystem) — skip.
+    if (!img.fileUrl.startsWith("https://")) {
+      console.warn(`[rotate] skipping ${img.id}: not a blob URL (${img.fileUrl})`);
+      skipped.push(img.id);
+      continue;
+    }
+
     try {
-      const buf = await fs.readFile(absPath);
+      // Fetch the current image bytes from Blob
+      const resp = await fetch(img.fileUrl);
+      if (!resp.ok) throw new Error(`fetch failed: HTTP ${resp.status}`);
+      const buf = Buffer.from(await resp.arrayBuffer());
+
       // Rotate the image. sharp uses positive angles for CW rotation.
       const out = await sharp(buf)
         .rotate(angle)
         .jpeg({ quality: 88, mozjpeg: true })
         .toBuffer();
 
-      // Re-write to the same path (overwrite). Always JPEG.
-      const newPath = absPath.replace(/\.[^.]+$/, ".jpg");
-      const newUrl = img.fileUrl.replace(/\.[^.]+$/, ".jpg");
-      await fs.writeFile(newPath, out);
+      // Compute new blob name. The current URL ends with .jpg (we always
+      // re-encode as JPEG on upload), so the new path keeps the same
+      // directory + basename but uses a "-rot<count>" suffix to avoid
+      // any caching issues.
+      const url = new URL(img.fileUrl);
+      const parts = url.pathname.split("/");
+      const oldName = parts[parts.length - 1]; // e.g. 1234-abcd.jpg
+      const baseName = oldName.replace(/\.[^.]+$/, "");
+      const newName = `${baseName}-rot${Date.now()}.jpg`;
+      parts[parts.length - 1] = newName;
+      const newBlobPath = parts.join("/"); // e.g. events/<eventId>/<baseName>-rot<ts>.jpg
 
-      // If the original wasn't .jpg, remove the old file
-      if (newPath !== absPath) {
-        try {
-          await fs.unlink(absPath);
-        } catch {
-          /* ignore */
-        }
-      }
+      // Upload rotated version
+      const newBlob = await put(newBlobPath, out, {
+        access: "public",
+        contentType: "image/jpeg",
+        addRandomSuffix: false,
+      });
 
       // Get new dimensions (width and height swap on 90° rotation)
       const meta = await sharp(out).metadata();
+
+      // Delete old blob (best-effort)
+      try {
+        await del(img.fileUrl);
+      } catch (e) {
+        console.warn(`[rotate] failed to delete old blob for ${img.id}:`, e);
+      }
+
+      // Update DB row
       await db.eventImage.update({
         where: { id: img.id },
         data: {
-          fileUrl: newUrl,
+          fileUrl: newBlob.url,
           width: meta.width ?? null,
           height: meta.height ?? null,
           fileSize: out.length,

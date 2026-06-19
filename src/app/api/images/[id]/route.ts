@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { del } from "@vercel/blob";
 
 /**
  * PATCH /api/images/[id]
@@ -56,7 +57,7 @@ export async function PATCH(
 
 /**
  * DELETE /api/images/[id]
- * Removes image (DB record + file on disk).
+ * Removes image (DB record + blob in Vercel Blob storage).
  * Uploader OR admin can delete.
  */
 export async function DELETE(
@@ -80,14 +81,16 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Delete file on disk (best-effort)
-  try {
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const abs = path.join(process.cwd(), "public", image.fileUrl);
-    await fs.unlink(abs);
-  } catch (e) {
-    console.warn("[delete-image] file removal failed:", e);
+  // Delete blob (best-effort) — only if it's a Vercel Blob URL (https://).
+  // Legacy /uploads/... paths from the old filesystem approach can't be
+  // deleted via the Blob API and are silently skipped (they don't exist
+  // on Vercel's serverless filesystem anyway).
+  if (image.fileUrl.startsWith("https://")) {
+    try {
+      await del(image.fileUrl);
+    } catch (e) {
+      console.warn("[delete-image] blob removal failed:", e);
+    }
   }
 
   await db.eventImage.delete({ where: { id } });
