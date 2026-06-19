@@ -12,7 +12,11 @@ type Tab = "google" | "signin" | "signup";
 // Map next-auth error codes to human-readable messages.
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   OAuthCallbackError:
-    "Google rejected our sign-in request. The site admin needs to add this redirect URI to the Google Cloud Console: https://aisalon.massapro.com/api/auth/callback/google — meanwhile, please use the Sign up tab to sign in by email.",
+    "Google rejected our sign-in request. The redirect URI " +
+    "https://aisalon.massapro.com/api/auth/callback/google is not yet " +
+    "registered in the Google Cloud Console. See the instructions under " +
+    "the Google tab to fix this — meanwhile, please use the Sign up tab " +
+    "to sign in by email.",
   OAuthAccountNotLinked:
     "That email is already linked to a Google account. Please sign in with Google instead.",
   Callback:
@@ -103,9 +107,16 @@ export function LoginForm({ callbackUrl }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: signupEmail, name: signupName }),
       });
-      const data = await res.json();
+      // Try to parse JSON; if that fails, fall back to a generic error.
+      let data: { error?: string; message?: string; ok?: boolean } = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: `Server returned ${res.status} with no JSON body.` };
+      }
       if (!res.ok) {
-        setError(data.error || "Sign-up failed.");
+        // Surface the actual server error message (e.g. "DB not reachable…").
+        setError(data.error || `Sign-up failed (HTTP ${res.status}).`);
       } else {
         setInfo(data.message || "Check your email for your password.");
         setSignupName("");
@@ -115,7 +126,10 @@ export function LoginForm({ callbackUrl }: Props) {
       }
     } catch (err) {
       console.error(err);
-      setError("Could not reach the server. Please try again.");
+      setError(
+        "Could not reach the server. Check your internet connection and try again. " +
+          "If the problem persists, the server may be down — please contact the admin."
+      );
     } finally {
       setLoading(null);
     }
@@ -154,6 +168,46 @@ export function LoginForm({ callbackUrl }: Props) {
               "Continue with Google"
             )}
           </button>
+
+          <details className="text-xs text-black/60">
+            <summary className="cursor-pointer hover:text-black/80 select-none">
+              Google sign-in not working? (Error 400: redirect_uri_mismatch)
+            </summary>
+            <div className="mt-3 space-y-2 leading-relaxed">
+              <p>
+                The Google Cloud Console needs this exact URI registered:
+              </p>
+              <code className="block bg-black/5 px-2 py-1.5 rounded text-[11px] break-all">
+                https://aisalon.massapro.com/api/auth/callback/google
+              </code>
+              <p className="font-semibold text-black/80">How to add it:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Open{" "}
+                  <a
+                    href="https://console.cloud.google.com/apis/credentials"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#004F98] underline"
+                  >
+                    Google Cloud Console → Credentials
+                  </a>
+                  .
+                </li>
+                <li>
+                  Click the OAuth 2.0 Client ID starting with{" "}
+                  <code className="bg-black/5 px-1 rounded">271496681716-…</code>
+                </li>
+                <li>Scroll to <strong>Authorized redirect URIs</strong>.</li>
+                <li>Click <strong>Add URI</strong> and paste the URL above.</li>
+                <li>Click <strong>Save</strong>. Wait ~1 min for it to propagate.</li>
+              </ol>
+              <p className="text-black/50 italic">
+                Until this is done, please use the Sign up tab to sign in by email.
+              </p>
+            </div>
+          </details>
+
           <p className="text-center text-xs text-black/50">
             Use the Sign up tab to receive a password by email instead.
           </p>

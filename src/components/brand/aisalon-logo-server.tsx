@@ -33,7 +33,7 @@ export function AiSalonLogoServer({
   if (variant === "monogram") {
     return (
       <span className={cn("inline-flex items-baseline font-extrabold tracking-tight", text, className)}>
-        <MeerkatMarkServer className="h-[1em] w-auto mr-[0.15em]" />
+        <MeerkatMarkServer height="1em" className="mr-[0.15em]" />
         <span className="text-[1em]">ais</span>
       </span>
     );
@@ -42,7 +42,7 @@ export function AiSalonLogoServer({
   if (variant === "stacked" || variant === "stacked-tagline") {
     return (
       <span className={cn("inline-flex flex-col items-start leading-[0.9]", text, className)}>
-        <MeerkatMarkServer className="h-[1.4em] w-auto mb-[0.2em]" />
+        <MeerkatMarkServer height="1.4em" className="mb-[0.2em]" />
         <span className="text-[1.6em] font-extrabold tracking-tight">ai</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">sa</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">lon</span>
@@ -58,7 +58,7 @@ export function AiSalonLogoServer({
   return (
     <span className={cn("inline-flex flex-col items-start leading-none", text, className)}>
       <span className="inline-flex items-end">
-        <MeerkatMarkServer className="h-[1.5em] w-auto mr-[0.2em]" />
+        <MeerkatMarkServer height="1.5em" className="mr-[0.2em]" />
         <span className="text-[1.6em] font-extrabold tracking-tight lowercase">aisalon</span>
       </span>
       {tagline && (
@@ -76,21 +76,42 @@ export function AiSalonLogoServer({
  * page (including the login page).
  *
  * NOTE: The source image is 624 × 1686 (a tall portrait). We pass the
- * intrinsic dimensions to next/image and let CSS scale via `h-[1em] w-auto`
- * so the natural aspect ratio is preserved — using `fill` inside a square
- * `1em × 1em` box would shrink the meerkat to a near-invisible sliver.
+ * intrinsic dimensions to next/image; CSS scaling is done via inline
+ * `height` (in `em`, relative to the parent's font-size) so the natural
+ * aspect ratio is preserved.
+ *
+ * IMPORTANT — inline styles (rather than Tailwind `h-[1.5em]` classes)
+ * are intentional: on slow mobile connections there is a brief window
+ * where the HTML has loaded but the Tailwind CSS chunk has not. During
+ * that window, an <img> with width=624 height=1686 would otherwise
+ * render at its natural size and cover the entire mobile screen.
+ * Inline `height` + `max-width` styles are honoured immediately, before
+ * CSS arrives, so the mark stays small.
  */
-export function MeerkatMarkServer({ className }: { className?: string }) {
+export function MeerkatMarkServer({
+  className,
+  height = "1.5em",
+}: {
+  className?: string;
+  height?: string;
+}) {
   return (
     <Image
       src="/images/falafel-meerkat.png"
       alt="AI Salon Falafel Meerkat"
       width={624}
       height={1686}
-      className={cn(
-        "inline-block h-[1em] w-auto object-contain align-middle",
-        className
-      )}
+      className={cn("object-contain align-middle", className)}
+      style={{
+        // Inline styles = bulletproof against CSS-not-yet-loaded flashes.
+        // The `em` unit resolves relative to the parent's font-size, which
+        // is set on the outer logo span (e.g. text-[1.6rem]).
+        height,
+        width: "auto",
+        maxWidth: "100%",
+        display: "inline-block",
+        verticalAlign: "middle",
+      }}
       priority
       unoptimized
     />

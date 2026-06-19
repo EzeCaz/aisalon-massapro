@@ -1,12 +1,27 @@
 // AI Salon Tel Aviv — MassaPro platform
-// Prisma schema (SQLite)
+// Prisma schema
+//
+// Provider is `postgresql` so the same schema works in both local dev
+// (any Postgres — local Docker, Neon dev DB, Supabase, etc.) and on
+// Vercel production (Vercel Postgres / Neon). SQLite is intentionally
+// NOT used because Vercel's serverless filesystem is read-only and
+// ephemeral — local file SQLite simply cannot persist writes there.
+//
+// On Vercel: create a Postgres database from the project's Storage tab
+// (1 click), then copy the value of `POSTGRES_PRISMA_URL` (set
+// automatically by Vercel) into the existing `DATABASE_URL` env var.
+// (Or, equivalently, paste the connection string from any other
+// Postgres provider — Neon, Supabase, Railway, etc.)
+//
+// Locally: set DATABASE_URL to your local Postgres URL, e.g.
+//   DATABASE_URL=postgresql://user:pass@localhost:5432/aisalon
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
