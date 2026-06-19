@@ -48,6 +48,7 @@ model User {
   role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]
+  presentations PresentationFile[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -88,39 +89,42 @@ model Event {
   speakers      Speaker[]
   agenda        EventAgendaItem[]
   images        EventImage[]
+  presentations PresentationFile[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
 model Speaker {
-  id          String   @id @default(cuid())
-  eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name        String
-  role        String?   // e.g. "AI Product Lead, Amdocs"
-  company     String?
-  bio         String?
-  topic       String?   // talk title
-  photoUrl    String?
-  order       Int      @default(0)
-  images      EventImage[] // images linked to this speaker
-  agendaItems EventAgendaItem[] // agenda items featuring this speaker
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name           String
+  role           String?   // e.g. "AI Product Lead, Amdocs"
+  company        String?
+  bio            String?
+  topic          String?   // talk title
+  photoUrl       String?
+  order          Int      @default(0)
+  images         EventImage[] // images linked to this speaker
+  presentations  PresentationFile[] // presentations linked to this speaker
+  agendaItems    EventAgendaItem[] // agenda items featuring this speaker
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 /// One row in the event agenda — can be a talk, a break, fast pitch, etc.
 model EventAgendaItem {
-  id          String   @id @default(cuid())
-  eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  startsAt    DateTime
-  endsAt      DateTime?
-  title       String   // e.g. "Welcome by Ezequiel Sznaider"
-  type        String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME"
-  speakerId   String?
-  speaker     Speaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  startsAt       DateTime
+  endsAt         DateTime?
+  title          String   // e.g. "Welcome by Ezequiel Sznaider"
+  type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME"
+  speakerId      String?
+  speaker        Speaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
+  presentations  PresentationFile[] // files uploaded for this specific agenda item
+  createdAt      DateTime @default(now())
 }
 
 // ---------------------------- Event Images ----------------------------
@@ -150,4 +154,40 @@ model EventImage {
 
   @@index([eventId, slideOrder])
   @@index([uploaderId])
+}
+
+// ---------------------------- Presentation Files ----------------------------
+
+/// One presentation/document uploaded for a specific event — PDF, PPT(X),
+/// Keynote, Google Slides export, handouts, etc. Linked to one or more
+/// speakers (the presenters) and optionally to one specific agenda item
+/// (the session the file was presented in).
+///
+/// Stored in Vercel Blob at `events/<eventId>/presentations/<filename>`
+/// — same reason as EventImage: Vercel's serverless filesystem is
+/// read-only at runtime.
+model PresentationFile {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId    String
+  uploader      User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName      String   // original filename, e.g. "AI-CMO-Blueprint.pdf"
+  fileUrl       String   // Vercel Blob URL
+  fileSize      Int      @default(0)
+  mimeType      String   @default("application/pdf")
+  title         String?  // optional display title (defaults to fileName)
+  description   String?  // optional short description
+  // Optional link to a specific agenda item — null means "general event
+  // file" (e.g. event wrap-up deck, sponsor deck, etc.)
+  agendaItemId  String?
+  agendaItem    EventAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: SetNull)
+  // Linked speakers (presenters) — many-to-many (a deck can be co-presented)
+  speakers      Speaker[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([uploaderId])
+  @@index([agendaItemId])
 }

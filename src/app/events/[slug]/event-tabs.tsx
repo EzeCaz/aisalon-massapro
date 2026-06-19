@@ -6,6 +6,7 @@ import { OverviewTab } from "./tabs/overview-tab";
 import { AgendaTab } from "./tabs/agenda-tab";
 import { PhotosTab } from "./tabs/photos-tab";
 import { SlideshowTab } from "./tabs/slideshow-tab";
+import { PresentationsTab } from "./tabs/presentations-tab";
 
 type Speaker = {
   id: string;
@@ -82,6 +83,9 @@ export function EventTabs({
         <TabsTrigger value="slideshow" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Slideshow
         </TabsTrigger>
+        <TabsTrigger value="presentations" className="data-[state=active]:bg-white data-[state=active]:text-black">
+          Presentations
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="mt-6">
@@ -95,6 +99,9 @@ export function EventTabs({
       </TabsContent>
       <TabsContent value="slideshow" className="mt-6">
         <SlideshowTab event={event} />
+      </TabsContent>
+      <TabsContent value="presentations" className="mt-6">
+        <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
     </Tabs>
   );
