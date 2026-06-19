@@ -3,6 +3,8 @@
 > **AI Salon Tel Aviv — community platform**, built by [MassaPro](https://massapro.com).
 > Empowering AI connections.
 
+**Live deployment:** <https://aisalon-massapro.vercel.app>
+
 A members-only platform for the AI Salon Tel Aviv chapter: browse events, view speakers & agenda, upload community photos, link them to agenda speakers, and play the shared slideshow.
 
 Built strictly on the [AI Salon Brand Book v1.0](./public/brand-book.md) — AIS BLACK / AIS RED (#FF005A) / AIS CYAN (#00E6FF) palette, AIS GRADIENT, Plus Jakarta Sans typography, low-poly Meerkat motif, and the chapter-polyhedron visual language.

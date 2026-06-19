@@ -1,0 +1,8 @@
+download/
+tool-results/
+upload/
+skills/
+scripts/extract_*
+*.log
+README.md
+brand-book-expertise.md

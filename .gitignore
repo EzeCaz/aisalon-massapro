@@ -45,3 +45,4 @@ scripts/extract_*
 
 # Next.js
 next-env.d.ts
+.vercel
