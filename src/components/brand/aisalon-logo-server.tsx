@@ -33,7 +33,7 @@ export function AiSalonLogoServer({
   if (variant === "monogram") {
     return (
       <span className={cn("inline-flex items-baseline font-extrabold tracking-tight", text, className)}>
-        <MeerkatMarkServer className="h-[1em] w-[1em] mr-[0.15em]" />
+        <MeerkatMarkServer className="h-[1em] w-auto mr-[0.15em]" />
         <span className="text-[1em]">ais</span>
       </span>
     );
@@ -42,7 +42,7 @@ export function AiSalonLogoServer({
   if (variant === "stacked" || variant === "stacked-tagline") {
     return (
       <span className={cn("inline-flex flex-col items-start leading-[0.9]", text, className)}>
-        <MeerkatMarkServer className="h-[1em] w-[1em] mb-[0.2em]" />
+        <MeerkatMarkServer className="h-[1.4em] w-auto mb-[0.2em]" />
         <span className="text-[1.6em] font-extrabold tracking-tight">ai</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">sa</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">lon</span>
@@ -57,8 +57,8 @@ export function AiSalonLogoServer({
 
   return (
     <span className={cn("inline-flex flex-col items-start leading-none", text, className)}>
-      <span className="inline-flex items-baseline">
-        <MeerkatMarkServer className="h-[1em] w-[1em] mr-[0.2em]" />
+      <span className="inline-flex items-end">
+        <MeerkatMarkServer className="h-[1.5em] w-auto mr-[0.2em]" />
         <span className="text-[1.6em] font-extrabold tracking-tight lowercase">aisalon</span>
       </span>
       {tagline && (
@@ -73,24 +73,26 @@ export function AiSalonLogoServer({
 /**
  * MeerkatMarkServer — renders the actual Falafel Meerkat PNG.
  * Used as the brand mark to the left of the `aisalon` wordmark on every
- * page (including the login page). Falls back to the AIS GRADIENT
- * polyhedron SVG only if the image fails to load.
+ * page (including the login page).
+ *
+ * NOTE: The source image is 624 × 1686 (a tall portrait). We pass the
+ * intrinsic dimensions to next/image and let CSS scale via `h-[1em] w-auto`
+ * so the natural aspect ratio is preserved — using `fill` inside a square
+ * `1em × 1em` box would shrink the meerkat to a near-invisible sliver.
  */
 export function MeerkatMarkServer({ className }: { className?: string }) {
   return (
-    <span
-      className={cn("relative inline-block align-middle", className)}
-      aria-hidden="true"
-      role="presentation"
-    >
-      <Image
-        src="/images/falafel-meerkat.png"
-        alt="AI Salon Falafel Meerkat"
-        fill
-        sizes="(max-width: 768px) 32px, 40px"
-        className="object-contain"
-        priority
-      />
-    </span>
+    <Image
+      src="/images/falafel-meerkat.png"
+      alt="AI Salon Falafel Meerkat"
+      width={624}
+      height={1686}
+      className={cn(
+        "inline-block h-[1em] w-auto object-contain align-middle",
+        className
+      )}
+      priority
+      unoptimized
+    />
   );
 }
