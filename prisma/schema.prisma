@@ -120,6 +120,7 @@ model EventAgendaItem {
   startsAt       DateTime
   endsAt         DateTime?
   title          String   // e.g. "Welcome by Ezequiel Sznaider"
+  description    String?  // optional longer description (used by fast pitch sessions and other items)
   type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME"
   speakerId      String?
   speaker        Speaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)

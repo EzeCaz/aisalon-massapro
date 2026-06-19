@@ -20,6 +20,7 @@ type AgendaItem = {
   startsAt: string;
   endsAt: string | null;
   title: string;
+  description: string | null;
   type: string;
   speaker: Speaker | null;
 };
@@ -79,6 +80,11 @@ export function AgendaTab({ event }: { event: EventData }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm text-black leading-snug">{item.title}</div>
+                  {item.description && (
+                    <p className="text-xs text-black/60 mt-1 leading-relaxed">
+                      {item.description}
+                    </p>
+                  )}
                   {item.speaker && (
                     <div className="text-xs text-black/60 mt-0.5">
                       {item.speaker.name}
