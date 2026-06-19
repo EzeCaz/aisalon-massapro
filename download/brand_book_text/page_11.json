@@ -1,0 +1,16 @@
+{
+  "page": 11,
+  "content": "## Page Section / Title\nTypography\n\n## All Verbatim Text\n- Typography\n\n## Visual Elements\n- **Logos**: None visible on this page.\n- **Color palette**: \n  - Solid cyan background (approx. HEX: #00E0FF or similar bright cyan)\n  - Black text (approx. HEX: #000000)\n- **Typography**: \n  - Typeface: Modern sans-serif (likely a geometric or humanist sans-serif)\n  - Weight: Regular (medium)\n  - Sample text: \"Typography\" (displayed in the center of the page)\n- **Imagery / photography**: None visible on this page.\n- **Iconography**: None visible on this page.\n- **Layout grid**: \n  - Single-column layout\n  - Generous margins on all sides (approximately 20-25% of page width)\n  - Centered alignment of the \"Typography\" text\n- **Geometric / decorative elements**: None visible on this page.\n\n## Page Layout Summary\nThe page features a minimalist design with a solid cyan background. The word \"Typography\" is centered both horizontally and vertically on the page using black text. The layout is clean and uncluttered, with ample negative space around the text.\n\n## Design Rules / Guidance Visible on Page\nNo explicit do/don't rules, usage guidelines, or instructions are visible on this page. This appears to be a title page introducing the typography section of the brand book.",
+  "usage": {
+    "completion_tokens": 301,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 6310,
+    "prompt_tokens_details": {
+      "cached_tokens": 329
+    },
+    "total_tokens": 6611
+  },
+  "model": "glm-4.6v"
+}

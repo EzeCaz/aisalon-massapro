@@ -1,0 +1,16 @@
+{
+  "page": 21,
+  "content": "## Page Section / Title\nElements\n\n## All Verbatim Text\n- \"Brand Visual Guidelines | by Sightbox\"\n- \"City Name 1\"\n- \"City Name 3\"\n- \"City Name 2\"\n- \"1.1 Elements\"\n- \"CITY LINES\"\n- \"City Lines are connecting lines that interact with the SHAPES, showcasing cities near the corresponding Chapter. They connect through the vertices or edges of the SHAPES, creating a visual link between locations.\"\n\n## Visual Elements\n- **Logos**: A small black geometric logo (appears to be a stylized \"S\" or abstract shape) in the top-right corner. No explicit rules shown.\n- **Color palette**: Not shown (page uses black lines on white background).\n- **Typography**: \n  - Title: \"Elements\" (bold, sans-serif, large size)\n  - Section heading: \"CITY LINES\" (uppercase, sans-serif, smaller than title)\n  - Body text: Regular sans-serif (describing City Lines)\n  - City labels: Regular sans-serif (e.g., \"City Name 1\")\n- **Imagery / photography**: Not applicable (page contains a line diagram, not photography).\n- **Iconography**: Not applicable (page contains a line diagram, not icons).\n- **Layout grid**: Not explicitly shown, but text is left-aligned with a large diagram occupying the right/center space.\n- **Geometric / decorative elements**: A network of thin black lines forming an abstract polygonal shape with labeled vertices (\"City Name 1\", \"City Name 2\", \"City Name 3\").\n\n## Page Layout Summary\n- Top-left: \"Brand Visual Guidelines | by Sightbox\" (small text)\n- Top-right: Small geometric logo\n- Bottom-left: Section title \"1.1 Elements\" (large, bold), followed by \"CITY LINES\" (uppercase) and descriptive body text\n- Center/right: Large line diagram with labeled city points (City Name 1, City Name 2, City Name 3) forming an abstract shape\n- White background with black text and lines\n\n## Design Rules / Guidance Visible on Page\n- \"City Lines are connecting lines that interact with the SHAPES, showcasing cities near the corresponding Chapter. They connect through the vertices or edges of the SHAPES, creating a visual link between locations.\" (defines the purpose and usage of City Lines)",
+  "usage": {
+    "completion_tokens": 502,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 6310,
+    "prompt_tokens_details": {
+      "cached_tokens": 329
+    },
+    "total_tokens": 6812
+  },
+  "model": "glm-4.6v"
+}
