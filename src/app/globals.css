@@ -209,3 +209,13 @@
 .ais-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Pulsating alert for the inbox unread badge (AI Salon RED) */
+@keyframes ais-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 0, 90, 0.7); }
+  70%  { box-shadow: 0 0 0 8px rgba(255, 0, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 0, 90, 0); }
+}
+.ais-pulse-badge {
+  animation: ais-pulse 1.6s infinite;
+}

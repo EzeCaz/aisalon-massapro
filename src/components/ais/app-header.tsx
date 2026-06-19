@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
+import { InboxButtonServer } from "./inbox-button-server";
 
 export async function AppHeader() {
   const session = await getServerSession(authOptions);
@@ -44,11 +45,13 @@ export async function AppHeader() {
                 {l.label}
               </Link>
             ))}
+            {user && <InboxButtonServer />}
             {user && <UserMenu user={user} isAdmin={isAdmin} />}
           </nav>
 
           {/* Mobile nav */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center gap-1">
+            {user && <InboxButtonServer />}
             <MobileNav links={navLinks} user={user} isAdmin={isAdmin} />
           </div>
         </div>

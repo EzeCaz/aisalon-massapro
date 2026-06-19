@@ -50,8 +50,28 @@ model User {
   images        EventImage[]
   presentations PresentationFile[]
   speakerMessages SpeakerMessage[] // messages this user sent to speakers
+  // User-to-user direct messages (community chat)
+  sentMessages     ConversationMessage[] @relation("SentMessages")
+  receivedMessages ConversationMessage[] @relation("ReceivedMessages")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// A direct message between two platform users (community chat).
+/// Used to power the inbox / chat feature in the top-right of the header.
+model ConversationMessage {
+  id           String   @id @default(cuid())
+  senderId     String
+  sender       User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId  String
+  recipient    User     @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  body         String
+  readAt       DateTime? // null = unread by recipient
+  createdAt    DateTime @default(now())
+
+  @@index([senderId, createdAt])
+  @@index([recipientId, readAt])
+  @@index([senderId, recipientId, createdAt])
 }
 
 /// A tag the admin can assign to a member: "Speaker", "Builder", "Investor", etc.
