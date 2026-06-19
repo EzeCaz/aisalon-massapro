@@ -55,28 +55,28 @@ export const authOptions: NextAuthOptions = {
         };
       },
     }),
-    // Developer fallback — lets you sign in with any email locally without
-    // a password. Disabled in production.
-    ...(process.env.NODE_ENV !== "production"
-      ? [
-          CredentialsProvider({
-            id: "dev",
-            name: "Dev Email (any)",
-            credentials: {
-              email: { label: "Email", type: "email", placeholder: "you@example.com" },
-              name: { label: "Name", type: "text", placeholder: "Your Name" },
-            },
-            async authorize(creds) {
-              if (!creds?.email) return null;
-              return {
-                id: creds.email,
-                email: creds.email,
-                name: creds.name || creds.email.split("@")[0],
-              };
-            },
-          }),
-        ]
-      : []),
+    // Developer fallback — lets you sign in with any email and name.
+    // Currently enabled in BOTH dev and production while we resolve
+    // Google OAuth (redirect_uri_mismatch) and email-password delivery
+    // (no SMTP configured yet). This is the ONLY working sign-in option
+    // right now — see /login page. To revert: wrap this in
+    // `...(process.env.NODE_ENV !== "production" ? [...] : [])`.
+    CredentialsProvider({
+      id: "dev",
+      name: "Email & Name",
+      credentials: {
+        email: { label: "Email", type: "email", placeholder: "you@example.com" },
+        name: { label: "Name", type: "text", placeholder: "Your Name" },
+      },
+      async authorize(creds) {
+        if (!creds?.email) return null;
+        return {
+          id: creds.email,
+          email: creds.email,
+          name: creds.name || creds.email.split("@")[0],
+        };
+      },
+    }),
   ],
   session: { strategy: "jwt" },
   pages: {

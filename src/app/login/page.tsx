@@ -96,7 +96,7 @@ export default async function LoginPage() {
 
           <h2 className="text-2xl font-extrabold text-black mb-1">Welcome</h2>
           <p className="text-sm text-black/60 mb-8">
-            Sign in with Google or your email to join the AI Salon Tel Aviv community.
+            Enter your name and email to join the AI Salon Tel Aviv community.
           </p>
 
           <LoginForm callbackUrl={callbackUrl ?? undefined} />
