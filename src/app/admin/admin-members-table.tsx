@@ -23,6 +23,12 @@ type Member = {
   email: string;
   name: string | null;
   image: string | null;
+  photoUrl?: string | null;
+  bio?: string | null;
+  company?: string | null;
+  companyUrl?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
   role: string;
   createdAt: string;
   tags: { id: string; label: string; color: string | null }[];
@@ -97,7 +103,7 @@ export function AdminMembersTable({ members }: { members: Member[] }) {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={m.image || undefined} alt={m.name || m.email} />
+                        <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
                         <AvatarFallback className="bg-black text-white text-xs font-bold">
                           {(m.name || m.email)
                             .split(/\s+|@/)
@@ -117,6 +123,22 @@ export function AdminMembersTable({ members }: { members: Member[] }) {
                           )}
                         </div>
                         <div className="text-xs text-black/50 truncate">{m.email}</div>
+                        {m.company && (
+                          <div className="text-[10px] text-black/40 truncate mt-0.5">
+                            {m.company}
+                            {m.companyUrl && (
+                              <a
+                                href={m.companyUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="ml-1 text-[#004F98] hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                ↗
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>

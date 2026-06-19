@@ -2,9 +2,19 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { LoginForm } from "./login-form";
+import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+import Image from "next/image";
 
 export const metadata = {
   title: "Sign in — AI Salon Tel Aviv",
+  description:
+    "Sign in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
+  openGraph: {
+    title: "Sign in — AI Salon Tel Aviv",
+    description:
+      "Sign in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
+    images: [{ url: "/images/falafel-tlv-ai-salon.png", width: 1200, height: 630, alt: "AI Salon Tel Aviv" }],
+  },
 };
 
 export default async function LoginPage() {
@@ -19,32 +29,23 @@ export default async function LoginPage() {
     <main className="min-h-screen grid md:grid-cols-2">
       {/* Left — brand panel (black with AIS GRADIENT polyhedron motif) */}
       <section className="relative hidden md:flex flex-col justify-between p-12 ais-poly-bg overflow-hidden">
-        {/* Top-left: stacked aisalon logo (white) */}
+        {/* Top-left: stacked aisalon logo with Falafel Meerkat mark (white) */}
         <div className="relative z-10 text-white">
-          <div className="text-[2.4rem] leading-[0.95] font-extrabold">
-            <div className="flex items-baseline">
-              <svg viewBox="0 0 24 24" className="h-[1em] w-[1em] mr-[0.2em]">
-                <defs>
-                  <linearGradient id="lg-mark" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#FF005A" />
-                    <stop offset="40%" stopColor="#820A7D" />
-                    <stop offset="75%" stopColor="#004F98" />
-                    <stop offset="100%" stopColor="#00E6FF" />
-                  </linearGradient>
-                </defs>
-                <polygon points="12,2 22,8 12,14 2,8" fill="url(#lg-mark)" />
-                <polygon points="12,14 22,20 12,22 2,20" fill="url(#lg-mark)" opacity="0.7" />
-              </svg>
-              <span className="lowercase">aisalon</span>
-            </div>
-          </div>
-          <div className="mt-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-white/60">
-            Empowering AI Connections
-          </div>
+          <AiSalonLogoServer variant="horizontal-tagline" color="white" className="text-[2.4rem]" />
         </div>
 
-        {/* Center: chapter tagline */}
+        {/* Center: Falafel TLV brand image + chapter tagline */}
         <div className="relative z-10 text-white max-w-md">
+          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white/5">
+            <Image
+              src="/images/falafel-tlv-ai-salon.png"
+              alt="AI Salon Tel Aviv — Falafel mascot"
+              fill
+              sizes="(max-width: 768px) 240px, 320px"
+              className="object-contain"
+              priority
+            />
+          </div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#00E6FF] mb-4">
             Tel Aviv Chapter
           </p>
@@ -85,11 +86,10 @@ export default async function LoginPage() {
       {/* Right — login form (white) */}
       <section className="flex flex-col justify-center p-8 sm:p-12 lg:p-16 bg-white">
         <div className="w-full max-w-sm mx-auto">
-          <div className="md:hidden mb-8 text-center">
-            <div className="text-2xl font-extrabold text-black">
-              <span className="lowercase">aisalon</span>
-            </div>
-            <div className="mt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/60">
+          {/* Mobile-only logo with Falafel Meerkat mark */}
+          <div className="md:hidden mb-8 flex flex-col items-center text-center">
+            <AiSalonLogoServer variant="horizontal-tagline" color="black" className="text-[1.6rem]" />
+            <div className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/60">
               Tel Aviv · Empowering AI Connections
             </div>
           </div>

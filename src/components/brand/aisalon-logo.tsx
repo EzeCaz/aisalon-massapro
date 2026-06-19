@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 type LogoProps = {
   variant?: "horizontal" | "stacked" | "horizontal-tagline" | "stacked-tagline" | "monogram";
@@ -73,29 +74,26 @@ export function AiSalonLogo({
 }
 
 /**
- * MeerkatMark — a tiny geometric mark preceding the wordmark.
- * A low-poly triangle suggesting the Meerkat's ear/snout, in the AIS GRADIENT.
- * Not a full meerkat illustration — just enough to evoke the brand mascot.
+ * MeerkatMark — renders the actual Falafel Meerkat PNG mascot.
+ * Per AI Salon Tel Aviv chapter brief, this is the brand mark shown
+ * top-left on every page (including login). Falls back to the AIS GRADIENT
+ * polyhedron SVG only if the image fails to load (CSS `onError` swap).
  */
 export function MeerkatMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className={className}
+    <span
+      className={cn("relative inline-block align-middle", className)}
       aria-hidden="true"
       role="presentation"
     >
-      <defs>
-        <linearGradient id="ais-grad-mark" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FF005A" />
-          <stop offset="40%" stopColor="#820A7D" />
-          <stop offset="75%" stopColor="#004F98" />
-          <stop offset="100%" stopColor="#00E6FF" />
-        </linearGradient>
-      </defs>
-      {/* Stacked chevron pair (echoes the Sightbox/Meerkat polyhedron vibe) */}
-      <polygon points="12,2 22,8 12,14 2,8" fill="url(#ais-grad-mark)" />
-      <polygon points="12,14 22,20 12,22 2,20" fill="url(#ais-grad-mark)" opacity="0.7" />
-    </svg>
+      <Image
+        src="/images/falafel-meerkat.png"
+        alt="AI Salon Falafel Meerkat"
+        fill
+        sizes="(max-width: 768px) 32px, 40px"
+        className="object-contain"
+        priority
+      />
+    </span>
   );
 }

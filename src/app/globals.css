@@ -185,6 +185,18 @@
   @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide;
 }
 
+/* Gradient ring around profile avatars — the brand's signature
+   red → cyan gradient as a thin border, evoking the polyhedron headshot
+   frames from the brand book. */
+.ais-gradient-ring {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px transparent,
+    0 0 0 5px #ff005a,
+    0 0 0 7px transparent,
+    0 0 0 8px #00e6ff;
+}
+
 /* Scrollbar styling for image grids & long lists */
 .ais-scroll::-webkit-scrollbar {
   width: 6px;

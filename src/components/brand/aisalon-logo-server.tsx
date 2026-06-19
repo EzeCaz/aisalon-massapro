@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 type Variant = "horizontal" | "stacked" | "monogram" | "horizontal-tagline" | "stacked-tagline";
 type Color = "black" | "white";
@@ -13,6 +14,11 @@ type Props = {
 /**
  * Server-safe version of AiSalonLogo for use in RSC layouts.
  * (No "use client" so it can render on the server.)
+ *
+ * Per the AI Salon Tel Aviv chapter brief, the Falafel Meerkat mascot
+ * (`/images/falafel-meerkat.png`) is the brand mark shown on the top-left
+ * of every page (including login). It replaces the previous SVG polyhedron
+ * mark while still pairing with the lowercase `aisalon` wordmark.
  */
 export function AiSalonLogoServer({
   variant = "horizontal",
@@ -64,19 +70,27 @@ export function AiSalonLogoServer({
   );
 }
 
+/**
+ * MeerkatMarkServer — renders the actual Falafel Meerkat PNG.
+ * Used as the brand mark to the left of the `aisalon` wordmark on every
+ * page (including the login page). Falls back to the AIS GRADIENT
+ * polyhedron SVG only if the image fails to load.
+ */
 export function MeerkatMarkServer({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" role="presentation">
-      <defs>
-        <linearGradient id="ais-grad-mark-srv" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FF005A" />
-          <stop offset="40%" stopColor="#820A7D" />
-          <stop offset="75%" stopColor="#004F98" />
-          <stop offset="100%" stopColor="#00E6FF" />
-        </linearGradient>
-      </defs>
-      <polygon points="12,2 22,8 12,14 2,8" fill="url(#ais-grad-mark-srv)" />
-      <polygon points="12,14 22,20 12,22 2,20" fill="url(#ais-grad-mark-srv)" opacity="0.7" />
-    </svg>
+    <span
+      className={cn("relative inline-block align-middle", className)}
+      aria-hidden="true"
+      role="presentation"
+    >
+      <Image
+        src="/images/falafel-meerkat.png"
+        alt="AI Salon Falafel Meerkat"
+        fill
+        sizes="(max-width: 768px) 32px, 40px"
+        className="object-contain"
+        priority
+      />
+    </span>
   );
 }

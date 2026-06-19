@@ -17,6 +17,14 @@ model User {
   email         String   @unique
   name          String?
   image         String?
+  // ---------------- Profile fields (user-editable) ----------------
+  bio           String?  // free-form short bio
+  linkedinUrl   String?  // https://www.linkedin.com/in/...
+  company       String?  // e.g. "MassaPro"
+  companyUrl    String?  // https://...
+  portfolioUrl  String?  // personal site / portfolio
+  photoUrl      String?  // user-uploaded photo (overrides Google `image` when set)
+  // ----------------------------------------------------------------
   role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]

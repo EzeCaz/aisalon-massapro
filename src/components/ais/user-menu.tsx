@@ -20,6 +20,7 @@ type Props = {
     name: string | null;
     email: string;
     image: string | null;
+    photoUrl?: string | null;
     role: string;
     tags: { id: string; label: string; color: string | null }[];
   };
@@ -34,12 +35,15 @@ export function UserMenu({ user, isAdmin }: Props) {
     .map((p) => p[0]?.toUpperCase())
     .join("");
 
+  // Prefer user-uploaded photo (photoUrl) over the Google-provided image
+  const avatarSrc = user.photoUrl || user.image;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="ml-2 inline-flex items-center gap-2 rounded-full hover:bg-black/5 p-1 pr-2 transition-colors">
           <Avatar className="h-8 w-8">
-            <AvatarImage src={user.image || undefined} alt={user.name || user.email} />
+            <AvatarImage src={avatarSrc || undefined} alt={user.name || user.email} />
             <AvatarFallback className="bg-black text-white text-xs font-semibold">
               {initials || "?"}
             </AvatarFallback>
@@ -81,6 +85,11 @@ export function UserMenu({ user, isAdmin }: Props) {
             </Link>
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem asChild>
+          <Link href="/profile">
+            <UserIcon className="mr-2 h-4 w-4" /> My Profile
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/events">
             <UserIcon className="mr-2 h-4 w-4" /> Events

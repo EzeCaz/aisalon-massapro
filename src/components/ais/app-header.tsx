@@ -25,9 +25,9 @@ export async function AppHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo + tagline */}
+          {/* Logo + tagline — Falafel Meerkat mark on the left, on every page */}
           <Link href="/events" className="flex items-center gap-2">
-            <AiSalonLogoServer variant="horizontal-tagline" className="text-[0.9rem]" />
+            <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
             <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/40 border-l border-black/15 pl-3">
               Tel Aviv Chapter
             </span>

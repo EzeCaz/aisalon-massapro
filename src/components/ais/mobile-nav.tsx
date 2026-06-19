@@ -13,6 +13,7 @@ type Props = {
     name: string | null;
     email: string;
     image: string | null;
+    photoUrl?: string | null;
     role: string;
   } | null;
   isAdmin: boolean;
@@ -44,6 +45,13 @@ export function MobileNav({ links, user, isAdmin }: Props) {
               {l.label}
             </Link>
           ))}
+          <Link
+            href="/profile"
+            onClick={() => setOpen(false)}
+            className="px-3 py-2 rounded-md text-sm font-medium text-black/80 hover:bg-black/5"
+          >
+            My Profile
+          </Link>
           {isAdmin && (
             <Link
               href="/admin"
