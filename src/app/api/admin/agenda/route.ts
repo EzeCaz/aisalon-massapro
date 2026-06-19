@@ -65,7 +65,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const formData = await req.formData();
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch (err) {
+    // Most common cause: the multipart body exceeded Vercel's 4.5 MB
+    // serverless function body limit. See /images route for details.
+    console.error("[admin/agenda] req.formData() failed:", err);
+    return NextResponse.json(
+      {
+        error:
+          "Upload failed — the total request body was too large (Vercel limits each request to ~4.5 MB). " +
+          "Please use a smaller presentation file (under ~4 MB).",
+      },
+      { status: 413 }
+    );
+  }
   const eventId = (formData.get("eventId") as string | null)?.trim();
   const title = (formData.get("title") as string | null)?.trim();
   const description = (formData.get("description") as string | null)?.trim() || null;

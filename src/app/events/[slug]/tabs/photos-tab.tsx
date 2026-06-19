@@ -105,28 +105,66 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
 
   async function handleUpload(files: FileList | null, caption?: string) {
     if (!files || files.length === 0) return;
-    const formData = new FormData();
-    for (const f of Array.from(files)) formData.append("files", f);
-    if (caption) formData.append("caption", caption);
+    const fileList = Array.from(files);
+    const total = fileList.length;
 
-    const t = toast.loading(`Uploading ${files.length} photo${files.length === 1 ? "" : "s"}…`);
-    try {
-      const res = await fetch(`/api/events/${event.slug}/images`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
+    // Upload ONE FILE PER REQUEST to avoid hitting Vercel's 4.5 MB
+    // serverless function body limit. Even with sharp resizing on the
+    // server, the incoming multipart body must arrive in full before
+    // any processing happens, so a batch of 6 modern phone photos
+    // (each 3–5 MB before server-side resize) will easily exceed the
+    // limit. Uploading one at a time also gives per-file progress and
+    // partial success (one bad file doesn't kill the whole batch).
+    const t = toast.loading(`Uploading 1/${total} …`);
+    let success = 0;
+    const failures: { name: string; reason: string }[] = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      toast.loading(`Uploading ${i + 1}/${total} — ${file.name}`, { id: t });
+      const fd = new FormData();
+      fd.append("files", file);
+      if (caption) fd.append("caption", caption);
+      try {
+        const res = await fetch(`/api/events/${event.slug}/images`, {
+          method: "POST",
+          body: fd,
+        });
+        if (!res.ok) {
+          let reason = `HTTP ${res.status}`;
+          try {
+            const err = await res.json();
+            if (err?.error) reason = err.error;
+          } catch {
+            // platform-level 413 / HTML error page — keep the generic reason
+          }
+          failures.push({ name: file.name, reason });
+        } else {
+          success++;
+        }
+      } catch (e) {
+        failures.push({
+          name: file.name,
+          reason: e instanceof Error ? e.message : String(e),
+        });
       }
-      const data = await res.json();
-      toast.success(`Uploaded ${data.count} photo${data.count === 1 ? "" : "s"}`, { id: t });
-      setUploadOpen(false);
-      await loadImages();
-    } catch (e) {
-      console.error(e);
-      toast.error((e as Error).message, { id: t });
     }
+
+    if (failures.length === 0) {
+      toast.success(`Uploaded ${success} photo${success === 1 ? "" : "s"}`, { id: t });
+    } else if (success === 0) {
+      toast.error(
+        `All ${total} photo${total === 1 ? "" : "s"} failed: ${failures[0].reason}`,
+        { id: t }
+      );
+    } else {
+      toast.warning(
+        `${success}/${total} uploaded. ${failures.length} failed — first failure: ${failures[0].name} (${failures[0].reason})`,
+        { id: t, duration: 8000 }
+      );
+    }
+    setUploadOpen(false);
+    await loadImages();
   }
 
   async function handleDelete(id: string) {
@@ -596,7 +634,8 @@ function UploadDialog({
               <div>
                 <div className="font-semibold text-black">Drop photos here or click to browse</div>
                 <div className="text-xs text-black/60 mt-1">
-                  JPG, PNG, WebP — up to 20 files at once
+                  JPG, PNG, WebP, HEIC — each file uploaded separately so you can pick as many as you want.
+                  Files over ~4 MB may fail to upload.
                 </div>
               </div>
             )}

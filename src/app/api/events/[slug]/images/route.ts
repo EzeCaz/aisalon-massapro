@@ -43,7 +43,25 @@ export async function POST(
   const user = await db.user.findUnique({ where: { email: session.user.email } });
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
-  const formData = await req.formData();
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch (err) {
+    // Most common cause: the multipart body exceeded Vercel's 4.5 MB
+    // serverless function body limit. The platform returns HTTP 413
+    // with a non-JSON body, which surfaces as a confusing "string did
+    // not match the expected pattern" error in the browser. Catch it
+    // here and return a clear, actionable JSON message instead.
+    console.error("[upload] req.formData() failed:", err);
+    return NextResponse.json(
+      {
+        error:
+          "Upload failed — the total request body was too large (Vercel limits each request to ~4.5 MB). " +
+          "Please upload fewer photos at once, or upload them one at a time.",
+      },
+      { status: 413 }
+    );
+  }
   const files = formData.getAll("files").filter((f): f is File => f instanceof File);
   const caption = formData.get("caption") as string | null;
 

@@ -196,38 +196,68 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
     speakerIds: string[];
     agendaItemId?: string;
   }) {
-    const formData = new FormData();
-    for (const f of Array.from(params.files)) formData.append("files", f);
-    if (params.title) formData.append("title", params.title);
-    if (params.description) formData.append("description", params.description);
-    if (params.speakerIds.length > 0) {
-      formData.append("speakerIds", JSON.stringify(params.speakerIds));
-    }
-    if (params.agendaItemId) formData.append("agendaItemId", params.agendaItemId);
+    const fileList = Array.from(params.files);
+    const total = fileList.length;
 
-    const t = toast.loading(
-      `Uploading ${params.files.length} file${params.files.length === 1 ? "" : "s"}…`
-    );
-    try {
-      const res = await fetch(`/api/events/${event.slug}/presentations`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
+    // Upload ONE FILE PER REQUEST to avoid hitting Vercel's 4.5 MB
+    // serverless function body limit. Presentation files (PDF decks,
+    // PPTX with embedded video, etc.) routinely exceed 4 MB each, so
+    // batching multiple in one request will trip the limit.
+    const t = toast.loading(`Uploading 1/${total} …`);
+    let success = 0;
+    const failures: { name: string; reason: string }[] = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      toast.loading(`Uploading ${i + 1}/${total} — ${file.name}`, { id: t });
+      const fd = new FormData();
+      fd.append("files", file);
+      if (params.title) fd.append("title", params.title);
+      if (params.description) fd.append("description", params.description);
+      if (params.speakerIds.length > 0) {
+        fd.append("speakerIds", JSON.stringify(params.speakerIds));
       }
-      const data = await res.json();
-      toast.success(
-        `Uploaded ${data.count} file${data.count === 1 ? "" : "s"}`,
+      if (params.agendaItemId) fd.append("agendaItemId", params.agendaItemId);
+      try {
+        const res = await fetch(`/api/events/${event.slug}/presentations`, {
+          method: "POST",
+          body: fd,
+        });
+        if (!res.ok) {
+          let reason = `HTTP ${res.status}`;
+          try {
+            const err = await res.json();
+            if (err?.error) reason = err.error;
+          } catch {
+            // platform-level 413 / HTML error page — keep the generic reason
+          }
+          failures.push({ name: file.name, reason });
+        } else {
+          success++;
+        }
+      } catch (e) {
+        failures.push({
+          name: file.name,
+          reason: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    if (failures.length === 0) {
+      toast.success(`Uploaded ${success} file${success === 1 ? "" : "s"}`, { id: t });
+    } else if (success === 0) {
+      toast.error(
+        `All ${total} file${total === 1 ? "" : "s"} failed: ${failures[0].reason}`,
         { id: t }
       );
-      setUploadOpen(false);
-      await load();
-    } catch (e) {
-      console.error(e);
-      toast.error((e as Error).message, { id: t });
+    } else {
+      toast.warning(
+        `${success}/${total} uploaded. ${failures.length} failed — first failure: ${failures[0].name} (${failures[0].reason})`,
+        { id: t, duration: 8000 }
+      );
     }
+    setUploadOpen(false);
+    await load();
   }
 
   async function handleDelete(id: string) {
