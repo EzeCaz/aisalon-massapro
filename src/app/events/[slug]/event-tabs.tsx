@@ -9,6 +9,21 @@ import { SlideshowTab } from "./tabs/slideshow-tab";
 import { PresentationsTab } from "./tabs/presentations-tab";
 import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
 
+type SlimImage = {
+  id: string;
+  fileUrl: string;
+  fileName: string;
+  caption: string | null;
+};
+
+type SlimPresentation = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  mimeType: string;
+  title: string | null;
+};
+
 type Speaker = {
   id: string;
   name: string;
@@ -18,6 +33,8 @@ type Speaker = {
   topic: string | null;
   photoUrl: string | null;
   order: number;
+  images?: SlimImage[];
+  presentations?: SlimPresentation[];
 };
 
 type AgendaItem = {
@@ -28,6 +45,7 @@ type AgendaItem = {
   description: string | null;
   type: string;
   speaker: Speaker | null;
+  presentations?: SlimPresentation[];
 };
 
 type EventData = {
@@ -105,7 +123,7 @@ export function EventTabs({
         <OverviewTab event={event} />
       </TabsContent>
       <TabsContent value="agenda" className="mt-6">
-        <AgendaTab key={`agenda-${agendaVersion}`} event={event} />
+        <AgendaTab key={`agenda-${agendaVersion}`} event={event} me={me} />
       </TabsContent>
       <TabsContent value="photos" className="mt-6">
         <PhotosTab event={event} me={me} isAdmin={isAdmin} />

@@ -49,6 +49,7 @@ model User {
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]
   presentations PresentationFile[]
+  speakerMessages SpeakerMessage[] // messages this user sent to speakers
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -107,9 +108,29 @@ model Speaker {
   images         EventImage[] // images linked to this speaker
   presentations  PresentationFile[] // presentations linked to this speaker
   agendaItems    EventAgendaItem[] // agenda items featuring this speaker
+  messages       SpeakerMessage[] // messages left by community members for this speaker
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+/// A message left by a community member for a speaker.
+/// Stored so the speaker (or admin) can read & respond out-of-band
+/// (e.g. via email or LinkedIn). The platform itself does not (yet)
+/// support bidirectional chat — this is the "first contact" hop.
+model SpeakerMessage {
+  id          String   @id @default(cuid())
+  speakerId   String
+  speaker     Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  fromUserId  String?
+  fromUser    User?    @relation(fields: [fromUserId], references: [id], onDelete: SetNull)
+  fromName    String   // snapshot in case the user is later deleted
+  fromEmail   String   // snapshot — this is how the speaker replies
+  body        String
+  createdAt   DateTime @default(now())
+
+  @@index([speakerId, createdAt])
+  @@index([fromUserId])
 }
 
 /// One row in the event agenda — can be a talk, a break, fast pitch, etc.

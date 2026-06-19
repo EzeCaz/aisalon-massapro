@@ -27,7 +27,54 @@ export default async function EventDetailPage({ params }: Params) {
       speakers: { orderBy: { order: "asc" } },
       agenda: {
         orderBy: { startsAt: "asc" },
-        include: { speaker: true },
+        include: {
+          speaker: {
+            include: {
+              // Limit to first 4 images per speaker — just enough for
+              // the "Pictures of the session" thumbnail preview in the
+              // agenda box. We grab up to 4 so the dialog can show a
+              // small strip; the full gallery is on the Photos tab.
+              images: {
+                orderBy: { slideOrder: "asc" },
+                take: 4,
+                select: {
+                  id: true,
+                  fileUrl: true,
+                  fileName: true,
+                  caption: true,
+                },
+              },
+              // Same idea for presentations — just the first one for
+              // the thumbnail. The full list is on the Presentations
+              // tab.
+              presentations: {
+                take: 1,
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  fileName: true,
+                  fileUrl: true,
+                  mimeType: true,
+                  title: true,
+                },
+              },
+            },
+          },
+          // Presentations linked directly to THIS agenda item (e.g.
+          // uploaded by the admin via the Manage Agenda tab). Take
+          // just the first one for the thumbnail.
+          presentations: {
+            take: 1,
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              fileName: true,
+              fileUrl: true,
+              mimeType: true,
+              title: true,
+            },
+          },
+        },
       },
       _count: { select: { images: true } },
     },
