@@ -20,14 +20,40 @@ export default async function AdminPage() {
   if (me.role !== "ADMIN") redirect("/events");
 
   const members = await db.user.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { tags: true, _count: { select: { images: true } } },
+    orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
+    include: {
+      tags: true,
+      _count: { select: { images: true } },
+      speakers: {
+        select: {
+          id: true,
+          name: true,
+          topic: true,
+          event: { select: { id: true, title: true, slug: true } },
+        },
+      },
+    },
   });
 
   const events = await db.event.findMany({
     orderBy: { startsAt: "desc" },
     include: { _count: { select: { images: true, speakers: true } } },
   });
+
+  // All speakers across all events — for the "Link user to speaker" picker
+  const allSpeakers = await db.speaker.findMany({
+    orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
+    include: {
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
+      user: { select: { id: true, email: true } },
+    },
+  });
+
+  // Serialize to plain JSON (Date -> ISO string) so the client component
+  // types match what Prisma returns at runtime.
+  const membersJson = JSON.parse(JSON.stringify(members));
+  const eventsJson = JSON.parse(JSON.stringify(events));
+  const allSpeakersJson = JSON.parse(JSON.stringify(allSpeakers));
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -50,9 +76,9 @@ export default async function AdminPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
           <StatCard label="Members" value={members.length} accent="#FF005A" />
-          <StatCard label="Tagged members" value={members.filter((m) => m.tags.length > 0).length} accent="#00E6FF" />
+          <StatCard label="Imported" value={members.filter((m) => m.importSource).length} accent="#00E6FF" />
           <StatCard label="Events" value={events.length} accent="#007E72" />
-          <StatCard label="Total photos" value={events.reduce((s, e) => s + e._count.images, 0)} accent="#820A7D" />
+          <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent="#820A7D" />
         </div>
 
         {/* Members section */}
@@ -62,7 +88,7 @@ export default async function AdminPage() {
             Assign tags to members — speakers, builders, investors, founders, etc. Tags appear on
             their profile and the user menu.
           </p>
-          <AdminMembersTable members={members} />
+          <AdminMembersTable members={membersJson} events={eventsJson} allSpeakers={allSpeakersJson} />
         </section>
 
         {/* Events section */}

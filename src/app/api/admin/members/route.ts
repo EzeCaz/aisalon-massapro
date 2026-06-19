@@ -5,8 +5,10 @@ import { db } from "@/lib/db";
 
 /**
  * GET /api/admin/members
- * Returns all users with their tags.
- * Admin-only.
+ * Returns all users with their tags + linked speakers (across all events).
+ * Admin-only. Includes the imported-from-spreadsheet fields (mobile,
+ * interestedIn, profileCategories, appliedFor, invitedToSpeak,
+ * importSource, importedAt) — these are admin-only.
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -19,8 +21,21 @@ export async function GET() {
   }
 
   const members = await db.user.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { tags: true },
+    orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
+    include: {
+      tags: true,
+      _count: { select: { images: true } },
+      // Speakers linked to this user (across all events) — used to show
+      // "Linked to: <event title>" in the admin table.
+      speakers: {
+        select: {
+          id: true,
+          name: true,
+          topic: true,
+          event: { select: { id: true, title: true, slug: true } },
+        },
+      },
+    },
   });
   return NextResponse.json({ members });
 }

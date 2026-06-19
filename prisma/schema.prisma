@@ -45,6 +45,18 @@ model User {
   // subsequent password resets.
   passwordHash  String?
   // ----------------------------------------------------------------
+  // Imported-from-spreadsheet fields (admin-only). Captured from the
+  // AI Salon TLV intake form so the admin can see who applied, what
+  // they're interested in, what they applied for, and whether they
+  // were invited to speak. Visible only in the admin panel.
+  mobile            String?  // phone number from the intake form
+  interestedIn      String?  // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
+  profileCategories String?  // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
+  appliedFor        String?  // e.g. "Fast pitch", "Presentation/Lecure"
+  invitedToSpeak    String?  // admin-set indicator (e.g. "Yes" / event slug)
+  importSource      String?  // e.g. "excel:AI Salon TLV.xlsx"
+  importedAt        DateTime?
+  // ----------------------------------------------------------------
   role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]
