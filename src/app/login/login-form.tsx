@@ -26,7 +26,7 @@ export function LoginForm({ callbackUrl }: Props) {
   useEffect(() => {
     const errCode = params.get("error");
     if (errCode) {
-      setError("Sign-in was interrupted. Please try again.");
+      setError("Login was interrupted. Please try again.");
     }
   }, [params]);
 
@@ -35,7 +35,7 @@ export function LoginForm({ callbackUrl }: Props) {
     if (!email) return;
     setError(null);
     setLoading(true);
-    const res = await signIn("dev", {
+    const res = await signIn("login", {
       email,
       name: name || email.split("@")[0],
       redirect: false,
@@ -46,7 +46,7 @@ export function LoginForm({ callbackUrl }: Props) {
       router.push(finalCallback);
       router.refresh();
     } else {
-      setError("Sign-in failed. Please try again.");
+      setError("Login failed. Please try again.");
     }
   }
 
@@ -79,11 +79,11 @@ export function LoginForm({ callbackUrl }: Props) {
         >
           {loading ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Signing in…
+              <Loader2 className="h-4 w-4 animate-spin" /> Logging in…
             </>
             ) : (
               <>
-                Sign in <ArrowRight className="h-4 w-4" />
+                Login <ArrowRight className="h-4 w-4" />
               </>
             )}
           </button>

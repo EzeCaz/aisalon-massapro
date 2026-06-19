@@ -6,14 +6,6 @@
 //   4. Full agenda
 
 import { PrismaClient } from "@prisma/client";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Use the same DB path as the app
-process.env.DATABASE_URL =
-  process.env.DATABASE_URL || `file:${path.join(__dirname, "..", "db", "app.db")}`;
 
 const db = new PrismaClient();
 

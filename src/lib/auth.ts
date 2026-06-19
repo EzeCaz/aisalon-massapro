@@ -55,15 +55,14 @@ export const authOptions: NextAuthOptions = {
         };
       },
     }),
-    // Developer fallback — lets you sign in with any email and name.
-    // Currently enabled in BOTH dev and production while we resolve
-    // Google OAuth (redirect_uri_mismatch) and email-password delivery
-    // (no SMTP configured yet). This is the ONLY working sign-in option
-    // right now — see /login page. To revert: wrap this in
-    // `...(process.env.NODE_ENV !== "production" ? [...] : [])`.
+    // Login provider — email + name, no password. Currently the ONLY
+    // working sign-in option while we resolve Google OAuth
+    // (redirect_uri_mismatch) and email-password delivery (no SMTP
+    // configured yet). To restore the multi-tab login UI, see git
+    // history of src/app/login/login-form.tsx.
     CredentialsProvider({
-      id: "dev",
-      name: "Email & Name",
+      id: "login",
+      name: "Login",
       credentials: {
         email: { label: "Email", type: "email", placeholder: "you@example.com" },
         name: { label: "Name", type: "text", placeholder: "Your Name" },

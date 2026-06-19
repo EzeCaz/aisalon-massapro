@@ -6,13 +6,13 @@ import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import Image from "next/image";
 
 export const metadata = {
-  title: "Sign in — AI Salon Tel Aviv",
+  title: "Login — AI Salon Tel Aviv",
   description:
-    "Sign in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
+    "Log in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
   openGraph: {
-    title: "Sign in — AI Salon Tel Aviv",
+    title: "Login — AI Salon Tel Aviv",
     description:
-      "Sign in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
+      "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
     images: [{ url: "/images/falafel-tlv-ai-salon.png", width: 1200, height: 630, alt: "AI Salon Tel Aviv" }],
   },
 };
@@ -53,7 +53,7 @@ export default async function LoginPage() {
             The community for <span className="ais-gradient-text">AI builders</span> in Tel Aviv.
           </h1>
           <p className="text-white/70 text-base leading-relaxed">
-            Sign in to access events, upload photos from our gatherings, browse the shared
+            Log in to access events, upload photos from our gatherings, browse the shared
             slideshow, and connect with fellow founders, CMOs, investors and AI builders.
           </p>
         </div>
@@ -96,13 +96,13 @@ export default async function LoginPage() {
 
           <h2 className="text-2xl font-extrabold text-black mb-1">Welcome</h2>
           <p className="text-sm text-black/60 mb-8">
-            Enter your name and email to join the AI Salon Tel Aviv community.
+            Enter your name and email to log in to the AI Salon Tel Aviv community.
           </p>
 
           <LoginForm callbackUrl={callbackUrl ?? undefined} />
 
           <p className="mt-8 text-xs text-black/40 leading-relaxed">
-            By signing in you agree to the AI Salon community guidelines. Only registered
+            By logging in you agree to the AI Salon community guidelines. Only registered
             members can attend events.
           </p>
         </div>
