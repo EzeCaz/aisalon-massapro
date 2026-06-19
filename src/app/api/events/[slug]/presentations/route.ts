@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { put } from "@vercel/blob";
+import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 
 /**
  * POST /api/events/[slug]/presentations
@@ -97,7 +98,7 @@ export async function POST(
   ];
 
   for (const f of files) {
-    const ext = f.name.split(".").pop()?.toLowerCase() || "";
+    const ext = safeFileExtension(f.name, f.type, "");
     if (!allowedMime.includes(f.type) && !allowedExt.includes(ext)) {
       return NextResponse.json(
         { error: `Unsupported file type: ${f.name} (${f.type || ext})` },
@@ -144,10 +145,16 @@ export async function POST(
   const created: CreatedFile[] = [];
   for (const file of files) {
     const buf = Buffer.from(await file.arrayBuffer());
-    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-    const blobName = `events/${event.id}/presentations/${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}.${ext}`;
+    // Use the safe extension (handles non-ASCII filenames that have no
+    // extension — the old code would fail Vercel Blob's pathname regex
+    // for files like "תמונה" or "מצגת").
+    const ext = safeFileExtension(file.name, file.type, "bin");
+    const blobName = safeBlobPathname(
+      "events",
+      event.id,
+      "presentations",
+      uniqueBlobFilename(ext)
+    );
 
     try {
       const blob = await put(blobName, buf, {

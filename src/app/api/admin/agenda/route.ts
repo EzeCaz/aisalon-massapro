@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { put } from "@vercel/blob";
+import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 
 /**
  * POST /api/admin/agenda
@@ -185,16 +186,19 @@ export async function POST(req: NextRequest) {
   // ---------- Optional: upload the presentation file ----------
   let createdPresentation: { id: string; fileName: string; fileUrl: string } | null = null;
   if (file instanceof File) {
-    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const ext = safeFileExtension(file.name, file.type, "");
     if (!ALLOWED_MIME.includes(file.type) && !ALLOWED_EXT.includes(ext)) {
       // Don't fail the whole request — the agenda item was already created.
       // Just skip the file upload and report a warning in the response.
       console.warn("[admin/agenda] Skipping unsupported file:", file.name, file.type);
     } else {
       const buf = Buffer.from(await file.arrayBuffer());
-      const blobName = `events/${eventId}/presentations/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}.${ext || "bin"}`;
+      const blobName = safeBlobPathname(
+        "events",
+        eventId,
+        "presentations",
+        uniqueBlobFilename(ext || "bin")
+      );
       try {
         const blob = await put(blobName, buf, {
           access: "public",

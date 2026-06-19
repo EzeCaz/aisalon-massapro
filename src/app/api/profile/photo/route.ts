@@ -31,10 +31,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/avif"];
+  const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "image/avif"];
   if (!allowed.includes(file.type)) {
     return NextResponse.json(
-      { error: `Unsupported file type: ${file.type}. Use JPG, PNG, WebP, or GIF.` },
+      { error: `Unsupported file type: ${file.type}. Use JPG, PNG, WebP, GIF, or HEIC.` },
       { status: 400 }
     );
   }

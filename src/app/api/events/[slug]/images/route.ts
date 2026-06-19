@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
+import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 
 /**
  * POST /api/events/[slug]/images
@@ -50,12 +51,17 @@ export async function POST(
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
   }
 
-  // Validate image MIME types
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/avif"];
+  // Validate image MIME types. We also accept `image/jpg` (some Android
+  // cameras send this instead of the official `image/jpeg`) and fall back
+  // to checking the file extension when the MIME type is missing or
+  // generic (e.g. `application/octet-stream` from desktop drag-drop).
+  const allowedMime = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif", "image/avif"];
+  const allowedExt = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif"];
   for (const f of files) {
-    if (!allowed.includes(f.type)) {
+    const ext = safeFileExtension(f.name, f.type, "");
+    if (!allowedMime.includes(f.type) && !allowedExt.includes(ext)) {
       return NextResponse.json(
-        { error: `Unsupported file type: ${f.name} (${f.type})` },
+        { error: `Unsupported file type: ${f.name} (${f.type || ext})` },
         { status: 400 }
       );
     }
@@ -86,7 +92,12 @@ export async function POST(
     let width: number | null = null;
     let height: number | null = null;
     let uploadBuf: Buffer = buf;
-    let uploadExt = (file.name.split(".").pop()?.toLowerCase() || "jpg");
+    // Compute a safe extension up front (handles non-ASCII filenames
+    // like Hebrew "תמונה" that have no extension — the old code would
+    // turn the entire filename into the "extension" and Vercel Blob
+    // would reject the pathname). sharp normally re-encodes as JPEG so
+    // we override this to "jpg" inside the try block below.
+    let uploadExt = safeFileExtension(file.name, file.type, "jpg");
     let mimeType = file.type;
 
     try {
@@ -105,10 +116,16 @@ export async function POST(
       mimeType = "image/jpeg";
     } catch (err) {
       console.warn("[upload] sharp processing failed, uploading original:", err);
-      // uploadBuf and uploadExt remain as the original file
+      // uploadBuf stays as the original buffer; uploadExt stays as the
+      // safe extension derived above (NOT the raw extension from the
+      // filename — that's the bug we're fixing).
     }
 
-    const blobName = `events/${event.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${uploadExt}`;
+    const blobName = safeBlobPathname(
+      "events",
+      event.id,
+      uniqueBlobFilename(uploadExt)
+    );
 
     try {
       const blob = await put(blobName, uploadBuf, {
