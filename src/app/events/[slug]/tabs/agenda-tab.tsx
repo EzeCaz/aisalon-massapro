@@ -26,6 +26,7 @@ import {
   Send,
   Loader2,
   ExternalLink,
+  Link2,
 } from "lucide-react";
 
 type SlimImage = {
@@ -106,13 +107,24 @@ function fmtTime(iso: string): string {
 }
 
 /**
+ * Extract the first http(s) URL from a block of text (e.g. an agenda
+ * item description). Returns null when none is found.
+ */
+function extractFirstUrl(text: string | null): string | null {
+  if (!text) return null;
+  const match = text.match(/https?:\/\/[^\s<>"')]+/i);
+  return match ? match[0] : null;
+}
+
+/**
  * Decide whether a given agenda item should show the "Pictures",
- * "Presentation", and "Contact" thumbnails row.
+ * "Presentation", "URL", and "Contact" thumbnails row.
  *
  * Rules (per the user's request):
  *   - Show pictures thumbnail if the speaker has any linked images.
  *   - Show presentation thumbnail if EITHER the agenda item has a
  *     linked presentation OR the speaker has a linked presentation.
+ *   - Show URL thumbnail if the description contains an http(s) URL.
  *   - Always show the "Contact speaker" button if there is a speaker
  *     (the user said "when a specific session / speaker box has
  *     either a url, attachment or images attached to the speaker" —
@@ -125,9 +137,11 @@ function fmtTime(iso: string): string {
 function agendaItemHasAssets(item: AgendaItem): {
   hasPictures: boolean;
   hasPresentation: boolean;
+  hasUrl: boolean;
   hasContact: boolean;
   firstImage: SlimImage | null;
   firstPresentation: SlimPresentation | null;
+  sessionUrl: string | null;
 } {
   const speakerImages = item.speaker?.images ?? [];
   const itemPresentations = item.presentations ?? [];
@@ -136,13 +150,16 @@ function agendaItemHasAssets(item: AgendaItem): {
   const firstImage = speakerImages[0] ?? null;
   const firstPresentation =
     itemPresentations[0] ?? speakerPresentations[0] ?? null;
+  const sessionUrl = extractFirstUrl(item.description);
 
   return {
     hasPictures: speakerImages.length > 0,
     hasPresentation: firstPresentation !== null,
+    hasUrl: sessionUrl !== null,
     hasContact: !!item.speaker,
     firstImage,
     firstPresentation,
+    sessionUrl,
   };
 }
 
@@ -417,7 +434,10 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
             const end = item.endsAt ? new Date(item.endsAt) : null;
             const assets = agendaItemHasAssets(item);
             const showThumbnails =
-              assets.hasPictures || assets.hasPresentation || assets.hasContact;
+              assets.hasPictures ||
+              assets.hasPresentation ||
+              assets.hasUrl ||
+              assets.hasContact;
 
             return (
               <Card
@@ -504,6 +524,26 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                           <span className="truncate">
                             {assets.firstPresentation.title || assets.firstPresentation.fileName}
                           </span>
+                        </div>
+                      </a>
+                    )}
+
+                    {/* Session URL — appears next to the Contact thumbnail
+                        when the description contains an http(s) link. */}
+                    {assets.hasUrl && assets.sessionUrl && (
+                      <a
+                        href={assets.sessionUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#007E72]/40 bg-white overflow-hidden transition-colors"
+                        title={`Open session link: ${assets.sessionUrl}`}
+                      >
+                        <div className="w-full h-16 bg-[#007E72]/5 flex items-center justify-center">
+                          <Link2 className="h-7 w-7 text-[#007E72]" />
+                        </div>
+                        <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#007E72] flex items-center gap-1 pb-1">
+                          <Link2 className="h-2.5 w-2.5" />
+                          Session URL
                         </div>
                       </a>
                     )}

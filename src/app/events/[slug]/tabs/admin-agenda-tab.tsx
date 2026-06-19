@@ -434,6 +434,21 @@ function CreateAgendaItemDialog({
       return;
     }
 
+    // ---- Pre-flight file size check ----
+    // Vercel's serverless body limit is 4.5 MB. The platform itself returns
+    // a plain-text 413 "Request Entity Too Large" response that bypasses our
+    // route handler entirely — so we catch the oversized file BEFORE the
+    // fetch to give the user a friendly message.
+    const MAX_FILE_BYTES = 4 * 1024 * 1024; // 4 MB safety margin
+    if (file && file.size > MAX_FILE_BYTES) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1);
+      toast.error(
+        `File is too large (${mb} MB). The maximum upload size is ~4 MB due to serverless limits. Please compress the file or use a smaller version.`,
+        { duration: 6000 }
+      );
+      return;
+    }
+
     setSaving(true);
     const t = toast.loading("Creating agenda item…");
 
@@ -474,8 +489,23 @@ function CreateAgendaItemDialog({
         body: formData,
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed");
+        // Safely parse the error response. The server normally returns JSON,
+        // but Vercel's platform-level 413 returns plain text ("Request Entity
+        // Too Large") which would throw on .json() — surfacing as the
+        // confusing "Unexpected token 'R'…" error.
+        let errMsg = `Request failed (HTTP ${res.status})`;
+        try {
+          const err = await res.json();
+          if (err?.error) errMsg = err.error;
+        } catch {
+          if (res.status === 413) {
+            errMsg =
+              "The uploaded file is too large. Vercel limits each request to ~4.5 MB — please use a smaller file (under 4 MB).";
+          } else {
+            errMsg = `Request failed (HTTP ${res.status}). Please try again.`;
+          }
+        }
+        throw new Error(errMsg);
       }
       const data = await res.json();
       const parts = [`Created "${data.agendaItem.title}"`];
@@ -486,7 +516,7 @@ function CreateAgendaItemDialog({
       onOpenChange(false);
       onCreated();
     } catch (e) {
-      toast.error((e as Error).message, { id: t });
+      toast.error((e as Error).message || "Failed to create agenda item", { id: t, duration: 6000 });
     } finally {
       setSaving(false);
     }
@@ -694,8 +724,17 @@ function CreateAgendaItemDialog({
               {file ? (
                 <div>
                   <div className="font-semibold text-sm text-black">{file.name}</div>
-                  <div className="text-[0.65rem] text-black/50 mt-0.5">
-                    {(file.size / 1024).toFixed(1)} KB · click to change
+                  <div
+                    className={`text-[0.65rem] mt-0.5 ${
+                      file.size > 4 * 1024 * 1024
+                        ? "text-[#FF005A] font-semibold"
+                        : "text-black/50"
+                    }`}
+                  >
+                    {(file.size / 1024).toFixed(1)} KB
+                    {file.size > 4 * 1024 * 1024
+                      ? " · ⚠ exceeds 4 MB limit — please pick a smaller file"
+                      : " · click to change"}
                   </div>
                 </div>
               ) : (
@@ -705,7 +744,7 @@ function CreateAgendaItemDialog({
                     Drop a file or click to browse
                   </div>
                   <div className="text-[0.65rem] text-black/50 mt-0.5">
-                    PDF, PPT, PPTX, Keynote, DOC, images
+                    PDF, PPT, PPTX, Keynote, DOC, images · max 4 MB
                   </div>
                 </div>
               )}
@@ -800,14 +839,20 @@ function EditAgendaItemDialog({
         }),
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed");
+        let errMsg = `Request failed (HTTP ${res.status})`;
+        try {
+          const err = await res.json();
+          if (err?.error) errMsg = err.error;
+        } catch {
+          errMsg = `Request failed (HTTP ${res.status}). Please try again.`;
+        }
+        throw new Error(errMsg);
       }
       toast.success("Saved", { id: t });
       onOpenChange(false);
       onSaved();
     } catch (e) {
-      toast.error((e as Error).message, { id: t });
+      toast.error((e as Error).message || "Failed to save", { id: t });
     } finally {
       setSaving(false);
     }
