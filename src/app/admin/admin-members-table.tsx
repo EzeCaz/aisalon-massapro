@@ -36,6 +36,9 @@ import {
   X,
   ListChecks,
   Loader2,
+  Merge as MergeIcon,
+  AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -105,6 +108,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -240,6 +244,48 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
     setBulkLinkOpen(false);
     setBulkPending(false);
     window.location.reload();
+  }
+
+  async function bulkMerge(
+    primaryId: string,
+    secondaryIds: string[],
+    confirmNameMismatch: boolean
+  ) {
+    if (secondaryIds.length === 0) return;
+    setBulkPending(true);
+    const t = toast.loading(
+      `Merging ${secondaryIds.length} account${secondaryIds.length === 1 ? "" : "s"} into primary…`
+    );
+    try {
+      const res = await fetch(`/api/admin/members/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          primaryId,
+          secondaryIds,
+          confirmNameMismatch,
+        }),
+      });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          if (err?.error) msg = err.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      toast.success(
+        `Merged ${data.deletedCount} account${data.deletedCount === 1 ? "" : "s"} into primary. All data combined.`,
+        { id: t, duration: 6000 }
+      );
+      setMergeOpen(false);
+      window.location.reload();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setBulkPending(false);
+    }
   }
 
   async function saveTags(memberId: string, tags: string[]) {
@@ -393,6 +439,17 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
             count={selected.size}
             onSubmit={(sid) => bulkLinkSpeaker(sid)}
           />
+          {selected.size >= 2 && (
+            <MergeMembersDialog
+              open={mergeOpen}
+              onOpenChange={setMergeOpen}
+              pending={bulkPending}
+              selectedMembers={filtered.filter((m) => selected.has(m.id))}
+              onMerge={(primaryId, secondaryIds, confirm) =>
+                bulkMerge(primaryId, secondaryIds, confirm)
+              }
+            />
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -1429,6 +1486,372 @@ function BulkLinkSpeakerDialog({
             ) : (
               <>
                 <Link2 className="h-4 w-4 mr-1.5" /> Link to {count} member{count === 1 ? "" : "s"}
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Merge members
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if two names are "similar" (could plausibly be the same person).
+ * Mirrors the server-side check in /api/admin/members/merge/route.ts.
+ */
+function areNamesSimilar(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
+  const ta = norm(a);
+  const tb = norm(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+  if (ta[0] === tb[0]) return true; // same first name
+  const sa = new Set(ta);
+  for (const t of tb) if (sa.has(t)) return true; // shared token
+  const al = a.toLowerCase().trim();
+  const bl = b.toLowerCase().trim();
+  if (al.length >= 3 && bl.includes(al)) return true; // substring
+  if (bl.length >= 3 && al.includes(bl)) return true;
+  return false;
+}
+
+function checkAllPairsSimilar(users: { name: string | null; email: string }[]) {
+  const mismatchedPairs: { a: string; b: string }[] = [];
+  for (let i = 0; i < users.length; i++) {
+    for (let j = i + 1; j < users.length; j++) {
+      const a = users[i].name || users[i].email.split("@")[0];
+      const b = users[j].name || users[j].email.split("@")[0];
+      if (!areNamesSimilar(a, b)) {
+        mismatchedPairs.push({ a, b });
+      }
+    }
+  }
+  return {
+    similar: mismatchedPairs.length === 0,
+    mismatchedPairs,
+  };
+}
+
+/**
+ * MergeMembersDialog — pick a primary, review the name-similarity check,
+ * and merge all other selected accounts into the primary.
+ *
+ * Shows a red alert when names don't match ("the names are not even close,
+ * are you sure to merge?") and requires explicit acknowledgement before
+ * allowing the merge.
+ */
+function MergeMembersDialog({
+  open,
+  onOpenChange,
+  pending,
+  selectedMembers,
+  onMerge,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  pending: boolean;
+  selectedMembers: Member[];
+  onMerge: (
+    primaryId: string,
+    secondaryIds: string[],
+    confirmNameMismatch: boolean
+  ) => void;
+}) {
+  const [primaryId, setPrimaryId] = useState<string>(
+    selectedMembers[0]?.id || ""
+  );
+  const [acknowledged, setAcknowledged] = useState(false);
+
+  // Reset state when the dialog opens
+  useEffect(() => {
+    if (open) {
+      setPrimaryId(selectedMembers[0]?.id || "");
+      setAcknowledged(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const nameCheck = useMemo(
+    () => checkAllPairsSimilar(selectedMembers),
+    [selectedMembers]
+  );
+
+  const secondaryIds = selectedMembers
+    .filter((m) => m.id !== primaryId)
+    .map((m) => m.id);
+
+  // Build a merge preview for the dialog
+  const primary = selectedMembers.find((m) => m.id === primaryId);
+  const allTagLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of selectedMembers) {
+      for (const t of m.tags) set.add(t.label);
+    }
+    return Array.from(set);
+  }, [selectedMembers]);
+
+  const combinedBio = useMemo(() => {
+    const parts: string[] = [];
+    for (const m of selectedMembers) {
+      if (!m.bio || !m.bio.trim()) continue;
+      if (m.id === primaryId) {
+        parts.push(m.bio);
+      } else {
+        parts.push(
+          `— Merged from ${m.name || m.email} (${m.email}) —\n${m.bio.trim()}`
+        );
+      }
+    }
+    return parts.join("\n\n");
+  }, [selectedMembers, primaryId]);
+
+  const canMerge =
+    !!primary &&
+    secondaryIds.length > 0 &&
+    (nameCheck.similar || acknowledged) &&
+    !pending;
+
+  function handleMerge() {
+    if (!primary || secondaryIds.length === 0) return;
+    onMerge(primary.id, secondaryIds, !nameCheck.similar && acknowledged);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setAcknowledged(false);
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-[#820A7D] text-[#820A7D] h-7"
+        >
+          <MergeIcon className="h-3.5 w-3.5 mr-1" /> Merge ({selectedMembers.length})
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <MergeIcon className="h-5 w-5 text-[#820A7D]" />
+            Merge {selectedMembers.length} members into one
+          </DialogTitle>
+        </DialogHeader>
+
+        <p className="text-xs text-black/60 -mt-2">
+          Pick the <strong>primary account</strong> to keep. All other selected
+          accounts will be deleted, and their data (tags, photos, presentations,
+          messages, speaker links, bio, interests) will be combined into the
+          primary. Nothing is erased.
+        </p>
+
+        {/* Name similarity check */}
+        {nameCheck.similar ? (
+          <div className="flex items-start gap-2 bg-[#007E72]/5 border border-[#007E72]/20 rounded-md px-3 py-2 text-xs text-[#007E72]">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <strong>Names look similar.</strong> All selected names appear to
+              belong to the same person. You can proceed with the merge.
+            </div>
+          </div>
+        ) : (
+          <div className="bg-[#FF005A]/5 border border-[#FF005A]/30 rounded-md p-3 space-y-2">
+            <div className="flex items-start gap-2 text-sm text-[#FF005A]">
+              <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+              <div>
+                <strong>The names are not even close.</strong> Are you sure you
+                want to merge?
+              </div>
+            </div>
+            <div className="text-xs text-black/60 pl-7">
+              These name pairs don&apos;t look like the same person:
+              <ul className="mt-1 space-y-0.5">
+                {nameCheck.mismatchedPairs.slice(0, 4).map((p, i) => (
+                  <li key={i} className="font-mono">
+                    &ldquo;{p.a}&rdquo; vs &ldquo;{p.b}&rdquo;
+                  </li>
+                ))}
+                {nameCheck.mismatchedPairs.length > 4 && (
+                  <li className="italic">
+                    +{nameCheck.mismatchedPairs.length - 4} more pair
+                    {nameCheck.mismatchedPairs.length - 4 === 1 ? "" : "s"}
+                  </li>
+                )}
+              </ul>
+            </div>
+            <label className="flex items-start gap-2 text-xs text-black/80 cursor-pointer pl-7">
+              <Checkbox
+                checked={acknowledged}
+                onCheckedChange={(v) => setAcknowledged(!!v)}
+                className="data-[state=checked]:bg-[#FF005A] data-[state=checked]:border-[#FF005A] mt-0.5"
+              />
+              <span>
+                I understand the names don&apos;t match — these may be different
+                people. Merge anyway.
+              </span>
+            </label>
+          </div>
+        )}
+
+        {/* Primary account picker */}
+        <div>
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1.5">
+            Primary account (the one to keep)
+          </div>
+          <div className="space-y-1 max-h-56 overflow-y-auto ais-scroll border border-black/10 rounded-md p-1">
+            {selectedMembers.map((m) => {
+              const isPrimary = m.id === primaryId;
+              return (
+                <label
+                  key={m.id}
+                  className={`flex items-center gap-3 p-2 rounded-md cursor-pointer ${
+                    isPrimary ? "bg-[#820A7D]/10" : "hover:bg-black/5"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="merge-primary"
+                    checked={isPrimary}
+                    onChange={() => setPrimaryId(m.id)}
+                    className="h-4 w-4 accent-[#820A7D]"
+                  />
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src={m.photoUrl || m.image || undefined}
+                      alt={m.name || m.email}
+                    />
+                    <AvatarFallback className="bg-black text-white text-[0.6rem] font-bold">
+                      {(m.name || m.email)
+                        .split(/\s+|@/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((p) => p[0]?.toUpperCase())
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-sm flex items-center gap-1.5">
+                      {m.name || m.email.split("@")[0]}
+                      {m.role === "ADMIN" && (
+                        <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
+                          <Shield className="h-2.5 w-2.5" /> Admin
+                        </span>
+                      )}
+                      {m.importSource && (
+                        <span className="text-[0.55rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] px-1.5 py-0.5 rounded">
+                          Imported
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-black/50 truncate">{m.email}</div>
+                  </div>
+                  {isPrimary && (
+                    <span className="text-[0.6rem] font-bold uppercase text-[#820A7D] shrink-0">
+                      Keeps account
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Merge preview */}
+        {primary && (
+          <div className="bg-black/[0.02] border border-black/10 rounded-md p-3 space-y-2 text-xs">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+              Merge preview
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <div className="text-black/40">Tags (combined)</div>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {allTagLabels.length === 0 ? (
+                    <span className="italic text-black/30">No tags</span>
+                  ) : (
+                    allTagLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="ais-tag"
+                        style={{
+                          backgroundColor: `${tagColor(label)}20`,
+                          color: tagColor(label),
+                        }}
+                      >
+                        {label}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-black/40">Will be deleted</div>
+                <div className="mt-1 text-black/70">
+                  {secondaryIds.length} account
+                  {secondaryIds.length === 1 ? "" : "s"}:{" "}
+                  {selectedMembers
+                    .filter((m) => m.id !== primaryId)
+                    .map((m) => m.email)
+                    .join(", ")}
+                </div>
+              </div>
+            </div>
+
+            {combinedBio && (
+              <div>
+                <div className="text-black/40">Bio (combined)</div>
+                <div className="mt-1 max-h-32 overflow-y-auto ais-scroll text-black/70 whitespace-pre-line border-l-2 border-black/10 pl-2">
+                  {combinedBio.length > 400
+                    ? combinedBio.slice(0, 400) + "…"
+                    : combinedBio}
+                </div>
+              </div>
+            )}
+
+            <div className="text-[0.65rem] text-black/40 pt-1 border-t border-black/10">
+              Single-value fields (name, photo, LinkedIn, company, mobile,
+              password) keep the primary&apos;s value when set, otherwise the
+              first non-null value from the secondaries. Email always stays the
+              primary&apos;s. Speaker links, photos, presentations, and direct
+              messages are all reassigned to the primary.
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            disabled={!canMerge}
+            onClick={handleMerge}
+            className="bg-[#820A7D] hover:bg-[#820A7D]/90"
+          >
+            {pending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Merging…
+              </>
+            ) : (
+              <>
+                <MergeIcon className="h-4 w-4 mr-1.5" />
+                Merge {secondaryIds.length} into{" "}
+                {primary?.name || primary?.email.split("@")[0] || "primary"}
+                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
               </>
             )}
           </Button>
