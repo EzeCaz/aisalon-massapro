@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ import {
   Calendar,
   CheckCircle2,
   ExternalLink,
+  X,
+  ListChecks,
+  Loader2,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -98,6 +101,10 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   const [filterApplied, setFilterApplied] = useState<string>("");
   const [filterInvited, setFilterInvited] = useState(false);
   const [filterLinked, setFilterLinked] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -115,6 +122,17 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
     });
   }, [members, search, filterApplied, filterInvited, filterLinked]);
 
+  // When the filtered list changes, drop any selections that are no
+  // longer visible — prevents accidentally bulk-editing hidden rows.
+  useEffect(() => {
+    setSelected((prev) => {
+      const visibleIds = new Set(filtered.map((m) => m.id));
+      const next = new Set<string>();
+      for (const id of prev) if (visibleIds.has(id)) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filtered]);
+
   function toggleExpanded(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -122,6 +140,106 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
       else next.add(id);
       return next;
     });
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected(new Set(filtered.map((m) => m.id)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((m) => selected.has(m.id));
+  const someVisibleSelected =
+    !allVisibleSelected && filtered.some((m) => selected.has(m.id));
+
+  async function bulkSaveTags(addTags: string[], removeTags: string[]) {
+    if (selected.size === 0) return;
+    if (addTags.length === 0 && removeTags.length === 0) {
+      toast.error("Pick at least one tag to add or remove");
+      return;
+    }
+    setBulkPending(true);
+    const t = toast.loading(
+      `Updating tags on ${selected.size} member${selected.size === 1 ? "" : "s"}…`
+    );
+    try {
+      const res = await fetch(`/api/admin/members/bulk-tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userIds: Array.from(selected),
+          addTags,
+          removeTags,
+        }),
+      });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          if (err?.error) msg = err.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      toast.success(`Tags updated on ${data.updated} member${data.updated === 1 ? "" : "s"}`, { id: t });
+      setBulkTagOpen(false);
+      window.location.reload();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t });
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
+  async function bulkLinkSpeaker(speakerId: string | null) {
+    if (selected.size === 0) return;
+    if (!speakerId) {
+      toast.error("Pick a speaker to link");
+      return;
+    }
+    setBulkPending(true);
+    const t = toast.loading(
+      `Linking ${selected.size} member${selected.size === 1 ? "" : "s"} to speaker…`
+    );
+    const ids = Array.from(selected);
+    let ok = 0;
+    let fail = 0;
+    // Sequential to avoid hammering the DB with parallel transactions.
+    for (const id of ids) {
+      try {
+        const res = await fetch(`/api/admin/members/${id}/link-speaker`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ speakerId }),
+        });
+        if (res.ok) ok++;
+        else fail++;
+      } catch {
+        fail++;
+      }
+    }
+    if (fail === 0) {
+      toast.success(`Linked ${ok} member${ok === 1 ? "" : "s"} to speaker`, { id: t });
+    } else if (ok === 0) {
+      toast.error(`All ${fail} failed`, { id: t });
+    } else {
+      toast.warning(`${ok} linked, ${fail} failed`, { id: t, duration: 8000 });
+    }
+    setBulkLinkOpen(false);
+    setBulkPending(false);
+    window.location.reload();
   }
 
   async function saveTags(memberId: string, tags: string[]) {
@@ -243,12 +361,71 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         </span>
       </div>
 
+      {/* Bulk action bar (only visible when rows are selected) */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 bg-[#FF005A]/5 border border-[#FF005A]/20 rounded-md px-3 py-2">
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF005A]">
+            <ListChecks className="h-4 w-4" />
+            {selected.size} selected
+          </span>
+          <div className="h-4 w-px bg-black/10 mx-1" />
+          {filtered.length > selected.size && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={selectAllVisible}
+            >
+              Select all {filtered.length} visible
+            </Button>
+          )}
+          <BulkTagDialog
+            open={bulkTagOpen}
+            onOpenChange={setBulkTagOpen}
+            pending={bulkPending}
+            onSubmit={(add, remove) => bulkSaveTags(add, remove)}
+          />
+          <BulkLinkSpeakerDialog
+            open={bulkLinkOpen}
+            onOpenChange={setBulkLinkOpen}
+            pending={bulkPending}
+            allSpeakers={allSpeakers}
+            count={selected.size}
+            onSubmit={(sid) => bulkLinkSpeaker(sid)}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs ml-auto"
+            onClick={clearSelection}
+          >
+            <X className="h-3.5 w-3.5 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="border border-black/10 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider">
               <tr>
+                <th className="text-left px-3 py-3 w-10">
+                  <Checkbox
+                    checked={
+                      allVisibleSelected
+                        ? true
+                        : someVisibleSelected
+                        ? "indeterminate"
+                        : false
+                    }
+                    onCheckedChange={() => {
+                      if (allVisibleSelected) clearSelection();
+                      else selectAllVisible();
+                    }}
+                    aria-label="Select all visible"
+                  />
+                </th>
                 <th className="text-left px-2 py-3 w-8"></th>
                 <th className="text-left px-4 py-3 font-bold">Member</th>
                 <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Applied for</th>
@@ -260,21 +437,40 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
             <tbody>
               {filtered.map((m) => {
                 const isOpen = expanded.has(m.id);
+                const isSelected = selected.has(m.id);
                 return (
                   <>
                     <tr
                       key={m.id}
-                      className="border-t border-black/5 hover:bg-black/[0.02] cursor-pointer"
-                      onClick={() => toggleExpanded(m.id)}
+                      className={`border-t border-black/5 hover:bg-black/[0.02] ${
+                        isSelected ? "bg-[#FF005A]/[0.04]" : ""
+                      }`}
                     >
-                      <td className="px-2 py-3 text-black/40">
+                      <td
+                        className="px-3 py-3"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelect(m.id)}
+                          aria-label={`Select ${m.name || m.email}`}
+                          className="data-[state=checked]:bg-[#FF005A] data-[state=checked]:border-[#FF005A]"
+                        />
+                      </td>
+                      <td
+                        className="px-2 py-3 text-black/40 cursor-pointer"
+                        onClick={() => toggleExpanded(m.id)}
+                      >
                         {isOpen ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
                           <ChevronRight className="h-4 w-4" />
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td
+                        className="px-4 py-3 cursor-pointer"
+                        onClick={() => toggleExpanded(m.id)}
+                      >
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
                             <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
@@ -411,7 +607,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
                     {isOpen && (
                       <tr key={`${m.id}-detail`} className="bg-black/[0.02]">
                         <td></td>
-                        <td colSpan={5} className="px-4 py-4">
+                        <td colSpan={6} className="px-4 py-4">
                           <MemberDetail member={m} />
                         </td>
                       </tr>
@@ -421,7 +617,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-black/40 text-sm">
+                  <td colSpan={7} className="px-4 py-8 text-center text-black/40 text-sm">
                     No members match your filters.
                   </td>
                 </tr>
@@ -923,6 +1119,318 @@ function ConvertToSpeakerDialog({
             className="bg-[#FF005A] hover:bg-[#FF005A]/90"
           >
             {pending ? "Creating…" : "Create speaker profile"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * BulkTagDialog — add or remove tags across all selected members.
+ *
+ * Unlike the single-member TagDialog (which replaces all tags), this
+ * dialog MERGES: tags checked under "Add" are added to each selected
+ * user (no deduplication needed — the API uses Set semantics), and
+ * tags checked under "Remove" are stripped from each selected user.
+ *
+ * The same tag can be in both lists (it's a no-op: add then remove
+ * would leave it absent, but order is undefined; we just disallow it
+ * on the client by toggling between the two states).
+ */
+function BulkTagDialog({
+  open,
+  onOpenChange,
+  pending,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  pending: boolean;
+  onSubmit: (addTags: string[], removeTags: string[]) => void;
+}) {
+  const [addTags, setAddTags] = useState<Set<string>>(new Set());
+  const [removeTags, setRemoveTags] = useState<Set<string>>(new Set());
+
+  function reset() {
+    setAddTags(new Set());
+    setRemoveTags(new Set());
+  }
+
+  function cycleTag(label: string) {
+    // off -> add -> remove -> off
+    // Compute next state from current refs synchronously.
+    const isAdd = addTags.has(label);
+    const isRemove = removeTags.has(label);
+    if (isAdd) {
+      // move add -> remove
+      const aNext = new Set(addTags);
+      aNext.delete(label);
+      const rNext = new Set(removeTags);
+      rNext.add(label);
+      setAddTags(aNext);
+      setRemoveTags(rNext);
+    } else if (isRemove) {
+      // remove -> off
+      const rNext = new Set(removeTags);
+      rNext.delete(label);
+      setRemoveTags(rNext);
+    } else {
+      // off -> add
+      const aNext = new Set(addTags);
+      aNext.add(label);
+      setAddTags(aNext);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) reset();
+        onOpenChange(v);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="border-[#FF005A] text-[#FF005A] h-7">
+          <TagIcon className="h-3.5 w-3.5 mr-1" /> Bulk edit tags
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Bulk edit tags</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-black/60 -mt-2">
+          Click each tag once to <strong className="text-[#007E72]">Add</strong> it to all selected
+          members, click again to <strong className="text-[#FF005A]">Remove</strong> it from all
+          selected members, click a third time to clear.
+        </p>
+        <div className="space-y-1.5 max-h-80 overflow-y-auto ais-scroll">
+          {MEMBER_TAG_CATALOG.map((t) => {
+            const isAdd = addTags.has(t.label);
+            const isRemove = removeTags.has(t.label);
+            return (
+              <button
+                key={t.label}
+                type="button"
+                onClick={() => cycleTag(t.label)}
+                className={`w-full flex items-center gap-3 p-2 rounded-md text-left transition-colors ${
+                  isAdd
+                    ? "bg-[#007E72]/10"
+                    : isRemove
+                    ? "bg-[#FF005A]/10"
+                    : "hover:bg-black/5"
+                }`}
+              >
+                <span
+                  className={`h-4 w-4 rounded border flex items-center justify-center text-[0.6rem] font-bold ${
+                    isAdd
+                      ? "bg-[#007E72] border-[#007E72] text-white"
+                      : isRemove
+                      ? "bg-[#FF005A] border-[#FF005A] text-white"
+                      : "border-black/20"
+                  }`}
+                >
+                  {isAdd ? "+" : isRemove ? "−" : ""}
+                </span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">{t.label}</span>
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: t.color }}
+                      title={t.color}
+                    />
+                  </div>
+                  {t.description && (
+                    <div className="text-xs text-black/60">{t.description}</div>
+                  )}
+                </div>
+                <span
+                  className={`text-[0.6rem] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    isAdd
+                      ? "bg-[#007E72] text-white"
+                      : isRemove
+                      ? "bg-[#FF005A] text-white"
+                      : "bg-black/10 text-black/40"
+                  }`}
+                >
+                  {isAdd ? "Add" : isRemove ? "Remove" : "—"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="text-xs text-black/50 bg-black/5 rounded-md px-3 py-2">
+          <strong>Summary:</strong>{" "}
+          {addTags.size === 0 && removeTags.size === 0 ? (
+            <span className="italic text-black/40">No changes selected</span>
+          ) : (
+            <>
+              {addTags.size > 0 && (
+                <span className="text-[#007E72]">+{addTags.size} to add</span>
+              )}
+              {addTags.size > 0 && removeTags.size > 0 && <span className="mx-1">·</span>}
+              {removeTags.size > 0 && (
+                <span className="text-[#FF005A]">−{removeTags.size} to remove</span>
+              )}
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            disabled={pending || (addTags.size === 0 && removeTags.size === 0)}
+            onClick={() => onSubmit(Array.from(addTags), Array.from(removeTags))}
+            className="bg-black hover:bg-black/90"
+          >
+            {pending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Updating…
+              </>
+            ) : (
+              <>
+                <TagIcon className="h-4 w-4 mr-1.5" /> Apply to selected
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * BulkLinkSpeakerDialog — link all selected members to a single speaker.
+ *
+ * Picks one speaker from the global speakers list (across all events).
+ * Useful for batching the "this set of users all presented at event X"
+ * workflow.
+ */
+function BulkLinkSpeakerDialog({
+  open,
+  onOpenChange,
+  pending,
+  allSpeakers,
+  count,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  pending: boolean;
+  allSpeakers: SpeakerRow[];
+  count: number;
+  onSubmit: (speakerId: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [pickedId, setPickedId] = useState<string | null>(null);
+
+  const filtered = allSpeakers.filter((s) => {
+    const q = search.toLowerCase();
+    return (
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      (s.topic || "").toLowerCase().includes(q) ||
+      s.event.title.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          setSearch("");
+          setPickedId(null);
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="border-[#004F98] text-[#004F98] h-7">
+          <Link2 className="h-3.5 w-3.5 mr-1" /> Bulk link speaker
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Link {count} member{count === 1 ? "" : "s"} to a speaker
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-black/60 -mt-2">
+          Pick a speaker. Each selected member will be linked to that speaker profile (replacing any
+          existing link to that speaker). Members can then chat with community members via the
+          in-app inbox.
+        </p>
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/30" />
+          <Input
+            placeholder="Search speakers by name, topic, event…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+
+        <div className="space-y-1 max-h-72 overflow-y-auto ais-scroll">
+          {filtered.length === 0 ? (
+            <div className="text-center text-black/40 text-sm py-8">
+              No speakers found. Try a different search.
+            </div>
+          ) : (
+            filtered.map((s) => {
+              const isPicked = pickedId === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setPickedId(isPicked ? null : s.id)}
+                  className={`w-full flex items-center justify-between gap-2 p-2 rounded-md text-left transition-colors ${
+                    isPicked ? "bg-[#004F98]/10" : "hover:bg-black/5"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm flex items-center gap-1.5">
+                      {s.name}
+                      {isPicked && <CheckCircle2 className="h-3.5 w-3.5 text-[#004F98]" />}
+                    </div>
+                    <div className="text-xs text-black/60 truncate">
+                      {s.event.title}
+                      {s.topic ? ` · ${s.topic}` : ""}
+                    </div>
+                    {s.user && (
+                      <div className="text-[0.65rem] text-black/40">
+                        Currently linked to {s.user.email}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            disabled={pending || !pickedId}
+            onClick={() => pickedId && onSubmit(pickedId)}
+            className="bg-[#004F98] hover:bg-[#004F98]/90"
+          >
+            {pending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Linking…
+              </>
+            ) : (
+              <>
+                <Link2 className="h-4 w-4 mr-1.5" /> Link to {count} member{count === 1 ? "" : "s"}
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
