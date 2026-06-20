@@ -39,6 +39,10 @@ import {
   Merge as MergeIcon,
   AlertTriangle,
   ArrowRight,
+  Table as TableIcon,
+  LayoutGrid,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -46,6 +50,13 @@ type LinkedSpeaker = {
   name: string;
   topic: string | null;
   event: { id: string; title: string; slug: string };
+};
+
+type SecondaryEmail = {
+  id: string;
+  email: string;
+  label: string | null;
+  createdAt: string;
 };
 
 type Member = {
@@ -67,11 +78,13 @@ type Member = {
   invitedToSpeak?: string | null;
   importSource?: string | null;
   importedAt?: string | null;
+  onboardedAt?: string | null;
   role: string;
   createdAt: string;
   tags: { id: string; label: string; color: string | null }[];
   _count: { images: number };
   speakers: LinkedSpeaker[];
+  secondaryEmails: SecondaryEmail[];
 };
 
 type EventRow = {
@@ -109,6 +122,10 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  // Secondary-email management state (used by ManageEmailsDialog)
+  const [emailMember, setEmailMember] = useState<Member | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -118,13 +135,54 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         m.email.toLowerCase().includes(q) ||
         (m.name || "").toLowerCase().includes(q) ||
         (m.company || "").toLowerCase().includes(q) ||
-        m.tags.some((t) => t.label.toLowerCase().includes(q));
+        m.tags.some((t) => t.label.toLowerCase().includes(q)) ||
+        m.secondaryEmails.some((e) => e.email.toLowerCase().includes(q));
       const matchApplied = !filterApplied || m.appliedFor === filterApplied;
       const matchInvited = !filterInvited || m.invitedToSpeak === "Yes";
       const matchLinked = !filterLinked || m.speakers.length > 0;
       return matchSearch && matchApplied && matchInvited && matchLinked;
     });
   }, [members, search, filterApplied, filterInvited, filterLinked]);
+
+  // Secondary-email handlers — call the API and reload on success
+  async function addSecondaryEmail(memberId: string, email: string, label: string) {
+    const t = toast.loading("Adding email…");
+    try {
+      const res = await fetch(`/api/admin/members/${memberId}/emails`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, label }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      toast.success("Email added.", { id: t });
+      window.location.reload();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    }
+  }
+
+  async function removeSecondaryEmail(memberId: string, emailId: string) {
+    const t = toast.loading("Removing email…");
+    try {
+      const res = await fetch(`/api/admin/members/${memberId}/emails/${emailId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      toast.success("Email removed.", { id: t });
+      window.location.reload();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    }
+  }
+
+  function openEmailDialog(member: Member) {
+    setEmailMember(member);
+    setEmailOpen(true);
+  }
 
   // When the filtered list changes, drop any selections that are no
   // longer visible — prevents accidentally bulk-editing hidden rows.
@@ -368,7 +426,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* Search + filters */}
+      {/* Search + filters + view toggle */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[240px] max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/30" />
@@ -405,9 +463,39 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         <span className="text-xs text-black/40 ml-auto">
           {filtered.length} of {members.length} members
         </span>
+        {/* View toggle — Cards vs Table */}
+        <div className="inline-flex border border-black/15 rounded-md overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode("cards")}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-colors ${
+              viewMode === "cards"
+                ? "bg-black text-white"
+                : "bg-white text-black/60 hover:bg-black/5"
+            }`}
+            title="Cards view (expandable rows)"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> Cards
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("table")}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-colors border-l border-black/10 ${
+              viewMode === "table"
+                ? "bg-black text-white"
+                : "bg-white text-black/60 hover:bg-black/5"
+            }`}
+            title="Table view (all fields, horizontal scroll)"
+          >
+            <TableIcon className="h-3.5 w-3.5" /> Table
+          </button>
+        </div>
       </div>
 
-      {/* Bulk action bar (only visible when rows are selected) */}
+      {/* Bulk action bar — only visible when rows are selected.
+          The Merge button is ALWAYS shown (disabled when <2 selected)
+          so admins can discover the feature without having to know
+          they need to pick 2+ rows first. */}
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 bg-[#FF005A]/5 border border-[#FF005A]/20 rounded-md px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF005A]">
@@ -439,6 +527,23 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
             count={selected.size}
             onSubmit={(sid) => bulkLinkSpeaker(sid)}
           />
+          {/* Merge button — always rendered so it's discoverable.
+              When <2 selected, it's disabled and shows a tooltip. */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={selected.size < 2}
+            onClick={() => selected.size >= 2 && setMergeOpen(true)}
+            title={
+              selected.size < 2
+                ? "Select 2 or more members to merge"
+                : `Merge ${selected.size} selected members`
+            }
+            className="border-[#820A7D] text-[#820A7D] h-7 disabled:opacity-40 disabled:cursor-not-allowed disabled:border-black/15 disabled:text-black/40"
+          >
+            <MergeIcon className="h-3.5 w-3.5 mr-1" /> Merge{" "}
+            {selected.size >= 2 ? `(${selected.size})` : ""}
+          </Button>
           {selected.size >= 2 && (
             <MergeMembersDialog
               open={mergeOpen}
@@ -461,233 +566,837 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         </div>
       )}
 
-      {/* Table */}
-      <div className="border border-black/10 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-3 py-3 w-10">
-                  <Checkbox
-                    checked={
-                      allVisibleSelected
-                        ? true
-                        : someVisibleSelected
-                        ? "indeterminate"
-                        : false
-                    }
-                    onCheckedChange={() => {
-                      if (allVisibleSelected) clearSelection();
-                      else selectAllVisible();
-                    }}
-                    aria-label="Select all visible"
-                  />
-                </th>
-                <th className="text-left px-2 py-3 w-8"></th>
-                <th className="text-left px-4 py-3 font-bold">Member</th>
-                <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Applied for</th>
-                <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Linked speaker</th>
-                <th className="text-left px-4 py-3 font-bold">Tags</th>
-                <th className="text-right px-4 py-3 font-bold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((m) => {
-                const isOpen = expanded.has(m.id);
-                const isSelected = selected.has(m.id);
-                return (
-                  <>
-                    <tr
-                      key={m.id}
-                      className={`border-t border-black/5 hover:bg-black/[0.02] ${
-                        isSelected ? "bg-[#FF005A]/[0.04]" : ""
-                      }`}
+      {/* Tip showing how to merge when nothing is selected yet */}
+      {selected.size === 0 && (
+        <div className="flex items-center gap-2 text-[0.7rem] text-black/40 px-1">
+          <MergeIcon className="h-3 w-3 text-[#820A7D]" />
+          Tip: tick 2+ checkboxes on the left to enable Merge, Bulk edit tags, and Bulk link speaker.
+        </div>
+      )}
+
+      {viewMode === "cards" ? (
+        <CardsView
+          filtered={filtered}
+          expanded={expanded}
+          selected={selected}
+          allVisibleSelected={allVisibleSelected}
+          someVisibleSelected={someVisibleSelected}
+          pending={pending}
+          allSpeakers={allSpeakers}
+          events={events}
+          onToggleSelect={toggleSelect}
+          onToggleExpanded={toggleExpanded}
+          onSelectAllVisible={selectAllVisible}
+          onClearSelection={clearSelection}
+          onSaveTags={saveTags}
+          onLinkSpeaker={linkSpeaker}
+          onConvertToSpeaker={convertToSpeaker}
+          onOpenEmailDialog={openEmailDialog}
+        />
+      ) : (
+        <TableView
+          filtered={filtered}
+          selected={selected}
+          allVisibleSelected={allVisibleSelected}
+          someVisibleSelected={someVisibleSelected}
+          onToggleSelect={toggleSelect}
+          onSelectAllVisible={selectAllVisible}
+          onClearSelection={clearSelection}
+          onOpenEmailDialog={openEmailDialog}
+        />
+      )}
+
+      {/* Manage-emails dialog — controlled at the top level so any
+          row can open it. */}
+      <ManageEmailsDialog
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
+        member={emailMember}
+        onAdd={(email, label) =>
+          emailMember && addSecondaryEmail(emailMember.id, email, label)
+        }
+        onRemove={(emailId) =>
+          emailMember && removeSecondaryEmail(emailMember.id, emailId)
+        }
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CardsView — the original expandable-row view (Member | Applied for |
+// Linked speaker | Tags | Actions). Each row expands into a MemberDetail
+// panel showing all the secondary fields, contact info, etc.
+// ---------------------------------------------------------------------------
+
+function CardsView({
+  filtered,
+  expanded,
+  selected,
+  allVisibleSelected,
+  someVisibleSelected,
+  pending,
+  allSpeakers,
+  events,
+  onToggleSelect,
+  onToggleExpanded,
+  onSelectAllVisible,
+  onClearSelection,
+  onSaveTags,
+  onLinkSpeaker,
+  onConvertToSpeaker,
+  onOpenEmailDialog,
+}: {
+  filtered: Member[];
+  expanded: Set<string>;
+  selected: Set<string>;
+  allVisibleSelected: boolean;
+  someVisibleSelected: boolean;
+  pending: string | null;
+  allSpeakers: SpeakerRow[];
+  events: EventRow[];
+  onToggleSelect: (id: string) => void;
+  onToggleExpanded: (id: string) => void;
+  onSelectAllVisible: () => void;
+  onClearSelection: () => void;
+  onSaveTags: (id: string, tags: string[]) => void;
+  onLinkSpeaker: (id: string, sid: string | null) => void;
+  onConvertToSpeaker: (
+    id: string,
+    payload: { eventId: string; topic?: string; role?: string; bio?: string }
+  ) => void;
+  onOpenEmailDialog: (m: Member) => void;
+}) {
+  return (
+    <div className="border border-black/10 rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider">
+            <tr>
+              <th className="text-left px-3 py-3 w-10">
+                <Checkbox
+                  checked={
+                    allVisibleSelected
+                      ? true
+                      : someVisibleSelected
+                      ? "indeterminate"
+                      : false
+                  }
+                  onCheckedChange={() => {
+                    if (allVisibleSelected) onClearSelection();
+                    else onSelectAllVisible();
+                  }}
+                  aria-label="Select all visible"
+                />
+              </th>
+              <th className="text-left px-2 py-3 w-8"></th>
+              <th className="text-left px-4 py-3 font-bold">Member</th>
+              <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Applied for</th>
+              <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Linked speaker</th>
+              <th className="text-left px-4 py-3 font-bold">Tags</th>
+              <th className="text-right px-4 py-3 font-bold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((m) => {
+              const isOpen = expanded.has(m.id);
+              const isSelected = selected.has(m.id);
+              return (
+                <>
+                  <tr
+                    key={m.id}
+                    className={`border-t border-black/5 hover:bg-black/[0.02] ${
+                      isSelected ? "bg-[#FF005A]/[0.04]" : ""
+                    }`}
+                  >
+                    <td
+                      className="px-3 py-3"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <td
-                        className="px-3 py-3"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelect(m.id)}
-                          aria-label={`Select ${m.name || m.email}`}
-                          className="data-[state=checked]:bg-[#FF005A] data-[state=checked]:border-[#FF005A]"
-                        />
-                      </td>
-                      <td
-                        className="px-2 py-3 text-black/40 cursor-pointer"
-                        onClick={() => toggleExpanded(m.id)}
-                      >
-                        {isOpen ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </td>
-                      <td
-                        className="px-4 py-3 cursor-pointer"
-                        onClick={() => toggleExpanded(m.id)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9">
-                            <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
-                            <AvatarFallback className="bg-black text-white text-xs font-bold">
-                              {(m.name || m.email)
-                                .split(/\s+|@/)
-                                .filter(Boolean)
-                                .slice(0, 2)
-                                .map((p) => p[0]?.toUpperCase())
-                                .join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-black truncate flex items-center gap-1.5">
-                              {m.name || m.email.split("@")[0]}
-                              {m.role === "ADMIN" && (
-                                <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
-                                  <Shield className="h-2.5 w-2.5" /> Admin
-                                </span>
-                              )}
-                              {m.importSource && (
-                                <span
-                                  title={`Imported from ${m.importSource} on ${m.importedAt ? new Date(m.importedAt).toLocaleString() : ""}`}
-                                  className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] px-1.5 py-0.5 rounded"
-                                >
-                                  <FileText className="h-2.5 w-2.5" /> Imported
-                                </span>
-                              )}
-                              {m.invitedToSpeak === "Yes" && (
-                                <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FFAC30]/20 text-[#8a5a00] px-1.5 py-0.5 rounded">
-                                  <Megaphone className="h-2.5 w-2.5" /> Invited
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-black/50 truncate">{m.email}</div>
-                            {m.company && (
-                              <div className="text-[10px] text-black/40 truncate mt-0.5">
-                                {m.company}
-                                {m.companyUrl && (
-                                  <a
-                                    href={m.companyUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="ml-1 text-[#004F98] hover:underline"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    ↗
-                                  </a>
-                                )}
-                              </div>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onToggleSelect(m.id)}
+                        aria-label={`Select ${m.name || m.email}`}
+                        className="data-[state=checked]:bg-[#FF005A] data-[state=checked]:border-[#FF005A]"
+                      />
+                    </td>
+                    <td
+                      className="px-2 py-3 text-black/40 cursor-pointer"
+                      onClick={() => onToggleExpanded(m.id)}
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </td>
+                    <td
+                      className="px-4 py-3 cursor-pointer"
+                      onClick={() => onToggleExpanded(m.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
+                          <AvatarFallback className="bg-black text-white text-xs font-bold">
+                            {(m.name || m.email)
+                              .split(/\s+|@/)
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((p) => p[0]?.toUpperCase())
+                              .join("")}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-black truncate flex items-center gap-1.5">
+                            {m.name || m.email.split("@")[0]}
+                            {m.role === "ADMIN" && (
+                              <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
+                                <Shield className="h-2.5 w-2.5" /> Admin
+                              </span>
+                            )}
+                            {m.importSource && (
+                              <span
+                                title={`Imported from ${m.importSource} on ${m.importedAt ? new Date(m.importedAt).toLocaleString() : ""}`}
+                                className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] px-1.5 py-0.5 rounded"
+                              >
+                                <FileText className="h-2.5 w-2.5" /> Imported
+                              </span>
+                            )}
+                            {m.invitedToSpeak === "Yes" && (
+                              <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FFAC30]/20 text-[#8a5a00] px-1.5 py-0.5 rounded">
+                                <Megaphone className="h-2.5 w-2.5" /> Invited
+                              </span>
                             )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        {m.appliedFor ? (
-                          <span
-                            className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                              m.appliedFor === "Fast pitch"
-                                ? "bg-[#FF005A]/10 text-[#FF005A]"
-                                : "bg-[#004F98]/10 text-[#004F98]"
-                            }`}
-                          >
-                            {m.appliedFor}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-black/30 italic">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        {m.speakers.length === 0 ? (
-                          <span className="text-xs text-black/30 italic">Not linked</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {m.speakers.map((s) => (
-                              <a
-                                key={s.id}
-                                href={`/events/${s.event.slug}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-[0.65rem] font-semibold bg-[#007E72]/10 text-[#007E72] px-1.5 py-0.5 rounded hover:bg-[#007E72]/20"
-                                title={s.topic || s.name}
-                              >
-                                {s.event.title} · {s.name}
-                                {s.topic ? ` · ${s.topic}` : ""}
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap gap-1 max-w-[280px]">
-                          {m.tags.length === 0 ? (
-                            <span className="text-xs text-black/30 italic">No tags</span>
-                          ) : (
-                            m.tags.map((t) => (
+                          <div className="text-xs text-black/50 truncate flex items-center gap-1">
+                            <span>{m.email}</span>
+                            {m.secondaryEmails && m.secondaryEmails.length > 0 && (
                               <span
-                                key={t.id}
-                                className="ais-tag"
-                                style={{
-                                  backgroundColor: `${t.color || tagColor(t.label)}20`,
-                                  color: t.color || tagColor(t.label),
-                                }}
+                                className="inline-flex items-center text-[0.55rem] font-bold uppercase bg-[#820A7D]/10 text-[#820A7D] px-1 py-0.5 rounded"
+                                title={m.secondaryEmails.map((e) => e.email).join(", ")}
                               >
-                                {t.label}
+                                +{m.secondaryEmails.length} email{m.secondaryEmails.length === 1 ? "" : "s"}
                               </span>
-                            ))
+                            )}
+                          </div>
+                          {m.company && (
+                            <div className="text-[10px] text-black/40 truncate mt-0.5">
+                              {m.company}
+                              {m.companyUrl && (
+                                <a
+                                  href={m.companyUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-1 text-[#004F98] hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  ↗
+                                </a>
+                              )}
+                            </div>
                           )}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap gap-1 justify-end">
-                          <TagDialog
-                            member={m}
-                            pending={pending === m.id}
-                            onSave={(tags) => saveTags(m.id, tags)}
-                          />
-                          <LinkSpeakerDialog
-                            member={m}
-                            allSpeakers={allSpeakers}
-                            pending={pending === m.id}
-                            onLink={(sid) => linkSpeaker(m.id, sid)}
-                          />
-                          <ConvertToSpeakerDialog
-                            member={m}
-                            events={events}
-                            pending={pending === m.id}
-                            onConvert={(payload) => convertToSpeaker(m.id, payload)}
-                          />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {m.appliedFor ? (
+                        <span
+                          className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                            m.appliedFor === "Fast pitch"
+                              ? "bg-[#FF005A]/10 text-[#FF005A]"
+                              : "bg-[#004F98]/10 text-[#004F98]"
+                          }`}
+                        >
+                          {m.appliedFor}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-black/30 italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {m.speakers.length === 0 ? (
+                        <span className="text-xs text-black/30 italic">Not linked</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {m.speakers.map((s) => (
+                            <a
+                              key={s.id}
+                              href={`/events/${s.event.slug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[0.65rem] font-semibold bg-[#007E72]/10 text-[#007E72] px-1.5 py-0.5 rounded hover:bg-[#007E72]/20"
+                              title={s.topic || s.name}
+                            >
+                              {s.event.title} · {s.name}
+                              {s.topic ? ` · ${s.topic}` : ""}
+                            </a>
+                          ))}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-1 max-w-[280px]">
+                        {m.tags.length === 0 ? (
+                          <span className="text-xs text-black/30 italic">No tags</span>
+                        ) : (
+                          m.tags.map((t) => (
+                            <span
+                              key={t.id}
+                              className="ais-tag"
+                              style={{
+                                backgroundColor: `${t.color || tagColor(t.label)}20`,
+                                color: t.color || tagColor(t.label),
+                              }}
+                            >
+                              {t.label}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        <TagDialog
+                          member={m}
+                          pending={pending === m.id}
+                          onSave={(tags) => onSaveTags(m.id, tags)}
+                        />
+                        <LinkSpeakerDialog
+                          member={m}
+                          allSpeakers={allSpeakers}
+                          pending={pending === m.id}
+                          onLink={(sid) => onLinkSpeaker(m.id, sid)}
+                        />
+                        <ConvertToSpeakerDialog
+                          member={m}
+                          events={events}
+                          pending={pending === m.id}
+                          onConvert={(payload) => onConvertToSpeaker(m.id, payload)}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-[#820A7D]/40 text-[#820A7D] h-8"
+                          onClick={() => onOpenEmailDialog(m)}
+                          title="Manage secondary emails"
+                        >
+                          <Mail className="h-3.5 w-3.5 mr-1" /> Emails
+                          {m.secondaryEmails && m.secondaryEmails.length > 0 && (
+                            <span className="ml-1 text-[0.6rem] font-bold bg-[#820A7D] text-white rounded-full h-4 min-w-4 px-1 inline-flex items-center justify-center">
+                              {m.secondaryEmails.length}
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr key={`${m.id}-detail`} className="bg-black/[0.02]">
+                      <td></td>
+                      <td colSpan={6} className="px-4 py-4">
+                        <MemberDetail member={m} onOpenEmailDialog={onOpenEmailDialog} />
                       </td>
                     </tr>
-                    {isOpen && (
-                      <tr key={`${m.id}-detail`} className="bg-black/[0.02]">
-                        <td></td>
-                        <td colSpan={6} className="px-4 py-4">
-                          <MemberDetail member={m} />
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-black/40 text-sm">
-                    No members match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-black/40 text-sm">
+                  No members match your filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function MemberDetail({ member }: { member: Member }) {
+// ---------------------------------------------------------------------------
+// TableView — wide horizontal-scroll table showing EVERY field of every
+// member at a glance. Designed for spreadsheets-style scanning / export.
+// ---------------------------------------------------------------------------
+
+function TableView({
+  filtered,
+  selected,
+  allVisibleSelected,
+  someVisibleSelected,
+  onToggleSelect,
+  onSelectAllVisible,
+  onClearSelection,
+  onOpenEmailDialog,
+}: {
+  filtered: Member[];
+  selected: Set<string>;
+  allVisibleSelected: boolean;
+  someVisibleSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onSelectAllVisible: () => void;
+  onClearSelection: () => void;
+  onOpenEmailDialog: (m: Member) => void;
+}) {
+  return (
+    <div className="border border-black/10 rounded-lg overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs whitespace-nowrap">
+          <thead className="bg-black/5 text-black/60 text-[0.65rem] uppercase tracking-wider">
+            <tr>
+              <th className="text-left px-3 py-3 w-10 sticky left-0 bg-black/5 z-10">
+                <Checkbox
+                  checked={
+                    allVisibleSelected
+                      ? true
+                      : someVisibleSelected
+                      ? "indeterminate"
+                      : false
+                  }
+                  onCheckedChange={() => {
+                    if (allVisibleSelected) onClearSelection();
+                    else onSelectAllVisible();
+                  }}
+                  aria-label="Select all visible"
+                />
+              </th>
+              <th className="text-left px-3 py-3 font-bold sticky left-10 bg-black/5 z-10 min-w-[180px]">
+                Member
+              </th>
+              <th className="text-left px-3 py-3 font-bold min-w-[220px]">All Emails</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Company</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[120px]">Mobile</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[220px]">LinkedIn</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[240px]">Bio</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[200px]">Interested in</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[200px]">Profile categories</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[120px]">Applied for</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[100px]">Invited</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Tags</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[180px]">Linked speaker</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[100px]">Photos</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Import source</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Imported at</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Onboarded at</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[140px]">Created at</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[80px]">Role</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[80px]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((m) => {
+              const isSelected = selected.has(m.id);
+              return (
+                <tr
+                  key={m.id}
+                  className={`border-t border-black/5 hover:bg-black/[0.02] ${
+                    isSelected ? "bg-[#FF005A]/[0.04]" : ""
+                  }`}
+                >
+                  <td className="px-3 py-2 sticky left-0 bg-white z-10" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={() => onToggleSelect(m.id)}
+                      aria-label={`Select ${m.name || m.email}`}
+                      className="data-[state=checked]:bg-[#FF005A] data-[state=checked]:border-[#FF005A]"
+                    />
+                  </td>
+                  <td className="px-3 py-2 sticky left-10 bg-white z-10">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-7 w-7 flex-shrink-0">
+                        <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
+                        <AvatarFallback className="bg-black text-white text-[0.6rem] font-bold">
+                          {(m.name || m.email)
+                            .split(/\s+|@/)
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((p) => p[0]?.toUpperCase())
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-black truncate flex items-center gap-1">
+                          {m.name || m.email.split("@")[0]}
+                          {m.role === "ADMIN" && (
+                            <span className="inline-flex items-center gap-0.5 text-[0.5rem] font-bold uppercase bg-[#FF005A] text-white px-1 py-0.5 rounded">
+                              <Shield className="h-2 w-2" /> A
+                            </span>
+                          )}
+                          {m.importSource && (
+                            <span
+                              title={`Imported from ${m.importSource}`}
+                              className="text-[0.5rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] px-1 py-0.5 rounded"
+                            >
+                              IMP
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[0.65rem] text-black/50 truncate max-w-[180px]">
+                          {m.email}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-black/80 font-medium">{m.email}</span>
+                      <span className="text-[0.6rem] text-black/40 uppercase font-bold">primary</span>
+                      {m.secondaryEmails && m.secondaryEmails.map((e) => (
+                        <div key={e.id} className="flex items-center gap-1">
+                          <span className="text-black/60">{e.email}</span>
+                          {e.label && (
+                            <span className="text-[0.55rem] uppercase font-bold text-[#820A7D]">
+                              {e.label}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.company ? (
+                      <div className="flex items-center gap-1">
+                        <span>{m.company}</span>
+                        {m.companyUrl && (
+                          <a
+                            href={m.companyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#004F98]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            ↗
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{m.mobile || <span className="text-black/30 italic">—</span>}</td>
+                  <td className="px-3 py-2">
+                    {m.linkedinUrl ? (
+                      <a
+                        href={m.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#004F98] hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {m.linkedinUrl.replace(/^https?:\/\/(www\.)?/, "").slice(0, 40)}
+                      </a>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 max-w-[280px]">
+                    {m.bio ? (
+                      <div className="truncate text-black/60" title={m.bio}>
+                        {m.bio.slice(0, 100)}
+                        {m.bio.length > 100 ? "…" : ""}
+                      </div>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.interestedIn ? (
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {m.interestedIn.split(",").map((s, i) => (
+                          <span
+                            key={i}
+                            className="text-[0.6rem] font-medium bg-[#FF005A]/10 text-[#FF005A] px-1.5 py-0.5 rounded"
+                          >
+                            {s.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.profileCategories ? (
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {m.profileCategories.split(",").map((s, i) => (
+                          <span
+                            key={i}
+                            className="text-[0.6rem] font-medium bg-[#004F98]/10 text-[#004F98] px-1.5 py-0.5 rounded"
+                          >
+                            {s.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.appliedFor ? (
+                      <span
+                        className={`text-[0.65rem] font-semibold px-1.5 py-0.5 rounded ${
+                          m.appliedFor === "Fast pitch"
+                            ? "bg-[#FF005A]/10 text-[#FF005A]"
+                            : "bg-[#004F98]/10 text-[#004F98]"
+                        }`}
+                      >
+                        {m.appliedFor}
+                      </span>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.invitedToSpeak === "Yes" ? (
+                      <span className="text-[0.65rem] font-semibold bg-[#FFAC30]/20 text-[#8a5a00] px-1.5 py-0.5 rounded">
+                        Yes
+                      </span>
+                    ) : (
+                      <span className="text-black/30 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.tags.length === 0 ? (
+                      <span className="text-black/30 italic">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 max-w-[140px]">
+                        {m.tags.map((t) => (
+                          <span
+                            key={t.id}
+                            className="text-[0.6rem] font-medium px-1.5 py-0.5 rounded"
+                            style={{
+                              backgroundColor: `${t.color || tagColor(t.label)}20`,
+                              color: t.color || tagColor(t.label),
+                            }}
+                          >
+                            {t.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.speakers.length === 0 ? (
+                      <span className="text-black/30 italic">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        {m.speakers.map((s) => (
+                          <a
+                            key={s.id}
+                            href={`/events/${s.event.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[0.6rem] font-semibold text-[#007E72] hover:underline"
+                            title={s.topic || s.name}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {s.event.title}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-black/60">{m._count.images}</td>
+                  <td className="px-3 py-2 text-black/60">{m.importSource || "—"}</td>
+                  <td className="px-3 py-2 text-black/60">
+                    {m.importedAt ? new Date(m.importedAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-black/60">
+                    {m.onboardedAt ? new Date(m.onboardedAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-black/60">
+                    {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`text-[0.65rem] font-bold uppercase px-1.5 py-0.5 rounded ${
+                        m.role === "ADMIN"
+                          ? "bg-[#FF005A] text-white"
+                          : "bg-black/5 text-black/60"
+                      }`}
+                    >
+                      {m.role}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-[#820A7D]/40 text-[#820A7D] h-7 text-[0.65rem]"
+                      onClick={() => onOpenEmailDialog(m)}
+                    >
+                      <Mail className="h-3 w-3 mr-1" /> Emails
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={20} className="px-4 py-8 text-center text-black/40 text-sm">
+                  No members match your filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ManageEmailsDialog — add/remove secondary emails for a member.
+// ---------------------------------------------------------------------------
+
+function ManageEmailsDialog({
+  open,
+  onOpenChange,
+  member,
+  onAdd,
+  onRemove,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  member: Member | null;
+  onAdd: (email: string, label: string) => void;
+  onRemove: (emailId: string) => void;
+}) {
+  const [newEmail, setNewEmail] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+
+  // Reset the form whenever the dialog closes
+  useEffect(() => {
+    if (!open) {
+      setNewEmail("");
+      setNewLabel("");
+    }
+  }, [open]);
+
+  if (!member) return null;
+
+  const primaryEmail = member.email;
+  const secondaries = member.secondaryEmails || [];
+  const canSubmit =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim()) &&
+    newEmail.trim().toLowerCase() !== primaryEmail.toLowerCase() &&
+    !secondaries.some((e) => e.email.toLowerCase() === newEmail.trim().toLowerCase());
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    onAdd(newEmail.trim().toLowerCase(), newLabel.trim());
+    setNewEmail("");
+    setNewLabel("");
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-[#820A7D]" />
+            Manage emails ·{" "}
+            <span className="text-black/60 truncate">{member.name || member.email}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <p className="text-xs text-black/60 -mt-2">
+          The <strong>primary email</strong> is the account&rsquo;s identity and can&rsquo;t be
+          changed here. <strong>Secondary emails</strong> allow the same person to sign in via
+          a different inbox — useful when someone registered with Gmail but also wants to use
+          their work email.
+        </p>
+
+        {/* Primary email (read-only) */}
+        <div>
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            Primary email
+          </div>
+          <div className="flex items-center gap-2 rounded-md border border-black/10 bg-black/[0.02] px-3 py-2">
+            <Mail className="h-3.5 w-3.5 text-black/40" />
+            <span className="text-sm font-mono text-black/80">{primaryEmail}</span>
+            <span className="ml-auto text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
+              Primary
+            </span>
+          </div>
+        </div>
+
+        {/* Secondary emails list */}
+        {secondaries.length > 0 && (
+          <div>
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Secondary emails ({secondaries.length})
+            </div>
+            <div className="space-y-1">
+              {secondaries.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2"
+                >
+                  <Mail className="h-3.5 w-3.5 text-black/40" />
+                  <span className="text-sm font-mono text-black/80 truncate">{e.email}</span>
+                  {e.label && (
+                    <span className="text-[0.55rem] font-bold uppercase bg-[#820A7D]/10 text-[#820A7D] px-1.5 py-0.5 rounded">
+                      {e.label}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(e.id)}
+                    className="ml-auto inline-flex items-center gap-0.5 text-[0.65rem] font-semibold text-[#FF005A] hover:bg-[#FF005A]/5 rounded px-2 py-1"
+                    title="Remove this secondary email"
+                  >
+                    <Trash2 className="h-3 w-3" /> Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Add new secondary email */}
+        <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t border-black/10">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+            Add a secondary email
+          </div>
+          <Input
+            type="email"
+            placeholder="e.g. john@work.com"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            required
+          />
+          <Input
+            type="text"
+            placeholder="Label (optional): Work, Personal, etc."
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            maxLength={40}
+          />
+          <div className="flex justify-end gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Done
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={!canSubmit}
+              className="bg-[#820A7D] hover:bg-[#820A7D]/90"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add email
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEmailDialog?: (m: Member) => void }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
       {/* Bio */}
@@ -756,11 +1465,47 @@ function MemberDetail({ member }: { member: Member }) {
         {member.email && (
           <DetailRow
             icon={<Mail className="h-3.5 w-3.5" />}
-            label="Email"
+            label="Email (primary)"
             value={
-              <a href={`mailto:${member.email}`} className="text-[#004F98] hover:underline">
-                {member.email}
-              </a>
+              <div className="flex items-center gap-2 flex-wrap">
+                <a href={`mailto:${member.email}`} className="text-[#004F98] hover:underline">
+                  {member.email}
+                </a>
+                {onOpenEmailDialog && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenEmailDialog(member)}
+                    className="inline-flex items-center gap-0.5 text-[0.65rem] font-semibold text-[#820A7D] border border-[#820A7D]/30 rounded px-1.5 py-0.5 hover:bg-[#820A7D]/5"
+                  >
+                    <Plus className="h-2.5 w-2.5" /> Manage emails
+                  </button>
+                )}
+              </div>
+            }
+          />
+        )}
+        {/* Secondary emails */}
+        {member.secondaryEmails && member.secondaryEmails.length > 0 && (
+          <DetailRow
+            icon={<Mail className="h-3.5 w-3.5" />}
+            label={`Secondary email${member.secondaryEmails.length === 1 ? "" : "s"}`}
+            value={
+              <div className="flex flex-wrap gap-1">
+                {member.secondaryEmails.map((e) => (
+                  <span
+                    key={e.id}
+                    className="inline-flex items-center gap-1 text-xs bg-black/5 text-black/70 px-2 py-0.5 rounded"
+                    title={e.label ? e.label : "Secondary email"}
+                  >
+                    {e.email}
+                    {e.label && (
+                      <span className="text-[0.6rem] uppercase font-bold text-black/40">
+                        {e.label}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
             }
           />
         )}

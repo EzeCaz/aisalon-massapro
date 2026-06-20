@@ -73,8 +73,34 @@ model User {
   receivedMessages ConversationMessage[] @relation("ReceivedMessages")
   // Speakers linked to this user (for in-app chat with members)
   speakers         Speaker[]
+  // ----------------------------------------------------------------
+  // Secondary emails — admin can attach multiple emails to a single
+  // user so that signing in with any of them resolves to the same
+  // account. User.email itself is still the unique primary email
+  // (and the value displayed in the admin table).
+  secondaryEmails  UserEmail[]
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+/// A secondary email attached to a User. The User.email column is
+/// always the PRIMARY email (immutable identity). Additional emails
+/// here allow a single user to sign in with multiple addresses —
+/// e.g. john@work.com (primary) + john@gmail.com (secondary).
+///
+/// On sign-in, the auth callback first looks up User.email directly;
+/// if that misses, it falls back to UserEmail.email — if found, the
+/// signed-in user is treated as the linked User.
+model UserEmail {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String   @unique
+  label     String?  // optional note: "Work", "Personal", etc.
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// A direct message between two platform users (community chat).

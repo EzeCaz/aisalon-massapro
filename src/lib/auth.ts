@@ -87,11 +87,29 @@ export const authOptions: NextAuthOptions = {
       if (!user?.email) return false;
       try {
         const role = resolveRole(user.email);
-        const existing = await db.user.findUnique({ where: { email: user.email } });
+        const lowerEmail = user.email.toLowerCase();
+
+        // 1. Direct lookup by primary email
+        let existing = await db.user.findUnique({ where: { email: lowerEmail } });
+
+        // 2. Fallback: secondary email (UserEmail table). If found,
+        //    treat the signed-in user as the linked User — same person,
+        //    different inbox. This is what lets an admin attach multiple
+        //    emails to one member.
+        if (!existing) {
+          const secondary = await db.userEmail.findUnique({
+            where: { email: lowerEmail },
+            include: { user: true },
+          });
+          if (secondary) {
+            existing = secondary.user;
+          }
+        }
+
         if (!existing) {
           await db.user.create({
             data: {
-              email: user.email,
+              email: lowerEmail,
               name: user.name || null,
               image: user.image || null,
               role,
@@ -107,6 +125,16 @@ export const authOptions: NextAuthOptions = {
           if (!existing.image && user.image) patch.image = user.image;
           if (Object.keys(patch).length > 0) {
             await db.user.update({ where: { id: existing.id }, data: patch });
+          }
+          // CRITICAL: when the user signed in via a secondary email,
+          // overwrite the next-auth `user.email` with the primary email
+          // so the rest of the auth flow (JWT callback, session) uses
+          // the canonical identity. Otherwise the session would store
+          // the secondary email, and downstream code that does
+          // db.user.findUnique({ where: { email: session.user.email } })
+          // would miss.
+          if (existing.email !== lowerEmail) {
+            (user as { email?: string }).email = existing.email;
           }
         }
         (user as { provider?: string }).provider = account?.provider || "google";

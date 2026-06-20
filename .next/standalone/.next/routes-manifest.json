@@ -38,6 +38,23 @@
       "namedRegex": "^/api/admin/members/(?<nxtPid>[^/]+?)/convert\\-to\\-speaker(?:/)?$"
     },
     {
+      "page": "/api/admin/members/[id]/emails",
+      "regex": "^/api/admin/members/([^/]+?)/emails(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/members/(?<nxtPid>[^/]+?)/emails(?:/)?$"
+    },
+    {
+      "page": "/api/admin/members/[id]/emails/[emailId]",
+      "regex": "^/api/admin/members/([^/]+?)/emails/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid",
+        "nxtPemailId": "nxtPemailId"
+      },
+      "namedRegex": "^/api/admin/members/(?<nxtPid>[^/]+?)/emails/(?<nxtPemailId>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/admin/members/[id]/link-speaker",
       "regex": "^/api/admin/members/([^/]+?)/link\\-speaker(?:/)?$",
       "routeKeys": {
@@ -150,6 +167,12 @@
       "regex": "^/admin(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/dashboard",
+      "regex": "^/admin/dashboard(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/dashboard(?:/)?$"
     },
     {
       "page": "/api",
