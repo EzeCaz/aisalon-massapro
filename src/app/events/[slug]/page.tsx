@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { format } from "date-fns";
@@ -20,6 +21,10 @@ export default async function EventDetailPage({ params }: Params) {
     include: { tags: true },
   });
   if (!me) redirect("/login");
+
+  // Brand-new users must complete onboarding before they can access any
+  // event-specific page — same gate as /events and /profile.
+  if (needsOnboarding(me)) redirect("/onboarding");
 
   const event = await db.event.findUnique({
     where: { slug },

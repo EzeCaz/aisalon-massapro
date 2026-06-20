@@ -57,6 +57,12 @@ model User {
   importSource      String?  // e.g. "excel:AI Salon TLV.xlsx"
   importedAt        DateTime?
   // ----------------------------------------------------------------
+  // Onboarding: set to NOW() the first time a self-registered user
+  // fills out the /onboarding form. Null = the user hasn't completed
+  // the intake form yet. Pre-imported users (importSource set) skip
+  // onboarding — they already have intake data from the spreadsheet.
+  onboardedAt       DateTime?
+  // ----------------------------------------------------------------
   role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventsList } from "./events-list";
 
@@ -16,6 +17,10 @@ export default async function EventsPage() {
     include: { tags: true },
   });
   if (!me) redirect("/login");
+
+  // Brand-new users (not pre-imported + haven't filled the intake form)
+  // get redirected to /onboarding before they can see the events list.
+  if (needsOnboarding(me)) redirect("/onboarding");
 
   const events = await db.event.findMany({
     orderBy: { startsAt: "desc" },

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { ProfileEditor } from "./profile-editor";
 
@@ -16,6 +17,11 @@ export default async function ProfilePage() {
     include: { tags: true },
   });
   if (!me) redirect("/login");
+
+  // Brand-new users must fill the intake form before they can edit their
+  // profile — otherwise they'd land on a half-empty profile page and miss
+  // the mobile / LinkedIn / interests fields the intake form collects.
+  if (needsOnboarding(me)) redirect("/onboarding");
 
   // Serialize for client component
   const initial = {

@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/admin/members/merge/route.js")
+R.c("server/chunks/[root-of-the-server]__5a03d89c._.js")
+R.c("server/chunks/node_modules_next_f2da0d3e._.js")
+R.c("server/chunks/node_modules_next_dist_esm_build_templates_app-route_971c4747.js")
+R.c("server/chunks/[root-of-the-server]__24f8fcd9._.js")
+R.c("server/chunks/_a98b71d9._.js")
+R.c("server/chunks/node_modules_bcryptjs_index_42ebb250.js")
+R.c("server/chunks/_next-internal_server_app_api_admin_members_merge_route_actions_86158f1f.js")
+R.m(96192)
+module.exports=R.m(96192).exports
