@@ -30,6 +30,30 @@
       "namedRegex": "^/api/admin/agenda/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/admin/email/campaigns/[id]",
+      "regex": "^/api/admin/email/campaigns/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/email/campaigns/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/email/campaigns/[id]/save-as-template",
+      "regex": "^/api/admin/email/campaigns/([^/]+?)/save\\-as\\-template(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/email/campaigns/(?<nxtPid>[^/]+?)/save\\-as\\-template(?:/)?$"
+    },
+    {
+      "page": "/api/admin/email/campaigns/[id]/send",
+      "regex": "^/api/admin/email/campaigns/([^/]+?)/send(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/email/campaigns/(?<nxtPid>[^/]+?)/send(?:/)?$"
+    },
+    {
       "page": "/api/admin/members/[id]/convert-to-speaker",
       "regex": "^/api/admin/members/([^/]+?)/convert\\-to\\-speaker(?:/)?$",
       "routeKeys": {
@@ -175,6 +199,12 @@
       "namedRegex": "^/admin/dashboard(?:/)?$"
     },
     {
+      "page": "/admin/email",
+      "regex": "^/admin/email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/email(?:/)?$"
+    },
+    {
       "page": "/api",
       "regex": "^/api(?:/)?$",
       "routeKeys": {},
@@ -185,6 +215,18 @@
       "regex": "^/api/admin/agenda(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/admin/agenda(?:/)?$"
+    },
+    {
+      "page": "/api/admin/email/campaigns",
+      "regex": "^/api/admin/email/campaigns(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/email/campaigns(?:/)?$"
+    },
+    {
+      "page": "/api/admin/email/templates",
+      "regex": "^/api/admin/email/templates(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/email/templates(?:/)?$"
     },
     {
       "page": "/api/admin/events",

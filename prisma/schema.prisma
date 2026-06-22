@@ -80,6 +80,14 @@ model User {
   // (and the value displayed in the admin table).
   secondaryEmails  UserEmail[]
   // ----------------------------------------------------------------
+  // Email campaigns & templates — back-relations
+  emailCampaigns    EmailCampaign[]  @relation("EmailCampaignCreator")
+  emailTemplates    EmailTemplate[]  @relation("EmailTemplateCreator")
+  emailRecipients   EmailRecipient[] @relation("EmailRecipientUser")
+  eventRsvps        EventRsvp[]      @relation("EventRsvpUser")
+  eventCoHosts      EventCoHost[]    @relation("EventCoHostUser")
+  coHostAddedBy     EventCoHost[]    @relation("EventCoHostAdder")
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -157,6 +165,8 @@ model Event {
   agenda        EventAgendaItem[]
   images        EventImage[]
   presentations PresentationFile[]
+  rsvps         EventRsvp[]
+  coHosts       EventCoHost[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -289,4 +299,168 @@ model PresentationFile {
   @@index([eventId])
   @@index([uploaderId])
   @@index([agendaItemId])
+}
+
+// ---------------------------- Email Campaigns & Templates ----------------------------
+
+/// A reusable email template. Created by an admin via the "Create template"
+/// button on the Email tab, or by cloning an existing sent campaign via the
+/// "Save as template" button. Templates are picked from the campaign
+/// composer's template picker, which loads their subject + bodyHtml into the
+/// composer as a starting point.
+model EmailTemplate {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String?
+  category      String   @default("general")
+  subject       String
+  bodyHtml      String
+  bodyText      String?
+  signatureHtml String?
+  thumbnailUrl  String?
+  createdBy     String
+  creator       User     @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  campaigns     EmailCampaign[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdBy])
+  @@index([category])
+}
+
+/// An email campaign — a single send-out to a list of recipients.
+/// Tracks status from DRAFT → SCHEDULED → SENDING → SENT (or FAILED).
+/// The subject/body are snapshotted at send time so that later edits to
+/// the source template don't change what was actually sent.
+model EmailCampaign {
+  id                    String   @id @default(cuid())
+  name                  String
+  templateId            String?
+  template              EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  subjectSnapshot       String
+  bodyHtmlSnapshot      String
+  bodyTextSnapshot      String?
+  signatureHtmlSnapshot String?
+  listSource            String   // "ALL_MEMBERS" | "TAG:Speaker" | "EVENT:abc123" | "MANUAL:list@x.com,..." etc.
+  listConfigJson        String   // JSON payload describing the recipient list filter
+  recipientCount        Int      @default(0)
+  status                String   @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED
+  scheduledAt           DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  fromName              String?
+  fromEmail             String?
+  replyTo               String?
+  createdBy             String
+  creator               User     @relation("EmailCampaignCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  recipients            EmailRecipient[]
+  events                EmailEvent[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdBy])
+  @@index([templateId])
+}
+
+/// One recipient of one campaign. Tracks per-recipient delivery state
+/// (queued → sent → opened → clicked → replied) and stores the unique
+/// trackToken used to identify this recipient in open/click tracking
+/// pixels and links.
+model EmailRecipient {
+  id            String   @id @default(cuid())
+  campaignId    String
+  campaign      EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?    @relation("EmailRecipientUser", fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  name          String?
+  trackToken    String   @unique
+  messageId     String?  // SMTP Message-ID, for matching bounces/replies
+  status        String   @default("QUEUED") // QUEUED | SENT | FAILED | BOUNCED | COMPLAINED
+  errorReason   String?
+  sentAt        DateTime?
+  firstOpenedAt DateTime?
+  lastOpenedAt  DateTime?
+  openCount     Int      @default(0)
+  firstClickedAt DateTime?
+  lastClickedAt DateTime?
+  clickCount    Int      @default(0)
+  repliedAt     DateTime?
+  replySnippet  String?
+  events        EmailEvent[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([campaignId, email])
+  @@index([campaignId])
+  @@index([userId])
+  @@index([email])
+  @@index([trackToken])
+  @@index([messageId])
+  @@index([status])
+}
+
+/// One tracking event for one campaign/recipient. Types include
+/// SENT, DELIVERED, OPENED, CLICKED, REPLIED, BOUNCED, COMPLAINED.
+/// `details` is free-form JSON (e.g. the URL that was clicked).
+model EmailEvent {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipientId String?
+  recipient   EmailRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  email       String
+  type        String
+  details     String?
+  userAgent   String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([campaignId, type, createdAt])
+  @@index([recipientId, type])
+  @@index([email])
+}
+
+// ---------------------------- Event RSVPs & Co-Hosts ----------------------------
+
+/// RSVP for an event. Created when a member (or external guest) confirms
+/// attendance. Used by the email campaign system's "EVENT:<eventId>" list
+/// source to send only to people who RSVP'd to a specific event.
+model EventRsvp {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  name      String?
+  status    String   @default("GOING") // GOING | MAYBE | NOT_GOING
+  source    String   @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, email])
+  @@index([eventId])
+  @@index([userId])
+  @@index([email])
+}
+
+/// Co-host of an event (admin-designated collaborators, in addition to the
+/// implicit event creator). Used to give non-admin users admin-style access
+/// to a specific event's dashboard (images, agenda, RSVPs).
+model EventCoHost {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("EventCoHostUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedBy   String?
+  adder     User?    @relation("EventCoHostAdder", fields: [addedBy], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
 }

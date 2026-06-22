@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/ais/app-header";
 import { AdminMembersTable } from "./admin-members-table";
 import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
-import { BarChart3, ArrowRight } from "lucide-react";
+import { BarChart3, ArrowRight, Mail } from "lucide-react";
 
 export const metadata = { title: "Admin — AI Salon Tel Aviv" };
 
@@ -76,14 +76,23 @@ export default async function AdminPage() {
               account has admin privileges — all other members are standard community members.
             </p>
           </div>
-          <Link
-            href="/admin/dashboard"
-            className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2.5 text-sm hover:bg-black/90 ais-lift whitespace-nowrap"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Member dashboard
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/email"
+              className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-2.5 text-sm hover:bg-[#820A7D]/90 ais-lift whitespace-nowrap"
+            >
+              <Mail className="h-4 w-4" />
+              Email campaigns
+            </Link>
+            <Link
+              href="/admin/dashboard"
+              className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2.5 text-sm hover:bg-black/90 ais-lift whitespace-nowrap"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Member dashboard
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
 
         {/* Stats */}

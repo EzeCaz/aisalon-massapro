@@ -56,6 +56,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/admin/email/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/admin/email">> = Specific
+  const handler = {} as typeof import("../../src/app/admin/email/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/admin/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/admin">> = Specific
@@ -132,6 +141,51 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/agenda">> = Specific
   const handler = {} as typeof import("../../src/app/api/admin/agenda/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/email/campaigns/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/email/campaigns/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/email/campaigns/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/email/campaigns/[id]/save-as-template/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/email/campaigns/[id]/save-as-template">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/email/campaigns/[id]/save-as-template/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/email/campaigns/[id]/send/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/email/campaigns/[id]/send">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/email/campaigns/[id]/send/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/email/campaigns/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/email/campaigns">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/email/campaigns/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/email/templates/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/email/templates">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/email/templates/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

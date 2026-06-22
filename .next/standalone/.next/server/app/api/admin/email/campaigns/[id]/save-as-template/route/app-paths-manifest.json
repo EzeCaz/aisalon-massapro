@@ -1,0 +1,3 @@
+{
+  "/api/admin/email/campaigns/[id]/save-as-template/route": "app/api/admin/email/campaigns/[id]/save-as-template/route.js"
+}
