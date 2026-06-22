@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AppHeader } from "@/components/ais/app-header";
+import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
 import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
@@ -62,6 +63,7 @@ export default async function AdminPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <AdminTabs />
         {/* Header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>

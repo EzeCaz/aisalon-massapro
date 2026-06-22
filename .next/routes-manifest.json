@@ -54,6 +54,14 @@
       "namedRegex": "^/api/admin/email/campaigns/(?<nxtPid>[^/]+?)/send(?:/)?$"
     },
     {
+      "page": "/api/admin/events/[id]/main-image",
+      "regex": "^/api/admin/events/([^/]+?)/main\\-image(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/events/(?<nxtPid>[^/]+?)/main\\-image(?:/)?$"
+    },
+    {
       "page": "/api/admin/members/[id]/convert-to-speaker",
       "regex": "^/api/admin/members/([^/]+?)/convert\\-to\\-speaker(?:/)?$",
       "routeKeys": {
@@ -93,6 +101,22 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/admin/members/(?<nxtPid>[^/]+?)/tags(?:/)?$"
+    },
+    {
+      "page": "/api/admin/registrants/[id]",
+      "regex": "^/api/admin/registrants/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/registrants/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/admin/speakers/[id]",
+      "regex": "^/api/admin/speakers/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/speakers/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
       "page": "/api/auth/[...nextauth]",
@@ -205,6 +229,24 @@
       "namedRegex": "^/admin/email(?:/)?$"
     },
     {
+      "page": "/admin/events/new",
+      "regex": "^/admin/events/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/events/new(?:/)?$"
+    },
+    {
+      "page": "/admin/registrants",
+      "regex": "^/admin/registrants(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/registrants(?:/)?$"
+    },
+    {
+      "page": "/admin/speakers",
+      "regex": "^/admin/speakers(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/speakers(?:/)?$"
+    },
+    {
       "page": "/api",
       "regex": "^/api(?:/)?$",
       "routeKeys": {},
@@ -253,6 +295,12 @@
       "namedRegex": "^/api/admin/members/merge(?:/)?$"
     },
     {
+      "page": "/api/admin/registrants",
+      "regex": "^/api/admin/registrants(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/registrants(?:/)?$"
+    },
+    {
       "page": "/api/admin/speakers",
       "regex": "^/api/admin/speakers(?:/)?$",
       "routeKeys": {},
@@ -269,6 +317,12 @@
       "regex": "^/api/auth/signup(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/auth/signup(?:/)?$"
+    },
+    {
+      "page": "/api/cron/email",
+      "regex": "^/api/cron/email(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/cron/email(?:/)?$"
     },
     {
       "page": "/api/events",

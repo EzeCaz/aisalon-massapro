@@ -28,6 +28,7 @@ import {
   Tag,
   RotateCw,
   RotateCcw,
+  Star,
 } from "lucide-react";
 
 type Speaker = {
@@ -55,6 +56,7 @@ type Props = {
     slug: string;
     title: string;
     speakers: Speaker[];
+    mainImageId?: string | null;
   };
   me: { id: string; email: string; name: string | null; role: string };
   isAdmin: boolean;
@@ -66,6 +68,11 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
   const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
+  // mainImageId — populated from the event's mainImage field on load,
+  // updated optimistically when the admin sets a new main image.
+  const [mainImageId, setMainImageId] = useState<string | null>(
+    event.mainImageId ?? null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadImages = useCallback(async () => {
@@ -179,9 +186,36 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
         next.delete(id);
         return next;
       });
+      // If we just deleted the main image, clear it locally. The API
+      // will already have nulled it via the onDelete: SetNull relation.
+      if (mainImageId === id) setMainImageId(null);
       await loadImages();
     } catch (e) {
       toast.error("Delete failed", { id: t });
+    }
+  }
+
+  // Admin-only: set this image as the event's main image.
+  // PATCH /api/admin/events/[id]/main-image with { imageId }.
+  async function handleSetMain(imageId: string) {
+    const t = toast.loading("Setting as main image…");
+    try {
+      const res = await fetch(`/api/admin/events/${event.id}/main-image`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageId }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed");
+      }
+      setMainImageId(imageId);
+      toast.success("Set as main image", { id: t });
+    } catch (e) {
+      toast.error(
+        (e as Error).message || "Failed to set main image",
+        { id: t }
+      );
     }
   }
 
@@ -353,10 +387,13 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
               image={img}
               speakers={event.speakers}
               selected={selected.has(img.id)}
+              isMain={img.id === mainImageId}
+              canSetMain={isAdmin}
               onToggle={() => toggleSelect(img.id)}
               onDelete={() => handleDelete(img.id)}
               onLink={(sids) => handleSingleLink(img.id, sids)}
               onRotate={(dir) => handleRotate([img.id], dir)}
+              onSetMain={() => handleSetMain(img.id)}
               canManage={isAdmin || img.uploader.id === me.id}
               uploaderName={img.uploader.name || img.uploader.email}
             />
@@ -379,20 +416,26 @@ function PhotoCard({
   image,
   speakers,
   selected,
+  isMain,
+  canSetMain,
   onToggle,
   onDelete,
   onLink,
   onRotate,
+  onSetMain,
   canManage,
   uploaderName,
 }: {
   image: ImageItem;
   speakers: Speaker[];
   selected: boolean;
+  isMain: boolean;
+  canSetMain: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onLink: (speakerIds: string[]) => void;
   onRotate: (direction: "cw" | "ccw") => void;
+  onSetMain: () => void;
   canManage: boolean;
   uploaderName: string;
 }) {
@@ -424,8 +467,17 @@ function PhotoCard({
         loading="lazy"
       />
 
-      {/* Top-left checkbox */}
-      <div className="absolute top-1.5 left-1.5 z-10">
+      {/* Top-left checkbox / main-image star */}
+      <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1">
+        {isMain ? (
+          <span
+            title="Main image for this event"
+            className="inline-flex items-center gap-0.5 rounded-full bg-[#FF005A] text-white px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-wide shadow-sm"
+          >
+            <Star className="h-3 w-3 fill-current" />
+            Main
+          </span>
+        ) : null}
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
@@ -437,6 +489,18 @@ function PhotoCard({
       {/* Top-right actions (admin or owner only) */}
       {canManage && (
         <div className="absolute top-1.5 right-1.5 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {canSetMain && !isMain && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetMain();
+              }}
+              className="rounded-md bg-white/90 hover:bg-white p-1.5 text-black"
+              title="Set as main image for this event"
+            >
+              <Star className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

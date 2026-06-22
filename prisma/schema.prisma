@@ -157,7 +157,13 @@ model Event {
   takeaways     String?  // "What you'll take home"
   intendedFor   String?  // "This event is built for: ..."
   rsvpUrl       String?  // external RSVP form
-  coverImage    String?
+  coverImage    String?  // legacy: external URL for the event's cover image
+  // The "main" image for this event — a pointer to one of the
+  // EventImage rows uploaded via the gallery. Used as the hero image
+  // on the event page and the thumbnail on /events. When null, the
+  // gallery's first image (by slideOrder) is used as a fallback.
+  mainImageId   String?
+  mainImage     EventImage? @relation("EventMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -258,6 +264,9 @@ model EventImage {
   slideOrder  Int      @default(0)
   // Linked speakers — many-to-many (an image can be from multiple talks/speakers)
   speakers    Speaker[]
+  // Back-relation: events that have this image as their mainImage.
+  // (One image can be the main of at most one event — the FK lives on Event.)
+  mainOfEvents Event[] @relation("EventMainImage")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -380,6 +389,7 @@ model EmailRecipient {
   messageId     String?  // SMTP Message-ID, for matching bounces/replies
   status        String   @default("QUEUED") // QUEUED | SENT | FAILED | BOUNCED | COMPLAINED
   errorReason   String?
+  retryCount    Int      @default(0) // incremented by /api/cron/email on each retry attempt
   sentAt        DateTime?
   firstOpenedAt DateTime?
   lastOpenedAt  DateTime?
