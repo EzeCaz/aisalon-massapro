@@ -29,6 +29,9 @@ export default async function EventDetailPage({ params }: Params) {
   const event = await db.event.findUnique({
     where: { slug },
     include: {
+      // The admin-picked main image — used as the event's hero picture
+      // at the top-left of the event page. null when none has been set.
+      mainImage: { select: { id: true, fileUrl: true, caption: true } },
       speakers: {
         orderBy: { order: "asc" },
         include: {
@@ -139,6 +142,25 @@ export default async function EventDetailPage({ params }: Params) {
       {/* Hero / title block */}
       <section className="border-b border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+          {/* Main image — top-left of the event page. Sized to a 16:9
+              banner that spans the full hero width on small screens and
+              is capped at 50% width on large screens so it sits to the
+              left of (and visually anchors) the date block. */}
+          {event.mainImage?.fileUrl && (
+            <div className="mb-8 overflow-hidden rounded-xl border border-black/10 bg-black/5 shadow-sm">
+              <div className="relative w-full aspect-[16/9] max-h-80">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={event.mainImage.fileUrl}
+                  alt={event.mainImage.caption || event.title}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                {/* Bottom gradient so any overlaid text (none right now,
+                    but ready for future caption) stays legible. */}
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+              </div>
+            </div>
+          )}
           <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-start">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs mb-4">

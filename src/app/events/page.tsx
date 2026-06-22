@@ -26,6 +26,10 @@ export default async function EventsPage() {
     orderBy: { startsAt: "desc" },
     include: {
       _count: { select: { images: true, speakers: true } },
+      // The "main" image — used as the event's profile picture / banner
+      // thumbnail on the events list. Falls back to null when no main
+      // image has been set by the admin yet.
+      mainImage: { select: { id: true, fileUrl: true, caption: true } },
     },
   });
 

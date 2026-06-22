@@ -18,6 +18,9 @@ type EventCard = {
   startsAt: string;
   endsAt: string;
   _count: { images: number; speakers: number };
+  // The admin-picked main image — used as the event's profile picture /
+  // banner at the top of the card. null when none has been set.
+  mainImage: { id: string; fileUrl: string; caption: string | null } | null;
 };
 
 function monthCode(d: Date) {
@@ -120,6 +123,7 @@ function Section({
 function EventCardItem({ e, isPast }: { e: EventCard; isPast: boolean }) {
   const start = new Date(e.startsAt);
   const end = new Date(e.endsAt);
+  const hasMainImage = !!e.mainImage?.fileUrl;
   return (
     <Link href={`/events/${e.slug}`} className="block group">
       <Card
@@ -127,25 +131,62 @@ function EventCardItem({ e, isPast }: { e: EventCard; isPast: boolean }) {
           isPast ? "opacity-80" : ""
         }`}
       >
-        {/* AIS GRADIENT top strip — brand anchor */}
-        <div className="h-1.5 w-full ais-gradient" />
+        {/* AIS GRADIENT top strip — brand anchor (only when there's no
+            main image; when a main image is present it replaces this
+            strip as the card's visual header) */}
+        {!hasMainImage && <div className="h-1.5 w-full ais-gradient" />}
+
+        {/* Main image banner — sized to the card width with a fixed
+            16:9 aspect ratio so all cards line up regardless of the
+            source image's native dimensions. object-cover crops to fill. */}
+        {hasMainImage && (
+          <div className="relative w-full aspect-[16/9] overflow-hidden bg-black/5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={e.mainImage!.fileUrl}
+              alt={e.mainImage!.caption || e.title}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+            />
+            {/* Gradient overlay at the bottom so the chapter badge is
+                legible against any photo. */}
+            <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/60 to-transparent" />
+            {/* Chapter pill — sits over the image bottom-left */}
+            <span className="absolute bottom-2 left-2 inline-flex items-center rounded-full bg-[#FF005A] text-white px-2 py-0.5 text-[0.55rem] font-bold uppercase tracking-wider shadow-sm">
+              {e.chapter}
+            </span>
+            {/* Date chip — sits over the image top-left, replaces the
+                old date block when an image is present. */}
+            <div className="absolute top-2 left-2 rounded-md border border-white/40 bg-white/85 backdrop-blur px-2 py-1 text-center shadow-sm">
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-[#FF005A] leading-none">
+                {monthCode(start)}
+              </div>
+              <div className="text-base font-extrabold text-black leading-none mt-0.5">
+                {dayNum(start)}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="p-5">
           <div className="flex items-start gap-4">
-            {/* Date block — chapter shape style */}
-            <div className="flex-shrink-0 w-16 text-center">
-              <div className="rounded-md border border-black/15 bg-white py-1.5 px-2">
-                <div className="text-[0.6rem] font-bold uppercase tracking-wider text-[#FF005A]">
-                  {monthCode(start)}
-                </div>
-                <div className="text-2xl font-extrabold text-black leading-none">
-                  {dayNum(start)}
-                </div>
-                <div className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40 mt-0.5">
-                  {dateInTLV(start, "weekday")}
+            {/* Date block — only shown when there's no main image
+                (otherwise the date is overlaid on the image). */}
+            {!hasMainImage && (
+              <div className="flex-shrink-0 w-16 text-center">
+                <div className="rounded-md border border-black/15 bg-white py-1.5 px-2">
+                  <div className="text-[0.6rem] font-bold uppercase tracking-wider text-[#FF005A]">
+                    {monthCode(start)}
+                  </div>
+                  <div className="text-2xl font-extrabold text-black leading-none">
+                    {dayNum(start)}
+                  </div>
+                  <div className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40 mt-0.5">
+                    {dateInTLV(start, "weekday")}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Title + meta */}
             <div className="flex-1 min-w-0">
@@ -188,7 +229,7 @@ function EventCardItem({ e, isPast }: { e: EventCard; isPast: boolean }) {
                   : "border-[#00E6FF] text-[#007E72] bg-[#00E6FF]/10"
               }`}
             >
-              {e.chapter} · {e.country || ""}
+              {hasMainImage ? (e.country || "") : `${e.chapter} · ${e.country || ""}`}
             </Badge>
           </div>
 

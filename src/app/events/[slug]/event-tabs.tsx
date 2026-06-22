@@ -68,6 +68,9 @@ type EventData = {
   speakers: Speaker[];
   agenda: AgendaItem[];
   _count: { images: number };
+  // Set by the admin via the photo gallery; null when no main image
+  // has been picked. PhotosTab reads this to highlight the active one.
+  mainImageId?: string | null;
 };
 
 type Me = {
