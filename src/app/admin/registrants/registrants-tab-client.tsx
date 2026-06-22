@@ -23,6 +23,9 @@ import {
   Edit3,
   Save,
   Loader2,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react";
 
 type RsvpEvent = {
@@ -98,6 +101,13 @@ export function RegistrantsTabClient({
   // name cell or the Edit button is clicked. Lets the admin edit the
   // name, email, and status of an existing RSVP.
   const [editingRsvp, setEditingRsvp] = React.useState<Rsvp | null>(null);
+  // Bulk-import state — opens the ImportRegistrantsDialog when the
+  // Import CSV/XLS button is clicked. Lets the admin upload a
+  // spreadsheet of registrants to bulk-import for the selected event.
+  const [importOpen, setImportOpen] = React.useState(false);
+  // Track which event the import dialog should target. Default to the
+  // currently-selected eventFilter, or the first event if "ALL".
+  const [importEventId, setImportEventId] = React.useState<string>("");
   const [editOpen, setEditOpen] = React.useState(false);
 
   const filtered = React.useMemo(() => {
@@ -252,6 +262,22 @@ export function RegistrantsTabClient({
         </button>
         <button
           type="button"
+          onClick={() => {
+            // Default the import dialog to the currently-selected event,
+            // or the first event if "ALL" is selected.
+            setImportEventId(
+              eventFilter !== "ALL" ? eventFilter : events[0]?.id || ""
+            );
+            setImportOpen(true);
+          }}
+          disabled={events.length === 0}
+          className="inline-flex items-center gap-2 rounded-md border border-[#007E72] text-[#007E72] bg-white font-semibold px-3 py-2 text-sm hover:bg-[#007E72]/5 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          <Upload className="h-4 w-4" />
+          Import CSV/XLS
+        </button>
+        <button
+          type="button"
           onClick={() => setAdding(true)}
           disabled={events.length === 0}
           className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-2 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
@@ -396,6 +422,19 @@ export function RegistrantsTabClient({
         onClose={() => {
           setEditOpen(false);
           setEditingRsvp(null);
+        }}
+      />
+
+      {/* Import modal — bulk-import registrants from CSV/XLS */}
+      <ImportRegistrantsDialog
+        open={importOpen}
+        events={events}
+        defaultEventId={importEventId}
+        onOpenChange={setImportOpen}
+        onImported={() => {
+          setImportOpen(false);
+          // Reload to surface the new RSVPs in the table.
+          window.location.reload();
         }}
       />
 
@@ -753,6 +792,256 @@ function EditRegistrantDialog({
             </button>
           </div>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ImportRegistrantsDialog — bulk-import event registrants from CSV/XLS.
+//
+// Lets the admin pick an event + a spreadsheet file, then POSTs both to
+// /api/admin/registrants/bulk-import. Shows a result summary (inserted /
+// updated / skipped / errors) and a download-template link.
+// ---------------------------------------------------------------------------
+function ImportRegistrantsDialog({
+  open,
+  events,
+  defaultEventId,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean;
+  events: EventOption[];
+  defaultEventId: string;
+  onOpenChange: (v: boolean) => void;
+  onImported: () => void;
+}) {
+  const [file, setFile] = React.useState<File | null>(null);
+  const [eventId, setEventId] = React.useState<string>(defaultEventId);
+  const [uploading, setUploading] = React.useState(false);
+  const [result, setResult] = React.useState<{
+    inserted: number;
+    updated: number;
+    skipped: number;
+    totalRows: number;
+    filename: string;
+    eventTitle: string;
+    errors: Array<{ row: number; reason: string }>;
+  } | null>(null);
+
+  // Keep the dialog's selected event in sync when the toolbar passes a
+  // new defaultEventId (e.g. when the admin changes the event filter and
+  // then clicks Import).
+  React.useEffect(() => {
+    if (defaultEventId) setEventId(defaultEventId);
+  }, [defaultEventId]);
+
+  const handleUpload = async () => {
+    if (!file || !eventId) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("eventId", eventId);
+      const res = await fetch("/api/admin/registrants/bulk-import", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Import failed");
+        return;
+      }
+      setResult(data);
+      toast.success(
+        `Imported ${data.inserted} new, updated ${data.updated}, skipped ${data.skipped}`
+      );
+    } catch (err) {
+      toast.error(`Upload failed: ${(err as Error).message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) {
+      setFile(null);
+      setResult(null);
+      if (result && result.inserted + result.updated > 0) {
+        onImported();
+        return;
+      }
+    }
+    onOpenChange(v);
+  };
+
+  const downloadTemplate = () => {
+    window.location.href = "/api/admin/registrants/import-template";
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-[#007E72]" />
+            Import registrants from CSV / XLS
+          </DialogTitle>
+        </DialogHeader>
+
+        {!result && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-black/70 mb-1">
+                Target event
+              </label>
+              <select
+                value={eventId}
+                onChange={(e) => setEventId(e.target.value)}
+                className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+              >
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <p className="text-sm text-black/70">
+              Upload a{" "}
+              <code className="px-1 py-0.5 bg-black/5 rounded">.csv</code>,{" "}
+              <code className="px-1 py-0.5 bg-black/5 rounded">.xls</code>, or{" "}
+              <code className="px-1 py-0.5 bg-black/5 rounded">.xlsx</code> file.
+              Each row becomes an RSVP for the selected event. The only required
+              column is <strong>email</strong>.
+            </p>
+
+            <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 text-xs text-black/70">
+              <div className="font-semibold mb-1 text-black">Supported columns</div>
+              <code className="block whitespace-pre-wrap">
+                email (required), name, status (GOING|MAYBE|NOT_GOING), source
+                (IMPORT|MANUAL|EVENT_PAGE)
+              </code>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                accept=".csv,.xls,.xlsx"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-[#007E72] file:text-white file:font-semibold hover:file:bg-[#007E72]/90 cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-black/5"
+              >
+                <Download className="h-3.5 w-3.5" /> CSV template
+              </button>
+            </div>
+
+            {file && (
+              <div className="text-xs text-black/60">
+                Selected: <strong>{file.name}</strong> ({(file.size / 1024).toFixed(1)} KB)
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-black/10">
+              <button
+                type="button"
+                onClick={() => handleClose(false)}
+                disabled={uploading}
+                className="rounded-md px-3 py-2 text-sm font-semibold text-black/60 hover:bg-black/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleUpload}
+                disabled={!file || !eventId || uploading}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#007E72] text-white font-semibold px-4 py-2 text-sm hover:bg-[#007E72]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" /> Import
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-700">
+                  {result.inserted}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-emerald-700/70">
+                  New
+                </div>
+              </div>
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">
+                  {result.updated}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-blue-700/70">
+                  Updated
+                </div>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
+                <div className="text-2xl font-bold text-amber-700">
+                  {result.skipped}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-amber-700/70">
+                  Skipped
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-black/60">
+              File: <strong>{result.filename}</strong> · Event:{" "}
+              <strong>{result.eventTitle}</strong> · {result.totalRows} rows
+              processed
+            </div>
+
+            {result.errors.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 max-h-48 overflow-y-auto">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 mb-2">
+                  <AlertCircle className="h-4 w-4" />
+                  First {result.errors.length} issue
+                  {result.errors.length === 1 ? "" : "s"} (of {result.skipped}{" "}
+                  skipped):
+                </div>
+                <ul className="text-[0.7rem] text-amber-900 space-y-1">
+                  {result.errors.map((e, i) => (
+                    <li key={i}>
+                      <strong>Row {e.row}:</strong> {e.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-black/10">
+              <button
+                type="button"
+                onClick={() => handleClose(false)}
+                className="rounded-md bg-[#007E72] text-white font-semibold px-4 py-2 text-sm hover:bg-[#007E72]/90"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

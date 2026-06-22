@@ -45,6 +45,10 @@ import {
   Trash2,
   Edit3,
   Save,
+  Upload,
+  FileSpreadsheet,
+  Download,
+  AlertCircle,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -132,6 +136,10 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   // clicked or the Edit button on a row is pressed.
   const [editMember, setEditMember] = useState<Member | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  // Bulk-import state — opens the ImportMembersDialog when the Import
+  // CSV/XLS button in the toolbar is clicked. Lets the admin upload a
+  // spreadsheet of members to bulk-import.
+  const [importOpen, setImportOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -471,6 +479,15 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
           />
           Linked to speaker
         </label>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9 border-[#007E72] text-[#007E72] hover:bg-[#007E72]/5"
+          onClick={() => setImportOpen(true)}
+          title="Bulk-import members from a CSV or XLS file"
+        >
+          <Upload className="h-3.5 w-3.5 mr-1.5" /> Import CSV/XLS
+        </Button>
         <span className="text-xs text-black/40 ml-auto">
           {filtered.length} of {members.length} members
         </span>
@@ -650,6 +667,16 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
           // patches local state, but a reload guarantees the row is
           // fresh from the server (incl. linked user, tags count,
           // etc.).
+          window.location.reload();
+        }}
+      />
+      <ImportMembersDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => {
+          setImportOpen(false);
+          // Reload the admin page so the newly imported members show up
+          // in the table (and the count "X of Y members" updates).
           window.location.reload();
         }}
       />
@@ -3021,6 +3048,233 @@ function MergeMembersDialog({
             )}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ImportMembersDialog — bulk-import members from a CSV or XLS file.
+//
+// Uploads the file to /api/admin/members/bulk-import (multipart/form-data),
+// shows a result summary (inserted / updated / skipped / errors), and offers
+// a download link for the CSV template. After a successful import, the dialog
+// calls onImported() which triggers a page reload so the new rows appear.
+// ---------------------------------------------------------------------------
+function ImportMembersDialog({
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onImported: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<{
+    inserted: number;
+    updated: number;
+    skipped: number;
+    totalRows: number;
+    filename: string;
+    errors: Array<{ row: number; reason: string }>;
+  } | null>(null);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/members/bulk-import", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Import failed");
+        return;
+      }
+      setResult(data);
+      toast.success(
+        `Imported ${data.inserted} new, updated ${data.updated}, skipped ${data.skipped}`
+      );
+    } catch (err) {
+      toast.error(`Upload failed: ${(err as Error).message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleClose = (v: boolean) => {
+    if (!v) {
+      // Reset on close
+      setFile(null);
+      setResult(null);
+      if (result && result.inserted + result.updated > 0) {
+        onImported();
+      }
+    }
+    onOpenChange(v);
+  };
+
+  const downloadTemplate = () => {
+    window.location.href = "/api/admin/members/import-template";
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-[#007E72]" />
+            Import members from CSV / XLS
+          </DialogTitle>
+        </DialogHeader>
+
+        {!result && (
+          <div className="space-y-4">
+            <p className="text-sm text-black/70">
+              Upload a <code className="px-1 py-0.5 bg-black/5 rounded">.csv</code>,{" "}
+              <code className="px-1 py-0.5 bg-black/5 rounded">.xls</code>, or{" "}
+              <code className="px-1 py-0.5 bg-black/5 rounded">.xlsx</code> file.
+              Each row becomes (or updates) a member. The only required column is{" "}
+              <strong>email</strong>.
+            </p>
+
+            <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 text-xs text-black/70">
+              <div className="font-semibold mb-1 text-black">Supported columns</div>
+              <code className="block whitespace-pre-wrap">
+                name, email, company, companyUrl, linkedinUrl, portfolioUrl, bio,
+                mobile, interestedIn, profileCategories, appliedFor, invitedToSpeak
+              </code>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                ref={(el) => {
+                  // Keep a ref so we can reset the file input value after upload
+                  (el as HTMLInputElement | null)?.setAttribute(
+                    "accept",
+                    ".csv,.xls,.xlsx"
+                  );
+                }}
+                type="file"
+                accept=".csv,.xls,.xlsx"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-[#007E72] file:text-white file:font-semibold hover:file:bg-[#007E72]/90 cursor-pointer"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={downloadTemplate}
+                type="button"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" /> CSV template
+              </Button>
+            </div>
+
+            {file && (
+              <div className="text-xs text-black/60">
+                Selected: <strong>{file.name}</strong> ({(file.size / 1024).toFixed(1)} KB)
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-black/10">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleClose(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-[#007E72] hover:bg-[#007E72]/90 text-white"
+                onClick={handleUpload}
+                disabled={!file || uploading}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-1.5" /> Import
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-700">
+                  {result.inserted}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-emerald-700/70">
+                  New
+                </div>
+              </div>
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">
+                  {result.updated}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-blue-700/70">
+                  Updated
+                </div>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-center">
+                <div className="text-2xl font-bold text-amber-700">
+                  {result.skipped}
+                </div>
+                <div className="text-[0.7rem] uppercase tracking-wide text-amber-700/70">
+                  Skipped
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-black/60">
+              File: <strong>{result.filename}</strong> · {result.totalRows} rows
+              processed
+            </div>
+
+            {result.errors.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 max-h-48 overflow-y-auto">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 mb-2">
+                  <AlertCircle className="h-4 w-4" />
+                  First {result.errors.length} issue
+                  {result.errors.length === 1 ? "" : "s"} (of {result.skipped}{" "}
+                  skipped):
+                </div>
+                <ul className="text-[0.7rem] text-amber-900 space-y-1">
+                  {result.errors.map((e, i) => (
+                    <li key={i}>
+                      <strong>Row {e.row}:</strong> {e.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-black/10">
+              <Button
+                size="sm"
+                className="bg-[#007E72] hover:bg-[#007E72]/90 text-white"
+                onClick={() => handleClose(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
