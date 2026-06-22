@@ -62,6 +62,14 @@
       "namedRegex": "^/api/admin/events/(?<nxtPid>[^/]+?)/main\\-image(?:/)?$"
     },
     {
+      "page": "/api/admin/members/[id]",
+      "regex": "^/api/admin/members/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/admin/members/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/admin/members/[id]/convert-to-speaker",
       "regex": "^/api/admin/members/([^/]+?)/convert\\-to\\-speaker(?:/)?$",
       "routeKeys": {
@@ -287,6 +295,12 @@
       "regex": "^/api/admin/members/bulk\\-tags(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/admin/members/bulk\\-tags(?:/)?$"
+    },
+    {
+      "page": "/api/admin/members/companies",
+      "regex": "^/api/admin/members/companies(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/members/companies(?:/)?$"
     },
     {
       "page": "/api/admin/members/merge",
