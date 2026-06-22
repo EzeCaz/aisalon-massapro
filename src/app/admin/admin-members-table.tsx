@@ -43,6 +43,8 @@ import {
   LayoutGrid,
   Plus,
   Trash2,
+  Edit3,
+  Save,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -126,6 +128,10 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   // Secondary-email management state (used by ManageEmailsDialog)
   const [emailMember, setEmailMember] = useState<Member | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  // Edit-member state — opens the EditMemberDialog when a name is
+  // clicked or the Edit button on a row is pressed.
+  const [editMember, setEditMember] = useState<Member | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -182,6 +188,11 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
   function openEmailDialog(member: Member) {
     setEmailMember(member);
     setEmailOpen(true);
+  }
+
+  function openEditDialog(member: Member) {
+    setEditMember(member);
+    setEditOpen(true);
   }
 
   // When the filtered list changes, drop any selections that are no
@@ -592,6 +603,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
           onLinkSpeaker={linkSpeaker}
           onConvertToSpeaker={convertToSpeaker}
           onOpenEmailDialog={openEmailDialog}
+          onOpenEditDialog={openEditDialog}
         />
       ) : (
         <TableView
@@ -603,6 +615,7 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
           onSelectAllVisible={selectAllVisible}
           onClearSelection={clearSelection}
           onOpenEmailDialog={openEmailDialog}
+          onOpenEditDialog={openEditDialog}
         />
       )}
 
@@ -618,6 +631,27 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         onRemove={(emailId) =>
           emailMember && removeSecondaryEmail(emailMember.id, emailId)
         }
+      />
+
+      {/* Edit-member dialog — opens when the member name or the Edit
+          button on a row is clicked. Lets the admin edit the profile
+          fields (name, bio, company, links, mobile, intake-form
+          fields). Company name is a combobox — pick from existing or
+          type a new one. */}
+      <EditMemberDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        member={editMember}
+        onSaved={() => {
+          setEditOpen(false);
+          setEditMember(null);
+          // Reload to reflect the updated row in both CardsView and
+          // TableView. The EditMemberDialog already optimistically
+          // patches local state, but a reload guarantees the row is
+          // fresh from the server (incl. linked user, tags count,
+          // etc.).
+          window.location.reload();
+        }}
       />
     </div>
   );
@@ -646,6 +680,7 @@ function CardsView({
   onLinkSpeaker,
   onConvertToSpeaker,
   onOpenEmailDialog,
+  onOpenEditDialog,
 }: {
   filtered: Member[];
   expanded: Set<string>;
@@ -666,6 +701,7 @@ function CardsView({
     payload: { eventId: string; topic?: string; role?: string; bio?: string }
   ) => void;
   onOpenEmailDialog: (m: Member) => void;
+  onOpenEditDialog: (m: Member) => void;
 }) {
   return (
     <div className="border border-black/10 rounded-lg overflow-hidden">
@@ -747,7 +783,18 @@ function CardsView({
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
-                          <div className="font-semibold text-black truncate flex items-center gap-1.5">
+                          {/* Clickable name — opens the edit dialog.
+                              Stop propagation so the row expand toggle
+                              doesn't also fire. */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenEditDialog(m);
+                            }}
+                            className="font-semibold text-black truncate flex items-center gap-1.5 text-left hover:text-[#FF005A] hover:underline underline-offset-2"
+                            title="Click to edit member info"
+                          >
                             {m.name || m.email.split("@")[0]}
                             {m.role === "ADMIN" && (
                               <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
@@ -767,7 +814,7 @@ function CardsView({
                                 <Megaphone className="h-2.5 w-2.5" /> Invited
                               </span>
                             )}
-                          </div>
+                          </button>
                           <div className="text-xs text-black/50 truncate flex items-center gap-1">
                             <span>{m.email}</span>
                             {m.secondaryEmails && m.secondaryEmails.length > 0 && (
@@ -857,6 +904,15 @@ function CardsView({
                     </td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-[#FF005A]/40 text-[#FF005A] h-8"
+                          onClick={() => onOpenEditDialog(m)}
+                          title="Edit member info"
+                        >
+                          <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
+                        </Button>
                         <TagDialog
                           member={m}
                           pending={pending === m.id}
@@ -930,6 +986,7 @@ function TableView({
   onSelectAllVisible,
   onClearSelection,
   onOpenEmailDialog,
+  onOpenEditDialog,
 }: {
   filtered: Member[];
   selected: Set<string>;
@@ -939,6 +996,7 @@ function TableView({
   onSelectAllVisible: () => void;
   onClearSelection: () => void;
   onOpenEmailDialog: (m: Member) => void;
+  onOpenEditDialog: (m: Member) => void;
 }) {
   return (
     <div className="border border-black/10 rounded-lg overflow-hidden">
@@ -1017,7 +1075,13 @@ function TableView({
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <div className="font-semibold text-black truncate flex items-center gap-1">
+                        {/* Clickable name — opens the edit dialog */}
+                        <button
+                          type="button"
+                          onClick={() => onOpenEditDialog(m)}
+                          className="font-semibold text-black truncate flex items-center gap-1 text-left hover:text-[#FF005A] hover:underline underline-offset-2"
+                          title="Click to edit member info"
+                        >
                           {m.name || m.email.split("@")[0]}
                           {m.role === "ADMIN" && (
                             <span className="inline-flex items-center gap-0.5 text-[0.5rem] font-bold uppercase bg-[#FF005A] text-white px-1 py-0.5 rounded">
@@ -1032,7 +1096,7 @@ function TableView({
                               IMP
                             </span>
                           )}
-                        </div>
+                        </button>
                         <div className="text-[0.65rem] text-black/50 truncate max-w-[180px]">
                           {m.email}
                         </div>
@@ -1221,14 +1285,25 @@ function TableView({
                     </span>
                   </td>
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-[#820A7D]/40 text-[#820A7D] h-7 text-[0.65rem]"
-                      onClick={() => onOpenEmailDialog(m)}
-                    >
-                      <Mail className="h-3 w-3 mr-1" /> Emails
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-[#FF005A]/40 text-[#FF005A] h-7 text-[0.65rem]"
+                        onClick={() => onOpenEditDialog(m)}
+                        title="Edit member info"
+                      >
+                        <Edit3 className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-[#820A7D]/40 text-[#820A7D] h-7 text-[0.65rem]"
+                        onClick={() => onOpenEmailDialog(m)}
+                      >
+                        <Mail className="h-3 w-3 mr-1" /> Emails
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -1391,6 +1466,351 @@ function ManageEmailsDialog({
             </Button>
           </div>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditMemberDialog — opens when the admin clicks a member name or the
+// "Edit" button on a row. Lets the admin edit all the profile fields
+// (name, bio, company, links) AND the admin-only intake-form fields
+// (mobile, interestedIn, profileCategories, appliedFor, invitedToSpeak).
+//
+// The company field is a combobox (HTML datalist) — the admin can
+// either pick from the existing companies (loaded once from the API)
+// OR type a new one. Whatever they type becomes the company value on
+// save, so a brand-new company becomes immediately selectable for
+// other members afterwards (the next time someone opens the dialog).
+// ---------------------------------------------------------------------------
+
+function EditMemberDialog({
+  open,
+  onOpenChange,
+  member,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  member: Member | null;
+  onSaved: () => void;
+}) {
+  // Local form state — re-initialized whenever the member changes.
+  const [name, setName] = useState("");
+  const [bio, setBio] = useState("");
+  const [company, setCompany] = useState("");
+  const [companyUrl, setCompanyUrl] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [interestedIn, setInterestedIn] = useState("");
+  const [profileCategories, setProfileCategories] = useState("");
+  const [appliedFor, setAppliedFor] = useState("");
+  const [invitedToSpeak, setInvitedToSpeak] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Existing company names — fetched once on mount. Used to populate
+  // the datalist so the admin can pick an existing company OR type a
+  // brand-new one (the datalist is a suggestion list, not a closed
+  // dropdown).
+  const [existingCompanies, setExistingCompanies] = useState<string[]>([]);
+
+  // Reset form whenever the member changes (i.e. when the dialog opens
+  // for a different member). We use useEffect so the form fields sync
+  // even when the dialog is reused across members.
+  useEffect(() => {
+    if (member) {
+      setName(member.name || "");
+      setBio(member.bio || "");
+      setCompany(member.company || "");
+      setCompanyUrl(member.companyUrl || "");
+      setLinkedinUrl(member.linkedinUrl || "");
+      setPortfolioUrl(member.portfolioUrl || "");
+      setMobile(member.mobile || "");
+      setInterestedIn(member.interestedIn || "");
+      setProfileCategories(member.profileCategories || "");
+      setAppliedFor(member.appliedFor || "");
+      setInvitedToSpeak(member.invitedToSpeak || "");
+    }
+  }, [member]);
+
+  // Fetch existing companies on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/members/companies");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.companies)) {
+          setExistingCompanies(data.companies);
+        }
+      } catch {
+        // silent — the datalist just won't have suggestions
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!member) return null;
+
+  const handleSave = async () => {
+    if (!member) return;
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    setSaving(true);
+    const t = toast.loading("Saving member…");
+    try {
+      const res = await fetch(`/api/admin/members/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          bio,
+          company,
+          companyUrl,
+          linkedinUrl,
+          portfolioUrl,
+          mobile,
+          interestedIn,
+          profileCategories,
+          appliedFor,
+          invitedToSpeak,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      toast.success(`Saved changes to ${name || member.email}`, { id: t });
+      onSaved();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit3 className="h-4 w-4 text-[#FF005A]" />
+            Edit member
+          </DialogTitle>
+          <p className="text-xs text-black/60 -mt-1">
+            {member.email} · changes are saved instantly to the platform.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Profile section */}
+          <div className="rounded-md border border-black/10 p-3 space-y-3">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+              Profile
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Display name *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="e.g. Jane Cohen"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Mobile
+                </label>
+                <input
+                  type="text"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="+972 …"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-black/60 mb-1">
+                Bio
+              </label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                placeholder="Short bio — shown on the public profile + admin table."
+              />
+              <p className="text-[0.65rem] text-black/40 mt-0.5">
+                {bio.length}/2000
+              </p>
+            </div>
+
+            {/* Company — combobox (datalist). Lets the admin pick an
+                existing company OR type a new one. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Company
+                </label>
+                <input
+                  type="text"
+                  list="existing-companies"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="Pick an existing company or type a new one"
+                />
+                <datalist id="existing-companies">
+                  {existingCompanies.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+                <p className="text-[0.65rem] text-black/40 mt-0.5">
+                  {existingCompanies.length === 0
+                    ? "Loading existing companies…"
+                    : `${existingCompanies.length} existing compan${existingCompanies.length === 1 ? "y" : "ies"} available — pick or type a new one.`}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Company URL
+                </label>
+                <input
+                  type="text"
+                  value={companyUrl}
+                  onChange={(e) => setCompanyUrl(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="https://company.com"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  LinkedIn URL
+                </label>
+                <input
+                  type="text"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="https://www.linkedin.com/in/…"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Portfolio URL
+                </label>
+                <input
+                  type="text"
+                  value={portfolioUrl}
+                  onChange={(e) => setPortfolioUrl(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="https://your-portfolio.com"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Intake-form section — admin-only fields from the
+              spreadsheet import / onboarding form. */}
+          <div className="rounded-md border border-[#00E6FF]/30 bg-[#00E6FF]/[0.03] p-3 space-y-3">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-[#007E72]">
+              Intake form (admin-only)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Interested in
+                </label>
+                <input
+                  type="text"
+                  value={interestedIn}
+                  onChange={(e) => setInterestedIn(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="Comma-separated, e.g. Be a guest speaker, Want to pitch"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Profile categories
+                </label>
+                <input
+                  type="text"
+                  value={profileCategories}
+                  onChange={(e) => setProfileCategories(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="Comma-separated, e.g. I am an entrepreneur, I am an investor"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Applied for
+                </label>
+                <select
+                  value={appliedFor}
+                  onChange={(e) => setAppliedFor(e.target.value)}
+                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                >
+                  <option value="">— none —</option>
+                  <option value="Fast pitch">Fast pitch</option>
+                  <option value="Presentation/Lecure">Presentation/Lecture</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/60 mb-1">
+                  Invited to speak
+                </label>
+                <select
+                  value={invitedToSpeak}
+                  onChange={(e) => setInvitedToSpeak(e.target.value)}
+                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                >
+                  <option value="">— no —</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-1.5" />
+            )}
+            Save changes
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

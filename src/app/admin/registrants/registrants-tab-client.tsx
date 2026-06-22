@@ -20,6 +20,9 @@ import {
   CheckCircle2,
   HelpCircle,
   XCircle,
+  Edit3,
+  Save,
+  Loader2,
 } from "lucide-react";
 
 type RsvpEvent = {
@@ -91,6 +94,11 @@ export function RegistrantsTabClient({
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
   const [adding, setAdding] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  // Edit-registrant state — opens the EditRegistrantDialog when the
+  // name cell or the Edit button is clicked. Lets the admin edit the
+  // name, email, and status of an existing RSVP.
+  const [editingRsvp, setEditingRsvp] = React.useState<Rsvp | null>(null);
+  const [editOpen, setEditOpen] = React.useState(false);
 
   const filtered = React.useMemo(() => {
     return rsvps.filter((r) => {
@@ -115,6 +123,17 @@ export function RegistrantsTabClient({
       return copy;
     });
     setAdding(false);
+  };
+
+  function openEditDialog(rsvp: Rsvp) {
+    setEditingRsvp(rsvp);
+    setEditOpen(true);
+  }
+
+  const handleEditSaved = (updated: Rsvp) => {
+    setRsvps((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setEditOpen(false);
+    setEditingRsvp(null);
   };
 
   const handleStatusChange = async (id: string, status: string) => {
@@ -265,7 +284,15 @@ export function RegistrantsTabClient({
                 return (
                   <tr key={r.id} className="border-t border-black/5 hover:bg-black/[0.015]">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-black">{r.name || r.email}</div>
+                      {/* Clickable name — opens the edit dialog */}
+                      <button
+                        type="button"
+                        onClick={() => openEditDialog(r)}
+                        className="font-semibold text-black hover:text-[#FF005A] hover:underline underline-offset-2 text-left"
+                        title="Click to edit registrant info"
+                      >
+                        {r.name || r.email}
+                      </button>
                       <div className="text-xs text-black/50">{r.email}</div>
                       {r.user ? (
                         <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700">
@@ -306,14 +333,24 @@ export function RegistrantsTabClient({
                       {new Date(r.createdAt).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right align-top">
-                      <button
-                        type="button"
-                        onClick={() => setDeletingId(r.id)}
-                        title="Remove"
-                        className="rounded p-1.5 text-red-600/70 hover:bg-red-50 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditDialog(r)}
+                          title="Edit registrant"
+                          className="inline-flex items-center gap-1 rounded-md border border-[#FF005A]/40 text-[#FF005A] px-2.5 py-1.5 text-xs font-semibold hover:bg-[#FF005A]/5"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingId(r.id)}
+                          title="Remove"
+                          className="rounded p-1.5 text-red-600/70 hover:bg-red-50 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -349,6 +386,17 @@ export function RegistrantsTabClient({
         events={events}
         onAdded={handleAdd}
         onClose={() => setAdding(false)}
+      />
+
+      {/* Edit modal — opens when the registrant name or Edit button is clicked */}
+      <EditRegistrantDialog
+        open={editOpen}
+        rsvp={editingRsvp}
+        onSaved={handleEditSaved}
+        onClose={() => {
+          setEditOpen(false);
+          setEditingRsvp(null);
+        }}
       />
 
       {/* Delete confirm */}
@@ -535,6 +583,173 @@ function AddRegistrantDialog({
               className="rounded-md bg-[#FF005A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#FF005A]/90 disabled:opacity-50"
             >
               {saving ? "Adding…" : "Add registrant"}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditRegistrantDialog — opens when the admin clicks a registrant name
+// or the "Edit" button on a row. Lets the admin edit the name, email,
+// and status of an existing RSVP. Email changes re-link the RSVP to a
+// platform user if one exists with the new email (handled server-side).
+// ---------------------------------------------------------------------------
+
+function EditRegistrantDialog({
+  open,
+  rsvp,
+  onSaved,
+  onClose,
+}: {
+  open: boolean;
+  rsvp: Rsvp | null;
+  onSaved: (updated: Rsvp) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [status, setStatus] = React.useState("GOING");
+  const [saving, setSaving] = React.useState(false);
+
+  // Sync form state whenever the rsvp changes (i.e. dialog re-opens
+  // for a different RSVP).
+  React.useEffect(() => {
+    if (rsvp) {
+      setName(rsvp.name || "");
+      setEmail(rsvp.email);
+      setStatus(rsvp.status);
+    }
+  }, [rsvp]);
+
+  if (!rsvp) return null;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast.error("Email is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/registrants/${rsvp.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || null,
+          email: email.trim(),
+          status,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Failed to save");
+        return;
+      }
+      const data = await res.json();
+      toast.success("Registrant updated");
+      onSaved(data.rsvp);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit3 className="h-4 w-4 text-[#FF005A]" />
+            Edit registrant
+          </DialogTitle>
+          <DialogDescription>
+            Update the name, email, or RSVP status. Changing the email
+            re-links the RSVP to a platform user if one matches.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSave} className="space-y-3">
+          {/* Read-only event — the RSVP can't be moved to a different
+              event after creation. */}
+          <div className="rounded-md bg-black/[0.03] p-3 text-xs text-black/70 space-y-1">
+            <div>
+              <strong>Event:</strong> {rsvp.event.title}
+            </div>
+            <div>
+              <strong>Registered:</strong>{" "}
+              {new Date(rsvp.createdAt).toLocaleString()}
+            </div>
+            <div>
+              <strong>Source:</strong>{" "}
+              <span className="font-mono">{rsvp.source}</span>
+            </div>
+            {rsvp.user && (
+              <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[0.65rem] font-semibold text-emerald-700 mt-1">
+                linked user · {rsvp.user.email}
+              </div>
+            )}
+          </div>
+          <label className="block">
+            <span className="block text-xs font-semibold text-black/60 mb-1">
+              Name (optional)
+            </span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+              placeholder="Display name"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-semibold text-black/60 mb-1">
+              Email *
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-semibold text-black/60 mb-1">
+              Status
+            </span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+            >
+              <option value="GOING">Going</option>
+              <option value="MAYBE">Maybe</option>
+              <option value="NOT_GOING">Not going</option>
+            </select>
+          </label>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-black/15 px-4 py-2 text-sm font-semibold text-black hover:bg-black/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#FF005A]/90 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {saving ? "Saving…" : "Save changes"}
             </button>
           </div>
         </form>

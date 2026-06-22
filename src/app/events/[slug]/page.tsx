@@ -70,18 +70,18 @@ export default async function EventDetailPage({ params }: Params) {
                   tags: { select: { id: true, label: true, color: true } },
                 },
               },
-              // Limit to first 4 images per speaker — just enough for
-              // the "Pictures of the session" thumbnail preview in the
-              // agenda box. We grab up to 4 so the dialog can show a
-              // small strip; the full gallery is on the Photos tab.
+              // Show ALL of the speaker's linked images — the user
+              // requested no 4-picture cap. The agenda thumbnail shows
+              // the first image as a preview, and the slideshow dialog
+              // (which supports reorder) shows the full set.
               images: {
                 orderBy: { slideOrder: "asc" },
-                take: 4,
                 select: {
                   id: true,
                   fileUrl: true,
                   fileName: true,
                   caption: true,
+                  slideOrder: true,
                 },
               },
               // Same idea for presentations — just the first one for

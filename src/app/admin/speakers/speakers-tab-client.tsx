@@ -214,7 +214,14 @@ export function SpeakersTabClient({
                         </div>
                       )}
                       <div>
-                        <div className="font-semibold text-black">{s.name}</div>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(s)}
+                          className="font-semibold text-black hover:text-[#FF005A] hover:underline underline-offset-2 text-left"
+                          title="Click to edit speaker info"
+                        >
+                          {s.name}
+                        </button>
                         {s.company ? (
                           <div className="text-xs text-black/50">{s.company}</div>
                         ) : null}

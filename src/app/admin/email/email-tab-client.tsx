@@ -258,7 +258,7 @@ export function EmailTabClient({
 
       {/* Composer modal */}
       <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-        <DialogContent className="max-w-[128rem] w-[95vw] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCampaign ? "Edit campaign" : "New campaign"}
@@ -338,7 +338,7 @@ export function EmailTabClient({
 
       {/* Template editor modal */}
       <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
-        <DialogContent className="max-w-[128rem] w-[95vw] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTemplate ? "Edit template" : "Create template"}
@@ -880,25 +880,35 @@ function CampaignComposer({
             {showPreview ? "Edit" : "Preview"}
           </Button>
         </div>
-        {showPreview ? (
-          <div
-            className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
-            dangerouslySetInnerHTML={{ __html: bodyHtml }}
-          />
-        ) : (
-          <Textarea
-            id="cmp-body"
-            value={bodyHtml}
-            onChange={(e) => setBodyHtml(e.target.value)}
-            disabled={!!isFrozen}
-            rows={12}
-            className="font-mono text-xs"
-            placeholder="<h1>Hi {{name}},</h1><p>Here's what's coming up...</p>"
-          />
-        )}
-        <p className="text-xs text-black/50 mt-1">
-          Merge fields: <code>{"{{name}}"}</code> resolves to recipient's name. HTML
-          supported.
+        {/* The editor + preview are constrained to the email-safe max
+            width (600px) and centered, so what you see is what the
+            recipient will see in their inbox. Most email clients cap the
+            readable width at ~600-650px; designing wider than that causes
+            horizontal scroll on mobile and ugly column-stacking in
+            Outlook. */}
+        <div className="flex justify-center">
+          <div className="w-full max-w-[600px]">
+            {showPreview ? (
+              <div
+                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
+                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+              />
+            ) : (
+              <Textarea
+                id="cmp-body"
+                value={bodyHtml}
+                onChange={(e) => setBodyHtml(e.target.value)}
+                disabled={!!isFrozen}
+                rows={12}
+                className="font-mono text-xs"
+                placeholder="<h1>Hi {{name}},</h1><p>Here's what's coming up...</p>"
+              />
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-black/50 mt-1 text-center">
+          Email-safe width: 600px · Merge fields: <code>{"{{name}}"}</code> resolves
+          to recipient's name. HTML supported.
         </p>
       </div>
 
@@ -1182,23 +1192,30 @@ function TemplateEditor({
             {showPreview ? "Edit" : "Preview"}
           </Button>
         </div>
-        {showPreview ? (
-          <div
-            className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
-            dangerouslySetInnerHTML={{ __html: bodyHtml }}
-          />
-        ) : (
-          <Textarea
-            id="tpl-body"
-            value={bodyHtml}
-            onChange={(e) => setBodyHtml(e.target.value)}
-            rows={12}
-            className="font-mono text-xs"
-            placeholder="<h1>Hi {{name}},</h1>..."
-          />
-        )}
-        <p className="text-xs text-black/50 mt-1">
-          Merge field <code>{"{{name}}"}</code> resolves to recipient's name when sent.
+        {/* Email-safe 600px width — same as the composer, so the
+            template author sees the exact inbox rendering. */}
+        <div className="flex justify-center">
+          <div className="w-full max-w-[600px]">
+            {showPreview ? (
+              <div
+                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
+                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+              />
+            ) : (
+              <Textarea
+                id="tpl-body"
+                value={bodyHtml}
+                onChange={(e) => setBodyHtml(e.target.value)}
+                rows={12}
+                className="font-mono text-xs"
+                placeholder="<h1>Hi {{name}},</h1>..."
+              />
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-black/50 mt-1 text-center">
+          Email-safe width: 600px · Merge field <code>{"{{name}}"}</code> resolves
+          to recipient's name when sent.
         </p>
       </div>
 
