@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requirePermission, requireEventSpeakersEdit, isError } from "@/lib/auth-guards";
 
 /**
  * GET /api/admin/speakers
@@ -9,17 +8,11 @@ import { db } from "@/lib/db";
  * and (if linked) their user account email. Used by the admin "Link user
  * to speaker" picker.
  *
- * Admin-only.
+ * Permission: any user with members.view (SUPER_ADMIN + ADMIN).
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const me = await requirePermission("members.view");
+  if (isError(me)) return me;
 
   const speakers = await db.speaker.findMany({
     orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
@@ -48,15 +41,6 @@ export async function GET() {
  * add a speaker that isn't already on the event's roster.
  */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const body = await req.json();
   const { eventId, name, role, company, bio, topic, photoUrl, contactEmail } = body as {
     eventId?: string;
@@ -75,6 +59,11 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Permission check — admins can edit any event's speakers; CO_HOST
+  // users can edit only events they're explicitly co-hosting.
+  const me = await requireEventSpeakersEdit(eventId);
+  if (isError(me)) return me;
 
   // Verify the event exists
   const event = await db.event.findUnique({ where: { id: eventId }, select: { id: true } });

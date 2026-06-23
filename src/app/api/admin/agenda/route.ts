@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { put } from "@vercel/blob";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
+import { requireEventAgendaEdit, isError } from "@/lib/auth-guards";
 
 /**
  * POST /api/admin/agenda
@@ -56,15 +57,7 @@ const ALLOWED_EXT = [
 ];
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+  // First parse the form data so we can read eventId for the scope check
   let formData: FormData;
   try {
     formData = await req.formData();
@@ -82,6 +75,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const eventId = (formData.get("eventId") as string | null)?.trim();
+  if (!eventId) {
+    return NextResponse.json(
+      { error: "eventId is required" },
+      { status: 400 }
+    );
+  }
+
+  // Permission check — admins can edit any event; CO_HOST users can
+  // edit only events they're explicitly co-hosting.
+  const me = await requireEventAgendaEdit(eventId);
+  if (isError(me)) return me;
   const title = (formData.get("title") as string | null)?.trim();
   const description = (formData.get("description") as string | null)?.trim() || null;
   const type = (formData.get("type") as string | null)?.trim() || "FAST_PITCH";
@@ -279,20 +283,16 @@ export async function POST(req: NextRequest) {
  * editing. Includes linked speaker + count of presentation files per item.
  */
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const url = new URL(req.url);
   const eventId = url.searchParams.get("eventId");
   if (!eventId) {
     return NextResponse.json({ error: "eventId required" }, { status: 400 });
   }
+
+  // Permission check — admins can view any event's agenda; CO_HOST
+  // users can view only their own events.
+  const me = await requireEventAgendaEdit(eventId);
+  if (isError(me)) return me;
 
   const items = await db.eventAgendaItem.findMany({
     where: { eventId },

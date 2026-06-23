@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireEventSpeakersEdit, isError } from "@/lib/auth-guards";
 
 /**
  * PATCH /api/admin/speakers/[id]
@@ -9,39 +8,25 @@ import { db } from "@/lib/db";
  * logic when contactEmail changes — if a User with the new email exists,
  * the speaker is linked to them (userId set); otherwise userId is cleared.
  *
- * Body (all optional): {
- *   name?: string,
- *   role?: string,
- *   company?: string,
- *   bio?: string,
- *   topic?: string,
- *   photoUrl?: string,
- *   contactEmail?: string,
- *   userId?: string | null,  // explicit link override
- *   order?: number,
- * }
+ * Permission: admins can edit any speaker; CO_HOST users can edit only
+ * speakers in events they're co-hosting.
  */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { id } = await params;
   const existing = await db.speaker.findUnique({
     where: { id },
-    select: { id: true, contactEmail: true, userId: true },
+    select: { id: true, contactEmail: true, userId: true, eventId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Speaker not found" }, { status: 404 });
   }
+
+  // Permission check — uses speaker.eventId for CO_HOST scope
+  const me = await requireEventSpeakersEdit(existing.eventId);
+  if (isError(me)) return me;
 
   const body = await req.json();
   const { name, role, company, bio, topic, photoUrl, contactEmail, userId, order } =
@@ -115,20 +100,18 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { id } = await params;
-  const existing = await db.speaker.findUnique({ where: { id }, select: { id: true } });
+  const existing = await db.speaker.findUnique({
+    where: { id },
+    select: { id: true, eventId: true },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Speaker not found" }, { status: 404 });
   }
+
+  // Permission check — uses speaker.eventId for CO_HOST scope
+  const me = await requireEventSpeakersEdit(existing.eventId);
+  if (isError(me)) return me;
 
   await db.speaker.delete({ where: { id } });
   return NextResponse.json({ ok: true });

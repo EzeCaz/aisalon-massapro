@@ -3,15 +3,39 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { isSuperAdminEmail, ROLES, type Role } from "@/lib/permissions";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "eze@massapro.com").toLowerCase();
 
 /**
- * Resolve the role for a given email.
- * Only ADMIN_EMAIL gets "ADMIN"; everyone else is "MEMBER".
+ * Resolve the role for a given email on FIRST sign-in (i.e. when the
+ * user row doesn't exist yet).
+ *
+ *   - Super Admin emails (hard-coded list in permissions.ts) → "SUPER_ADMIN"
+ *   - ADMIN_EMAIL env var → "ADMIN"
+ *   - everyone else → "MEMBER"
+ *
+ * NOTE: After the first sign-in, the role is stored on the User row
+ * and is NOT re-synced from this function on subsequent logins (except
+ * for the Super Admin list — that ALWAYS overrides). This is so an
+ * admin can promote/demote a user via the Edit Member dialog without
+ * their change being clobbered on the user's next login.
  */
-function resolveRole(email: string): "ADMIN" | "MEMBER" {
-  return email.toLowerCase() === ADMIN_EMAIL ? "ADMIN" : "MEMBER";
+function resolveInitialRole(email: string): Role {
+  if (isSuperAdminEmail(email)) return ROLES.SUPER_ADMIN;
+  if (email.toLowerCase() === ADMIN_EMAIL) return ROLES.ADMIN;
+  return ROLES.MEMBER;
+}
+
+/**
+ * For an EXISTING user, decide what role they should have on this sign-in.
+ *
+ * Super Admin emails ALWAYS get SUPER_ADMIN (cannot be revoked via UI).
+ * Everyone else keeps their existing DB role (whatever the admin set).
+ */
+function resolveRoleForExistingUser(email: string, currentRole: string): Role {
+  if (isSuperAdminEmail(email)) return ROLES.SUPER_ADMIN;
+  return currentRole as Role;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -86,7 +110,6 @@ export const authOptions: NextAuthOptions = {
       // Persist the user in our DB on every successful sign-in
       if (!user?.email) return false;
       try {
-        const role = resolveRole(user.email);
         const lowerEmail = user.email.toLowerCase();
 
         // 1. Direct lookup by primary email
@@ -107,6 +130,8 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (!existing) {
+          // Brand-new user → use the initial role resolver
+          const role = resolveInitialRole(user.email);
           await db.user.create({
             data: {
               email: lowerEmail,
@@ -116,11 +141,12 @@ export const authOptions: NextAuthOptions = {
             },
           });
         } else {
-          // Keep role in sync (in case ADMIN_EMAIL was changed in env).
-          // Only patch fields that need patching — don't clobber the
-          // user's profile photo / bio / etc.
+          // Existing user — only sync the role if they're a Super Admin
+          // (so the SUPER_ADMIN status always matches the hard-coded
+          // email list). Otherwise, keep whatever role the admin set.
+          const syncedRole = resolveRoleForExistingUser(user.email, existing.role);
           const patch: Record<string, unknown> = {};
-          if (existing.role !== role) patch.role = role;
+          if (existing.role !== syncedRole) patch.role = syncedRole;
           if (!existing.name && user.name) patch.name = user.name;
           if (!existing.image && user.image) patch.image = user.image;
           if (Object.keys(patch).length > 0) {
@@ -147,8 +173,21 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user?.email) {
-        token.role = resolveRole(user.email);
-        token.id = user.id || token.sub;
+        // For the JWT, we always re-resolve from the DB so role changes
+        // by an admin take effect on the user's NEXT login (not the
+        // current session — that requires a re-auth).
+        const dbUser = await db.user.findUnique({
+          where: { email: user.email.toLowerCase() },
+          select: { id: true, role: true },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.id = dbUser.id;
+        } else {
+          // Fallback (shouldn't happen since signIn creates the row)
+          token.role = resolveInitialRole(user.email);
+          token.id = user.id || token.sub;
+        }
         if (account?.provider) token.provider = account.provider;
       }
       return token;
@@ -156,7 +195,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user?.email) {
         (session.user as { role?: string }).role =
-          (token.role as string) || resolveRole(session.user.email);
+          (token.role as string) || resolveInitialRole(session.user.email);
         (session.user as { id?: string }).id = token.id as string;
       }
       return session;

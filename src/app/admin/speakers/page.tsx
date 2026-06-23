@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { SpeakersTabClient } from "./speakers-tab-client";
@@ -14,7 +15,7 @@ export default async function AdminSpeakersPage() {
 
   const me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+  if (!can(me.role, "members.view")) redirect("/events");
 
   // Load all speakers across all events, plus the events themselves so
   // the client can render an event picker when adding a new speaker.

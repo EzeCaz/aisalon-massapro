@@ -1,0 +1,250 @@
+/**
+ * Centralized role + permissions system for AI Salon Tel Aviv.
+ *
+ * Roles (stored on User.role):
+ *   - "SUPER_ADMIN"  Hard-coded for eze@massapro.com and ezeszna@gmail.com.
+ *                    The ONLY role that can delete members or change
+ *                    another user's role. Cannot be removed or revoked
+ *                    (even by another SUPER_ADMIN).
+ *   - "ADMIN"        Full platform access (events, members info, email
+ *                    campaigns, agenda, speakers) EXCEPT delete-member
+ *                    and role-change operations.
+ *   - "CO_HOST"      Per-event collaborator. Can add/edit agendas +
+ *                    speakers for events they are explicitly co-hosting
+ *                    (EventCoHost table). Cannot create new events,
+ *                    cannot see member info, cannot send email campaigns.
+ *   - "MEMBER"       Default community member. Can RSVP, message
+ *                    speakers, view event pages.
+ *
+ * Permission check pattern:
+ *   import { can } from "@/lib/permissions";
+ *   if (!can(me, "members.delete")) return 403;
+ *
+ * The `can()` helper handles SUPER_ADMIN → ADMIN → CO_HOST → MEMBER
+ * inheritance automatically, so most callers just ask "can this user
+ * do X?" without caring about the specific role string.
+ */
+
+/** The four canonical role strings, in descending privilege order. */
+export const ROLES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  ADMIN: "ADMIN",
+  CO_HOST: "CO_HOST",
+  MEMBER: "MEMBER",
+} as const;
+
+export type Role = (typeof ROLES)[keyof typeof ROLES];
+
+/**
+ * The two email addresses that are ALWAYS Super Admins.
+ * Adding or removing from this list is the only way to grant or
+ * revoke Super Admin status — it CANNOT be done via the UI.
+ */
+export const SUPER_ADMIN_EMAILS: ReadonlySet<string> = new Set([
+  "eze@massapro.com",
+  "ezeszna@gmail.com",
+]);
+
+/**
+ * Determine whether a given email is a Super Admin (by hard-coded list).
+ * Used by the auth flow to seed/sync the SUPER_ADMIN role on every
+ * sign-in, so the DB role field stays in sync with this list.
+ */
+export function isSuperAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return SUPER_ADMIN_EMAILS.has(email.toLowerCase());
+}
+
+/**
+ * Normalize any role string to one of the canonical ROLES values.
+ * Unknown / legacy values (e.g. "ADMIN" from the V3.0 schema) are
+ * passed through unchanged so existing rows keep working. New code
+ * should write one of the canonical ROLES.* strings.
+ */
+export function normalizeRole(role: string | null | undefined): Role {
+  if (!role) return ROLES.MEMBER;
+  const upper = role.toUpperCase();
+  if (upper === "SUPER_ADMIN") return ROLES.SUPER_ADMIN;
+  if (upper === "ADMIN") return ROLES.ADMIN;
+  if (upper === "CO_HOST") return ROLES.CO_HOST;
+  if (upper === "MEMBER") return ROLES.MEMBER;
+  // Legacy / unknown values default to MEMBER
+  return ROLES.MEMBER;
+}
+
+/**
+ * Privilege rank — higher = more powerful. Used for inheritance.
+ *   SUPER_ADMIN = 4
+ *   ADMIN       = 3
+ *   CO_HOST     = 2
+ *   MEMBER      = 1
+ */
+const RANK: Record<Role, number> = {
+  SUPER_ADMIN: 4,
+  ADMIN: 3,
+  CO_HOST: 2,
+  MEMBER: 1,
+};
+
+/** Does role A have AT LEAST the privileges of role B? */
+export function hasAtLeastRole(userRole: string | null | undefined, required: Role): boolean {
+  const r = normalizeRole(userRole);
+  return RANK[r] >= RANK[required];
+}
+
+/**
+ * Permissions catalog. Each permission is a string like "members.delete".
+ * The CAN_MAP maps each permission to the MINIMUM role that grants it.
+ *
+ * SUPER_ADMIN implicitly grants ALL permissions (handled in can()).
+ */
+const CAN_MAP: Record<string, Role> = {
+  // Member management
+  "members.view": ROLES.ADMIN, // see /admin + member info
+  "members.edit": ROLES.ADMIN, // edit profile fields
+  "members.delete": ROLES.SUPER_ADMIN, // ONLY super admin
+  "members.changeRole": ROLES.SUPER_ADMIN, // ONLY super admin
+  "members.export": ROLES.ADMIN,
+  "members.bulkImport": ROLES.ADMIN,
+  "members.merge": ROLES.ADMIN,
+
+  // Events
+  "events.create": ROLES.ADMIN,
+  "events.edit": ROLES.ADMIN, // edit any event (admins)
+  "events.delete": ROLES.SUPER_ADMIN,
+  "events.view": ROLES.MEMBER, // anyone signed in can see events
+
+  // Agenda
+  "agenda.edit": ROLES.ADMIN, // admins can edit any event's agenda
+  "agenda.editCoHosted": ROLES.CO_HOST, // co-hosts can edit agenda of events they co-host
+
+  // Speakers
+  "speakers.create": ROLES.ADMIN,
+  "speakers.edit": ROLES.ADMIN,
+  "speakers.delete": ROLES.SUPER_ADMIN,
+  "speakers.editCoHosted": ROLES.CO_HOST,
+
+  // Registrants / RSVPs
+  "registrants.view": ROLES.ADMIN,
+  "registrants.edit": ROLES.ADMIN,
+  "registrants.bulkImport": ROLES.ADMIN,
+
+  // Email campaigns
+  "email.view": ROLES.ADMIN,
+  "email.send": ROLES.ADMIN,
+  "email.templates": ROLES.ADMIN,
+
+  // Images / presentations
+  "images.manageAny": ROLES.ADMIN,
+  "images.rotate": ROLES.ADMIN,
+  "presentations.manageAny": ROLES.ADMIN,
+
+  // Tags
+  "tags.manage": ROLES.ADMIN,
+};
+
+/**
+ * Check whether a user (with the given role) is allowed to perform
+ * the given permission.
+ *
+ * Super Admins always get true (they inherit everything).
+ * Otherwise we look up the permission in CAN_MAP and compare ranks.
+ *
+ * Note: some permissions are SCOPE-LIMITED (e.g. "agenda.editCoHosted"
+ * only applies to events the user is a co-host of). The can() helper
+ * only checks ROLE — the caller is responsible for additionally
+ * verifying the per-event scope via isEventCoHost().
+ *
+ * Example:
+ *   if (!can(me.role, "agenda.edit") && !can(me.role, "agenda.editCoHosted")) return 403;
+ *   // If user is CO_HOST, also verify they're a co-host of THIS event:
+ *   if (me.role === "CO_HOST" && !(await isEventCoHost(me.id, eventId))) return 403;
+ */
+export function can(
+  userRole: string | null | undefined,
+  permission: keyof typeof CAN_MAP | string
+): boolean {
+  const r = normalizeRole(userRole);
+  // Super Admins inherit everything
+  if (r === ROLES.SUPER_ADMIN) return true;
+  const required = CAN_MAP[permission];
+  if (!required) return false;
+  return RANK[r] >= RANK[required];
+}
+
+/**
+ * Check whether a user (by id) is a co-host of a given event.
+ * Returns false for non-CO_HOST users (use can(permission) for role checks).
+ *
+ * This is an async DB lookup — used by API routes that need per-event
+ * scope checks for CO_HOST users.
+ */
+export async function isEventCoHost(userId: string, eventId: string): Promise<boolean> {
+  // Lazy-import db to avoid circular imports in client-side code
+  const { db } = await import("@/lib/db");
+  const row = await db.eventCoHost.findUnique({
+    where: {
+      eventId_userId: { eventId, userId },
+    },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+/**
+ * Convenience: does the user have ANY of the listed permissions?
+ * Useful for "can edit agenda (either as admin OR co-host)" checks.
+ */
+export function canAny(
+  userRole: string | null | undefined,
+  permissions: string[]
+): boolean {
+  return permissions.some((p) => can(userRole, p));
+}
+
+/**
+ * Human-readable label for display in the UI.
+ */
+export function roleLabel(role: string | null | undefined): string {
+  const r = normalizeRole(role);
+  switch (r) {
+    case ROLES.SUPER_ADMIN:
+      return "Super Admin";
+    case ROLES.ADMIN:
+      return "Admin";
+    case ROLES.CO_HOST:
+      return "Co-host";
+    case ROLES.MEMBER:
+      return "Member";
+  }
+}
+
+/**
+ * Short badge color class (Tailwind) for each role.
+ */
+export function roleBadgeClass(role: string | null | undefined): string {
+  const r = normalizeRole(role);
+  switch (r) {
+    case ROLES.SUPER_ADMIN:
+      return "bg-[#820A7D] text-white";
+    case ROLES.ADMIN:
+      return "bg-[#FF005A] text-white";
+    case ROLES.CO_HOST:
+      return "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40";
+    case ROLES.MEMBER:
+      return "bg-black/5 text-black/60 border border-black/10";
+  }
+}
+
+/**
+ * Roles that a Super Admin can assign to a user via the EditMemberDialog.
+ * Super Admin itself is NOT in this list — it can only be granted by
+ * editing SUPER_ADMIN_EMAILS in code.
+ */
+export const ASSIGNABLE_ROLES: Role[] = [ROLES.ADMIN, ROLES.CO_HOST, ROLES.MEMBER];
+
+/**
+ * Roles that an Admin can assign to a user (more restrictive).
+ * Admins cannot grant Admin to others (only Super Admin can).
+ */
+export const ADMIN_ASSIGNABLE_ROLES: Role[] = [ROLES.CO_HOST, ROLES.MEMBER];

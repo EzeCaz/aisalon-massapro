@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { MEMBER_TAG_CATALOG } from "@/lib/tags";
 
 /**
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
+  if (!me || !can(me.role, "members.view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -209,8 +210,20 @@ export async function POST(req: NextRequest) {
       ? importedAts.sort((a, b) => a.getTime() - b.getTime())[0]
       : null;
 
-  // role: ADMIN if any
-  const mergedRole = allUsers.some((u) => u.role === "ADMIN") ? "ADMIN" : "MEMBER";
+  // role: pick the highest-privilege role among the merged users.
+  // SUPER_ADMIN is preserved (since it's tied to a hard-coded email,
+  // the primary email will inherit it on next sign-in anyway).
+  // Then ADMIN > CO_HOST > MEMBER.
+  const roleRank: Record<string, number> = {
+    SUPER_ADMIN: 4,
+    ADMIN: 3,
+    CO_HOST: 2,
+    MEMBER: 1,
+  };
+  const mergedRole =
+    allUsers
+      .map((u) => u.role)
+      .sort((a, b) => (roleRank[b] || 0) - (roleRank[a] || 0))[0] || "MEMBER";
 
   // Single-value fields: prefer primary's non-null, else first non-null
   const pickFirst = (field: keyof typeof primary): string | null => {

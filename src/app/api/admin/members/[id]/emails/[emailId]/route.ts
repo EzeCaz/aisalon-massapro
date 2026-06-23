@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 
 /**
  * DELETE /api/admin/members/[id]/emails/[emailId]
@@ -19,7 +20,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
+  if (!me || !can(me.role, "members.view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

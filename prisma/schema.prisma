@@ -63,7 +63,7 @@ model User {
   // onboarding — they already have intake data from the spreadsheet.
   onboardedAt       DateTime?
   // ----------------------------------------------------------------
-  role          String   @default("MEMBER") // "ADMIN" | "MEMBER"
+  role          String   @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CO_HOST" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]
   presentations PresentationFile[]

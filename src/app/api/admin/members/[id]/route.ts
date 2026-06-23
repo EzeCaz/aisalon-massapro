@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  can,
+  isSuperAdminEmail,
+  normalizeRole,
+  ROLES,
+  ASSIGNABLE_ROLES,
+} from "@/lib/permissions";
 
 /**
  * PATCH /api/admin/members/[id]
@@ -13,13 +20,26 @@ import { db } from "@/lib/db";
  *
  * Body: {
  *   name?, bio?, company?, companyUrl?, linkedinUrl?, portfolioUrl?,
- *   mobile?, interestedIn?, profileCategories?, appliedFor?, invitedToSpeak?
+ *   mobile?, interestedIn?, profileCategories?, appliedFor?, invitedToSpeak?,
+ *   role?  // ONLY Super Admin can change role; value must be one of
+ *          // ASSIGNABLE_ROLES (ADMIN, CO_HOST, MEMBER). SUPER_ADMIN
+ *          // cannot be granted via this endpoint — only the
+ *          // hard-coded email list in permissions.ts can be Super Admin.
  * }
  *
  * Email is NOT editable here (it's the immutable identity). Photo is
  * uploaded separately via POST /api/profile/photo or a dedicated admin
- * upload route. Role changes are intentionally NOT supported here —
- * use a dedicated admin endpoint if/when needed.
+ * upload route.
+ *
+ * Permission rules:
+ *   - me.role === "ADMIN"      → can edit profile fields, NOT role
+ *   - me.role === "SUPER_ADMIN" → can edit profile fields AND role
+ *   - "CO_HOST" / "MEMBER"      → 403 (this is an admin-only endpoint)
+ *
+ * Super Admin protection:
+ *   - The target user's role CANNOT be changed away from SUPER_ADMIN
+ *     via this endpoint (it's hard-coded by email).
+ *   - SUPER_ADMIN users cannot be deleted either (separate DELETE route).
  */
 export async function PATCH(
   req: NextRequest,
@@ -30,14 +50,14 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || me.role !== "ADMIN") {
+  if (!me || !can(me.role, "members.edit")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
   const existing = await db.user.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, email: true, role: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -55,7 +75,42 @@ export async function PATCH(
     profileCategories?: string | null;
     appliedFor?: string | null;
     invitedToSpeak?: string | null;
+    role?: string | null;
   };
+
+  // ---- Role change authorization ----
+  // Super Admin targets are IMMUTABLE — no one (not even another Super
+  // Admin) can change their role via the API. The only way to add or
+  // remove a Super Admin is by editing the SUPER_ADMIN_EMAILS list in
+  // src/lib/permissions.ts and re-deploying.
+  if (isSuperAdminEmail(existing.email)) {
+    if (body.role !== undefined && body.role !== null && body.role !== ROLES.SUPER_ADMIN) {
+      return NextResponse.json(
+        { error: "Cannot change the role of a Super Admin. Super Admin status is hard-coded by email." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Only Super Admin can change roles at all.
+  if (body.role !== undefined && body.role !== null) {
+    if (!can(me.role, "members.changeRole")) {
+      return NextResponse.json(
+        { error: "Only a Super Admin can change a member's role." },
+        { status: 403 }
+      );
+    }
+    // Validate the new role is in the assignable set (prevents granting
+    // SUPER_ADMIN via this endpoint — that's only available by editing
+    // the hard-coded email list).
+    const newRole = normalizeRole(body.role);
+    if (!ASSIGNABLE_ROLES.includes(newRole)) {
+      return NextResponse.json(
+        { error: `Invalid role. Allowed values: ${ASSIGNABLE_ROLES.join(", ")}.` },
+        { status: 400 }
+      );
+    }
+  }
 
   // Build the update payload — only fields explicitly present in the
   // body are touched (so partial updates work). Strings are trimmed +
@@ -106,6 +161,9 @@ export async function PATCH(
     const trimmed = (body.invitedToSpeak || "").trim();
     data.invitedToSpeak = trimmed.length > 0 ? trimmed.slice(0, 120) : null;
   }
+  if (body.role !== undefined && body.role !== null) {
+    data.role = normalizeRole(body.role);
+  }
 
   const updated = await db.user.update({
     where: { id },
@@ -134,6 +192,64 @@ export async function PATCH(
       tags: updated.tags,
     },
   });
+}
+
+/**
+ * DELETE /api/admin/members/[id]
+ *
+ * Permanently delete a member. ONLY Super Admin can do this.
+ * Super Admins themselves CANNOT be deleted (their role is hard-coded
+ * by email, so deleting the row would just cause them to be re-created
+ * with SUPER_ADMIN role on their next sign-in).
+ *
+ * Cascades: secondary emails, speaker messages, etc. are deleted with
+ * the user (per the schema's onDelete: Cascade). EventCoHost rows
+ * added BY this user have their addedBy set to null (onDelete: SetNull).
+ */
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const me = await db.user.findUnique({ where: { email: session.user.email } });
+  if (!me || !can(me.role, "members.delete")) {
+    return NextResponse.json(
+      { error: "Only a Super Admin can delete members." },
+      { status: 403 }
+    );
+  }
+
+  const { id } = await params;
+  const target = await db.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, role: true },
+  });
+  if (!target) {
+    return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  }
+
+  // Super Admins cannot be deleted.
+  if (isSuperAdminEmail(target.email)) {
+    return NextResponse.json(
+      { error: "Super Admins cannot be deleted. Remove their email from SUPER_ADMIN_EMAILS first." },
+      { status: 403 }
+    );
+  }
+
+  // Don't allow self-delete (avoids footgun — would lock the admin out).
+  if (target.id === me.id) {
+    return NextResponse.json(
+      { error: "You cannot delete your own account." },
+      { status: 400 }
+    );
+  }
+
+  await db.user.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true, deleted: id });
 }
 
 /**

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -15,7 +16,9 @@ export async function AppHeader() {
         include: { tags: true },
       })
     : null;
-  const isAdmin = user?.role === "ADMIN";
+  // Show the "Admin" nav link to anyone who can view members
+  // (SUPER_ADMIN + ADMIN). CO_HOST + MEMBER don't see it.
+  const isAdmin = !!user && can(user.role, "members.view");
 
   const navLinks = [
     { href: "/events", label: "Events" },

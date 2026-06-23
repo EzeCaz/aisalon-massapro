@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can, roleLabel } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
@@ -20,7 +21,9 @@ export default async function AdminPage() {
     include: { tags: true },
   });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+  // New permission gate: any role with members.view (SUPER_ADMIN + ADMIN)
+  // can access this page. CO_HOST + MEMBER are redirected to /events.
+  if (!can(me.role, "members.view")) redirect("/events");
 
   const members = await db.user.findMany({
     orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
@@ -74,8 +77,11 @@ export default async function AdminPage() {
               Manage community & events
             </h1>
             <p className="mt-2 text-sm text-black/60 max-w-2xl">
-              You are signed in as <strong className="font-mono">{me.email}</strong>. Only this
-              account has admin privileges — all other members are standard community members.
+              You are signed in as <strong className="font-mono">{me.email}</strong> with the{" "}
+              <span className="inline-flex items-center gap-1 font-semibold text-[#FF005A]">
+                {roleLabel(me.role)}
+              </span>{" "}
+              role. Super Admins can delete members and change roles; Admins can manage everything else.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

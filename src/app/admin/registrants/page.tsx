@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { RegistrantsTabClient } from "./registrants-tab-client";
@@ -14,7 +15,7 @@ export default async function AdminRegistrantsPage() {
 
   const me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+  if (!can(me.role, "members.view")) redirect("/events");
 
   const rsvps = await db.eventRsvp.findMany({
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],

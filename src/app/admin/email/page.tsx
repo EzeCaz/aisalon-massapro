@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { EmailTabClient } from "./email-tab-client";
@@ -19,7 +20,7 @@ export default async function EmailTabPage() {
     select: { id: true, email: true, name: true, role: true },
   });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+  if (!can(me.role, "members.view")) redirect("/events");
 
   // Pre-fetch initial lists for the client. The client can re-fetch via
   // API when it needs fresh data (after creating/sending a campaign).
