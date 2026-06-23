@@ -51,8 +51,20 @@ export async function PATCH(
   const me = await getCurrentUser();
   if (me instanceof NextResponse) return me;
   // me is now a { id, email, name, role } object with the synced role.
+  // Debug: include diagnostic info in 403 errors so we can see exactly
+  // which check failed and what the server sees as the caller's identity.
+  const debugInfo = {
+    youEmail: me.email,
+    youRole: me.role,
+    isSuperAdminByEmail: isSuperAdminEmail(me.email),
+    isSuperAdmin: isSuperAdmin({ email: me.email, role: me.role }),
+    canEditMembers: can(me.role, "members.edit"),
+  };
   if (!can(me.role, "members.edit") && !isSuperAdmin({ email: me.email, role: me.role })) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Forbidden", debug: debugInfo },
+      { status: 403 }
+    );
   }
 
   const { id } = await params;
@@ -100,7 +112,7 @@ export async function PATCH(
   if (body.role !== undefined && body.role !== null) {
     if (!isSuperAdmin({ email: me.email, role: me.role })) {
       return NextResponse.json(
-        { error: "Only a Super Admin can change a member's role." },
+        { error: "Only a Super Admin can change a member's role.", debug: debugInfo },
         { status: 403 }
       );
     }

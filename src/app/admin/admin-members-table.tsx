@@ -1677,7 +1677,12 @@ function EditMemberDialog({
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d?.error || `HTTP ${res.status}`);
+        // Include debug info in the error message so we can diagnose
+        // authorization failures (the server attaches a `debug` object
+        // to 403 responses with the caller's email, role, and which
+        // checks passed/failed).
+        const debug = d?.debug ? ` | debug: ${JSON.stringify(d.debug)}` : "";
+        throw new Error(`${d?.error || `HTTP ${res.status}`}${debug}`);
       }
       toast.success(`Saved changes to ${name || member.email}`, { id: t });
       onSaved();
