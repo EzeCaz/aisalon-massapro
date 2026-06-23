@@ -48,8 +48,12 @@ export async function PATCH(
   // Use getCurrentUser() so the auto-sync runs (if the user's email is
   // in the SUPER_ADMIN_EMAILS allowlist but their DB role hasn't been
   // upgraded yet, this will upgrade it inline).
-  const me = await getCurrentUser();
-  if (me instanceof NextResponse) return me;
+  // NOTE: getCurrentUser() returns { user, error } — we must destructure.
+  const { user: me, error: authError } = await getCurrentUser();
+  if (authError) return authError;
+  if (!me) {
+    return NextResponse.json({ error: "User not found" }, { status: 403 });
+  }
   // me is now a { id, email, name, role } object with the synced role.
   // Debug: include diagnostic info in 403 errors so we can see exactly
   // which check failed and what the server sees as the caller's identity.
@@ -226,8 +230,12 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const me = await getCurrentUser();
-  if (me instanceof NextResponse) return me;
+  // NOTE: getCurrentUser() returns { user, error } — we must destructure.
+  const { user: me, error: authError } = await getCurrentUser();
+  if (authError) return authError;
+  if (!me) {
+    return NextResponse.json({ error: "User not found" }, { status: 403 });
+  }
   if (!isSuperAdmin({ email: me.email, role: me.role })) {
     return NextResponse.json(
       { error: "Only a Super Admin can delete members." },
