@@ -118,7 +118,13 @@ export default async function AdminPage() {
             Assign tags to members — speakers, builders, investors, founders, etc. Tags appear on
             their profile and the user menu.
           </p>
-          <AdminMembersTable members={membersJson} events={eventsJson} allSpeakers={allSpeakersJson} />
+          <AdminMembersTable
+            members={membersJson}
+            events={eventsJson}
+            allSpeakers={allSpeakersJson}
+            currentUserEmail={me.email}
+            currentUserRole={me.role}
+          />
         </section>
 
         {/* Events section */}

@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/dialog";
 import { MEMBER_TAG_CATALOG, tagColor } from "@/lib/tags";
 import {
+  ASSIGNABLE_ROLES,
+  isSuperAdminEmail,
+  ROLES,
+  roleBadgeClass,
+  roleLabel,
+  type Role,
+} from "@/lib/permissions";
+import {
   Shield,
   Search,
   Tag as TagIcon,
@@ -114,9 +122,19 @@ type Props = {
   members: Member[];
   events: EventRow[];
   allSpeakers: SpeakerRow[];
+  /** Email of the currently-signed-in admin (for self-demotion block). */
+  currentUserEmail?: string;
+  /** Role of the currently-signed-in admin (drives role dropdown visibility). */
+  currentUserRole?: string;
 };
 
-export function AdminMembersTable({ members, events, allSpeakers }: Props) {
+export function AdminMembersTable({
+  members,
+  events,
+  allSpeakers,
+  currentUserEmail,
+  currentUserRole,
+}: Props) {
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -659,6 +677,8 @@ export function AdminMembersTable({ members, events, allSpeakers }: Props) {
         open={editOpen}
         onOpenChange={setEditOpen}
         member={editMember}
+        currentUserEmail={currentUserEmail}
+        currentUserRole={currentUserRole}
         onSaved={() => {
           setEditOpen(false);
           setEditMember(null);
@@ -1110,11 +1130,28 @@ function TableView({
                           title="Click to edit member info"
                         >
                           {m.name || m.email.split("@")[0]}
-                          {m.role === "ADMIN" && (
-                            <span className="inline-flex items-center gap-0.5 text-[0.5rem] font-bold uppercase bg-[#FF005A] text-white px-1 py-0.5 rounded">
-                              <Shield className="h-2 w-2" /> A
-                            </span>
-                          )}
+                          {/* Role badge — only shown for elevated roles
+                              (Super Admin, Admin, Co-host). Members get
+                              no badge to keep the card UI clean. */}
+                          {(() => {
+                            const r = (m.role || "MEMBER").toUpperCase();
+                            if (r === "SUPER_ADMIN") return (
+                              <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#820A7D] text-white px-1.5 py-0.5 rounded">
+                                <Shield className="h-2.5 w-2.5" /> SA
+                              </span>
+                            );
+                            if (r === "ADMIN") return (
+                              <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
+                                <Shield className="h-2.5 w-2.5" /> Admin
+                              </span>
+                            );
+                            if (r === "CO_HOST") return (
+                              <span className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40 px-1.5 py-0.5 rounded">
+                                Co-host
+                              </span>
+                            );
+                            return null;
+                          })()}
                           {m.importSource && (
                             <span
                               title={`Imported from ${m.importSource}`}
@@ -1515,11 +1552,17 @@ function EditMemberDialog({
   open,
   onOpenChange,
   member,
+  currentUserEmail,
+  currentUserRole,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   member: Member | null;
+  /** Email of the currently-signed-in admin. Used to block self-demotion. */
+  currentUserEmail?: string;
+  /** Role of the currently-signed-in admin. Drives role-dropdown visibility. */
+  currentUserRole?: string;
   onSaved: () => void;
 }) {
   // Local form state — re-initialized whenever the member changes.
@@ -1534,6 +1577,9 @@ function EditMemberDialog({
   const [profileCategories, setProfileCategories] = useState("");
   const [appliedFor, setAppliedFor] = useState("");
   const [invitedToSpeak, setInvitedToSpeak] = useState("");
+  // Role state — only editable by Super Admin. Initialized from member.role
+  // and synced on member change. Persisted via the same PATCH endpoint.
+  const [memberRole, setMemberRole] = useState<string>(ROLES.MEMBER);
   const [saving, setSaving] = useState(false);
 
   // Existing company names — fetched once on mount. Used to populate
@@ -1558,6 +1604,7 @@ function EditMemberDialog({
       setProfileCategories(member.profileCategories || "");
       setAppliedFor(member.appliedFor || "");
       setInvitedToSpeak(member.invitedToSpeak || "");
+      setMemberRole(member.role || ROLES.MEMBER);
     }
   }, [member]);
 
@@ -1589,25 +1636,44 @@ function EditMemberDialog({
       toast.error("Name is required");
       return;
     }
+    // SELF-DEMENTION BLOCK — per user choice: Super Admins cannot change
+    // their own role. This prevents accidental lockout (e.g. eze@massapro.com
+    // demoting themselves to Member and losing the ability to undo it).
+    // The server enforces this too, but we block here for UX clarity.
+    const isSelf = currentUserEmail && member.email === currentUserEmail;
+    const isSuperAdminTarget = isSuperAdminEmail(member.email);
+    if (isSelf && isSuperAdminTarget && memberRole !== ROLES.SUPER_ADMIN) {
+      toast.error("You cannot change your own Super Admin role. Ask another Super Admin to do it.");
+      return;
+    }
     setSaving(true);
     const t = toast.loading("Saving member…");
     try {
+      // Only include role in the payload if the current user is a Super Admin
+      // AND the target is not a Super Admin (Super Admin role is immutable).
+      // The server double-checks both conditions, but we skip it client-side
+      // too so non-Super-Admins don't accidentally send a role field.
+      const isSuperAdminMe = isSuperAdminEmail(currentUserEmail);
+      const payload: Record<string, string | null> = {
+        name,
+        bio,
+        company,
+        companyUrl,
+        linkedinUrl,
+        portfolioUrl,
+        mobile,
+        interestedIn,
+        profileCategories,
+        appliedFor,
+        invitedToSpeak,
+      };
+      if (isSuperAdminMe && !isSuperAdminTarget) {
+        payload.role = memberRole;
+      }
       const res = await fetch(`/api/admin/members/${member.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          bio,
-          company,
-          companyUrl,
-          linkedinUrl,
-          portfolioUrl,
-          mobile,
-          interestedIn,
-          profileCategories,
-          appliedFor,
-          invitedToSpeak,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -1812,6 +1878,85 @@ function EditMemberDialog({
                 </select>
               </div>
             </div>
+          </div>
+
+          {/* Role section — ONLY visible to Super Admins.
+              Non-Super-Admins see the role as a read-only badge.
+              Super Admins see a dropdown with ASSIGNABLE_ROLES
+              (ADMIN, CO_HOST, MEMBER). SUPER_ADMIN is NOT in the
+              dropdown — it can only be granted by editing the
+              SUPER_ADMIN_EMAILS list in src/lib/permissions.ts.
+
+              Self-demotion is blocked: a Super Admin editing their OWN
+              member record sees the dropdown disabled with a note
+              ("You cannot change your own role"). The server double-
+              checks all these conditions. */}
+          <div className="rounded-md border border-black/10 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+                Role &amp; permissions
+              </div>
+              {isSuperAdminEmail(member.email) && (
+                <span
+                  title="Super Admin status is hard-coded by email and cannot be changed via the UI."
+                  className="text-[0.55rem] font-bold uppercase bg-[#820A7D] text-white px-1.5 py-0.5 rounded"
+                >
+                  Hard-coded
+                </span>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-black/60 mb-1">
+                Member type
+              </label>
+              {isSuperAdminEmail(currentUserEmail) ? (
+                isSuperAdminEmail(member.email) ? (
+                  // Super Admin editing another Super Admin (or themselves):
+                  // role is locked. Show as disabled select with explanation.
+                  <select
+                    value={ROLES.SUPER_ADMIN}
+                    disabled
+                    className="w-full rounded-md border border-black/15 bg-black/5 px-3 py-2 text-sm cursor-not-allowed"
+                  >
+                    <option value={ROLES.SUPER_ADMIN}>Super Admin (locked)</option>
+                  </select>
+                ) : (
+                  // Super Admin editing a non-Super-Admin: show the dropdown.
+                  <select
+                    value={memberRole}
+                    onChange={(e) => setMemberRole(e.target.value)}
+                    className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  >
+                    {ASSIGNABLE_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {roleLabel(r)}
+                      </option>
+                    ))}
+                  </select>
+                )
+              ) : (
+                // Non-Super-Admin: read-only display of current role.
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[0.65rem] font-bold uppercase px-2 py-1 rounded ${roleBadgeClass(member.role)}`}
+                  >
+                    {roleLabel(member.role)}
+                  </span>
+                  <span className="text-[0.65rem] text-black/40">
+                    Only Super Admins can change roles.
+                  </span>
+                </div>
+              )}
+            </div>
+            {isSuperAdminEmail(currentUserEmail) &&
+              !isSuperAdminEmail(member.email) && (
+                <p className="text-[0.65rem] text-black/50 leading-relaxed">
+                  Super Admin status is granted only by editing the
+                  <code className="bg-black/5 px-1 rounded mx-0.5">SUPER_ADMIN_EMAILS</code>
+                  list in <code className="bg-black/5 px-1 rounded mx-0.5">src/lib/permissions.ts</code>
+                  and re-deploying. It cannot be granted via this dialog.
+                </p>
+              )}
           </div>
         </div>
 

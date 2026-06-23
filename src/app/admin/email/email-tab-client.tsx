@@ -885,12 +885,18 @@ function CampaignComposer({
             recipient will see in their inbox. Most email clients cap the
             readable width at ~600-650px; designing wider than that causes
             horizontal scroll on mobile and ugly column-stacking in
-            Outlook. */}
+            Outlook.
+
+            SHRINK-TO-FIT: the preview container never overflows
+            horizontally. Images, tables, and other intrinsic-width
+            elements are scaled down to fit the 600px column via
+            [&_img]:max-w-full and [&_table]:max-w-full. Long text wraps
+            with break-words. NO horizontal scroll, ever. */}
         <div className="flex justify-center">
           <div className="w-full max-w-[600px]">
             {showPreview ? (
               <div
-                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
+                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm overflow-hidden break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_div]:max-w-full"
                 dangerouslySetInnerHTML={{ __html: bodyHtml }}
               />
             ) : (
@@ -1193,12 +1199,14 @@ function TemplateEditor({
           </Button>
         </div>
         {/* Email-safe 600px width — same as the composer, so the
-            template author sees the exact inbox rendering. */}
+            template author sees the exact inbox rendering.
+            SHRINK-TO-FIT: no horizontal scroll. Images/tables scale to
+            fit the 600px column. */}
         <div className="flex justify-center">
           <div className="w-full max-w-[600px]">
             {showPreview ? (
               <div
-                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm max-w-none overflow-auto"
+                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm overflow-hidden break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_div]:max-w-full"
                 dangerouslySetInnerHTML={{ __html: bodyHtml }}
               />
             ) : (
