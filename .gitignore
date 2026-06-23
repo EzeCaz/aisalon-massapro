@@ -1,3 +1,7 @@
 skills/
 node_modules/
 .vercel
+
+# Vercel CLI link file (contains project/org IDs — not sensitive, but
+# re-linking per-machine is the canonical workflow)
+.vercel/
