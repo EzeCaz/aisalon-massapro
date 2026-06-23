@@ -1058,7 +1058,9 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                 {/* Thumbnails row (only if speaker has assets) */}
                 {showThumbnails && (
                   <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap items-stretch justify-center gap-2">
-                    {/* Pictures of the session */}
+                    {/* Pictures of the session — ONE thumbnail with a
+                        "1/N" counter in the top-right corner. Clicking
+                        opens the full slideshow dialog (with reorder). */}
                     {assets.hasPictures && assets.firstImage && item.speaker && (
                       <button
                         onClick={() => setPicturesSpeaker(item.speaker!)}
@@ -1072,8 +1074,12 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             loading="lazy"
                           />
-                          <div className="absolute top-0.5 right-0.5 bg-black/70 text-white text-[0.55rem] font-bold px-1 rounded">
-                            {(item.speaker.images ?? []).length}
+                          {/* "1/N" counter — top-right of the thumbnail.
+                              Shows "1 of N" so users immediately see how
+                              many pictures are available without rendering
+                              them all on the agenda box. */}
+                          <div className="absolute top-1 right-1 bg-black/75 text-white text-[0.6rem] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums shadow-sm">
+                            1/{(item.speaker.images ?? []).length}
                           </div>
                         </div>
                         <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
