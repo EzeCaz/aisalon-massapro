@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, roleLabel } from "@/lib/permissions";
+import { can, isSuperAdminEmail, ROLES, roleLabel } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
@@ -16,14 +16,27 @@ export default async function AdminPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin");
 
-  const me = await db.user.findUnique({
+  let me = await db.user.findUnique({
     where: { email: session.user.email },
     include: { tags: true },
   });
   if (!me) redirect("/login");
+
+  // Auto-sync: if the user's email is in the SUPER_ADMIN_EMAILS allowlist
+  // but their DB role isn't SUPER_ADMIN yet, upgrade it inline so the UI
+  // immediately reflects their true role. This keeps the hard-coded email
+  // allowlist authoritative regardless of DB state.
+  if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
+    await db.user.update({
+      where: { id: me.id },
+      data: { role: ROLES.SUPER_ADMIN },
+    });
+    me = { ...me, role: ROLES.SUPER_ADMIN };
+  }
+
   // New permission gate: any role with members.view (SUPER_ADMIN + ADMIN)
   // can access this page. CO_HOST + MEMBER are redirected to /events.
-  if (!can(me.role, "members.view")) redirect("/events");
+  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
 
   const members = await db.user.findMany({
     orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],

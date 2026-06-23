@@ -14,13 +14,20 @@ import type { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isEventCoHost, ROLES } from "@/lib/permissions";
+import { can, isEventCoHost, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 
 /**
  * Load the current authenticated user from the session. Returns:
  *   - { user: <User>, error: null }  on success
  *   - { user: null,  error: <401 NextResponse> }  if not signed in
  *   - { user: null,  error: <403 NextResponse> }  if signed in but no DB row
+ *
+ * SIDE EFFECT: If the user's email is in the SUPER_ADMIN_EMAILS allowlist
+ * but their DB role isn't SUPER_ADMIN yet (e.g. they were just added to
+ * the allowlist via code deploy and haven't logged out/in to refresh
+ * their JWT), this function auto-syncs the DB role to SUPER_ADMIN. This
+ * guarantees that the hard-coded email allowlist is ALWAYS authoritative,
+ * regardless of DB state.
  */
 export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
@@ -39,6 +46,15 @@ export async function getCurrentUser() {
       user: null,
       error: NextResponse.json({ error: "User not found" }, { status: 403 }),
     };
+  }
+  // Auto-sync: if email is in super admin allowlist but DB role isn't,
+  // upgrade the DB row immediately so all subsequent can() checks pass.
+  if (isSuperAdminEmail(user.email) && user.role !== ROLES.SUPER_ADMIN) {
+    await db.user.update({
+      where: { id: user.id },
+      data: { role: ROLES.SUPER_ADMIN },
+    });
+    return { user: { ...user, role: ROLES.SUPER_ADMIN }, error: null };
   }
   return { user, error: null };
 }

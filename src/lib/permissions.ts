@@ -2,7 +2,7 @@
  * Centralized role + permissions system for AI Salon Tel Aviv.
  *
  * Roles (stored on User.role):
- *   - "SUPER_ADMIN"  Hard-coded for eze@massapro.com and ezeszna@gmail.com.
+ *   - "SUPER_ADMIN"  Hard-coded for eze@massapro.com (single Super Admin).
  *                    The ONLY role that can delete members or change
  *                    another user's role. Cannot be removed or revoked
  *                    (even by another SUPER_ADMIN).
@@ -36,13 +36,16 @@ export const ROLES = {
 export type Role = (typeof ROLES)[keyof typeof ROLES];
 
 /**
- * The two email addresses that are ALWAYS Super Admins.
+ * The email address that is ALWAYS the Super Admin.
  * Adding or removing from this list is the only way to grant or
  * revoke Super Admin status — it CANNOT be done via the UI.
+ *
+ * NOTE: Per user request (2026-06-23), only eze@massapro.com is a
+ * Super Admin. To add another Super Admin in the future, append
+ * their lowercase email to this Set and re-deploy.
  */
 export const SUPER_ADMIN_EMAILS: ReadonlySet<string> = new Set([
   "eze@massapro.com",
-  "ezeszna@gmail.com",
 ]);
 
 /**
@@ -53,6 +56,27 @@ export const SUPER_ADMIN_EMAILS: ReadonlySet<string> = new Set([
 export function isSuperAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return SUPER_ADMIN_EMAILS.has(email.toLowerCase());
+}
+
+/**
+ * Determine whether a user (with both email + role) is a Super Admin.
+ *
+ * This is the CANONICAL super-admin check for server-side authorization.
+ * It returns true if EITHER:
+ *   - the user's email is in the SUPER_ADMIN_EMAILS hard-coded list, OR
+ *   - the user's DB role field is "SUPER_ADMIN"
+ *
+ * The email check is authoritative — it catches the case where an
+ * admin's DB role hasn't been synced yet (e.g. they were just added
+ * to the allowlist via code deploy but haven't logged out/in to
+ * refresh their JWT). The DB role check is a forward-compatibility
+ * fallback.
+ *
+ * Use this anywhere you need to authorize a Super-Admin-only action.
+ */
+export function isSuperAdmin(args: { email?: string | null; role?: string | null }): boolean {
+  if (isSuperAdminEmail(args.email)) return true;
+  return normalizeRole(args.role) === ROLES.SUPER_ADMIN;
 }
 
 /**

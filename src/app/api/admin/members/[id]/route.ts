@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   can,
+  isSuperAdmin,
   isSuperAdminEmail,
   normalizeRole,
   ROLES,
   ASSIGNABLE_ROLES,
 } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/auth-guards";
 
 /**
  * PATCH /api/admin/members/[id]
@@ -45,12 +45,13 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || !can(me.role, "members.edit")) {
+  // Use getCurrentUser() so the auto-sync runs (if the user's email is
+  // in the SUPER_ADMIN_EMAILS allowlist but their DB role hasn't been
+  // upgraded yet, this will upgrade it inline).
+  const me = await getCurrentUser();
+  if (me instanceof NextResponse) return me;
+  // me is now a { id, email, name, role } object with the synced role.
+  if (!can(me.role, "members.edit") && !isSuperAdmin({ email: me.email, role: me.role })) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -93,8 +94,11 @@ export async function PATCH(
   }
 
   // Only Super Admin can change roles at all.
+  // We use isSuperAdmin() (email-based OR DB-role-based) so that an
+  // admin whose DB role hasn't synced yet (stale JWT) is still
+  // authorized as long as their email is in the hard-coded allowlist.
   if (body.role !== undefined && body.role !== null) {
-    if (!can(me.role, "members.changeRole")) {
+    if (!isSuperAdmin({ email: me.email, role: me.role })) {
       return NextResponse.json(
         { error: "Only a Super Admin can change a member's role." },
         { status: 403 }
@@ -210,12 +214,9 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me || !can(me.role, "members.delete")) {
+  const me = await getCurrentUser();
+  if (me instanceof NextResponse) return me;
+  if (!isSuperAdmin({ email: me.email, role: me.role })) {
     return NextResponse.json(
       { error: "Only a Super Admin can delete members." },
       { status: 403 }
