@@ -171,6 +171,24 @@ export function RegistrantsTabClient({
   // Map of rsvpId -> selected suggestion userId (the admin's picks)
   const [findPicks, setFindPicks] = React.useState<Record<string, string>>({});
 
+  // NOTE: `filtered` MUST be declared here (before the selection helpers
+  // below) — they reference it during render. Declaring it later causes
+  // a temporal-dead-zone ReferenceError that crashes the page on every
+  // render. This was the V3.3 production bug.
+  const filtered = React.useMemo(() => {
+    return rsvps.filter((r) => {
+      if (eventFilter !== "ALL" && r.eventId !== eventFilter) return false;
+      if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return (
+        r.email.toLowerCase().includes(q) ||
+        (r.name || "").toLowerCase().includes(q) ||
+        r.event.title.toLowerCase().includes(q)
+      );
+    });
+  }, [rsvps, search, eventFilter, statusFilter]);
+
   function toggleSelected(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -300,20 +318,6 @@ export function RegistrantsTabClient({
       setFindLoading(false);
     }
   }
-
-  const filtered = React.useMemo(() => {
-    return rsvps.filter((r) => {
-      if (eventFilter !== "ALL" && r.eventId !== eventFilter) return false;
-      if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
-      if (!search.trim()) return true;
-      const q = search.trim().toLowerCase();
-      return (
-        r.email.toLowerCase().includes(q) ||
-        (r.name || "").toLowerCase().includes(q) ||
-        r.event.title.toLowerCase().includes(q)
-      );
-    });
-  }, [rsvps, search, eventFilter, statusFilter]);
 
   const handleAdd = (rsvp: Rsvp) => {
     setRsvps((prev) => {
