@@ -1,0 +1,47 @@
+==============================================================
+AI Salon Tel Aviv — MassaPro Platform
+Milestone Backup: V3.1
+==============================================================
+
+Backup created:    2026-06-23 08:10:54 UTC
+Created by:        Super Z (autonomous agent)
+Machine:           c-6a3a2d72-14a687f1-ad8da0ac6646
+Project dir:       /home/z/my-project
+
+Production URL:    https://aisalon.massapro.com
+Vercel project ID: prj_aoKtARAel8wlmcIlLRjjSPKshMLA
+Vercel team ID:    team_xQgfSmNbNo5JFCAaVyRboPBf
+Git remote:        https://github.com/EzeCaz/aff-massapro.git
+Git branch:        main
+Git HEAD commit:   8dcd314fedcd21c628fa260573478ed8da121b37
+Git HEAD subject:  896e05d6-9e42-4053-8dfe-310b96e92094
+
+What's new in V3.1 (vs V3.0):
+  - Agenda thumbnail fix: shows ONE picture with "1/N" counter in the
+    top-right corner (was a single number before).
+  - Clicking the agenda thumbnail opens the SpeakerSlideshowDialog
+    with full reorder support (drag-and-drop via dnd-kit, persists
+    via POST /api/images/reorder).
+  - V3.0 deployed to production at https://aisalon.massapro.com
+    (smoke-tested: /api/admin/members/companies returns 401, not 404).
+
+V3.0 features also included (carried forward):
+  - Email editor width fix
+  - Click-to-edit on user lists
+  - Edit button on tables
+  - Company name combobox
+  - Slideshow viewer with reorder (Photos tab)
+  - CSV/XLS bulk import for Members + Registrants
+    (/api/admin/{members,registrants}/bulk-import + import-template)
+
+Rollback instructions:
+  1. Untar this backup on a fresh machine:
+       tar -xzf aisalon-massapro-V3.1.tar.gz
+  2. cd into the extracted directory
+  3. bun install
+  4. Set DATABASE_URL to point to the production Postgres (or a snapshot)
+  5. bun run build
+  6. vercel link --yes (re-link to the same project)
+  7. vercel deploy --prod --yes
+
+==============================================================
