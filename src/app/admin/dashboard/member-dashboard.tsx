@@ -11,10 +11,7 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   CartesianGrid,
-  Legend,
 } from "recharts";
 import {
   Search,
@@ -24,11 +21,9 @@ import {
   Download,
   BarChart3,
   PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
   Table as TableIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { MEMBER_TAG_CATALOG, tagColor } from "@/lib/tags";
 
@@ -71,6 +66,35 @@ const AIS_COLORS = [
 
 type SortField = "name" | "createdAt" | "importedAt" | "company" | "appliedFor";
 type SortDir = "asc" | "desc";
+
+// --- Chart type toggle --------------------------------------------------
+// Each chart on the dashboard can be rendered as a bar chart, a pie chart,
+// or a table. The admin can switch each chart individually via a 3-button
+// segmented control in the chart card header, or switch ALL charts at once
+// via the "Set all" control above the charts grid.
+//
+// Defaults preserve the original V3.3 rendering except "Signups over time"
+// which was a line chart — it is now a vertical bar chart by default.
+type ChartType = "bar" | "pie" | "table";
+
+const CHART_IDS = [
+  "signups",
+  "source",
+  "interestedIn",
+  "profileCategories",
+  "appliedFor",
+  "tags",
+] as const;
+type ChartId = (typeof CHART_IDS)[number];
+
+const DEFAULT_CHART_TYPES: Record<ChartId, ChartType> = {
+  signups: "bar",
+  source: "pie",
+  interestedIn: "bar",
+  profileCategories: "bar",
+  appliedFor: "pie",
+  tags: "bar",
+};
 
 export function MemberDashboard({ members }: Props) {
   // --- Filters -----------------------------------------------------------
@@ -152,6 +176,35 @@ export function MemberDashboard({ members }: Props) {
 
   // --- Chart data --------------------------------------------------------
   const stats = useMemo(() => computeStats(filtered), [filtered]);
+
+  // --- Chart type state --------------------------------------------------
+  // Per-chart render type (bar / pie / table). The admin can toggle each
+  // chart individually via the segmented control in the chart header, or
+  // switch all charts at once via the "Set all" control above the grid.
+  const [chartTypes, setChartTypes] = useState<Record<ChartId, ChartType>>(
+    DEFAULT_CHART_TYPES
+  );
+
+  function setChartType(id: ChartId, type: ChartType) {
+    setChartTypes((prev) => ({ ...prev, [id]: type }));
+  }
+
+  function setAllChartTypes(type: ChartType) {
+    setChartTypes(() => {
+      const next = {} as Record<ChartId, ChartType>;
+      for (const id of CHART_IDS) next[id] = type;
+      return next;
+    });
+  }
+
+  // True when every chart is currently the same type — used to highlight
+  // the "active" button in the global "Set all" control.
+  const allSameType = (Object.keys(chartTypes) as ChartId[]).every(
+    (id) => chartTypes[id] === chartTypes.signups
+  );
+  const globalActive: ChartType | null = allSameType
+    ? chartTypes.signups
+    : null;
 
   // --- CSV export --------------------------------------------------------
   function exportCsv() {
@@ -332,181 +385,105 @@ export function MemberDashboard({ members }: Props) {
         </div>
       </div>
 
+      {/* Charts toolbar — global "Set all" control */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-black flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-[#FF005A]" />
+            Charts
+          </h2>
+          <p className="text-xs text-black/50 mt-0.5">
+            Toggle each chart between bar, pie, and table — or switch them all at once.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1 rounded-md border border-black/15 bg-white p-0.5">
+          <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/50 px-2">
+            Set all
+          </span>
+          <ChartTypeButton
+            active={globalActive === "bar"}
+            onClick={() => setAllChartTypes("bar")}
+            icon={<BarChart3 className="h-3.5 w-3.5" />}
+            label="Bar"
+          />
+          <ChartTypeButton
+            active={globalActive === "pie"}
+            onClick={() => setAllChartTypes("pie")}
+            icon={<PieChartIcon className="h-3.5 w-3.5" />}
+            label="Pie"
+          />
+          <ChartTypeButton
+            active={globalActive === "table"}
+            onClick={() => setAllChartTypes("table")}
+            icon={<TableIcon className="h-3.5 w-3.5" />}
+            label="Table"
+          />
+        </div>
+      </div>
+
       {/* Charts grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Signups over time */}
-        <ChartCard title="Signups over time" subtitle={`${stats.signupsOverTime.length} months`}>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={stats.signupsOverTime}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="count"
-                name="Signups"
-                stroke="#FF005A"
-                strokeWidth={2}
-                dot={{ fill: "#FF005A", r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Source split */}
-        <ChartCard title="Source split" subtitle="Imported vs self-registered">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={stats.sourceSplit}
-                dataKey="count"
-                nameKey="label"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={(entry) => `${entry.label} (${entry.count})`}
-                labelLine={false}
-              >
-                {stats.sourceSplit.map((_, i) => (
-                  <Cell key={i} fill={AIS_COLORS[i % AIS_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Interested in */}
-        <ChartCard title="I am interested in…" subtitle="Top interests across all members">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stats.interestedInCounts} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={140}
-                tick={{ fontSize: 10 }}
-                stroke="#00000060"
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
-                {stats.interestedInCounts.map((_, i) => (
-                  <Cell key={i} fill={AIS_COLORS[i % AIS_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Profile categories */}
-        <ChartCard title="Tell us more about yourself" subtitle="Member self-identification">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stats.profileCategoriesCounts} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={180}
-                tick={{ fontSize: 10 }}
-                stroke="#00000060"
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
-                {stats.profileCategoriesCounts.map((_, i) => (
-                  <Cell key={i} fill={AIS_COLORS[(i + 2) % AIS_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Applied for */}
-        <ChartCard title="Applied for" subtitle="Fast pitch vs Presentation/Lecture">
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={stats.appliedForCounts}
-                dataKey="count"
-                nameKey="label"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={(entry) => `${entry.label} (${entry.count})`}
-                labelLine={false}
-              >
-                {stats.appliedForCounts.map((_, i) => (
-                  <Cell key={i} fill={AIS_COLORS[(i + 4) % AIS_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Tag distribution */}
-        <ChartCard title="Top tags" subtitle="Most-assigned member tags">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stats.tagCounts} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={120}
-                tick={{ fontSize: 10 }}
-                stroke="#00000060"
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
-                {stats.tagCounts.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={tagColor(entry.label) || AIS_COLORS[i % AIS_COLORS.length]}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+        <ToggleableChartCard
+          title="Signups over time"
+          subtitle={`${stats.signupsOverTime.length} months`}
+          chartType={chartTypes.signups}
+          onTypeChange={(t) => setChartType("signups", t)}
+          data={stats.signupsOverTime.map((s) => ({ label: s.month, count: s.count }))}
+          colorOffset={0}
+          orientation="vertical"
+          height={240}
+        />
+        <ToggleableChartCard
+          title="Source split"
+          subtitle="Imported vs self-registered"
+          chartType={chartTypes.source}
+          onTypeChange={(t) => setChartType("source", t)}
+          data={stats.sourceSplit.map((s) => ({ label: s.label, count: s.count }))}
+          colorOffset={0}
+          orientation="vertical"
+          height={240}
+        />
+        <ToggleableChartCard
+          title="I am interested in…"
+          subtitle="Top interests across all members"
+          chartType={chartTypes.interestedIn}
+          onTypeChange={(t) => setChartType("interestedIn", t)}
+          data={stats.interestedInCounts}
+          colorOffset={0}
+          orientation="horizontal"
+          height={260}
+        />
+        <ToggleableChartCard
+          title="Tell us more about yourself"
+          subtitle="Member self-identification"
+          chartType={chartTypes.profileCategories}
+          onTypeChange={(t) => setChartType("profileCategories", t)}
+          data={stats.profileCategoriesCounts}
+          colorOffset={2}
+          orientation="horizontal"
+          height={260}
+        />
+        <ToggleableChartCard
+          title="Applied for"
+          subtitle="Fast pitch vs Presentation/Lecture"
+          chartType={chartTypes.appliedFor}
+          onTypeChange={(t) => setChartType("appliedFor", t)}
+          data={stats.appliedForCounts}
+          colorOffset={4}
+          orientation="vertical"
+          height={240}
+        />
+        <ToggleableChartCard
+          title="Top tags"
+          subtitle="Most-assigned member tags"
+          chartType={chartTypes.tags}
+          onTypeChange={(t) => setChartType("tags", t)}
+          data={stats.tagCounts}
+          colorOffset={0}
+          orientation="horizontal"
+          height={260}
+          useTagColors
+        />
       </div>
 
       {/* Sortable members table */}
@@ -668,23 +645,291 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
-function ChartCard({
+// ---------------------------------------------------------------------------
+// ToggleableChartCard — chart card with a 3-button segmented control in the
+// header that switches the body between Bar / Pie / Table views. All three
+// views render the SAME underlying data (an array of { label, count } rows);
+// they're just three different visual representations of it.
+//
+// Props:
+//   - title, subtitle: header text
+//   - chartType: current render mode
+//   - onTypeChange: callback when the admin picks a different mode
+//   - data: { label, count }[] — the rows to visualize
+//   - colorOffset: rotate the AIS color palette so adjacent charts don't
+//     start on the same color
+//   - orientation: "horizontal" = horizontal bar chart (good for long
+//     category labels like "I am interested in…"); "vertical" = vertical
+//     bar chart (good for timeseries / few categories like "Source split")
+//   - height: pixel height for the chart canvas (table mode grows beyond
+//     this if there are many rows, up to a max of height+120)
+//   - useTagColors: if true, use the tag-catalog colors (tagColor()) for
+//     each row instead of the AIS palette — used by the Top tags chart
+// ---------------------------------------------------------------------------
+
+type ChartRow = { label: string; count: number };
+
+function ToggleableChartCard({
   title,
   subtitle,
-  children,
+  chartType,
+  onTypeChange,
+  data,
+  colorOffset = 0,
+  orientation = "vertical",
+  height = 240,
+  useTagColors = false,
 }: {
   title: string;
   subtitle?: string;
-  children: React.ReactNode;
+  chartType: ChartType;
+  onTypeChange: (t: ChartType) => void;
+  data: ChartRow[];
+  colorOffset?: number;
+  orientation?: "horizontal" | "vertical";
+  height?: number;
+  useTagColors?: boolean;
 }) {
+  const colorFor = (label: string, i: number) =>
+    useTagColors
+      ? tagColor(label) || AIS_COLORS[(i + colorOffset) % AIS_COLORS.length]
+      : AIS_COLORS[(i + colorOffset) % AIS_COLORS.length];
+
+  const total = data.reduce((sum, r) => sum + r.count, 0);
+  // Table view can grow taller than the chart canvas — cap at height + 120
+  // so a 10-row table doesn't blow past the screen.
+  const tableMaxHeight = Math.max(height, Math.min(height + 120, data.length * 32 + 40));
+
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
-      <div className="mb-3">
-        <h3 className="text-sm font-bold text-black">{title}</h3>
-        {subtitle && <p className="text-xs text-black/50 mt-0.5">{subtitle}</p>}
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-black">{title}</h3>
+          {subtitle && <p className="text-xs text-black/50 mt-0.5">{subtitle}</p>}
+        </div>
+        <ChartTypeToggleGroup current={chartType} onChange={onTypeChange} />
       </div>
-      {children}
+
+      {/* BAR view */}
+      {chartType === "bar" && (
+        <ResponsiveContainer
+          width="100%"
+          height={orientation === "horizontal" ? Math.max(height, data.length * 28 + 40) : height}
+        >
+          {orientation === "horizontal" ? (
+            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 8, top: 4, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" horizontal={false} />
+              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={140}
+                tick={{ fontSize: 10 }}
+                stroke="#00000060"
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 8,
+                  border: "1px solid #00000020",
+                  fontSize: 12,
+                }}
+              />
+              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={colorFor(entry.label, i)} />
+                ))}
+              </Bar>
+            </BarChart>
+          ) : (
+            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#00000060" />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 8,
+                  border: "1px solid #00000020",
+                  fontSize: 12,
+                }}
+              />
+              <Bar dataKey="count" name="Members" radius={[4, 4, 0, 0]}>
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={colorFor(entry.label, i)} />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      )}
+
+      {/* PIE view */}
+      {chartType === "pie" && (
+        <ResponsiveContainer width="100%" height={height}>
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="count"
+              nameKey="label"
+              cx="50%"
+              cy="50%"
+              outerRadius={Math.min(80, (height - 40) / 2)}
+              label={(entry) =>
+                `${entry.label} (${entry.count})`
+              }
+              labelLine={false}
+            >
+              {data.map((entry, i) => (
+                <Cell key={i} fill={colorFor(entry.label, i)} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                borderRadius: 8,
+                border: "1px solid #00000020",
+                fontSize: 12,
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      )}
+
+      {/* TABLE view */}
+      {chartType === "table" && (
+        <div
+          className="overflow-auto rounded-md border border-black/10"
+          style={{ maxHeight: tableMaxHeight }}
+        >
+          <table className="w-full text-sm">
+            <thead className="bg-black/[0.03] text-black/60 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
+              <tr>
+                <th className="text-left px-3 py-2 font-bold">Label</th>
+                <th className="text-right px-3 py-2 font-bold w-20">Count</th>
+                <th className="text-right px-3 py-2 font-bold w-20">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-black/40">
+                    No data
+                  </td>
+                </tr>
+              ) : (
+                data.map((entry, i) => {
+                  const pct = total > 0 ? (entry.count / total) * 100 : 0;
+                  return (
+                    <tr
+                      key={`${entry.label}-${i}`}
+                      className="border-t border-black/5 hover:bg-black/[0.02]"
+                    >
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="h-2.5 w-2.5 rounded-sm shrink-0"
+                            style={{ backgroundColor: colorFor(entry.label, i) }}
+                          />
+                          <span className="font-medium text-black truncate">{entry.label}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                        {entry.count}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs text-black/50 tabular-nums">
+                        {pct.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            {data.length > 0 && (
+              <tfoot className="sticky bottom-0 bg-black/[0.03] border-t border-black/10">
+                <tr>
+                  <td className="px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-black/60">
+                    Total
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold tabular-nums text-black">
+                    {total}
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs text-black/50 tabular-nums">
+                    100.0%
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChartTypeToggleGroup — the 3-button segmented control that lives in the
+// top-right of each chart card. Highlights the currently active mode.
+// ---------------------------------------------------------------------------
+function ChartTypeToggleGroup({
+  current,
+  onChange,
+}: {
+  current: ChartType;
+  onChange: (t: ChartType) => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md border border-black/10 bg-black/[0.02] p-0.5 shrink-0">
+      <ChartTypeButton
+        active={current === "bar"}
+        onClick={() => onChange("bar")}
+        icon={<BarChart3 className="h-3.5 w-3.5" />}
+        label="Bar"
+      />
+      <ChartTypeButton
+        active={current === "pie"}
+        onClick={() => onChange("pie")}
+        icon={<PieChartIcon className="h-3.5 w-3.5" />}
+        label="Pie"
+      />
+      <ChartTypeButton
+        active={current === "table"}
+        onClick={() => onChange("table")}
+        icon={<TableIcon className="h-3.5 w-3.5" />}
+        label="Table"
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChartTypeButton — one button in a ChartTypeToggleGroup (or in the global
+// "Set all" control). Active state is highlighted with the AIS pink + a
+// subtle shadow; inactive uses a muted gray that darkens on hover.
+// ---------------------------------------------------------------------------
+function ChartTypeButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Show as ${label.toLowerCase()}`}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[0.65rem] font-bold transition-colors ${
+        active
+          ? "bg-white text-[#FF005A] shadow-sm"
+          : "text-black/50 hover:text-black/80"
+      }`}
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </button>
   );
 }
 
