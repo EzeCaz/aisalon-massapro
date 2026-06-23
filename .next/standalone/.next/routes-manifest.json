@@ -285,6 +285,12 @@
       "namedRegex": "^/api/admin/events(?:/)?$"
     },
     {
+      "page": "/api/admin/events/extract",
+      "regex": "^/api/admin/events/extract(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/events/extract(?:/)?$"
+    },
+    {
       "page": "/api/admin/members",
       "regex": "^/api/admin/members(?:/)?$",
       "routeKeys": {},
@@ -331,6 +337,18 @@
       "regex": "^/api/admin/registrants/bulk\\-import(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/admin/registrants/bulk\\-import(?:/)?$"
+    },
+    {
+      "page": "/api/admin/registrants/bulk-link",
+      "regex": "^/api/admin/registrants/bulk\\-link(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/registrants/bulk\\-link(?:/)?$"
+    },
+    {
+      "page": "/api/admin/registrants/find-members",
+      "regex": "^/api/admin/registrants/find\\-members(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/admin/registrants/find\\-members(?:/)?$"
     },
     {
       "page": "/api/admin/registrants/import-template",

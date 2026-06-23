@@ -6,14 +6,25 @@ import { can } from "@/lib/permissions";
 
 /**
  * PATCH /api/admin/registrants/[id]
- * Update a registrant's status, name, or email.
+ * Update a registrant's status, name, email, OR explicitly link to a
+ * platform user via `userId`.
  *
- * Body: { status?: string, name?: string|null, email?: string }
+ * Body: { status?: string, name?: string|null, email?: string, userId?: string|null }
  *
- * When email is changed, the (eventId, email) uniqueness constraint
- * applies — if the new email already exists on a different RSVP for
- * the same event, we return 409 Conflict. If the new email matches a
- * platform user, the RSVP's userId link is auto-rebased to that user.
+ * - status: GOING | MAYBE | NOT_GOING
+ * - name: free text
+ * - email: if changed, (eventId, email) uniqueness applies; if the new
+ *   email matches a platform user, userId is auto-rebased to that user
+ * - userId: explicitly link/unlink the RSVP to a platform user. Pass
+ *   null to unlink. Pass a user ID to link (the user must exist). This
+ *   is used by the "Add to existing member" dialog in the admin
+ *   registrants table — the admin picks a member from a searchable
+ *   list, and the RSVP is linked to that user without changing the
+ *   RSVP's email (the member might have signed up with a different
+ *   email, e.g. a secondary email).
+ *
+ * If both `email` and `userId` are provided, `userId` wins (explicit
+ * link takes precedence over auto-link-by-email).
  */
 export async function PATCH(
   req: NextRequest,
@@ -38,10 +49,11 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { status, name, email } = body as {
+  const { status, name, email, userId } = body as {
     status?: string;
     name?: string | null;
     email?: string;
+    userId?: string | null;
   };
 
   const allowedStatuses = ["GOING", "MAYBE", "NOT_GOING"];
@@ -54,7 +66,7 @@ export async function PATCH(
 
   // If email is being changed, validate + check uniqueness on (eventId, email).
   let newEmail: string | undefined;
-  let linkedUserId: string | null | undefined;
+  let autoLinkedUserId: string | null | undefined;
   if (email !== undefined) {
     newEmail = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
@@ -81,9 +93,38 @@ export async function PATCH(
         where: { email: newEmail },
         select: { id: true },
       });
-      linkedUserId = linked?.id || null;
+      autoLinkedUserId = linked?.id || null;
     }
   }
+
+  // Explicit userId link/unlink — takes precedence over auto-link-by-email.
+  let explicitUserId: string | null | undefined;
+  if (userId !== undefined) {
+    if (userId === null) {
+      explicitUserId = null;
+    } else {
+      // Validate the user exists.
+      const target = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!target) {
+        return NextResponse.json(
+          { error: "The selected member no longer exists." },
+          { status: 404 }
+        );
+      }
+      explicitUserId = userId;
+    }
+  }
+
+  // Resolve final userId: explicit > auto-link > leave unchanged
+  const finalUserId =
+    explicitUserId !== undefined
+      ? explicitUserId
+      : autoLinkedUserId !== undefined
+      ? autoLinkedUserId
+      : undefined;
 
   const updated = await db.eventRsvp.update({
     where: { id },
@@ -91,7 +132,7 @@ export async function PATCH(
       ...(status ? { status } : {}),
       ...(name !== undefined ? { name: name?.trim() || null } : {}),
       ...(newEmail !== undefined ? { email: newEmail } : {}),
-      ...(linkedUserId !== undefined ? { userId: linkedUserId } : {}),
+      ...(finalUserId !== undefined ? { userId: finalUserId } : {}),
     },
     include: {
       event: { select: { id: true, title: true, slug: true, startsAt: true } },

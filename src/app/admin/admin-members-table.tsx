@@ -754,7 +754,7 @@ function CardsView({
     <div className="border border-black/10 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider">
+          <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <th className="text-left px-3 py-3 w-10">
                 <Checkbox
@@ -1049,7 +1049,7 @@ function TableView({
     <div className="border border-black/10 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
-          <thead className="bg-black/5 text-black/60 text-[0.65rem] uppercase tracking-wider">
+          <thead className="bg-black/5 text-black/60 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <th className="text-left px-3 py-3 w-10 sticky left-0 bg-black/5 z-10">
                 <Checkbox

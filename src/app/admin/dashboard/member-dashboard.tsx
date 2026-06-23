@@ -22,6 +22,10 @@ import {
   Calendar,
   Filter,
   Download,
+  BarChart3,
+  PieChart as PieChartIcon,
+  LineChart as LineChartIcon,
+  Table as TableIcon,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -517,7 +521,7 @@ export function MemberDashboard({ members }: Props) {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider">
+            <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
               <tr>
                 <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Company" field="company" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />

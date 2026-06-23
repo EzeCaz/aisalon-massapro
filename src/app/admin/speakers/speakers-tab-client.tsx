@@ -186,7 +186,7 @@ export function SpeakersTabClient({
       ) : (
         <div className="rounded-md border border-black/10 bg-white overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60">
+            <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
               <tr>
                 <th className="text-left px-4 py-3 font-bold">Speaker</th>
                 <th className="text-left px-4 py-3 font-bold">Topic / Role</th>

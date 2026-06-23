@@ -227,6 +227,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/admin/events/extract/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/events/extract">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/events/extract/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/admin/events/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/events">> = Specific
@@ -357,6 +366,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/registrants/bulk-import">> = Specific
   const handler = {} as typeof import("../../src/app/api/admin/registrants/bulk-import/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/registrants/bulk-link/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/registrants/bulk-link">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/registrants/bulk-link/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/admin/registrants/find-members/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/admin/registrants/find-members">> = Specific
+  const handler = {} as typeof import("../../src/app/api/admin/registrants/find-members/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

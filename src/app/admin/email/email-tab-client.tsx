@@ -413,7 +413,7 @@ function TemplatesTable({
   return (
     <div className="rounded-lg border border-black/10 overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-black/[0.03] text-black/60">
+        <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
           <tr>
             <th className="text-left font-medium px-3 py-2.5">Name</th>
             <th className="text-left font-medium px-3 py-2.5">Category</th>
@@ -543,7 +543,7 @@ function CampaignsTable({
       </div>
       <div className="rounded-lg border border-black/10 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/[0.03] text-black/60">
+          <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
             <tr>
               <th className="text-left font-medium px-3 py-2.5">Name</th>
               <th className="text-left font-medium px-3 py-2.5">Status</th>
