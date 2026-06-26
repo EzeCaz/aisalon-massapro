@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, Fragment } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,7 @@ import {
   FileSpreadsheet,
   Download,
   AlertCircle,
+  Archive,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -461,6 +462,48 @@ export function AdminMembersTable({
     }
   }
 
+  async function archiveMember(member: Member) {
+    if (!isSuperAdminEmail(currentUserEmail)) {
+      toast.error("Only a Super Admin can archive members.");
+      return;
+    }
+    if (isSuperAdminEmail(member.email)) {
+      toast.error("Super Admins cannot be archived.");
+      return;
+    }
+    if (member.email === currentUserEmail) {
+      toast.error("You cannot archive your own account.");
+      return;
+    }
+    const displayName = member.name || member.email;
+    // Use window.confirm for the destructive action — it's the most
+    // explicit "are you sure?" affordance available.
+    const ok = window.confirm(
+      `Archive ${displayName}?\n\n` +
+        `They will be hidden from the main members list. Their data is ` +
+        `preserved for audit and can be restored from the archive page ` +
+        `(Super Admins only).`
+    );
+    if (!ok) return;
+    setPending(member.id);
+    const t = toast.loading(`Archiving ${displayName}…`);
+    try {
+      const res = await fetch(`/api/admin/members/${member.id}/archive`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      toast.success(`${displayName} archived.`, { id: t });
+      window.location.reload();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setPending(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {/* Search + filters + view toggle */}
@@ -630,6 +673,7 @@ export function AdminMembersTable({
           pending={pending}
           allSpeakers={allSpeakers}
           events={events}
+          canArchive={isSuperAdminEmail(currentUserEmail)}
           onToggleSelect={toggleSelect}
           onToggleExpanded={toggleExpanded}
           onSelectAllVisible={selectAllVisible}
@@ -639,6 +683,7 @@ export function AdminMembersTable({
           onConvertToSpeaker={convertToSpeaker}
           onOpenEmailDialog={openEmailDialog}
           onOpenEditDialog={openEditDialog}
+          onArchive={archiveMember}
         />
       ) : (
         <TableView
@@ -646,11 +691,13 @@ export function AdminMembersTable({
           selected={selected}
           allVisibleSelected={allVisibleSelected}
           someVisibleSelected={someVisibleSelected}
+          canArchive={isSuperAdminEmail(currentUserEmail)}
           onToggleSelect={toggleSelect}
           onSelectAllVisible={selectAllVisible}
           onClearSelection={clearSelection}
           onOpenEmailDialog={openEmailDialog}
           onOpenEditDialog={openEditDialog}
+          onArchive={archiveMember}
         />
       )}
 
@@ -679,6 +726,7 @@ export function AdminMembersTable({
         member={editMember}
         currentUserEmail={currentUserEmail}
         currentUserRole={currentUserRole}
+        onArchive={archiveMember}
         onSaved={() => {
           setEditOpen(false);
           setEditMember(null);
@@ -719,6 +767,7 @@ function CardsView({
   pending,
   allSpeakers,
   events,
+  canArchive,
   onToggleSelect,
   onToggleExpanded,
   onSelectAllVisible,
@@ -728,6 +777,7 @@ function CardsView({
   onConvertToSpeaker,
   onOpenEmailDialog,
   onOpenEditDialog,
+  onArchive,
 }: {
   filtered: Member[];
   expanded: Set<string>;
@@ -737,6 +787,7 @@ function CardsView({
   pending: string | null;
   allSpeakers: SpeakerRow[];
   events: EventRow[];
+  canArchive: boolean;
   onToggleSelect: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onSelectAllVisible: () => void;
@@ -749,6 +800,7 @@ function CardsView({
   ) => void;
   onOpenEmailDialog: (m: Member) => void;
   onOpenEditDialog: (m: Member) => void;
+  onArchive: (m: Member) => void;
 }) {
   return (
     <div className="border border-black/10 rounded-lg overflow-hidden">
@@ -785,9 +837,8 @@ function CardsView({
               const isOpen = expanded.has(m.id);
               const isSelected = selected.has(m.id);
               return (
-                <>
+                <Fragment key={m.id}>
                   <tr
-                    key={m.id}
                     className={`border-t border-black/5 hover:bg-black/[0.02] ${
                       isSelected ? "bg-[#FF005A]/[0.04]" : ""
                     }`}
@@ -991,18 +1042,29 @@ function CardsView({
                             </span>
                           )}
                         </Button>
+                        {canArchive && !isSuperAdminEmail(m.email) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-300 text-red-600 hover:bg-red-50 h-8"
+                            onClick={() => onArchive(m)}
+                            title="Archive member (Super Admin only)"
+                          >
+                            <Archive className="h-3.5 w-3.5 mr-1" /> Archive
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr key={`${m.id}-detail`} className="bg-black/[0.02]">
+                    <tr className="bg-black/[0.02]">
                       <td></td>
                       <td colSpan={6} className="px-4 py-4">
                         <MemberDetail member={m} onOpenEmailDialog={onOpenEmailDialog} />
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
             {filtered.length === 0 && (
@@ -1029,21 +1091,25 @@ function TableView({
   selected,
   allVisibleSelected,
   someVisibleSelected,
+  canArchive,
   onToggleSelect,
   onSelectAllVisible,
   onClearSelection,
   onOpenEmailDialog,
   onOpenEditDialog,
+  onArchive,
 }: {
   filtered: Member[];
   selected: Set<string>;
   allVisibleSelected: boolean;
   someVisibleSelected: boolean;
+  canArchive: boolean;
   onToggleSelect: (id: string) => void;
   onSelectAllVisible: () => void;
   onClearSelection: () => void;
   onOpenEmailDialog: (m: Member) => void;
   onOpenEditDialog: (m: Member) => void;
+  onArchive: (m: Member) => void;
 }) {
   return (
     <div className="border border-black/10 rounded-lg overflow-hidden">
@@ -1367,6 +1433,17 @@ function TableView({
                       >
                         <Mail className="h-3 w-3 mr-1" /> Emails
                       </Button>
+                      {canArchive && !isSuperAdminEmail(m.email) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-300 text-red-600 hover:bg-red-50 h-7 text-[0.65rem]"
+                          onClick={() => onArchive(m)}
+                          title="Archive member (Super Admin only)"
+                        >
+                          <Archive className="h-3 w-3 mr-1" /> Archive
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1555,6 +1632,7 @@ function EditMemberDialog({
   currentUserEmail,
   currentUserRole,
   onSaved,
+  onArchive,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -1564,6 +1642,8 @@ function EditMemberDialog({
   /** Role of the currently-signed-in admin. Drives role-dropdown visibility. */
   currentUserRole?: string;
   onSaved: () => void;
+  /** Archive handler — passed from the top-level AdminMembersTable. */
+  onArchive?: (m: Member) => void;
 }) {
   // Local form state — re-initialized whenever the member changes.
   const [name, setName] = useState("");
@@ -1974,6 +2054,28 @@ function EditMemberDialog({
           >
             Cancel
           </Button>
+          {/* Archive button — Super Admin only, not for Super Admin targets,
+              not for self. Uses the destructive style to signal finality. */}
+          {isSuperAdminEmail(currentUserEmail) &&
+            !isSuperAdminEmail(member.email) &&
+            member.email !== currentUserEmail && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50 mr-auto"
+                onClick={() => {
+                  onOpenChange(false);
+                  // Defer to next tick so this dialog closes before the
+                  // confirm() prompt appears (otherwise the dialog overlays
+                  // the confirm on some browsers).
+                  setTimeout(() => onArchive?.(member), 50);
+                }}
+                title="Archive this member — hide from the active list. Can be restored from the archive page."
+              >
+                <Archive className="h-4 w-4 mr-1.5" />
+                Archive member
+              </Button>
+            )}
           <Button
             type="button"
             onClick={handleSave}

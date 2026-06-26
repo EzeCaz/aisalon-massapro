@@ -16,8 +16,12 @@ export async function GET(
       speakers: { orderBy: { order: "asc" } },
       agenda: {
         orderBy: { startsAt: "asc" },
-        include: { speaker: true },
+        include: {
+          speaker: true,
+          panelists: { select: { id: true } },
+        },
       },
+      mainImage: { select: { id: true, fileUrl: true, caption: true } },
       _count: { select: { images: true } },
     },
   });

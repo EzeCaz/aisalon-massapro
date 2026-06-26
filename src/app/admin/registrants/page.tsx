@@ -13,10 +13,15 @@ export default async function AdminRegistrantsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/registrants");
 
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
+  const me = await db.user.findUnique({
+    where: { email: session.user.email },
+    select: { id: true, email: true, role: true, name: true },
+  });
   if (!me) redirect("/login");
   if (!can(me.role, "members.view")) redirect("/events");
 
+  // Fetch RSVPs with check-in code + door-check-in state.
+  // Only fetch user info for RSVPs that have a linked user.
   const rsvps = await db.eventRsvp.findMany({
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
     include: {
@@ -27,6 +32,7 @@ export default async function AdminRegistrantsPage() {
     },
   });
 
+  // Fetch all events for the filter, with their RSVP count.
   const events = await db.event.findMany({
     orderBy: { startsAt: "desc" },
     select: {
@@ -37,6 +43,17 @@ export default async function AdminRegistrantsPage() {
       _count: { select: { rsvps: true } },
     },
   });
+
+  // Fetch co-hosted event IDs for the current user — CO_HOSTs can
+  // generate check-in codes only for events they co-host.
+  const coHostedEventIds: string[] = [];
+  if (me.role === "CO_HOST") {
+    const coHostRows = await db.eventCoHost.findMany({
+      where: { userId: me.id },
+      select: { eventId: true },
+    });
+    coHostedEventIds.push(...coHostRows.map((r) => r.eventId));
+  }
 
   const rsvpsJson = JSON.parse(JSON.stringify(rsvps));
   const eventsJson = JSON.parse(JSON.stringify(events));
@@ -57,11 +74,20 @@ export default async function AdminRegistrantsPage() {
           <p className="mt-2 text-sm text-black/60 max-w-2xl">
             Every RSVP across every event — manual additions, paper RSVPs
             imported after the fact, and self-service RSVPs from the event
-            pages. Update status, remove test entries, or add a VIP by email.
+            pages. The check-in code column shows each attendee&apos;s
+            8-character door code (or a Generate button if they don&apos;t
+            have one yet). Once a code is scanned at the door it is marked
+            as &quot;used&quot; and cannot be reused.
           </p>
         </div>
 
-        <RegistrantsTabClient rsvps={rsvpsJson} events={eventsJson} />
+        <RegistrantsTabClient
+          rsvps={rsvpsJson}
+          events={eventsJson}
+          currentUserRole={me.role}
+          currentUserEmail={me.email}
+          coHostedEventIds={coHostedEventIds}
+        />
       </main>
     </div>
   );

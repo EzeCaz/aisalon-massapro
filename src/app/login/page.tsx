@@ -3,23 +3,54 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+import { getPublicSettings } from "@/lib/site-settings";
 import Image from "next/image";
 
-export const metadata = {
-  title: "Login — AI Salon Tel Aviv",
-  description:
-    "Log in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
-  openGraph: {
+/**
+ * /login
+ *
+ * Server-rendered. Pulls the current `loginHero` and `loginBanner` URLs
+ * from the SiteSetting table (admin-managed via /admin/images) and uses
+ * them as the hero image in the brand panel and the OG/Twitter preview
+ * image respectively. Falls back to the hardcoded defaults if the DB is
+ * unreachable or no selection has been made yet.
+ *
+ * Both URLs are passed through `next/image` with `unoptimized` when
+ * they're external Blob URLs, so they work without configuring
+ * `next.config.js` `images.remotePatterns`.
+ */
+export async function generateMetadata() {
+  const settings = await getPublicSettings();
+  const bannerUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
+  return {
     title: "Login — AI Salon Tel Aviv",
     description:
-      "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
-    images: [{ url: "/images/falafel-tlv-ai-salon.png", width: 1200, height: 630, alt: "AI Salon Tel Aviv" }],
-  },
-};
+      "Log in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
+    openGraph: {
+      title: "Login — AI Salon Tel Aviv",
+      description:
+        "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
+      images: [{ url: bannerUrl, width: 1200, height: 630, alt: "AI Salon Tel Aviv" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "Login — AI Salon Tel Aviv",
+      description:
+        "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
+      images: [bannerUrl],
+    },
+  };
+}
 
 export default async function LoginPage() {
   const session = await getServerSession(authOptions);
   if (session) redirect("/events");
+
+  const settings = await getPublicSettings();
+  const heroUrl = settings.loginHero || "/images/falafel-meerkat.jpg";
+
+  // Is the hero an external URL (Vercel Blob) or a relative path?
+  const heroIsExternal = heroUrl.startsWith("http");
 
   const callbackUrl = new URLSearchParams(
     typeof window !== "undefined" ? window.location.search : ""
@@ -34,16 +65,17 @@ export default async function LoginPage() {
           <AiSalonLogoServer variant="horizontal-tagline" color="white" className="text-[2.4rem]" />
         </div>
 
-        {/* Center: Falafel TLV brand image + chapter tagline */}
+        {/* Center: dynamic brand hero image + chapter tagline */}
         <div className="relative z-10 text-white max-w-md">
           <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white">
             <Image
-              src="/images/falafel-tlv-ai-salon.png"
-              alt="AI Salon Tel Aviv — Falafel mascot"
+              src={heroUrl}
+              alt="AI Salon Tel Aviv — brand image"
               fill
               sizes="(max-width: 768px) 240px, 320px"
               className="object-contain"
               priority
+              unoptimized={heroIsExternal}
             />
           </div>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#00E6FF] mb-4">
@@ -96,7 +128,8 @@ export default async function LoginPage() {
 
           <h2 className="text-2xl font-extrabold text-black mb-1">Welcome</h2>
           <p className="text-sm text-black/60 mb-8">
-            Enter your name and email to log in to the AI Salon Tel Aviv community.
+            Sign in with Google, or use your email and password to access the AI
+            Salon Tel Aviv community.
           </p>
 
           <LoginForm callbackUrl={callbackUrl ?? undefined} />

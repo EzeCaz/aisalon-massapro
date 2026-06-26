@@ -8,7 +8,7 @@ import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
 import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
-import { BarChart3, ArrowRight, Mail } from "lucide-react";
+import { BarChart3, ArrowRight, Mail, Archive } from "lucide-react";
 
 export const metadata = { title: "Admin — AI Salon Tel Aviv" };
 
@@ -39,6 +39,7 @@ export default async function AdminPage() {
   if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
 
   const members = await db.user.findMany({
+    where: { archivedAt: null },
     orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
     include: {
       tags: true,
@@ -54,6 +55,8 @@ export default async function AdminPage() {
       secondaryEmails: { select: { id: true, email: true, label: true, createdAt: true } },
     },
   });
+
+  const archivedCount = await db.user.count({ where: { archivedAt: { not: null } } });
 
   const events = await db.event.findMany({
     orderBy: { startsAt: "desc" },
@@ -124,6 +127,30 @@ export default async function AdminPage() {
           <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent="#820A7D" />
         </div>
 
+        {/* Super-Admin-only archive link */}
+        {isSuperAdminEmail(me.email) && (
+          <div className="mb-8 rounded-md border border-[#820A7D]/30 bg-[#820A7D]/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Archive className="h-4 w-4 text-[#820A7D]" />
+              <div>
+                <p className="text-sm font-semibold text-black">
+                  Archived members: {archivedCount}
+                </p>
+                <p className="text-xs text-black/50">
+                  Archived members are hidden from the main list. Only Super Admins can view and restore them.
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/members/archive"
+              className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D]/90 whitespace-nowrap"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              View archive
+            </Link>
+          </div>
+        )}
+
         {/* Members section */}
         <section className="mb-12">
           <h2 className="text-lg font-bold text-black mb-1">Community members</h2>
@@ -142,11 +169,19 @@ export default async function AdminPage() {
 
         {/* Events section */}
         <section>
-          <h2 className="text-lg font-bold text-black mb-1">Events</h2>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-bold text-black">Events</h2>
+            <Link
+              href="/admin/events"
+              className="text-xs font-semibold text-[#FF005A] hover:underline"
+            >
+              Manage all events →
+            </Link>
+          </div>
           <p className="text-sm text-black/60 mb-4">
-            All events in the platform. New events are added via the database / API.
+            Recent events in the platform. Click an event to edit details, manage co-hosts, and view RSVPs.
           </p>
-          <AdminEventsList events={events} />
+          <AdminEventsList events={eventsJson} />
         </section>
       </main>
 

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
+import { can, isEventCoHost, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { format } from "date-fns";
@@ -100,6 +101,47 @@ export default async function EventDetailPage({ params }: Params) {
               },
             },
           },
+          // Panelists for PANEL-type agenda items (m:n). Empty for non-PANEL
+          // items. Includes the linked User so the Contact Speaker dialog
+          // can route via in-app chat vs. email relay (same shape as the
+          // lead speaker above).
+          panelists: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  photoUrl: true,
+                  image: true,
+                  company: true,
+                  bio: true,
+                  tags: { select: { id: true, label: true, color: true } },
+                },
+              },
+              images: {
+                orderBy: { slideOrder: "asc" },
+                select: {
+                  id: true,
+                  fileUrl: true,
+                  fileName: true,
+                  caption: true,
+                  slideOrder: true,
+                },
+              },
+              presentations: {
+                take: 1,
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  fileName: true,
+                  fileUrl: true,
+                  mimeType: true,
+                  title: true,
+                },
+              },
+            },
+          },
           // Presentations linked directly to THIS agenda item (e.g.
           // uploaded by the admin via the Manage Agenda tab). Take
           // just the first one for the thumbnail.
@@ -121,6 +163,80 @@ export default async function EventDetailPage({ params }: Params) {
   });
   if (!event) notFound();
 
+  // Compute the management tier for the current user on this event:
+  //   - Super Admins + Admins can manage ANY event.
+  //   - CO_HOSTs can manage only events they are explicitly a co-host of.
+  //   - Members cannot manage.
+  // This drives the "🛠 Manage Event" tab on the event page.
+  const isSuperAdminUser = isSuperAdmin({ email: me.email, role: me.role });
+  const isAdminTier = can(me.role, "events.edit") || isSuperAdminUser;
+  let isCoHostOfThisEvent = false;
+  if (!isAdminTier && normalizeRole(me.role) === ROLES.CO_HOST) {
+    isCoHostOfThisEvent = await isEventCoHost(me.id, event.id);
+  }
+  const canManageEvent = isAdminTier || isCoHostOfThisEvent;
+
+  // Fetch co-hosts for this event (so the Manage Event tab can show them
+  // without an extra round trip). Only visible to managers.
+  let coHostsList: Array<{
+    id: string;
+    createdAt: string;
+    user: {
+      id: string;
+      name: string | null;
+      email: string;
+      image: string | null;
+      photoUrl: string | null;
+      company: string | null;
+      role: string;
+    };
+  }> = [];
+  if (canManageEvent) {
+    const rows = await db.eventCoHost.findMany({
+      where: { eventId: event.id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            photoUrl: true,
+            company: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    coHostsList = rows.map((c) => ({
+      id: c.id,
+      createdAt: c.createdAt.toISOString(),
+      user: c.user,
+    }));
+  }
+
+  // Fetch RSVP + check-in counts for managers (shown in the Manage Event tab)
+  let eventStats: {
+    rsvps: number;
+    rsvpsGoing: number;
+    checkedIn: number;
+    images: number;
+    speakers: number;
+    agenda: number;
+  } | null = null;
+  if (canManageEvent) {
+    const [rsvps, rsvpsGoing, checkedIn, images, speakers, agenda] = await Promise.all([
+      db.eventRsvp.count({ where: { eventId: event.id } }),
+      db.eventRsvp.count({ where: { eventId: event.id, status: "GOING" } }),
+      db.eventRsvp.count({ where: { eventId: event.id, checkedInAt: { not: null } } }),
+      db.eventImage.count({ where: { eventId: event.id } }),
+      db.speaker.count({ where: { eventId: event.id } }),
+      db.eventAgendaItem.count({ where: { eventId: event.id } }),
+    ]);
+    eventStats = { rsvps, rsvpsGoing, checkedIn, images, speakers, agenda };
+  }
+
   // Serialize dates for client
   const serialized = {
     ...event,
@@ -133,7 +249,34 @@ export default async function EventDetailPage({ params }: Params) {
     })),
   };
 
-  const isAdmin = me.role === "ADMIN";
+  // The "isAdmin" prop historically only drove the "Manage Agenda" tab.
+  // We keep it (for backward compat with existing tab components) but
+  // ALSO pass canManageEvent + canManageCoHosts for the new Manage Event tab.
+  const isAdmin = canManageEvent;
+
+  // Preload the current user's RSVP for this event so the registration +
+  // check-in widget on the Overview tab can render the right CTA without
+  // a flash on first paint. The client component re-fetches on mount to
+  // stay fresh, but this initial value avoids the "not registered" flash
+  // for users who already RSVPed on the public /e/[slug] page.
+  const rsvp = await db.eventRsvp.findUnique({
+    where: { eventId_email: { eventId: event.id, email: me.email } },
+    select: {
+      id: true,
+      status: true,
+      source: true,
+      checkInCode: true,
+      checkedInAt: true,
+      createdAt: true,
+    },
+  });
+  const serializedRsvp = rsvp
+    ? {
+        ...rsvp,
+        checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
+        createdAt: rsvp.createdAt.toISOString(),
+      }
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -233,7 +376,17 @@ export default async function EventDetailPage({ params }: Params) {
 
       {/* Tabs */}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        <EventTabs event={serialized} me={me} isAdmin={isAdmin} />
+        <EventTabs
+          event={serialized}
+          me={me}
+          isAdmin={isAdmin}
+          initialRsvp={serializedRsvp}
+          canManageEvent={canManageEvent}
+          canManageCoHosts={isAdminTier}
+          isSuperAdmin={isSuperAdminUser}
+          coHosts={coHostsList}
+          eventStats={eventStats}
+        />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

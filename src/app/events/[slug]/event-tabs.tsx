@@ -8,6 +8,18 @@ import { PhotosTab } from "./tabs/photos-tab";
 import { SlideshowTab } from "./tabs/slideshow-tab";
 import { PresentationsTab } from "./tabs/presentations-tab";
 import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
+import { ManageEventTab } from "./tabs/manage-event-tab";
+import type { CoHost } from "@/components/admin/event-editor";
+import type { Rsvp } from "@/components/events/rsvp-check-in-card";
+
+type EventStats = {
+  rsvps: number;
+  rsvpsGoing: number;
+  checkedIn: number;
+  images: number;
+  speakers: number;
+  agenda: number;
+};
 
 type SlimImage = {
   id: string;
@@ -84,15 +96,41 @@ export function EventTabs({
   event,
   me,
   isAdmin,
+  initialRsvp = null,
+  canManageEvent = false,
+  canManageCoHosts = false,
+  isSuperAdmin = false,
+  coHosts = [],
+  eventStats = null,
 }: {
   event: EventData;
   me: Me;
   isAdmin: boolean;
+  initialRsvp?: Rsvp;
+  /** Whether the current viewer can manage this event (Admin / Super Admin / Co-host of this event). */
+  canManageEvent?: boolean;
+  /** Whether the current viewer can add/remove co-hosts (Admin+ only, NOT Co-host). */
+  canManageCoHosts?: boolean;
+  isSuperAdmin?: boolean;
+  coHosts?: CoHost[];
+  eventStats?: EventStats | null;
 }) {
   const [tab, setTab] = useState("overview");
   // Force re-mount of agenda tabs when the admin edits agenda so the
   // public agenda view stays in sync.
   const [agendaVersion, setAgendaVersion] = useState(0);
+
+  // Default stats when not provided (e.g. for non-managers — though the
+  // tab is hidden then anyway). Use event._count.images as the only
+  // always-available number.
+  const stats: EventStats = eventStats ?? {
+    rsvps: 0,
+    rsvpsGoing: 0,
+    checkedIn: 0,
+    images: event._count.images,
+    speakers: event.speakers.length,
+    agenda: event.agenda.length,
+  };
 
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
@@ -101,7 +139,7 @@ export function EventTabs({
           Overview
         </TabsTrigger>
         <TabsTrigger value="agenda" className="data-[state=active]:bg-white data-[state=active]:text-black">
-          Speakers & Agenda
+          Speakers &amp; Agenda
         </TabsTrigger>
         <TabsTrigger value="photos" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Photos ({event._count.images})
@@ -120,10 +158,18 @@ export function EventTabs({
             🛠 Manage Agenda
           </TabsTrigger>
         )}
+        {canManageEvent && (
+          <TabsTrigger
+            value="manage-event"
+            className="data-[state=active]:bg-[#FF005A] data-[state=active]:text-white"
+          >
+            🛠 Manage Event
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="overview" className="mt-6">
-        <OverviewTab event={event} />
+        <OverviewTab event={event} initialRsvp={initialRsvp} />
       </TabsContent>
       <TabsContent value="agenda" className="mt-6">
         <AgendaTab key={`agenda-${agendaVersion}`} event={event} me={me} />
@@ -143,6 +189,35 @@ export function EventTabs({
             key={`admin-${agendaVersion}`}
             event={event}
             onAgendaChanged={() => setAgendaVersion((v) => v + 1)}
+          />
+        </TabsContent>
+      )}
+      {canManageEvent && (
+        <TabsContent value="manage-event" className="mt-6">
+          <ManageEventTab
+            event={{
+              id: event.id,
+              slug: event.slug,
+              title: event.title,
+              subtitle: event.subtitle,
+              chapter: event.chapter,
+              venue: event.venue,
+              address: event.address,
+              city: event.city,
+              country: event.country,
+              mapUrl: event.mapUrl,
+              startsAt: event.startsAt,
+              endsAt: event.endsAt,
+              description: event.description,
+              takeaways: event.takeaways,
+              intendedFor: event.intendedFor,
+              rsvpUrl: event.rsvpUrl,
+            }}
+            coHosts={coHosts}
+            stats={stats}
+            canManageCoHosts={canManageCoHosts}
+            isSuperAdmin={isSuperAdmin}
+            showBackButton={false}
           />
         </TabsContent>
       )}

@@ -28,7 +28,7 @@ import { requireEventAgendaEdit, isError } from "@/lib/auth-guards";
  *
  * Returns: { agendaItem, speaker (if created), presentation (if uploaded) }
  */
-const ALLOWED_TYPES = ["TALK", "FAST_PITCH", "WELCOME", "BREAK", "NETWORKING"];
+const ALLOWED_TYPES = ["TALK", "FAST_PITCH", "WELCOME", "BREAK", "NETWORKING", "PANEL"];
 
 const ALLOWED_MIME = [
   "application/pdf",
@@ -93,6 +93,10 @@ export async function POST(req: NextRequest) {
   const endsAt = (formData.get("endsAt") as string | null)?.trim() || null;
   const speakerId = (formData.get("speakerId") as string | null)?.trim() || null;
   const newSpeakerRaw = formData.get("newSpeaker") as string | null;
+
+  // Panel-specific fields (only used when type === "PANEL")
+  const panelistIdsRaw = formData.get("panelistIds") as string | null;
+  const newPanelistsRaw = formData.get("newPanelists") as string | null;
 
   const file = formData.get("file");
   const fileTitle = (formData.get("fileTitle") as string | null)?.trim() || null;
@@ -204,6 +208,68 @@ export async function POST(req: NextRequest) {
     createdSpeaker = { id: sp.id, name: sp.name };
   }
 
+  // ---------- Panel validation + panelist resolution ----------
+  // For PANEL items, the admin must provide at least 1 panelist (either
+  // an existing speaker from the roster or a brand-new panelist typed
+  // inline). The moderator is separate (speakerId above) and is optional.
+  let panelistIds: string[] = [];
+  let newPanelists: Array<{
+    name: string;
+    role?: string;
+    company?: string;
+    bio?: string;
+    topic?: string;
+    contactEmail?: string;
+  }> = [];
+
+  if (panelistIdsRaw) {
+    try {
+      const parsed = JSON.parse(panelistIdsRaw);
+      if (Array.isArray(parsed)) {
+        panelistIds = parsed
+          .map((s) => (typeof s === "string" ? s.trim() : ""))
+          .filter((s) => s.length > 0);
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "panelistIds must be a JSON array of strings" },
+        { status: 400 }
+      );
+    }
+  }
+  if (newPanelistsRaw) {
+    try {
+      const parsed = JSON.parse(newPanelistsRaw);
+      if (Array.isArray(parsed)) {
+        newPanelists = parsed
+          .filter((p): p is Record<string, unknown> =>
+            !!p && typeof p === "object" && typeof (p as { name?: unknown }).name === "string"
+          )
+          .map((p) => ({
+            name: ((p.name as string) || "").trim(),
+            role: typeof p.role === "string" ? p.role.trim() : undefined,
+            company: typeof p.company === "string" ? p.company.trim() : undefined,
+            bio: typeof p.bio === "string" ? p.bio.trim() : undefined,
+            topic: typeof p.topic === "string" ? p.topic.trim() : undefined,
+            contactEmail: typeof p.contactEmail === "string" ? p.contactEmail.trim() : undefined,
+          }))
+          .filter((p) => p.name.length > 0);
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "newPanelists must be a JSON array of objects" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (type === "PANEL" && panelistIds.length === 0 && newPanelists.length === 0) {
+    return NextResponse.json(
+      { error: "Panel agenda items require at least 1 panelist" },
+      { status: 400 }
+    );
+  }
+
   // ---------- Create the agenda item ----------
   const agendaItem = await db.eventAgendaItem.create({
     data: {
@@ -219,6 +285,103 @@ export async function POST(req: NextRequest) {
       speaker: { select: { id: true, name: true, role: true, company: true } },
     },
   });
+
+  // ---------- Attach panelists (PANEL only) ----------
+  // Two passes:
+  //   (a) Existing speakers from the roster. If they belong to THIS event,
+  //       attach directly. If they belong to ANOTHER event, auto-clone them
+  //       into this event first (so the panelist now appears on this event's
+  //       roster too — matching the V3.7 "auto-cloned on save" behaviour).
+  //   (b) Brand-new panelists typed inline in the dialog → create as
+  //       Speaker rows on this event, with the same contactEmail → User
+  //       auto-link logic as the lead speaker flow.
+  const createdPanelists: Array<{ id: string; name: string }> = [];
+  const finalPanelistIds: string[] = [];
+
+  if (type === "PANEL") {
+    // (a) Resolve existing speakers (with cross-event auto-clone)
+    if (panelistIds.length > 0) {
+      const picked = await db.speaker.findMany({
+        where: { id: { in: panelistIds } },
+        include: { event: { select: { id: true } } },
+      });
+      const maxOrderRow = await db.speaker.aggregate({
+        where: { eventId },
+        _max: { order: true },
+      });
+      let nextOrder = (maxOrderRow._max.order ?? -1) + 1;
+
+      for (const sp of picked) {
+        if (sp.event.id === eventId) {
+          // Already on this event — attach directly
+          finalPanelistIds.push(sp.id);
+        } else {
+          // Cross-event speaker — clone into this event
+          const clone = await db.speaker.create({
+            data: {
+              eventId,
+              name: sp.name,
+              role: sp.role,
+              company: sp.company,
+              bio: sp.bio,
+              topic: sp.topic,
+              photoUrl: sp.photoUrl,
+              contactEmail: sp.contactEmail,
+              userId: sp.userId,
+              order: nextOrder++,
+            },
+          });
+          finalPanelistIds.push(clone.id);
+          createdPanelists.push({ id: clone.id, name: clone.name });
+        }
+      }
+    }
+
+    // (b) Create brand-new panelists typed inline
+    if (newPanelists.length > 0) {
+      const maxOrderRow = await db.speaker.aggregate({
+        where: { eventId },
+        _max: { order: true },
+      });
+      let nextOrder = (maxOrderRow._max.order ?? -1) + 1;
+
+      for (const np of newPanelists) {
+        const contactEmail = np.contactEmail?.trim().toLowerCase() || null;
+        let linkedUserId: string | null = null;
+        if (contactEmail) {
+          const linkedUser = await db.user.findUnique({
+            where: { email: contactEmail },
+            select: { id: true },
+          });
+          if (linkedUser) linkedUserId = linkedUser.id;
+        }
+        const sp = await db.speaker.create({
+          data: {
+            eventId,
+            name: np.name.trim(),
+            role: np.role?.trim() || null,
+            company: np.company?.trim() || null,
+            bio: np.bio?.trim() || null,
+            topic: np.topic?.trim() || null,
+            contactEmail,
+            userId: linkedUserId,
+            order: nextOrder++,
+          },
+        });
+        finalPanelistIds.push(sp.id);
+        createdPanelists.push({ id: sp.id, name: sp.name });
+      }
+    }
+
+    if (finalPanelistIds.length > 0) {
+      await db.eventAgendaItem.update({
+        where: { id: agendaItem.id },
+        data: {
+          panelists: { connect: finalPanelistIds.map((id) => ({ id })) },
+        },
+      });
+    }
+  }
 
   // ---------- Optional: upload the presentation file ----------
   let createdPresentation: { id: string; fileName: string; fileUrl: string } | null = null;
@@ -274,6 +437,7 @@ export async function POST(req: NextRequest) {
     agendaItem,
     speaker: createdSpeaker,
     presentation: createdPresentation,
+    panelists: createdPanelists,
   });
 }
 
@@ -299,6 +463,17 @@ export async function GET(req: NextRequest) {
     orderBy: { startsAt: "asc" },
     include: {
       speaker: { select: { id: true, name: true, role: true, company: true, bio: true, topic: true } },
+      panelists: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          company: true,
+          bio: true,
+          topic: true,
+          photoUrl: true,
+        },
+      },
       _count: { select: { presentations: true } },
     },
   });

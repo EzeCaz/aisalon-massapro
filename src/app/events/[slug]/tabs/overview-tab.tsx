@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Check, MapPin, Calendar, Clock, Users, Target, Gift } from "lucide-react";
+import { RsvpCheckInCard, type Rsvp } from "@/components/events/rsvp-check-in-card";
 
 type EventData = {
   id: string;
@@ -24,7 +25,13 @@ type EventData = {
   agenda: { id: string; type: string }[];
 };
 
-export function OverviewTab({ event }: { event: EventData }) {
+export function OverviewTab({
+  event,
+  initialRsvp = null,
+}: {
+  event: EventData;
+  initialRsvp?: Rsvp;
+}) {
   const start = new Date(event.startsAt);
   const end = new Date(event.endsAt);
   const takeaways = event.takeaways
@@ -78,6 +85,19 @@ export function OverviewTab({ event }: { event: EventData }) {
 
       {/* Sidebar */}
       <aside className="space-y-4">
+        {/* Registration + day-of check-in widget.
+            Renders one of four states: register / registered / check-in
+            available / checked-in with code. The unique check-in code
+            is generated server-side, globally unique, and tracked
+            across all events for door-staff verification. */}
+        <RsvpCheckInCard
+          eventSlug={event.slug}
+          eventTitle={event.title}
+          eventStartsAt={event.startsAt}
+          eventEndsAt={event.endsAt}
+          initialRsvp={initialRsvp}
+        />
+
         <Card className="p-5 bg-white border border-black/10">
           <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-4">
             Event details
@@ -133,9 +153,9 @@ export function OverviewTab({ event }: { event: EventData }) {
               href={event.rsvpUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 block w-full rounded-md border border-[#FF005A] text-[#FF005A] text-sm font-semibold py-2.5 text-center hover:bg-[#FF005A]/5"
+              className="mt-2 block w-full rounded-md border border-black/15 text-black/60 text-xs font-semibold py-2 text-center hover:bg-black/[0.03]"
             >
-              Register as member
+              External RSVP form ↗
             </a>
           )}
         </Card>

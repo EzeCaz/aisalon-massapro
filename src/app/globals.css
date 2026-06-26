@@ -219,3 +219,24 @@
 .ais-pulse-badge {
   animation: ais-pulse 1.6s infinite;
 }
+
+/* ===== Mockup Form View =====
+   Reusable form input styling for the structured form view in the
+   mockup editors (alternative to the raw JSON editor). Used by
+   speaker-intro-form-view.tsx, meet-the-speaker-form-view.tsx, etc.
+*/
+.form-input {
+  width: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  background: white;
+  color: black;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-input:focus {
+  border-color: #ff005a;
+  box-shadow: 0 0 0 2px rgba(255, 0, 90, 0.15);
+}

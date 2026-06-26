@@ -35,6 +35,7 @@ import {
   RotateCcw,
   ArrowUp,
   ArrowDown,
+  Users,
 } from "lucide-react";
 import {
   DndContext,
@@ -104,6 +105,7 @@ type AgendaItem = {
   description: string | null;
   type: string;
   speaker: Speaker | null;
+  panelists?: Speaker[];
   presentations?: SlimPresentation[];
 };
 
@@ -127,6 +129,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   BREAK: <Coffee className="h-4 w-4" />,
   NETWORKING: <Network className="h-4 w-4" />,
   FAST_PITCH: <Rocket className="h-4 w-4" />,
+  PANEL: <Users className="h-4 w-4" />,
 };
 
 const typeColor: Record<string, string> = {
@@ -135,6 +138,7 @@ const typeColor: Record<string, string> = {
   BREAK: "bg-black/5 text-black/60 border-black/10",
   NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
   FAST_PITCH: "bg-[#FFAC30]/10 text-[#FFAC30] border-[#FFAC30]/30",
+  PANEL: "bg-[#7C3AED]/10 text-[#7C3AED] border-[#7C3AED]/30",
 };
 
 function fmtTime(iso: string): string {
@@ -1048,11 +1052,53 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   )}
 
                   {item.speaker && (
-                    <div className="text-xs text-black/60">
+                    <div
+                      className={`text-xs ${
+                        item.type === "PANEL" ? "text-[#7C3AED]" : "text-black/60"
+                      }`}
+                    >
+                      {item.type === "PANEL" && (
+                        <span className="font-bold">Moderator: </span>
+                      )}
                       {item.speaker.name}
                       {item.speaker.role && <span> · {item.speaker.role}</span>}
                     </div>
                   )}
+                  {item.type === "PANEL" &&
+                    item.panelists &&
+                    item.panelists.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5 justify-center">
+                        {item.panelists.map((p) => {
+                          const initials = p.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase();
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => setContactSpeaker(p)}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/5 hover:bg-[#7C3AED]/10 hover:border-[#7C3AED]/50 px-2 py-0.5 text-[0.7rem] font-semibold text-[#7C3AED] transition-colors"
+                              title={`Contact ${p.name}`}
+                            >
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={p.photoUrl || undefined} alt={p.name} />
+                                <AvatarFallback className="text-[0.5rem] bg-[#7C3AED]/15 text-[#7C3AED]">
+                                  {initials || "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                              {p.name}
+                              {p.role && (
+                                <span className="text-[#7C3AED]/60 font-normal">· {p.role}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                 </div>
 
                 {/* Thumbnails row (only if speaker has assets) */}

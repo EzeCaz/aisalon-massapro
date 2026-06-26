@@ -74,11 +74,11 @@ export function AiSalonLogo({
 }
 
 /**
- * MeerkatMark — renders the actual Falafel Meerkat PNG mascot.
+ * MeerkatMark — renders the actual Falafel Meerkat mascot.
  * Per AI Salon Tel Aviv chapter brief, this is the brand mark shown
  * top-left on every page (including login).
  *
- * The source PNG is 624 × 1686 (a tall portrait). We pass the intrinsic
+ * The source JPG is 624 × 1686 (a tall portrait). We pass the intrinsic
  * dimensions to next/image; CSS scaling is done via inline `height` (in
  * `em`, relative to the parent's font-size) so the natural aspect ratio
  * is preserved.
@@ -100,7 +100,7 @@ export function MeerkatMark({
 }) {
   return (
     <Image
-      src="/images/falafel-meerkat.png"
+      src="/images/falafel-meerkat.jpg"
       alt="AI Salon Falafel Meerkat"
       width={624}
       height={1686}

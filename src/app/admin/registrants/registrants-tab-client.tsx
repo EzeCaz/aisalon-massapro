@@ -30,6 +30,8 @@ import {
   SearchCheck,
   Link2,
   X,
+  Ticket,
+  Clock,
 } from "lucide-react";
 
 type RsvpEvent = {
@@ -55,6 +57,10 @@ type Rsvp = {
   createdAt: string;
   updatedAt: string;
   userId: string | null;
+  checkInCode: string | null;
+  checkedInAt: string | null;
+  doorCheckedAt: string | null;
+  doorCheckedBy: string | null;
   event: RsvpEvent;
   user: RsvpUser | null;
 };
@@ -125,9 +131,15 @@ const STATUS_META: Record<
 export function RegistrantsTabClient({
   rsvps: initialRsvps,
   events,
+  currentUserRole,
+  currentUserEmail,
+  coHostedEventIds = [],
 }: {
   rsvps: Rsvp[];
   events: EventOption[];
+  currentUserRole: string;
+  currentUserEmail: string;
+  coHostedEventIds?: string[];
 }) {
   const [rsvps, setRsvps] = React.useState<Rsvp[]>(initialRsvps);
   const [search, setSearch] = React.useState("");
@@ -333,6 +345,53 @@ export function RegistrantsTabClient({
   function openEditDialog(rsvp: Rsvp) {
     setEditingRsvp(rsvp);
     setEditOpen(true);
+  }
+
+  // Permission check — can the current user generate a check-in code for
+  // a given RSVP? Admins + super-admins can do it for any RSVP; CO_HOSTs
+  // only for events they're a co-host of.
+  function canGenerateCode(rsvp: Rsvp): boolean {
+    const role = (currentUserRole || "MEMBER").toUpperCase();
+    if (role === "SUPER_ADMIN" || role === "ADMIN") return true;
+    if (role === "CO_HOST") return coHostedEventIds.includes(rsvp.eventId);
+    return false;
+  }
+
+  const [generatingId, setGeneratingId] = React.useState<string | null>(null);
+
+  async function handleGenerateCode(rsvp: Rsvp) {
+    setGeneratingId(rsvp.id);
+    const t = toast.loading("Generating check-in code…");
+    try {
+      const res = await fetch(`/api/admin/rsvps/${rsvp.id}/generate-code`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      // Update the RSVP in local state with the new code + timestamps.
+      setRsvps((prev) =>
+        prev.map((r) =>
+          r.id === rsvp.id
+            ? {
+                ...r,
+                checkInCode: data.checkInCode,
+                checkedInAt: data.checkedInAt,
+              }
+            : r
+        )
+      );
+      toast.success(`Check-in code generated: ${data.checkInCode}`, {
+        id: t,
+        duration: 6000,
+      });
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setGeneratingId(null);
+    }
   }
 
   const handleEditSaved = (updated: Rsvp) => {
@@ -543,6 +602,7 @@ export function RegistrantsTabClient({
                 <th className="text-left px-4 py-3 font-bold">Status</th>
                 <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Source</th>
                 <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Registered</th>
+                <th className="text-left px-4 py-3 font-bold">Check-in code</th>
                 <th className="text-right px-4 py-3 font-bold">Actions</th>
               </tr>
             </thead>
@@ -616,6 +676,53 @@ export function RegistrantsTabClient({
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/60">
                       {new Date(r.createdAt).toLocaleString()}
+                    </td>
+                    {/* Check-in code cell — shows the 8-char code if generated,
+                        or a "Generate" button if the user is allowed to issue one.
+                        Once doorCheckedAt is set, the code is marked as USED
+                        and can't be reused at the door. */}
+                    <td className="px-4 py-3 align-top">
+                      {r.checkInCode ? (
+                        <div className="flex flex-col gap-1">
+                          <code
+                            className="font-mono font-bold text-sm tracking-wider text-black bg-[#FF005A]/5 px-2 py-1 rounded inline-block w-fit"
+                            title={`Code generated ${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString() : ""}`}
+                          >
+                            {r.checkInCode}
+                          </code>
+                          {r.doorCheckedAt ? (
+                            <span className="inline-flex items-center gap-1 text-[0.6rem] font-bold uppercase bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded w-fit">
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                              Used at door
+                              <span className="font-normal lowercase text-emerald-600/80">
+                                {new Date(r.doorCheckedAt).toLocaleTimeString()}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[0.6rem] font-bold uppercase bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded w-fit">
+                              <Clock className="h-2.5 w-2.5" />
+                              Not used yet
+                            </span>
+                          )}
+                        </div>
+                      ) : canGenerateCode(r) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateCode(r)}
+                          disabled={generatingId === r.id}
+                          title="Generate a check-in code for this registrant"
+                          className="inline-flex items-center gap-1 rounded-md border border-[#007E72]/40 text-[#007E72] px-2.5 py-1.5 text-xs font-semibold hover:bg-[#007E72]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {generatingId === r.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Ticket className="h-3.5 w-3.5" />
+                          )}
+                          Generate
+                        </button>
+                      ) : (
+                        <span className="text-xs text-black/30 italic">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right align-top">
                       <div className="flex items-center justify-end gap-1">

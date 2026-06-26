@@ -1,0 +1,528 @@
+"use client";
+
+import { useCallback } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import type { MeetTheSpeakerData } from "../meet-the-speaker/types";
+
+/**
+ * MeetTheSpeakerFormView — structured form view of MeetTheSpeakerData.
+ *
+ * Same pattern as SpeakerIntroFormView — every field rendered as a
+ * labeled input, grouped by section. Toggle between this and the raw
+ * JSON editor in the toolbar.
+ */
+type Props = {
+  data: MeetTheSpeakerData;
+  onChange: (next: MeetTheSpeakerData) => void;
+};
+
+export function MeetTheSpeakerFormView({ data, onChange }: Props) {
+  const update = useCallback(
+    (recipe: (draft: MeetTheSpeakerData) => void) => {
+      const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+      recipe(next);
+      onChange(next);
+    },
+    [data, onChange],
+  );
+
+  return (
+    <div className="space-y-5 p-4 bg-white text-black max-h-[640px] overflow-y-auto text-sm">
+      {/* ===== HEADER ===== */}
+      <Section title="Header">
+        <Field label="Header text">
+          <input
+            type="text"
+            value={data.header.text}
+            onChange={(e) => update((d) => { d.header.text = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Header color">
+          <ColorInput
+            value={data.header.color}
+            onChange={(v) => update((d) => { d.header.color = v; })}
+          />
+        </Field>
+      </Section>
+
+      {/* ===== SPEAKER ===== */}
+      <Section title="Speaker">
+        <Field label="Full name">
+          <input
+            type="text"
+            value={data.speaker.fullName}
+            onChange={(e) => update((d) => { d.speaker.fullName = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Title">
+            <input
+              type="text"
+              value={data.speaker.title}
+              onChange={(e) => update((d) => { d.speaker.title = e.target.value; })}
+              className="form-input"
+            />
+          </Field>
+          <Field label="Company">
+            <input
+              type="text"
+              value={data.speaker.company}
+              onChange={(e) => update((d) => { d.speaker.company = e.target.value; })}
+              className="form-input"
+            />
+          </Field>
+        </div>
+        <Field label="Role">
+          <select
+            value={data.speaker.role}
+            onChange={(e) =>
+              update((d) => {
+                d.speaker.role = e.target.value as MeetTheSpeakerData["speaker"]["role"];
+              })
+            }
+            className="form-input"
+          >
+            <option value="Speaker">Speaker</option>
+            <option value="Moderator">Moderator</option>
+            <option value="Panelist">Panelist</option>
+            <option value="Host">Host</option>
+          </select>
+        </Field>
+        <Field label="Topic">
+          <input
+            type="text"
+            value={data.speaker.topic}
+            onChange={(e) => update((d) => { d.speaker.topic = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Topic description">
+          <input
+            type="text"
+            value={data.speaker.topicDescription ?? ""}
+            onChange={(e) => update((d) => { d.speaker.topicDescription = e.target.value || undefined; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Bio">
+          <textarea
+            value={data.speaker.bio}
+            onChange={(e) => update((d) => { d.speaker.bio = e.target.value; })}
+            className="form-input min-h-[80px] resize-y"
+            rows={3}
+          />
+        </Field>
+        <Field label="Expertise (optional second paragraph)">
+          <textarea
+            value={data.speaker.expertise ?? ""}
+            onChange={(e) => update((d) => { d.speaker.expertise = e.target.value || undefined; })}
+            className="form-input min-h-[60px] resize-y"
+            rows={2}
+          />
+        </Field>
+        <Field label="Photo URL">
+          <input
+            type="url"
+            value={data.speaker.photoUrl}
+            onChange={(e) => update((d) => { d.speaker.photoUrl = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Photo size (×)">
+          <input
+            type="number"
+            step="0.1"
+            min="0.1"
+            max="4"
+            value={data.speaker.photoSize ?? 1}
+            onChange={(e) =>
+              update((d) => {
+                d.speaker.photoSize = parseFloat(e.target.value) || 1;
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+      </Section>
+
+      {/* ===== EVENT ===== */}
+      <Section title="Event context">
+        <Field label="Event name">
+          <input
+            type="text"
+            value={data.event.name}
+            onChange={(e) => update((d) => { d.event.name = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date">
+            <input
+              type="text"
+              value={data.event.date}
+              onChange={(e) => update((d) => { d.event.date = e.target.value; })}
+              className="form-input"
+            />
+          </Field>
+          <Field label="Time">
+            <input
+              type="text"
+              value={data.event.time}
+              onChange={(e) => update((d) => { d.event.time = e.target.value; })}
+              className="form-input"
+            />
+          </Field>
+        </div>
+        <Field label="Venue">
+          <input
+            type="text"
+            value={data.event.venue}
+            onChange={(e) => update((d) => { d.event.venue = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Brand color 1">
+            <ColorInput
+              value={data.event.brandColors[0]}
+              onChange={(v) => update((d) => { d.event.brandColors[0] = v; })}
+            />
+          </Field>
+          <Field label="Brand color 2">
+            <ColorInput
+              value={data.event.brandColors[1]}
+              onChange={(v) => update((d) => { d.event.brandColors[1] = v; })}
+            />
+          </Field>
+        </div>
+        <Field label="QR code URL">
+          <input
+            type="url"
+            value={data.qrCodeUrl}
+            onChange={(e) => update((d) => { d.qrCodeUrl = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Footer credit">
+          <input
+            type="text"
+            value={data.footerCredit ?? ""}
+            onChange={(e) => update((d) => { d.footerCredit = e.target.value || undefined; })}
+            className="form-input"
+          />
+        </Field>
+      </Section>
+
+      {/* ===== GRAPHIC (meerkat) ===== */}
+      <Section title="Meerkat / brand graphic">
+        <Field label="Image URL">
+          <input
+            type="url"
+            value={data.graphic.imageUrl}
+            onChange={(e) => update((d) => { d.graphic.imageUrl = e.target.value; })}
+            className="form-input"
+          />
+        </Field>
+        <Field label="Image scale (×)">
+          <input
+            type="number"
+            step="0.1"
+            min="0.1"
+            max="4"
+            value={data.graphic.imageScale ?? 1}
+            onChange={(e) =>
+              update((d) => {
+                d.graphic.imageScale = parseFloat(e.target.value) || 1;
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+      </Section>
+
+      {/* ===== HERO OVERLAY ===== */}
+      <Section title="Hero overlay (gradient)">
+        <Field label="Gradient colors (comma-separated)">
+          <input
+            type="text"
+            value={data.heroOverlay.gradientColors.join(", ")}
+            onChange={(e) =>
+              update((d) => {
+                d.heroOverlay.gradientColors = e.target.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+        <Field label="Gradient opacity">
+          <input
+            type="number"
+            step="0.05"
+            min="0"
+            max="1"
+            value={data.heroOverlay.gradientOpacity}
+            onChange={(e) =>
+              update((d) => {
+                d.heroOverlay.gradientOpacity = parseFloat(e.target.value) || 0;
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+      </Section>
+
+      {/* ===== SPONSORS ===== */}
+      <Section title={`Collaborators (${data.collaborators.length})`}>
+        {data.collaborators.map((s, idx) => (
+          <SubCard
+            key={`coll-${idx}`}
+            title={s.name || `#${idx + 1}`}
+            onDelete={() =>
+              update((d) => {
+                d.collaborators.splice(idx, 1);
+              })
+            }
+          >
+            <Field label="Name">
+              <input
+                type="text"
+                value={s.name}
+                onChange={(e) =>
+                  update((d) => {
+                    d.collaborators[idx].name = e.target.value;
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+            <Field label="Logo URL">
+              <input
+                type="url"
+                value={s.logoUrl}
+                onChange={(e) =>
+                  update((d) => {
+                    d.collaborators[idx].logoUrl = e.target.value;
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Logo size (×)">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="4"
+                  value={s.logoSize ?? 1}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.collaborators[idx].logoSize = parseFloat(e.target.value) || 1;
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+              <Field label="Theme">
+                <select
+                  value={s.theme ?? "light"}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.collaborators[idx].theme = e.target.value as "light" | "dark";
+                    })
+                  }
+                  className="form-input"
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </Field>
+            </div>
+          </SubCard>
+        ))}
+        <AddButton
+          label="Add collaborator"
+          onClick={() =>
+            update((d) => {
+              d.collaborators.push({
+                name: "New",
+                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+                theme: "light",
+              });
+            })
+          }
+        />
+      </Section>
+
+      <Section title={`Sponsors (${data.sponsors.length})`}>
+        {data.sponsors.map((s, idx) => (
+          <SubCard
+            key={`spo-${idx}`}
+            title={s.name || `#${idx + 1}`}
+            onDelete={() =>
+              update((d) => {
+                d.sponsors.splice(idx, 1);
+              })
+            }
+          >
+            <Field label="Name">
+              <input
+                type="text"
+                value={s.name}
+                onChange={(e) =>
+                  update((d) => {
+                    d.sponsors[idx].name = e.target.value;
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+            <Field label="Logo URL">
+              <input
+                type="url"
+                value={s.logoUrl}
+                onChange={(e) =>
+                  update((d) => {
+                    d.sponsors[idx].logoUrl = e.target.value;
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Logo size (×)">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="4"
+                  value={s.logoSize ?? 1}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.sponsors[idx].logoSize = parseFloat(e.target.value) || 1;
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+              <Field label="Theme">
+                <select
+                  value={s.theme ?? "light"}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.sponsors[idx].theme = e.target.value as "light" | "dark";
+                    })
+                  }
+                  className="form-input"
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </Field>
+            </div>
+          </SubCard>
+        ))}
+        <AddButton
+          label="Add sponsor"
+          onClick={() =>
+            update((d) => {
+              d.sponsors.push({
+                name: "New",
+                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+                theme: "light",
+              });
+            })
+          }
+        />
+      </Section>
+    </div>
+  );
+}
+
+// ---- Helper sub-components (same as speaker-intro-form-view) ----
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="text-xs font-bold text-black uppercase tracking-wider mb-2 pb-1 border-b border-black/10">
+        {title}
+      </h3>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function SubCard({
+  title,
+  children,
+  onDelete,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onDelete?: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-black/15 bg-white p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-black">{title}</span>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-red-500 hover:bg-red-50 p-1 rounded"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/60 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
+}
+
+function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-7 w-9 rounded border border-black/15 cursor-pointer"
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="form-input flex-1"
+      />
+    </div>
+  );
+}

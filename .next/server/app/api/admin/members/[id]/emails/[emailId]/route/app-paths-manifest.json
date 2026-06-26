@@ -1,3 +1,0 @@
-{
-  "/api/admin/members/[id]/emails/[emailId]/route": "app/api/admin/members/[id]/emails/[emailId]/route.js"
-}

@@ -16,7 +16,7 @@ type Props = {
  * (No "use client" so it can render on the server.)
  *
  * Per the AI Salon Tel Aviv chapter brief, the Falafel Meerkat mascot
- * (`/images/falafel-meerkat.png`) is the brand mark shown on the top-left
+ * (`/images/falafel-meerkat.jpg`) is the brand mark shown on the top-left
  * of every page (including login). It replaces the previous SVG polyhedron
  * mark while still pairing with the lowercase `aisalon` wordmark.
  */
@@ -71,11 +71,11 @@ export function AiSalonLogoServer({
 }
 
 /**
- * MeerkatMarkServer — renders the actual Falafel Meerkat PNG.
+ * MeerkatMarkServer — renders the actual Falafel Meerkat mascot.
  * Used as the brand mark to the left of the `aisalon` wordmark on every
  * page (including the login page).
  *
- * NOTE: The source image is 624 × 1686 (a tall portrait). We pass the
+ * NOTE: The source image is 624 × 1686 (a tall portrait JPG). We pass the
  * intrinsic dimensions to next/image; CSS scaling is done via inline
  * `height` (in `em`, relative to the parent's font-size) so the natural
  * aspect ratio is preserved.
@@ -97,7 +97,7 @@ export function MeerkatMarkServer({
 }) {
   return (
     <Image
-      src="/images/falafel-meerkat.png"
+      src="/images/falafel-meerkat.jpg"
       alt="AI Salon Falafel Meerkat"
       width={624}
       height={1686}

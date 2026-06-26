@@ -35,7 +35,13 @@ import {
   FileText,
   AlertCircle,
   RefreshCcw,
+  Users,
+  Search,
+  X,
+  UserPlus,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 type Speaker = {
   id: string;
@@ -44,6 +50,17 @@ type Speaker = {
   company: string | null;
   bio: string | null;
   topic: string | null;
+  photoUrl?: string | null;
+};
+
+type Panelist = {
+  id: string;
+  name: string;
+  role: string | null;
+  company: string | null;
+  bio: string | null;
+  topic: string | null;
+  photoUrl: string | null;
 };
 
 type AgendaItem = {
@@ -54,6 +71,7 @@ type AgendaItem = {
   description: string | null;
   type: string;
   speaker: Speaker | null;
+  panelists?: Panelist[];
   _count: { presentations: number };
 };
 
@@ -146,6 +164,7 @@ const typeColor: Record<string, string> = {
   BREAK: "bg-black/5 text-black/60 border-black/10",
   NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
   FAST_PITCH: "bg-[#FFAC30]/10 text-[#FFAC30] border-[#FFAC30]/30",
+  PANEL: "bg-[#7C3AED]/10 text-[#7C3AED] border-[#7C3AED]/30",
 };
 
 const typeLabel: Record<string, string> = {
@@ -154,6 +173,7 @@ const typeLabel: Record<string, string> = {
   WELCOME: "Welcome",
   BREAK: "Break",
   NETWORKING: "Networking",
+  PANEL: "Panel",
 };
 
 export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
@@ -326,12 +346,39 @@ function AgendaItemRow({
         )}
         <div className="flex flex-wrap items-center gap-2 mt-1.5">
           {item.speaker && (
-            <span className="text-[0.65rem] font-semibold text-black/70 inline-flex items-center gap-1">
+            <span
+              className={`text-[0.65rem] font-semibold inline-flex items-center gap-1 ${
+                item.type === "PANEL" ? "text-[#7C3AED]" : "text-black/70"
+              }`}
+            >
               <Mic className="h-3 w-3" />
-              {item.speaker.name}
-              {item.speaker.role && <span className="text-black/40">· {item.speaker.role}</span>}
+              {item.type === "PANEL" ? (
+                <>
+                  <span className="font-bold">Moderator:</span>
+                  {item.speaker.name}
+                  {item.speaker.role && (
+                    <span className="text-[#7C3AED]/60 font-normal">· {item.speaker.role}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  {item.speaker.name}
+                  {item.speaker.role && <span className="text-black/40">· {item.speaker.role}</span>}
+                </>
+              )}
             </span>
           )}
+          {item.type === "PANEL" &&
+            item.panelists &&
+            item.panelists.length > 0 && (
+              <span className="text-[0.65rem] font-semibold text-[#7C3AED] inline-flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                {item.panelists.length} panelist{item.panelists.length === 1 ? "" : "s"}:
+                <span className="text-[#7C3AED]/80 font-normal">
+                  {item.panelists.map((p) => p.name).join(" · ")}
+                </span>
+              </span>
+            )}
           {item._count.presentations > 0 && (
             <span className="text-[0.65rem] font-semibold text-[#007E72] inline-flex items-center gap-1">
               <FileText className="h-3 w-3" />
@@ -406,6 +453,19 @@ function CreateAgendaItemDialog({
   const [fileDescription, setFileDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Panelist picker state (only used when type === "PANEL")
+  const [panelistIds, setPanelistIds] = useState<string[]>([]);
+  const [newPanelists, setNewPanelists] = useState<
+    Array<{
+      name: string;
+      role: string;
+      company: string;
+      topic: string;
+      bio: string;
+      contactEmail: string;
+    }>
+  >([]);
+
   function reset() {
     setTitle("");
     setDescription("");
@@ -423,6 +483,8 @@ function CreateAgendaItemDialog({
     setFile(null);
     setFileTitle("");
     setFileDescription("");
+    setPanelistIds([]);
+    setNewPanelists([]);
     setSaving(false);
   }
 
@@ -434,6 +496,14 @@ function CreateAgendaItemDialog({
     if (speakerMode === "new" && !newSpeakerName.trim()) {
       toast.error("New speaker name is required");
       return;
+    }
+    // PANEL validation: at least 1 panelist (existing pick OR new panelist with a name)
+    if (type === "PANEL") {
+      const validNewPanelists = newPanelists.filter((p) => p.name.trim().length > 0);
+      if (panelistIds.length === 0 && validNewPanelists.length === 0) {
+        toast.error("Panel items require at least 1 panelist — pick from the roster or add a new one below.");
+        return;
+      }
     }
 
     // ---- Pre-flight file size check ----
@@ -478,6 +548,22 @@ function CreateAgendaItemDialog({
       );
     }
     // speakerMode === "none" → don't append speakerId or newSpeaker
+
+    // Panel form fields (only when type === PANEL)
+    if (type === "PANEL") {
+      const validNewPanelists = newPanelists
+        .filter((p) => p.name.trim().length > 0)
+        .map((p) => ({
+          name: p.name.trim(),
+          role: p.role.trim() || undefined,
+          company: p.company.trim() || undefined,
+          topic: p.topic.trim() || undefined,
+          bio: p.bio.trim() || undefined,
+          contactEmail: p.contactEmail.trim() || undefined,
+        }));
+      formData.append("panelistIds", JSON.stringify(panelistIds));
+      formData.append("newPanelists", JSON.stringify(validNewPanelists));
+    }
 
     if (file) {
       formData.append("file", file);
@@ -552,6 +638,7 @@ function CreateAgendaItemDialog({
                 <SelectItem value="WELCOME">👋 Welcome</SelectItem>
                 <SelectItem value="BREAK">☕ Break</SelectItem>
                 <SelectItem value="NETWORKING">🤝 Networking</SelectItem>
+                <SelectItem value="PANEL">👥 Panel</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -566,6 +653,8 @@ function CreateAgendaItemDialog({
               placeholder={
                 type === "FAST_PITCH"
                   ? "e.g. Acme AI — Fraud detection for fintech"
+                  : type === "PANEL"
+                  ? "e.g. Panel: The future of generative AI in production"
                   : "e.g. Welcome by Ezequiel Sznaider"
               }
               value={title}
@@ -614,7 +703,19 @@ function CreateAgendaItemDialog({
 
           {/* Speaker */}
           <div className="border-t border-black/10 pt-4">
-            <Label className="text-xs font-semibold text-black/70">Speaker</Label>
+            <Label className="text-xs font-semibold text-black/70">
+              {type === "PANEL" ? "Panel Moderator (optional)" : "Speaker"}
+            </Label>
+            {type === "PANEL" && (
+              <div className="mt-1 mb-2 p-2 rounded-md bg-[#7C3AED]/5 border border-[#7C3AED]/20 text-[0.7rem] text-[#7C3AED] flex items-start gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                <span>
+                  The moderator is the single lead speaker who facilitates the panel. They are
+                  NOT auto-added to the panelist list below — pick them here, then add the other
+                  panelists in the section further down.
+                </span>
+              </div>
+            )}
             <div className="flex gap-1 mt-1 mb-2 bg-black/5 p-0.5 rounded-md w-fit">
               <button
                 type="button"
@@ -725,6 +826,18 @@ function CreateAgendaItemDialog({
             )}
           </div>
 
+          {/* Panelists (PANEL only) */}
+          {type === "PANEL" && (
+            <PanelistsPicker
+              eventId={event.id}
+              existingSpeakers={existingSpeakers}
+              panelistIds={panelistIds}
+              setPanelistIds={setPanelistIds}
+              newPanelists={newPanelists}
+              setNewPanelists={setNewPanelists}
+            />
+          )}
+
           {/* Presentation file */}
           <div className="border-t border-black/10 pt-4">
             <Label className="text-xs font-semibold text-black/70">
@@ -788,7 +901,14 @@ function CreateAgendaItemDialog({
           </DialogClose>
           <Button
             onClick={submit}
-            disabled={saving || !title.trim() || !startsAt}
+            disabled={
+              saving ||
+              !title.trim() ||
+              !startsAt ||
+              (type === "PANEL" &&
+                panelistIds.length === 0 &&
+                newPanelists.filter((p) => p.name.trim().length > 0).length === 0)
+            }
             className="bg-[#FFAC30] hover:bg-[#FFAC30]/90 text-black"
           >
             {saving ? (
@@ -834,25 +954,68 @@ function EditAgendaItemDialog({
   const [speakerId, setSpeakerId] = useState(item.speaker?.id || "__none__");
   const [saving, setSaving] = useState(false);
 
+  // Panelist picker state (PANEL only) — initialized from item.panelists
+  const [panelistIds, setPanelistIds] = useState<string[]>(
+    (item.panelists ?? []).map((p) => p.id)
+  );
+  const [newPanelists, setNewPanelists] = useState<
+    Array<{
+      name: string;
+      role: string;
+      company: string;
+      topic: string;
+      bio: string;
+      contactEmail: string;
+    }>
+  >([]);
+
   async function submit() {
     if (!title.trim() || !startsAt) {
       toast.error("Title and start time are required");
       return;
     }
+    if (type === "PANEL") {
+      const validNewPanelists = newPanelists.filter((p) => p.name.trim().length > 0);
+      if (panelistIds.length === 0 && validNewPanelists.length === 0) {
+        toast.error("Panel items require at least 1 panelist — pick from the roster or add a new one below.");
+        return;
+      }
+    }
     setSaving(true);
     const t = toast.loading("Saving…");
     try {
+      const body: Record<string, unknown> = {
+        title: title.trim(),
+        description: description.trim() || null,
+        type,
+        startsAt: fromLocalDatetimeInput(startsAt),
+        endsAt: endsAt ? fromLocalDatetimeInput(endsAt) : null,
+        speakerId: speakerId === "__none__" ? null : speakerId,
+      };
+      // Always send panelistIds when type is PANEL (so we can sync the m:n),
+      // OR when the user switched FROM Panel to something else (so we can
+      // clear the panelists). We send an empty array in the latter case.
+      if (type === "PANEL" || (type !== "PANEL" && (item.panelists?.length ?? 0) > 0)) {
+        body.panelistIds = type === "PANEL" ? panelistIds : [];
+        if (type === "PANEL") {
+          body.newPanelists = newPanelists
+            .filter((p) => p.name.trim().length > 0)
+            .map((p) => ({
+              name: p.name.trim(),
+              role: p.role.trim() || undefined,
+              company: p.company.trim() || undefined,
+              topic: p.topic.trim() || undefined,
+              bio: p.bio.trim() || undefined,
+              contactEmail: p.contactEmail.trim() || undefined,
+            }));
+        } else {
+          body.newPanelists = [];
+        }
+      }
       const res = await fetch(`/api/admin/agenda/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || null,
-          type,
-          startsAt: fromLocalDatetimeInput(startsAt),
-          endsAt: endsAt ? fromLocalDatetimeInput(endsAt) : null,
-          speakerId: speakerId === "__none__" ? null : speakerId,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         let errMsg = `Request failed (HTTP ${res.status})`;
@@ -894,6 +1057,7 @@ function EditAgendaItemDialog({
                 <SelectItem value="WELCOME">👋 Welcome</SelectItem>
                 <SelectItem value="BREAK">☕ Break</SelectItem>
                 <SelectItem value="NETWORKING">🤝 Networking</SelectItem>
+                <SelectItem value="PANEL">👥 Panel</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -939,7 +1103,19 @@ function EditAgendaItemDialog({
           </div>
 
           <div>
-            <Label className="text-xs font-semibold text-black/70">Speaker</Label>
+            <Label className="text-xs font-semibold text-black/70">
+              {type === "PANEL" ? "Panel Moderator (optional)" : "Speaker"}
+            </Label>
+            {type === "PANEL" && (
+              <div className="mt-1 mb-2 p-2 rounded-md bg-[#7C3AED]/5 border border-[#7C3AED]/20 text-[0.7rem] text-[#7C3AED] flex items-start gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                <span>
+                  The moderator is the single lead speaker who facilitates the panel. They are
+                  NOT auto-added to the panelist list below — pick them here, then add the other
+                  panelists in the section further down.
+                </span>
+              </div>
+            )}
             <Select value={speakerId} onValueChange={setSpeakerId}>
               <SelectTrigger className="w-full mt-1">
                 <SelectValue />
@@ -963,6 +1139,18 @@ function EditAgendaItemDialog({
               </p>
             )}
           </div>
+
+          {/* Panelists (PANEL only) */}
+          {type === "PANEL" && (
+            <PanelistsPicker
+              eventId={event.id}
+              existingSpeakers={event.speakers}
+              panelistIds={panelistIds}
+              setPanelistIds={setPanelistIds}
+              newPanelists={newPanelists}
+              setNewPanelists={setNewPanelists}
+            />
+          )}
         </div>
 
         <DialogFooter>
@@ -971,7 +1159,14 @@ function EditAgendaItemDialog({
           </DialogClose>
           <Button
             onClick={submit}
-            disabled={saving || !title.trim() || !startsAt}
+            disabled={
+              saving ||
+              !title.trim() ||
+              !startsAt ||
+              (type === "PANEL" &&
+                panelistIds.length === 0 &&
+                newPanelists.filter((p) => p.name.trim().length > 0).length === 0)
+            }
             className="bg-black hover:bg-black/90"
           >
             {saving ? (
@@ -987,5 +1182,360 @@ function EditAgendaItemDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------- Panelists Picker (PANEL agenda items) ----------------
+
+type GlobalSpeaker = {
+  id: string;
+  name: string;
+  role: string | null;
+  company: string | null;
+  topic: string | null;
+  photoUrl: string | null;
+  event: { id: string; title: string };
+};
+
+function PanelistsPicker({
+  eventId,
+  existingSpeakers,
+  panelistIds,
+  setPanelistIds,
+  newPanelists,
+  setNewPanelists,
+}: {
+  eventId: string;
+  existingSpeakers: Speaker[];
+  panelistIds: string[];
+  setPanelistIds: (v: string[]) => void;
+  newPanelists: Array<{
+    name: string;
+    role: string;
+    company: string;
+    topic: string;
+    bio: string;
+    contactEmail: string;
+  }>;
+  setNewPanelists: (v: Array<{
+    name: string;
+    role: string;
+    company: string;
+    topic: string;
+    bio: string;
+    contactEmail: string;
+  }>) => void;
+}) {
+  const [globalSpeakers, setGlobalSpeakers] = useState<GlobalSpeaker[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Lazy-load the global speaker roster the first time the user picks PANEL.
+  // Cross-event speakers are filtered to exclude this event's own speakers
+  // (they're already shown via existingSpeakers).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingRoster(true);
+      try {
+        const res = await fetch("/api/admin/speakers");
+        if (!res.ok) return;
+        const data = await res.json();
+        const speakers: GlobalSpeaker[] = (data.speakers ?? [])
+          .filter((s: GlobalSpeaker & { event?: { id: string } }) => s.event?.id !== eventId)
+          .map((s: GlobalSpeaker) => ({
+            id: s.id,
+            name: s.name,
+            role: s.role,
+            company: s.company,
+            topic: s.topic,
+            photoUrl: s.photoUrl,
+            event: { id: s.event.id, title: s.event.title },
+          }));
+        if (!cancelled) setGlobalSpeakers(speakers);
+      } catch (e) {
+        console.error("[PanelistsPicker] failed to load global speakers", e);
+      } finally {
+        if (!cancelled) setLoadingRoster(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
+  function toggle(id: string) {
+    if (panelistIds.includes(id)) {
+      setPanelistIds(panelistIds.filter((x) => x !== id));
+    } else {
+      setPanelistIds([...panelistIds, id]);
+    }
+  }
+
+  function addNewPanelist() {
+    setNewPanelists([
+      ...newPanelists,
+      { name: "", role: "", company: "", topic: "", bio: "", contactEmail: "" },
+    ]);
+  }
+
+  function removeNewPanelist(idx: number) {
+    setNewPanelists(newPanelists.filter((_, i) => i !== idx));
+  }
+
+  function updateNewPanelist(idx: number, field: "name" | "role" | "company" | "topic" | "bio" | "contactEmail", value: string) {
+    setNewPanelists(
+      newPanelists.map((p, i) => (i === idx ? { ...p, [field]: value } : p))
+    );
+  }
+
+  // Filter cross-event roster by live search
+  const searchLower = search.trim().toLowerCase();
+  const filteredCrossEvent = searchLower
+    ? globalSpeakers.filter((s) => {
+        const haystack = [
+          s.name,
+          s.role || "",
+          s.company || "",
+          s.event.title,
+        ].join(" ").toLowerCase();
+        return haystack.includes(searchLower);
+      })
+    : globalSpeakers;
+
+  const pickedCount =
+    panelistIds.length + newPanelists.filter((p) => p.name.trim().length > 0).length;
+
+  return (
+    <div className="border-t border-black/10 pt-4">
+      <div className="rounded-lg border border-[#7C3AED]/30 bg-[#7C3AED]/5 p-3 space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-[#7C3AED]" />
+            <Label className="text-xs font-bold text-[#7C3AED]">
+              Panelists <span className="text-[#FF005A]">*</span>
+            </Label>
+          </div>
+          <span className="text-[0.65rem] font-semibold text-[#7C3AED]/80 bg-[#7C3AED]/10 px-2 py-0.5 rounded-full">
+            {pickedCount} picked
+          </span>
+        </div>
+        <p className="text-[0.7rem] text-black/60 leading-snug">
+          Pick panelists from this event&apos;s roster or from other events (cross-event picks are
+          auto-cloned into this event on save). You can also add brand-new panelists below. The
+          moderator picked above is NOT auto-added here — if they&apos;re also a panelist, pick
+          them again in this list.
+        </p>
+
+        {/* Search box (only meaningful for cross-event roster) */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+          <Input
+            placeholder="Search speakers from other events by name, role, company, or event…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-7 text-xs h-8"
+          />
+        </div>
+
+        {/* Scrollable checkbox list */}
+        <div className="max-h-64 overflow-y-auto ais-scroll border border-black/10 rounded-md bg-white divide-y divide-black/5">
+          {/* This event's speakers */}
+          {existingSpeakers.length > 0 && (
+            <div className="p-2">
+              <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/40 px-1 pb-1 sticky top-0 bg-white">
+                This event&apos;s speakers ({existingSpeakers.length})
+              </div>
+              <div className="space-y-0.5">
+                {existingSpeakers.map((s) => (
+                  <PanelistRow
+                    key={s.id}
+                    speaker={{
+                      id: s.id,
+                      name: s.name,
+                      role: s.role,
+                      company: s.company,
+                      topic: s.topic,
+                      photoUrl: s.photoUrl ?? null,
+                    }}
+                    checked={panelistIds.includes(s.id)}
+                    onToggle={() => toggle(s.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cross-event speakers */}
+          <div className="p-2">
+            <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/40 px-1 pb-1 sticky top-0 bg-white">
+              Speakers from other events ({loadingRoster ? "loading…" : filteredCrossEvent.length})
+            </div>
+            {loadingRoster ? (
+              <div className="flex items-center gap-2 text-xs text-black/50 p-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading global speaker roster…
+              </div>
+            ) : filteredCrossEvent.length === 0 ? (
+              <div className="text-xs text-black/50 italic p-2">
+                {searchLower
+                  ? "No cross-event speakers match your search."
+                  : "No other-event speakers yet. Once you add speakers to other events, they will appear here."}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {filteredCrossEvent.map((s) => (
+                  <PanelistRow
+                    key={s.id}
+                    speaker={{
+                      id: s.id,
+                      name: s.name,
+                      role: s.role,
+                      company: s.company,
+                      topic: s.topic,
+                      photoUrl: s.photoUrl,
+                    }}
+                    eventTitle={s.event.title}
+                    checked={panelistIds.includes(s.id)}
+                    onToggle={() => toggle(s.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* New panelists (inline forms) */}
+        {newPanelists.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[0.6rem] font-bold uppercase tracking-wider text-[#7C3AED]">
+              New panelists ({newPanelists.length})
+            </div>
+            {newPanelists.map((p, idx) => (
+              <div
+                key={idx}
+                className="relative p-2.5 rounded-md border border-[#7C3AED]/20 bg-white space-y-2"
+              >
+                <button
+                  type="button"
+                  onClick={() => removeNewPanelist(idx)}
+                  className="absolute top-1.5 right-1.5 p-0.5 rounded text-black/40 hover:text-[#FF005A] hover:bg-[#FF005A]/10"
+                  title="Remove"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+                <Input
+                  placeholder="Panelist name *"
+                  value={p.name}
+                  onChange={(e) => updateNewPanelist(idx, "name", e.target.value)}
+                  className="text-xs h-8"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Role (e.g. CTO)"
+                    value={p.role}
+                    onChange={(e) => updateNewPanelist(idx, "role", e.target.value)}
+                    className="text-xs h-8"
+                  />
+                  <Input
+                    placeholder="Company"
+                    value={p.company}
+                    onChange={(e) => updateNewPanelist(idx, "company", e.target.value)}
+                    className="text-xs h-8"
+                  />
+                </div>
+                <Input
+                  placeholder="Topic / focus area (optional)"
+                  value={p.topic}
+                  onChange={(e) => updateNewPanelist(idx, "topic", e.target.value)}
+                  className="text-xs h-8"
+                />
+                <Textarea
+                  placeholder="Short bio (optional)"
+                  value={p.bio}
+                  onChange={(e) => updateNewPanelist(idx, "bio", e.target.value)}
+                  rows={2}
+                  className="text-xs"
+                />
+                <Input
+                  type="email"
+                  placeholder="Contact email (optional — auto-links to platform user for in-app chat)"
+                  value={p.contactEmail}
+                  onChange={(e) => updateNewPanelist(idx, "contactEmail", e.target.value)}
+                  className="text-xs h-8"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add new panelist button */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addNewPanelist}
+          className="w-full border-dashed border-[#7C3AED]/40 text-[#7C3AED] hover:bg-[#7C3AED]/5 hover:text-[#7C3AED]"
+        >
+          <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Add new panelist
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PanelistRow({
+  speaker,
+  eventTitle,
+  checked,
+  onToggle,
+}: {
+  speaker: {
+    id: string;
+    name: string;
+    role: string | null;
+    company: string | null;
+    topic: string | null;
+    photoUrl: string | null;
+  };
+  eventTitle?: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const initials = speaker.name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <label
+      className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer transition-colors ${
+        checked ? "bg-[#7C3AED]/10" : "hover:bg-black/5"
+      }`}
+    >
+      <Checkbox checked={checked} onCheckedChange={onToggle} className="border-[#7C3AED]/40 data-[state=checked]:bg-[#7C3AED] data-[state=checked]:border-[#7C3AED]" />
+      <Avatar className="h-6 w-6 flex-shrink-0">
+        <AvatarImage src={speaker.photoUrl || undefined} alt={speaker.name} />
+        <AvatarFallback className="text-[0.6rem] bg-[#7C3AED]/10 text-[#7C3AED]">
+          {initials || "?"}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-semibold text-black truncate">
+          {speaker.name}
+          {speaker.role && (
+            <span className="text-black/50 font-normal"> · {speaker.role}</span>
+          )}
+        </div>
+        <div className="text-[0.6rem] text-black/40 truncate">
+          {speaker.company && <span>{speaker.company}</span>}
+          {speaker.company && eventTitle && <span> · </span>}
+          {eventTitle && <span className="italic">from &quot;{eventTitle}&quot;</span>}
+        </div>
+      </div>
+    </label>
   );
 }
