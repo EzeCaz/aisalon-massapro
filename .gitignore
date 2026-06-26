@@ -1,29 +1,2 @@
 skills/
 node_modules/
-.vercel
-
-# Vercel CLI link file (contains project/org IDs — not sensitive, but
-# re-linking per-machine is the canonical workflow)
-.vercel/
-
-# Secrets — NEVER commit. The real .env contains VERCEL_TOKEN + DB creds;
-# .env.vercel-prod is the pulled-down production env vars (DATABASE_URL,
-# BLOB_READ_WRITE_TOKEN, NEXTAUTH_SECRET, etc.); .gdrive-token.json is
-# the persisted OAuth refresh token for Google Drive backup uploads.
-.env
-.env.*
-!.env.example
-scripts/.gdrive-token.json
-
-# Local dev artifacts
-dev.log
-server.log
-tsconfig.tsbuildinfo
-db/
-.next/
-
-# Backup tarballs (large binaries — kept locally + on Google Drive, not in git)
-download/
-upload/
-tool-results/
-tool-results/
