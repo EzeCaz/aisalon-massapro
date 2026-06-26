@@ -63,6 +63,16 @@ model User {
   // onboarding — they already have intake data from the spreadsheet.
   onboardedAt       DateTime?
   // ----------------------------------------------------------------
+  // Soft-delete (archive) — set when a Super Admin archives a member.
+  // Archived members are excluded from the main members list and from
+  // most queries, but their row is preserved for audit. Only Super
+  // Admins can view the archive list at /admin/members/archive and
+  // restore archived members. Null = active (not archived).
+  archivedAt        DateTime?
+  archivedBy        String?
+  archiver          User?    @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
+  archivedUsers     User[]    @relation("UserArchiver")
+  // ----------------------------------------------------------------
   role          String   @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CO_HOST" | "MEMBER"
   tags          MemberTag[] // tags assigned to this member (admin-managed)
   images        EventImage[]
@@ -198,7 +208,12 @@ model Speaker {
   order          Int      @default(0)
   images         EventImage[] // images linked to this speaker
   presentations  PresentationFile[] // presentations linked to this speaker
-  agendaItems    EventAgendaItem[] // agenda items featuring this speaker
+  // Lead-speaker relation: agenda items where this speaker is the primary
+  // speaker (for non-PANEL items, or for the PANEL moderator).
+  agendaItems    EventAgendaItem[] @relation("AgendaLeadSpeaker")
+  // Panelist relation: PANEL agenda items where this speaker appears as a
+  // panelist (not the moderator).
+  panelItems     EventAgendaItem[] @relation("AgendaPanelist")
   messages       SpeakerMessage[] // messages left by community members for this speaker
 
   createdAt      DateTime @default(now())
@@ -235,9 +250,14 @@ model EventAgendaItem {
   endsAt         DateTime?
   title          String   // e.g. "Welcome by Ezequiel Sznaider"
   description    String?  // optional longer description (used by fast pitch sessions and other items)
-  type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME"
+  type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME" | "PANEL"
+  // For non-PANEL items: the lead speaker. For PANEL items: the moderator
+  // (optional — one of the panelists can take that role if no moderator).
   speakerId      String?
-  speaker        Speaker? @relation(fields: [speakerId], references: [id], onDelete: SetNull)
+  speaker        Speaker? @relation("AgendaLeadSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
+  // Panelists for PANEL-type items (m:n). Empty for non-PANEL items.
+  // Stored via the implicit _EventAgendaItemToSpeaker join table.
+  panelists      Speaker[] @relation("AgendaPanelist")
   presentations  PresentationFile[] // files uploaded for this specific agenda item
   createdAt      DateTime @default(now())
 }
@@ -438,18 +458,40 @@ model EmailEvent {
 /// RSVP for an event. Created when a member (or external guest) confirms
 /// attendance. Used by the email campaign system's "EVENT:<eventId>" list
 /// source to send only to people who RSVP'd to a specific event.
+///
+/// On the day of the event, members can click "I'm here — Check in" on
+/// the public event page (/e/[slug]). This generates a unique `checkInCode`
+/// (8-char Crockford base32, formatted as XXXX-XXXX) that the user shows
+/// at the door to enter the venue. The code is idempotent — clicking
+/// "Check in" again returns the same code.
 model EventRsvp {
-  id        String   @id @default(cuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
-  email     String
-  name      String?
-  status    String   @default("GOING") // GOING | MAYBE | NOT_GOING
-  source    String   @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String    @id @default(cuid())
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?     @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
+  email        String
+  name         String?
+  status       String    @default("GOING") // GOING | MAYBE | NOT_GOING
+  source       String    @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
+  // --------------- Event-day check-in (entry ticket) ---------------
+  // 8-char Crockford base32 code (excludes O/0/I/1/L to avoid confusion).
+  // Generated server-side via crypto.randomBytes when the user clicks
+  // "Check in" on the public event page. Stored formatted as "XXXX-XXXX".
+  // Unique across ALL events so door staff can scan without event context.
+  checkInCode  String?   @unique
+  checkedInAt  DateTime?
+  // ----------------------------------------------------------------
+  // Door check-in (single-use enforcement). Set the FIRST time door
+  // staff look up this code at /admin/check-in. Once set, subsequent
+  // lookups return a "code already used" warning so the same code
+  // cannot be used to re-enter the venue. Null = code has been
+  // generated but not yet verified at the door.
+  doorCheckedAt    DateTime?
+  doorCheckedBy    String?
+  // ----------------------------------------------------------------
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([eventId, email])
   @@index([eventId])
@@ -473,4 +515,24 @@ model EventCoHost {
   @@unique([eventId, userId])
   @@index([eventId])
   @@index([userId])
+}
+
+// ---------------------------- Site Settings ----------------------------
+
+/// A single key/value site-level setting. Used for admin-managed global
+/// configuration that can be changed at runtime WITHOUT a redeploy — e.g.
+/// the brand image selected as the favicon, the login-page hero, the
+/// login-page banner, etc.
+///
+/// The `key` is one of a small fixed set (see K_* constants in
+/// `src/lib/site-settings.ts`). The `value` is always a string — typically
+/// a Vercel Blob URL or a public/ path that points at an image.
+///
+/// SUPER_ADMIN-only writes (enforced at the API layer). Publicly readable
+/// via GET /api/site-settings (returns only the safe-to-expose keys).
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }

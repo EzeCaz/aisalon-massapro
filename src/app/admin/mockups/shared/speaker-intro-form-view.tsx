@@ -405,6 +405,21 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
+          <Field label="Image scale (Y)">
+            <input
+              type="number"
+              step="0.1"
+              min="0.1"
+              max="4"
+              value={data.heroOverlay.imageScaleY ?? 1}
+              onChange={(e) =>
+                update((d) => {
+                  d.heroOverlay.imageScaleY = parseFloat(e.target.value) || 1;
+                })
+              }
+              className="form-input"
+            />
+          </Field>
         </div>
         <Field label="Show triangle overlay?">
           <select

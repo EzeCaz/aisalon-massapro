@@ -64,20 +64,24 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       >
         {/* ===== 5. HERO VISUAL (right side, behind everything else on right) ===== */}
         {(() => {
-          // imageScale: 1 = default 58% width starting at 42% left.
+          // imageScale (X): 1 = default 58% width starting at 42% left.
           // 1.5 = 87% width starting at 13% left (bleeds further left).
           // 2 = 116% width starting at -16% left (overflows — usually unwanted).
           const scale = Math.max(0.25, Math.min(3, data.heroOverlay.imageScale ?? 1));
           const heroWidth = 58 * scale; // % of canvas
           const heroLeft = Math.max(0, 100 - heroWidth); // anchor to right edge
+          // imageScaleY: 1 = full canvas height. <1 crops top portion, >1 bleeds beyond bottom.
+          const scaleY = Math.max(0.1, Math.min(3, data.heroOverlay.imageScaleY ?? 1));
+          const heroHeight = 100 * scaleY; // % of canvas
+          const heroTop = 0; // anchored to top
           return (
         <div
           className="absolute"
           style={{
             left: `${heroLeft}%`,
-            top: "0",
+            top: `${heroTop}%`,
             width: `${heroWidth}%`,
-            height: "100%",
+            height: `${heroHeight}%`,
           }}
         >
           {/* Background image (Tel Aviv skyline + beach) */}

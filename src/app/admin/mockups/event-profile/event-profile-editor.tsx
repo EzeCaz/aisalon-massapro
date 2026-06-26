@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Copy, Check, Download, RotateCcw, Eye, Code, AlertCircle,
-  ImageIcon, Calendar, Loader2, Wand2,
+  Copy, Check, Download, RotateCcw, Code, AlertCircle,
+  ImageIcon, Calendar, Loader2, Wand2, FormInput,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -15,6 +15,8 @@ import type {
 import { SAMPLE_DATA } from "./sample-data";
 import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
+import { ShareButtons } from "../shared/share-buttons";
+import { EventProfileFormView } from "../shared/event-profile-form-view";
 import {
   mapEventToEventProfileData,
   type DbEventForMapping,
@@ -44,7 +46,8 @@ export function EventProfileEditor({ events }: Props) {
     JSON.stringify(SAMPLE_DATA, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
-  const [showJson, setShowJson] = useState<boolean>(true);
+  /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
+  const [viewMode, setViewMode] = useState<"form" | "json">("form");
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.32);
@@ -115,7 +118,7 @@ export function EventProfileEditor({ events }: Props) {
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [showJson]);
+  }, [viewMode]);
 
   // localStorage hydration
   useEffect(() => {
@@ -212,15 +215,23 @@ export function EventProfileEditor({ events }: Props) {
       setTimeout(() => setCopied(false), 2000);
     } catch { /* ignore */ }
   }
+  /** Export the canvas to a PNG data URL (used by Share buttons + Download). */
+  const getPngDataUrl = useCallback(async (): Promise<string> => {
+    if (!canvasRef.current) {
+      throw new Error("Canvas not ready");
+    }
+    return toPng(canvasRef.current, {
+      pixelRatio: 2,
+      cacheBust: true,
+      backgroundColor: "#ffffff",
+    });
+  }, []);
+
   async function handleDownloadPng() {
     if (!canvasRef.current) return;
     setDownloading(true);
     try {
-      const dataUrl = await toPng(canvasRef.current, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "#ffffff",
-      });
+      const dataUrl = await getPngDataUrl();
       const link = document.createElement("a");
       const slug = data.event.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       link.download = `event-profile-${slug || "mockup"}-${Date.now()}.png`;
@@ -287,14 +298,33 @@ export function EventProfileEditor({ events }: Props) {
           <ImageIcon className="h-3.5 w-3.5" />
           {editMode ? "Editing images (on)" : "Edit images"}
         </button>
-        <button
-          type="button"
-          onClick={() => setShowJson((s) => !s)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
-        >
-          {showJson ? <Eye className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
-          {showJson ? "Hide JSON" : "Show JSON"}
-        </button>
+        {/* View-mode toggle: Form vs JSON */}
+        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode("form")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition ${
+              viewMode === "form"
+                ? "bg-[#FF005A] text-white"
+                : "text-black hover:bg-black/5"
+            }`}
+          >
+            <FormInput className="h-3.5 w-3.5" />
+            Form
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("json")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition border-l border-black/10 ${
+              viewMode === "json"
+                ? "bg-[#FF005A] text-white"
+                : "text-black hover:bg-black/5"
+            }`}
+          >
+            <Code className="h-3.5 w-3.5" />
+            JSON
+          </button>
+        </div>
         <button
           type="button"
           onClick={handleReset}
@@ -316,8 +346,13 @@ export function EventProfileEditor({ events }: Props) {
           className="inline-flex items-center gap-1.5 rounded-md bg-black text-white font-semibold px-3 py-1.5 text-xs hover:bg-black/90 disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" />
-          {downloading ? "Exporting…" : "Download PNG"}
+          {downloading ? "Exporting…" : "Download"}
         </button>
+        <ShareButtons
+          getPngDataUrl={getPngDataUrl}
+          title={`${data.event.name} — ${data.event.topic}`}
+          filename={`event-profile-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+        />
         <span className="ml-auto text-xs text-black/40">
           Canvas: 1200 × 1500 (4:5) · Edits auto-saved to this browser
         </span>
@@ -436,9 +471,27 @@ export function EventProfileEditor({ events }: Props) {
         </div>
       )}
 
-      <div className={`grid gap-4 ${showJson ? "lg:grid-cols-[420px_1fr]" : "grid-cols-1"}`}>
-        {/* Left: JSON editor */}
-        {showJson && (
+      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
+        {viewMode === "form" ? (
+          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
+              <div className="flex items-center gap-2">
+                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
+                <span className="text-[0.7rem] font-mono text-black/60">
+                  event-profile.form
+                </span>
+              </div>
+              <span className="text-[0.65rem] font-mono text-[#27C93F]">
+                LIVE
+              </span>
+            </div>
+            <EventProfileFormView
+              data={data}
+              onChange={(next) => applyData(next)}
+            />
+          </div>
+        ) : (
           <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
               <div className="flex items-center gap-2">

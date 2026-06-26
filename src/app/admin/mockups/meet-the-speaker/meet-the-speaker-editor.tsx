@@ -6,13 +6,13 @@ import {
   Check,
   Download,
   RotateCcw,
-  Eye,
   Code,
   AlertCircle,
   ImageIcon,
   Calendar,
   Loader2,
   Wand2,
+  FormInput,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -24,6 +24,8 @@ import type {
 import { SAMPLE_DATA } from "./sample-data";
 import { MeetTheSpeakerCanvas } from "./meet-the-speaker-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
+import { ShareButtons } from "../shared/share-buttons";
+import { MeetTheSpeakerFormView } from "../shared/meet-the-speaker-form-view";
 import {
   mapEventToMeetTheSpeakerData,
   type DbEventForMapping,
@@ -52,7 +54,8 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     JSON.stringify(SAMPLE_DATA, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
-  const [showJson, setShowJson] = useState<boolean>(true);
+  /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
+  const [viewMode, setViewMode] = useState<"form" | "json">("form");
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.5);
@@ -124,7 +127,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [showJson]);
+  }, [viewMode]);
 
   // --- localStorage hydration -----------------------------------------
 
@@ -238,15 +241,23 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     }
   }
 
+  /** Export the canvas to a PNG data URL (used by Share buttons + Download). */
+  const getPngDataUrl = useCallback(async (): Promise<string> => {
+    if (!canvasRef.current) {
+      throw new Error("Canvas not ready");
+    }
+    return toPng(canvasRef.current, {
+      pixelRatio: 2,
+      cacheBust: true,
+      backgroundColor: "#ffffff",
+    });
+  }, []);
+
   async function handleDownloadPng() {
     if (!canvasRef.current) return;
     setDownloading(true);
     try {
-      const dataUrl = await toPng(canvasRef.current, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "#ffffff",
-      });
+      const dataUrl = await getPngDataUrl();
       const link = document.createElement("a");
       const slug = data.speaker.fullName
         .toLowerCase()
@@ -326,14 +337,33 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           <ImageIcon className="h-3.5 w-3.5" />
           {editMode ? "Editing images (on)" : "Edit images"}
         </button>
-        <button
-          type="button"
-          onClick={() => setShowJson((s) => !s)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
-        >
-          {showJson ? <Eye className="h-3.5 w-3.5" /> : <Code className="h-3.5 w-3.5" />}
-          {showJson ? "Hide JSON" : "Show JSON"}
-        </button>
+        {/* View-mode toggle: Form vs JSON */}
+        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode("form")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition ${
+              viewMode === "form"
+                ? "bg-[#FF005A] text-white"
+                : "text-black hover:bg-black/5"
+            }`}
+          >
+            <FormInput className="h-3.5 w-3.5" />
+            Form
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("json")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition border-l border-black/10 ${
+              viewMode === "json"
+                ? "bg-[#FF005A] text-white"
+                : "text-black hover:bg-black/5"
+            }`}
+          >
+            <Code className="h-3.5 w-3.5" />
+            JSON
+          </button>
+        </div>
         <button
           type="button"
           onClick={handleReset}
@@ -363,8 +393,13 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           className="inline-flex items-center gap-1.5 rounded-md bg-black text-white font-semibold px-3 py-1.5 text-xs hover:bg-black/90 disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" />
-          {downloading ? "Exporting…" : "Download PNG"}
+          {downloading ? "Exporting…" : "Download"}
         </button>
+        <ShareButtons
+          getPngDataUrl={getPngDataUrl}
+          title={`${data.speaker.fullName} — ${data.topic.title}`}
+          filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+        />
         <span className="ml-auto text-xs text-black/40">
           Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
         </span>
@@ -383,13 +418,27 @@ export function MeetTheSpeakerEditor({ events }: Props) {
         </div>
       )}
 
-      <div
-        className={`grid gap-4 ${
-          showJson ? "lg:grid-cols-[420px_1fr]" : "grid-cols-1"
-        }`}
-      >
-        {/* Left: JSON editor */}
-        {showJson && (
+      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
+        {viewMode === "form" ? (
+          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
+              <div className="flex items-center gap-2">
+                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
+                <span className="text-[0.7rem] font-mono text-black/60">
+                  meet-the-speaker.form
+                </span>
+              </div>
+              <span className="text-[0.65rem] font-mono text-[#27C93F]">
+                LIVE
+              </span>
+            </div>
+            <MeetTheSpeakerFormView
+              data={data}
+              onChange={(next) => applyData(next)}
+            />
+          </div>
+        ) : (
           <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
               <div className="flex items-center gap-2">

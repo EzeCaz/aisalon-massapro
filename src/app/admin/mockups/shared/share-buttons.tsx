@@ -167,19 +167,24 @@ export function ShareButtons({
     setError(null);
     setBusy(true);
     try {
-      const pngDataUrl = await getPngDataUrl();
-      // Always download the PNG first so the user has it ready to attach
-      const link = document.createElement("a");
-      link.download = filename;
-      link.href = pngDataUrl;
-      link.click();
-
-      // Then open the platform's share URL (if any)
       const pageUrl = shareUrl ?? (typeof window !== "undefined" ? window.location.href : "");
+
       if (platform.buildShareUrl) {
+        // For platforms with proper share URLs (LinkedIn, WhatsApp, Facebook,
+        // Telegram): just open the share URL. Do NOT auto-download the PNG —
+        // the user clicked Share, not Download. The share URL contains the
+        // page URL + title, which is what these platforms actually accept.
         window.open(platform.buildShareUrl(pageUrl, title), "_blank", "noopener,noreferrer");
       } else if (platform.downloadOnly) {
-        // Open the platform's home so the user can attach the downloaded PNG
+        // For platforms that don't support web share URLs (Instagram, TikTok,
+        // WeChat): we MUST download the PNG first so the user can manually
+        // attach it in the platform's composer. There's no other way.
+        const pngDataUrl = await getPngDataUrl();
+        const link = document.createElement("a");
+        link.download = filename;
+        link.href = pngDataUrl;
+        link.click();
+
         const homes: Record<string, string> = {
           instagram: "https://www.instagram.com/",
           tiktok: "https://www.tiktok.com/upload",
@@ -245,9 +250,10 @@ export function ShareButtons({
             })}
           </div>
           <p className="mt-2 px-2 text-[0.6rem] text-black/50 leading-relaxed">
-            The PNG will download first so you can attach it in the
-            platform's composer. Platforms marked as download-only
-            (Instagram, TikTok, WeChat) don't support web share URLs.
+            LinkedIn / WhatsApp / Facebook / Telegram open a share URL with
+            the page link + title (no download). Instagram / TikTok / WeChat
+            don&rsquo;t support web share URLs — for those, the PNG downloads
+            first so you can attach it manually in their composer.
           </p>
         </div>
       )}

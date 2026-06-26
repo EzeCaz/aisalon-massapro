@@ -124,11 +124,18 @@ export type SpeakerIntroData = {
     /** Pan/zoom for the hero image — set by dragging the image in edit mode. */
     imagePlacement?: ImagePlacement;
     /**
-     * Size multiplier for the hero image container. 1 = default (58% of
-     * canvas width), 1.5 = 87%, 2 = 116% (overflows — usually unwanted).
-     * Useful for letting the hero bleed further left if desired.
+     * Horizontal size multiplier for the hero image container. 1 = default
+     * (58% of canvas width), 1.5 = 87%, 2 = 116% (overflows — usually
+     * unwanted). Useful for letting the hero bleed further left if desired.
      */
     imageScale?: number;
+    /**
+     * Vertical size multiplier for the hero image container. 1 = full canvas
+     * height (default). 0.5 = top half only, 1.5 = bleeds 50% beyond bottom.
+     * Useful for cropping the hero vertically (e.g. showing only the top
+     * portion of a tall skyline image).
+     */
+    imageScaleY?: number;
     /**
      * Whether to render the geometric triangle SVG overlay on top of the
      * hero image. Defaults to true. Automatically set to false when the
