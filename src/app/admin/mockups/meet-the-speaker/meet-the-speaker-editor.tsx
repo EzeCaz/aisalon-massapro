@@ -397,7 +397,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
         </button>
         <ShareButtons
           getPngDataUrl={getPngDataUrl}
-          title={`${data.speaker.fullName} — ${data.topic.title}`}
+          title={`${data.speaker.fullName} — ${data.speaker.topic}`}
           filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
         <span className="ml-auto text-xs text-black/40">
