@@ -33,6 +33,7 @@ import {
   Ticket,
   Clock,
 } from "lucide-react";
+import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 
 type RsvpEvent = {
   id: string;
@@ -1053,6 +1054,10 @@ function EditRegistrantDialog({
   const [email, setEmail] = React.useState("");
   const [status, setStatus] = React.useState("GOING");
   const [saving, setSaving] = React.useState(false);
+  // Live photo URL — populated only when the RSVP is linked to a user.
+  // We fetch the user's current photoUrl on dialog open so the admin
+  // can see the existing photo before uploading a new one.
+  const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
 
   // Sync form state whenever the rsvp changes (i.e. dialog re-opens
   // for a different RSVP).
@@ -1061,6 +1066,23 @@ function EditRegistrantDialog({
       setName(rsvp.name || "");
       setEmail(rsvp.email);
       setStatus(rsvp.status);
+      setPhotoUrl(null);
+      // If the RSVP is linked to a user, fetch their current photo so
+      // the PhotoUploadField shows the right preview.
+      if (rsvp.userId) {
+        (async () => {
+          try {
+            const res = await fetch(`/api/admin/members/${rsvp.userId}`, {
+              cache: "no-store",
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            setPhotoUrl(data?.user?.photoUrl ?? null);
+          } catch {
+            /* ignore — preview will just show placeholder */
+          }
+        })();
+      }
     }
   }, [rsvp]);
 
@@ -1133,6 +1155,27 @@ function EditRegistrantDialog({
               </div>
             )}
           </div>
+          {/* Profile photo upload — only shown when the RSVP is linked
+              to a user account. Uses the member photo endpoint to set
+              the linked user's photoUrl. The photo is what the mockup
+              canvas uses by default when this registrant appears as a
+              speaker on an event. */}
+          {rsvp.userId && (
+            <PhotoUploadField
+              photoUrl={photoUrl}
+              uploadUrl={`/api/admin/members/${rsvp.userId}/photo`}
+              onUploaded={(url) => setPhotoUrl(url)}
+              size={80}
+            />
+          )}
+          {!rsvp.userId && (
+            <div className="rounded-md border border-black/10 bg-black/[0.02] p-2.5 text-[0.7rem] text-black/50">
+              Profile photo upload is unavailable — this registrant is
+              not linked to a platform user. Ask them to sign in with
+              this email first, or fix their email above to match an
+              existing user.
+            </div>
+          )}
           <label className="block">
             <span className="block text-xs font-semibold text-black/60 mb-1">
               Name (optional)

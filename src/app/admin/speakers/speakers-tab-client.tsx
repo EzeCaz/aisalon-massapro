@@ -20,6 +20,7 @@ import {
   Unlink,
   Search,
 } from "lucide-react";
+import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 
 type SpeakerEvent = {
   id: string;
@@ -508,6 +509,18 @@ function SpeakerEditor({
                 className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
               />
             </Field>
+            {/* Photo upload — admin can upload a square headshot that
+                overrides the URL above. The upload endpoint stores it
+                at /api/admin/speakers/[id]/photo and returns the new URL. */}
+            {isEdit && speaker && (
+              <div className="sm:col-span-2">
+                <PhotoUploadField
+                  photoUrl={photoUrl}
+                  uploadUrl={`/api/admin/speakers/${speaker.id}/photo`}
+                  onUploaded={(url) => setPhotoUrl(url ?? "")}
+                />
+              </div>
+            )}
             <Field label="Contact email (auto-links to user)" full>
               <input
                 type="email"

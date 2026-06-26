@@ -242,6 +242,35 @@ export function SpeakerIntroEditor({ events }: Props) {
       });
     }
   }
+
+  /** Apply a resize drag to the data — updates the size multiplier on the
+   *  targeted slot (imageScale for hero, photoSize for speaker, logoSize
+   *  for sponsor). Same debounced-JSON pattern as handlePlacementChange. */
+  function applySizeChange(slot: ImageSlot, newMultiplier: number): SpeakerIntroData {
+    const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    if (slot.kind === "hero") {
+      next.heroOverlay.imageScale = newMultiplier;
+    } else if (slot.kind === "speaker") {
+      const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
+      if (sp) sp.photoSize = newMultiplier;
+    } else {
+      const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
+      const item = arr[slot.index];
+      if (item) item.logoSize = newMultiplier;
+    }
+    return next;
+  }
+
+  function handleSizeChange(slot: ImageSlot, newMultiplier: number) {
+    const next = applySizeChange(slot, newMultiplier);
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
   const rafRef = useRef<number | null>(null);
 
   // --- toolbar actions ------------------------------------------------
@@ -449,9 +478,12 @@ export function SpeakerIntroEditor({ events }: Props) {
       {/* Edit-mode hint */}
       {editMode && (
         <div className="rounded-md border border-[#0066FF]/30 bg-[#0066FF]/5 px-3 py-2 text-xs text-[#0066FF]">
-          <strong>Edit mode is ON.</strong> Hover any image (hero / speaker
-          photos / sponsor logos) to see a <em>Replace</em> button. Drag images
-          to pan. Scroll on an image to zoom. Double-click to reset placement.
+          <strong>Edit mode is ON.</strong> Hover any image to see:
+          <ul className="mt-1 ml-4 list-disc space-y-0.5">
+            <li><strong>Replace</strong> button (top-left) — swap from brand library</li>
+            <li><strong>4 corner handles</strong> (pink squares) — drag to resize the image</li>
+            <li>Drag the image body to pan; scroll to zoom; double-click to reset</li>
+          </ul>
         </div>
       )}
 
@@ -602,6 +634,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 previewScale={previewScale}
                 onPickImage={handlePickImage}
                 onPlacementChange={handlePlacementChange}
+                onSizeChange={handleSizeChange}
               />
             </div>
           </div>

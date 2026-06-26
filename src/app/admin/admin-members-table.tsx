@@ -16,6 +16,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { MEMBER_TAG_CATALOG, tagColor } from "@/lib/tags";
+import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 import {
   ASSIGNABLE_ROLES,
   isSuperAdminEmail,
@@ -1657,6 +1658,10 @@ function EditMemberDialog({
   const [profileCategories, setProfileCategories] = useState("");
   const [appliedFor, setAppliedFor] = useState("");
   const [invitedToSpeak, setInvitedToSpeak] = useState("");
+  // Live photo URL — kept in local state so it updates immediately when
+  // the admin uploads a new photo via PhotoUploadField (without requiring
+  // a full save). The parent table is refreshed via onSaved().
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   // Role state — only editable by Super Admin. Initialized from member.role
   // and synced on member change. Persisted via the same PATCH endpoint.
   const [memberRole, setMemberRole] = useState<string>(ROLES.MEMBER);
@@ -1685,6 +1690,7 @@ function EditMemberDialog({
       setAppliedFor(member.appliedFor || "");
       setInvitedToSpeak(member.invitedToSpeak || "");
       setMemberRole(member.role || ROLES.MEMBER);
+      setPhotoUrl(member.photoUrl ?? null);
     }
   }, [member]);
 
@@ -1903,6 +1909,24 @@ function EditMemberDialog({
               </div>
             </div>
           </div>
+
+          {/* Profile photo upload — admin can upload a photo that
+              overrides the member's Google avatar. This photo is the
+              one used by default on the mockup canvases (speaker-intro,
+              meet-the-speaker, event-profile) when this member is a
+              speaker on the chosen event. */}
+          <PhotoUploadField
+            photoUrl={photoUrl}
+            uploadUrl={`/api/admin/members/${member.id}/photo`}
+            onUploaded={(url) => {
+              setPhotoUrl(url);
+              // Don't call onSaved() here — that would close the dialog.
+              // The parent table will refresh the next time it loads.
+              // We DO update the local member object so a subsequent
+              // "Save changes" includes the new photo.
+              if (member) member.photoUrl = url;
+            }}
+          />
 
           {/* Intake-form section — admin-only fields from the
               spreadsheet import / onboarding form. */}

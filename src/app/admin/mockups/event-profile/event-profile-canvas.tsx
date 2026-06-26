@@ -44,12 +44,13 @@ type Props = {
   editable?: boolean;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 };
 
 export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
   function EventProfileCanvas(
-    { data, className, editable, onPickImage, onPlacementChange, previewScale = 1 },
+    { data, className, editable, onPickImage, onPlacementChange, onSizeChange, previewScale = 1 },
     ref,
   ) {
     const visibleSessions = data.sessions.filter((s) => s.visible !== false);
@@ -77,6 +78,9 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             previewScale={previewScale}
             onPickImage={onPickImage}
             onPlacementChange={onPlacementChange}
+            onSizeChange={onSizeChange}
+            sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+            sizeLabel="hero scale"
             containerClass="absolute inset-0"
             objectFit="cover"
           />
@@ -213,12 +217,68 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
               />
             ))}
           </div>
         </div>
 
-        {/* ===== QR + SPONSORS + BRANDING (bottom) ===== */}
+        {/* ===== SPONSORS + COLLABORATORS (above QR/branding) ===== */}
+        {(data.collaborators.length > 0 || data.sponsors.length > 0) && (
+          <div
+            className="absolute flex flex-col items-end gap-2"
+            style={{ left: "48px", right: "48px", bottom: "130px" }}
+          >
+            {data.collaborators.length > 0 && (
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                >
+                  In collaboration with
+                </span>
+                <div className="flex items-center gap-3">
+                  {data.collaborators.map((s, i) => (
+                    <SponsorLogo
+                      key={`collab-${i}-${s.name}`}
+                      sponsor={s}
+                      editable={editable}
+                      slot={{ kind: "sponsor", group: "collaborators", index: i }}
+                      onPickImage={onPickImage}
+                      onSizeChange={onSizeChange}
+                      previewScale={previewScale}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {data.sponsors.length > 0 && (
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                >
+                  Sponsored by
+                </span>
+                <div className="flex items-center gap-3">
+                  {data.sponsors.map((s, i) => (
+                    <SponsorLogo
+                      key={`sponsor-${i}-${s.name}`}
+                      sponsor={s}
+                      editable={editable}
+                      slot={{ kind: "sponsor", group: "sponsors", index: i }}
+                      onPickImage={onPickImage}
+                      onSizeChange={onSizeChange}
+                      previewScale={previewScale}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== QR + BRANDING (bottom) ===== */}
         <div
           className="absolute flex items-center justify-between"
           style={{ left: "48px", right: "48px", bottom: "36px" }}
@@ -375,6 +435,7 @@ function SpeakerCard({
   previewScale,
   onPickImage,
   onPlacementChange,
+  onSizeChange,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -383,6 +444,7 @@ function SpeakerCard({
   previewScale: number;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
 }) {
   const photoSize = Math.max(0.25, Math.min(4, speaker.photoSize ?? 1));
   const photoPx = Math.round(96 * photoSize);
@@ -405,6 +467,9 @@ function SpeakerCard({
           previewScale={previewScale}
           onPickImage={onPickImage}
           onPlacementChange={onPlacementChange}
+          onSizeChange={onSizeChange}
+          sizeMultiplier={speaker.photoSize ?? 1}
+          sizeLabel="photo"
           containerClass="absolute inset-0"
           objectFit="cover"
         />
@@ -471,6 +536,9 @@ function EditableImage({
   previewScale,
   onPickImage,
   onPlacementChange,
+  onSizeChange,
+  sizeMultiplier,
+  sizeLabel,
   containerClass,
   objectFit,
 }: {
@@ -482,6 +550,9 @@ function EditableImage({
   previewScale: number;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  sizeMultiplier?: number;
+  sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
 }) {
@@ -490,6 +561,47 @@ function EditableImage({
     startX: number; startY: number;
     startFocusX: number; startFocusY: number;
   } | null>(null);
+  const resizeRef = useRef<{
+    startX: number; startY: number;
+    startSize: number;
+    corner: "nw" | "ne" | "se" | "sw";
+  } | null>(null);
+
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = sizeMultiplier ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;
+        case "nw": signedDiag = -(dx + dy); break;
+        case "ne": signedDiag = -dx + dy; break;
+        case "sw": signedDiag = dx - dy; break;
+      }
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   function handleMouseDown(e: React.MouseEvent) {
     if (!editable || !onPlacementChange) return;
@@ -556,8 +668,13 @@ function EditableImage({
         sizes="700px"
         style={{
           objectPosition: `${focusX}% ${focusY}%`,
-          transform: `scale(${zoom})`,
+          // Tiny overscan (1.005x) to eliminate subpixel white gap at the
+          // container edge — see speaker-intro-canvas.tsx for the full
+          // explanation.
+          transform: `scale(${zoom * 1.005})`,
           transformOrigin: "center center",
+          willChange: "transform",
+          backfaceVisibility: "hidden",
           transition: dragRef.current ? "none" : "transform 80ms ease-out",
         }}
         draggable={false}
@@ -576,6 +693,34 @@ function EditableImage({
         <div className="absolute bottom-1 right-1 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none">
           {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
         </div>
+      )}
+      {/* Resize corner handles (only when size-control is enabled) */}
+      {editable && onSizeChange && (
+        <>
+          <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-2 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+            {sizeLabel ?? "size"}: {(sizeMultiplier ?? 1).toFixed(2)}×
+          </div>
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+        </>
       )}
     </div>
   );
@@ -612,4 +757,132 @@ function QrCode({ url, size }: { url: string; size: number }) {
   }
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={dataUrl} alt="QR code" width={size} height={size} />;
+}
+
+// ---------------------------------------------------------------------------
+// SponsorLogo — one logo in the "In collaboration with" / "Sponsored by" row.
+// Logos use object-contain (no crop), so they don't take a placement.
+// logoSize: 1 = 32px height (default), 2 = 64px, 0.5 = 16px.
+// ---------------------------------------------------------------------------
+
+function SponsorLogo({
+  sponsor,
+  editable,
+  slot,
+  onPickImage,
+  onSizeChange,
+  previewScale = 1,
+}: {
+  sponsor: { name: string; logoUrl: string; logoSize?: number };
+  editable?: boolean;
+  slot: ImageSlot;
+  onPickImage?: (slot: ImageSlot) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  previewScale?: number;
+}) {
+  const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
+  const heightPx = Math.round(32 * sizeMult);
+  const minWidthPx = Math.round(80 * sizeMult);
+
+  const resizeRef = useRef<{
+    startX: number; startY: number;
+    startSize: number;
+    corner: "nw" | "ne" | "se" | "sw";
+  } | null>(null);
+
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = sponsor.logoSize ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;
+        case "nw": signedDiag = -(dx + dy); break;
+        case "ne": signedDiag = -dx + dy; break;
+        case "sw": signedDiag = dx - dy; break;
+      }
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border group ${
+        editable ? "border-[#0066FF]/70" : "border-black/10"
+      }`}
+      style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+    >
+      <div className="relative w-full h-full">
+        <Image
+          src={sponsor.logoUrl}
+          alt={sponsor.name}
+          fill
+          unoptimized
+          className="object-contain"
+          sizes="80px"
+          draggable={false}
+        />
+      </div>
+      {editable && onPickImage && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPickImage(slot);
+          }}
+          className="absolute -top-1.5 -right-1.5 z-10 rounded-full bg-[#0066FF] text-white px-1.5 py-0.5 text-[9px] font-bold uppercase shadow hover:bg-[#0052CC]"
+        >
+          ↻
+        </button>
+      )}
+      {editable && onSizeChange && (
+        <>
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-1.5 py-0.5 text-[8px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+            logo: {sizeMult.toFixed(2)}×
+          </div>
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+        </>
+      )}
+    </div>
+  );
 }

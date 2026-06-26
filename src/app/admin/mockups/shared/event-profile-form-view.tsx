@@ -75,6 +75,15 @@ export function EventProfileFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <Field label="Event logo URL (optional — overrides 'ai salon' wordmark)">
+          <input
+            type="url"
+            value={data.event.logoUrl ?? ""}
+            onChange={(e) => update((d) => { d.event.logoUrl = e.target.value || undefined; })}
+            className="form-input"
+            placeholder="https://…"
+          />
+        </Field>
         <Field label="Description">
           <textarea
             value={data.event.description ?? ""}
@@ -526,6 +535,21 @@ export function EventProfileFormView({ data, onChange }: Props) {
                 className="form-input"
               />
             </Field>
+            <Field label="Logo size (×) — 1 = 32px height">
+              <input
+                type="number"
+                step="0.1"
+                min="0.25"
+                max="6"
+                value={s.logoSize ?? 1}
+                onChange={(e) =>
+                  update((d) => {
+                    d.collaborators[idx].logoSize = parseFloat(e.target.value) || 1;
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
           </SubCard>
         ))}
         <AddButton
@@ -562,6 +586,21 @@ export function EventProfileFormView({ data, onChange }: Props) {
                 type="url"
                 value={s.logoUrl}
                 onChange={(e) => update((d) => { d.sponsors[idx].logoUrl = e.target.value; })}
+                className="form-input"
+              />
+            </Field>
+            <Field label="Logo size (×) — 1 = 32px height">
+              <input
+                type="number"
+                step="0.1"
+                min="0.25"
+                max="6"
+                value={s.logoSize ?? 1}
+                onChange={(e) =>
+                  update((d) => {
+                    d.sponsors[idx].logoSize = parseFloat(e.target.value) || 1;
+                  })
+                }
                 className="form-input"
               />
             </Field>

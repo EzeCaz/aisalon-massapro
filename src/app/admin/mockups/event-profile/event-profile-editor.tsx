@@ -187,6 +187,33 @@ export function EventProfileEditor({ events }: Props) {
     }
   }
 
+  /** Apply a resize drag — updates the size multiplier on the targeted slot. */
+  function applySizeChange(slot: ImageSlot, newMultiplier: number): EventProfileData {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (slot.kind === "hero") {
+      next.heroOverlay.imageScale = newMultiplier;
+    } else if (slot.kind === "speaker") {
+      const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
+      if (sp) sp.photoSize = newMultiplier;
+    } else {
+      const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
+      const item = arr[slot.index];
+      if (item) item.logoSize = newMultiplier;
+    }
+    return next;
+  }
+
+  function handleSizeChange(slot: ImageSlot, newMultiplier: number) {
+    const next = applySizeChange(slot, newMultiplier);
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   // --- visibility toggles ---
   function toggleSessionVisible(sortedIdx: number) {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
@@ -558,6 +585,7 @@ export function EventProfileEditor({ events }: Props) {
                 previewScale={previewScale}
                 onPickImage={handlePickImage}
                 onPlacementChange={handlePlacementChange}
+                onSizeChange={handleSizeChange}
               />
             </div>
           </div>

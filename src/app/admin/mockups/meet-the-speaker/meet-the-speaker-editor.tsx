@@ -217,6 +217,33 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     }
   }
 
+  /** Apply a resize drag — updates the size multiplier on the targeted slot
+   *  (photoSize for speaker, imageScale for graphic, logoSize for sponsor). */
+  function applySizeChange(slot: ImageSlot, newMultiplier: number): MeetTheSpeakerData {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    if (slot.kind === "speaker-photo") {
+      next.speaker.photoSize = newMultiplier;
+    } else if (slot.kind === "graphic") {
+      next.graphic.imageScale = newMultiplier;
+    } else {
+      const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
+      const item = arr[slot.index];
+      if (item) item.logoSize = newMultiplier;
+    }
+    return next;
+  }
+
+  function handleSizeChange(slot: ImageSlot, newMultiplier: number) {
+    const next = applySizeChange(slot, newMultiplier);
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   // --- toolbar actions ------------------------------------------------
 
   function handleReset() {
@@ -512,6 +539,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 previewScale={previewScale}
                 onPickImage={handlePickImage}
                 onPlacementChange={handlePlacementChange}
+                onSizeChange={handleSizeChange}
               />
             </div>
           </div>

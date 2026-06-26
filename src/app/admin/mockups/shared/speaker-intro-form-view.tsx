@@ -390,11 +390,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (×)">
+          <Field label="Image scale (×) — 1 = default, >1 zooms in (no white gap)">
             <input
               type="number"
               step="0.1"
-              min="0.1"
+              min="1"
               max="4"
               value={data.heroOverlay.imageScale ?? 1}
               onChange={(e) =>
@@ -405,11 +405,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (Y)">
+          <Field label="Image scale (Y) — 1 = full height, >1 zooms in">
             <input
               type="number"
               step="0.1"
-              min="0.1"
+              min="1"
               max="4"
               value={data.heroOverlay.imageScaleY ?? 1}
               onChange={(e) =>

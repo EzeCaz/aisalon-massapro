@@ -42,13 +42,15 @@ type Props = {
   onPickImage?: (slot: ImageSlot) => void;
   /** Called whenever an image is dragged / zoomed. */
   onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
+  /** Called when the user drags a resize corner handle. */
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
 };
 
 export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
   function SpeakerIntroCanvas(
-    { data, className, editable, onPickImage, onPlacementChange, previewScale = 1 },
+    { data, className, editable, onPickImage, onPlacementChange, onSizeChange, previewScale = 1 },
     ref,
   ) {
     return (
@@ -66,12 +68,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         {(() => {
           // imageScale (X): 1 = default 58% width starting at 42% left.
           // 1.5 = 87% width starting at 13% left (bleeds further left).
-          // 2 = 116% width starting at -16% left (overflows — usually unwanted).
-          const scale = Math.max(0.25, Math.min(3, data.heroOverlay.imageScale ?? 1));
+          // 2 = 116% width starting at -16% left (overflows — usually
+          // unwanted). Min is clamped at 1 so the hero always covers at
+          // least the default area (no white gap on the right).
+          const scale = Math.max(1, Math.min(3, data.heroOverlay.imageScale ?? 1));
           const heroWidth = 58 * scale; // % of canvas
           const heroLeft = Math.max(0, 100 - heroWidth); // anchor to right edge
-          // imageScaleY: 1 = full canvas height. <1 crops top portion, >1 bleeds beyond bottom.
-          const scaleY = Math.max(0.1, Math.min(3, data.heroOverlay.imageScaleY ?? 1));
+          // imageScaleY: 1 = full canvas height. Min is clamped at 1 so
+          // the hero always covers the full canvas height vertically
+          // (no white gap at the bottom).
+          const scaleY = Math.max(1, Math.min(3, data.heroOverlay.imageScaleY ?? 1));
           const heroHeight = 100 * scaleY; // % of canvas
           const heroTop = 0; // anchored to top
           return (
@@ -94,6 +100,9 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             previewScale={previewScale}
             onPickImage={onPickImage}
             onPlacementChange={onPlacementChange}
+            onSizeChange={onSizeChange}
+            sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+            sizeLabel="hero scale"
             containerClass="absolute inset-0"
             objectFit="cover"
           />
@@ -309,6 +318,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
               />
             ))}
         </div>
@@ -334,6 +344,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     editable={editable}
                     slot={{ kind: "sponsor", group: "collaborators", index: i }}
                     onPickImage={onPickImage}
+                    onSizeChange={onSizeChange}
+                    previewScale={previewScale}
                   />
                 ))}
               </div>
@@ -355,6 +367,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     editable={editable}
                     slot={{ kind: "sponsor", group: "sponsors", index: i }}
                     onPickImage={onPickImage}
+                    onSizeChange={onSizeChange}
+                    previewScale={previewScale}
                   />
                 ))}
               </div>
@@ -411,6 +425,9 @@ function EditableImage({
   previewScale,
   onPickImage,
   onPlacementChange,
+  onSizeChange,
+  sizeMultiplier,
+  sizeLabel,
   containerClass,
   objectFit,
 }: {
@@ -422,6 +439,14 @@ function EditableImage({
   previewScale: number;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  /** Called when the user drags a resize corner handle. Receives the new
+   *  size multiplier (e.g. 1.5 = 150% of default). */
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  /** Current size multiplier (read from data). Used to seed the resize
+   *  drag delta. Defaults to 1. */
+  sizeMultiplier?: number;
+  /** Small label shown next to the resize readout (e.g. "photo", "logo"). */
+  sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
 }) {
@@ -432,6 +457,15 @@ function EditableImage({
     startY: number;
     startFocusX: number;
     startFocusY: number;
+  } | null>(null);
+  // Resize drag state — separate from pan drag so they don't conflict.
+  const resizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startSize: number;
+    /** Which corner is being dragged. The corner determines whether
+     *  moving the mouse up-left grows or shrinks the image. */
+    corner: "nw" | "ne" | "se" | "sw";
   } | null>(null);
 
   function handleMouseDown(e: React.MouseEvent) {
@@ -503,6 +537,57 @@ function EditableImage({
     onPlacementChange(slot, { focusX: 50, focusY: 50, zoom: 1 });
   }
 
+  /**
+   * handleResizeMouseDown — starts a resize drag from one of the 4 corner
+   * handles. The corner determines the direction:
+   *   - SE (bottom-right): drag down-right = grow, up-left = shrink
+   *   - NW (top-left):     drag up-left   = grow, down-right = shrink
+   *   - NE (top-right):    drag up-right  = grow, down-left = shrink
+   *   - SW (bottom-left):  drag down-left = grow, up-right = shrink
+   *
+   * We use the diagonal distance (dx + dy with appropriate sign) so the
+   * resize feels natural regardless of which corner is grabbed.
+   */
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation(); // don't trigger pan-drag
+    const startSize = sizeMultiplier ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      // For each corner, compute the signed diagonal distance so that
+      // moving "outward" (away from the image center) increases the size.
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;            // down-right grows
+        case "nw": signedDiag = -(dx + dy); break;          // up-left grows
+        case "ne": signedDiag = -dx + dy; break;            // up-right grows
+        case "sw": signedDiag = dx - dy; break;             // down-left grows
+      }
+      // 100px of drag = 1.0× size change (so dragging 50px = +0.5×).
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   return (
     <div
       id={`editable-img-${slotKey(slot)}`}
@@ -525,8 +610,19 @@ function EditableImage({
         sizes="700px"
         style={{
           objectPosition: `${focusX}% ${focusY}%`,
-          transform: `scale(${zoom})`,
+          // Apply a tiny overscan (1.005x) on top of the user's zoom to
+          // eliminate the 1px white gap that appears at the container
+          // edge due to subpixel rendering. This is the well-known
+          // "CSS transform scale(1) shows hairline gap" bug — adding a
+          // 0.5% overscan forces the image to spill 1-2px past each
+          // edge, which the parent's overflow:hidden then clips cleanly.
+          transform: `scale(${zoom * 1.005})`,
           transformOrigin: "center center",
+          // Force GPU compositing so the transform is applied on a
+          // separate layer — eliminates the闪烁 / shimmer that can
+          // happen during drag-pan on Chrome.
+          willChange: "transform",
+          backfaceVisibility: "hidden",
           transition: dragRef.current ? "none" : "transform 80ms ease-out",
         }}
         draggable={false}
@@ -551,7 +647,60 @@ function EditableImage({
           {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
         </div>
       )}
+      {/* Resize corner handles (only when size-control is enabled) */}
+      {editable && onSizeChange && (
+        <>
+          {/* Size readout (top-center pill) */}
+          <div
+            className="absolute top-1 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-2 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap"
+          >
+            {sizeLabel ?? "size"}: {(sizeMultiplier ?? 1).toFixed(2)}×
+          </div>
+          {/* NW corner */}
+          <ResizeHandle corner="nw" onMouseDown={handleResizeMouseDown} />
+          {/* NE corner */}
+          <ResizeHandle corner="ne" onMouseDown={handleResizeMouseDown} />
+          {/* SE corner */}
+          <ResizeHandle corner="se" onMouseDown={handleResizeMouseDown} />
+          {/* SW corner */}
+          <ResizeHandle corner="sw" onMouseDown={handleResizeMouseDown} />
+        </>
+      )}
     </div>
+  );
+}
+
+/**
+ * ResizeHandle — a small square handle at one of the 4 corners of an
+ * editable image. Dragging it resizes the image via onSizeChange.
+ *
+ * The handle is a 12×12 white square with a 2px pink border, positioned
+ * absolutely at the corner. The cursor changes based on the corner
+ * (nwse or nesw resize cursor).
+ *
+ * Visible only in edit mode (the parent conditionally renders it).
+ */
+function ResizeHandle({
+  corner,
+  onMouseDown,
+}: {
+  corner: "nw" | "ne" | "se" | "sw";
+  onMouseDown: (e: React.MouseEvent, corner: "nw" | "ne" | "se" | "sw") => void;
+}) {
+  const positionClass =
+    corner === "nw" ? "top-0 left-0" :
+    corner === "ne" ? "top-0 right-0" :
+    corner === "se" ? "bottom-0 right-0" :
+    "bottom-0 left-0";
+  const cursorClass =
+    corner === "nw" || corner === "se" ? "cursor-nwse-resize" : "cursor-nesw-resize";
+  return (
+    <div
+      onMouseDown={(e) => onMouseDown(e, corner)}
+      className={`absolute ${positionClass} ${cursorClass} z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition`}
+      style={{ pointerEvents: "auto" }}
+      aria-label={`Resize ${corner} corner`}
+    />
   );
 }
 
@@ -573,6 +722,7 @@ function SpeakerCard({
   previewScale,
   onPickImage,
   onPlacementChange,
+  onSizeChange,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -581,6 +731,7 @@ function SpeakerCard({
   previewScale: number;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
 }) {
   // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
   const photoSize = Math.max(0.25, Math.min(4, speaker.photoSize ?? 1));
@@ -605,6 +756,9 @@ function SpeakerCard({
           previewScale={previewScale}
           onPickImage={onPickImage}
           onPlacementChange={onPlacementChange}
+          onSizeChange={onSizeChange}
+          sizeMultiplier={speaker.photoSize ?? 1}
+          sizeLabel="photo"
           containerClass="absolute inset-0"
           objectFit="cover"
         />
@@ -690,18 +844,69 @@ function SponsorLogo({
   editable,
   slot,
   onPickImage,
+  onSizeChange,
+  previewScale = 1,
 }: {
   sponsor: { name: string; logoUrl: string; logoSize?: number };
   editable?: boolean;
   slot: ImageSlot;
   onPickImage?: (slot: ImageSlot) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  previewScale?: number;
 }) {
   const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
+
+  // Resize drag state — same pattern as EditableImage but inline since
+  // SponsorLogo doesn't use EditableImage (logos use object-contain, no
+  // placement control).
+  const resizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startSize: number;
+    corner: "nw" | "ne" | "se" | "sw";
+  } | null>(null);
+
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = sponsor.logoSize ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;
+        case "nw": signedDiag = -(dx + dy); break;
+        case "ne": signedDiag = -dx + dy; break;
+        case "sw": signedDiag = dx - dy; break;
+      }
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   return (
     <div
-      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border ${
+      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border group ${
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
@@ -728,6 +933,34 @@ function SponsorLogo({
         >
           ↻
         </button>
+      )}
+      {/* Resize corner handles (only when size-control is enabled) */}
+      {editable && onSizeChange && (
+        <>
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-1.5 py-0.5 text-[8px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+            logo: {sizeMult.toFixed(2)}×
+          </div>
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+        </>
       )}
     </div>
   );

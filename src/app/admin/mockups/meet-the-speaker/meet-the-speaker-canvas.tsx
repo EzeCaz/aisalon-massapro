@@ -42,12 +42,13 @@ type Props = {
   editable?: boolean;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 };
 
 export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
   function MeetTheSpeakerCanvas(
-    { data, className, editable, onPickImage, onPlacementChange, previewScale = 1 },
+    { data, className, editable, onPickImage, onPlacementChange, onSizeChange, previewScale = 1 },
     ref,
   ) {
     return (
@@ -133,6 +134,9 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
+                sizeMultiplier={data.speaker.photoSize ?? 1}
+                sizeLabel="photo"
                 containerClass="absolute inset-0 rounded-lg overflow-hidden shadow-2xl"
                 objectFit="cover"
               />
@@ -167,6 +171,9 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
+                sizeMultiplier={data.graphic.imageScale ?? 1}
+                sizeLabel="graphic"
                 containerClass="absolute inset-0"
                 objectFit="contain"
               />
@@ -349,6 +356,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                     editable={editable}
                     slot={{ kind: "sponsor", group: "collaborators", index: i }}
                     onPickImage={onPickImage}
+                    onSizeChange={onSizeChange}
+                    previewScale={previewScale}
                   />
                 ))}
               </div>
@@ -370,6 +379,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                     editable={editable}
                     slot={{ kind: "sponsor", group: "sponsors", index: i }}
                     onPickImage={onPickImage}
+                    onSizeChange={onSizeChange}
+                    previewScale={previewScale}
                   />
                 ))}
               </div>
@@ -430,6 +441,9 @@ function EditableImage({
   previewScale,
   onPickImage,
   onPlacementChange,
+  onSizeChange,
+  sizeMultiplier,
+  sizeLabel,
   containerClass,
   objectFit,
 }: {
@@ -441,6 +455,9 @@ function EditableImage({
   previewScale: number;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  sizeMultiplier?: number;
+  sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
 }) {
@@ -451,6 +468,47 @@ function EditableImage({
     startFocusX: number;
     startFocusY: number;
   } | null>(null);
+  const resizeRef = useRef<{
+    startX: number; startY: number;
+    startSize: number;
+    corner: "nw" | "ne" | "se" | "sw";
+  } | null>(null);
+
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = sizeMultiplier ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;
+        case "nw": signedDiag = -(dx + dy); break;
+        case "ne": signedDiag = -dx + dy; break;
+        case "sw": signedDiag = dx - dy; break;
+      }
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   function handleMouseDown(e: React.MouseEvent) {
     if (!editable || !onPlacementChange) return;
@@ -524,8 +582,10 @@ function EditableImage({
         sizes="600px"
         style={{
           objectPosition: `${focusX}% ${focusY}%`,
-          transform: `scale(${zoom})`,
+          transform: `scale(${zoom * 1.005})`,
           transformOrigin: "center center",
+          willChange: "transform",
+          backfaceVisibility: "hidden",
           transition: dragRef.current ? "none" : "transform 80ms ease-out",
         }}
         draggable={false}
@@ -548,6 +608,34 @@ function EditableImage({
           {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
         </div>
       )}
+      {/* Resize corner handles (only when size-control is enabled) */}
+      {editable && onSizeChange && (
+        <>
+          <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-2 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+            {sizeLabel ?? "size"}: {(sizeMultiplier ?? 1).toFixed(2)}×
+          </div>
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -566,18 +654,65 @@ function SponsorLogo({
   editable,
   slot,
   onPickImage,
+  onSizeChange,
+  previewScale = 1,
 }: {
   sponsor: Sponsor;
   editable?: boolean;
   slot: ImageSlot;
   onPickImage?: (slot: ImageSlot) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  previewScale?: number;
 }) {
   const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
+
+  const resizeRef = useRef<{
+    startX: number; startY: number;
+    startSize: number;
+    corner: "nw" | "ne" | "se" | "sw";
+  } | null>(null);
+
+  function handleResizeMouseDown(
+    e: React.MouseEvent,
+    corner: "nw" | "ne" | "se" | "sw",
+  ) {
+    if (!editable || !onSizeChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = sponsor.logoSize ?? 1;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = ev.clientX - r.startX;
+      const dy = ev.clientY - r.startY;
+      let signedDiag: number;
+      switch (r.corner) {
+        case "se": signedDiag = dx + dy; break;
+        case "nw": signedDiag = -(dx + dy); break;
+        case "ne": signedDiag = -dx + dy; break;
+        case "sw": signedDiag = dx - dy; break;
+      }
+      const sensitivity = 100 * previewScale;
+      const delta = signedDiag / sensitivity;
+      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      onSizeChange(slot, next);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
   return (
     <div
-      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border ${
+      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border group ${
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
@@ -604,6 +739,33 @@ function SponsorLogo({
         >
           ↻
         </button>
+      )}
+      {editable && onSizeChange && (
+        <>
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-1.5 py-0.5 text-[8px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+            logo: {sizeMult.toFixed(2)}×
+          </div>
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+          <div
+            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+            style={{ pointerEvents: "auto" }}
+          />
+        </>
       )}
     </div>
   );
