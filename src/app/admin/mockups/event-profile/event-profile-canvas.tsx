@@ -66,8 +66,17 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
           fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
         }}
       >
-        {/* ===== HERO BLOCK (top 0-450) ===== */}
-        <div className="absolute" style={{ left: 0, top: 0, width: "100%", height: "450px" }}>
+        {/* ===== HERO BLOCK (top 0-450 by default, scales with imageScale) ===== */}
+        {(() => {
+          // heroScale: 1 = 450px tall hero (default). Range [0.1, 10] per
+          // user spec. The hero block grows/shrinks vertically; the agenda
+          // + speakers blocks below stay anchored at their absolute tops
+          // (490px / 1020px) so a taller hero will overlap them — the
+          // admin can adjust the absolute tops via JSON if needed.
+          const heroScale = Math.max(0.1, Math.min(10, data.heroOverlay.imageScale ?? 1));
+          const heroHeight = Math.round(450 * heroScale);
+          return (
+        <div className="absolute" style={{ left: 0, top: 0, width: "100%", height: `${heroHeight}px` }}>
           {/* Background hero image */}
           <EditableImage
             slot={{ kind: "hero" }}
@@ -150,6 +159,8 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             </div>
           </div>
         </div>
+          );
+        })()}
 
         {/* ===== AGENDA BLOCK (450-1000, but auto-sizes) ===== */}
         <div className="absolute" style={{ left: "48px", top: "490px", right: "48px" }}>
@@ -446,7 +457,8 @@ function SpeakerCard({
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
 }) {
-  const photoSize = Math.max(0.25, Math.min(4, speaker.photoSize ?? 1));
+  // photoSize: 1 = default. Range [0.1, 10] per user spec.
+  const photoSize = Math.max(0.1, Math.min(10, speaker.photoSize ?? 1));
   const photoPx = Math.round(96 * photoSize);
   return (
     <div className="flex flex-col items-start gap-2 rounded-lg bg-white border border-black/10 p-3 shadow-sm">
@@ -591,7 +603,8 @@ function EditableImage({
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      // Range [0.1, 10] per user spec.
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {
@@ -636,8 +649,9 @@ function EditableImage({
   function handleWheel(e: React.WheelEvent) {
     if (!editable || !onPlacementChange) return;
     e.preventDefault();
+    // Wheel scroll adjusts image zoom. Range [0.1, 10] per user spec.
     const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(1, Math.min(4, zoom + step));
+    const nextZoom = Math.max(0.1, Math.min(10, zoom + step));
     onPlacementChange(slot, { focusX, focusY, zoom: nextZoom });
   }
 
@@ -780,7 +794,8 @@ function SponsorLogo({
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 }) {
-  const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
+  // logoSize: 1 = 32px height (default). Range [0.1, 10] per user spec.
+  const sizeMult = Math.max(0.1, Math.min(10, sponsor.logoSize ?? 1));
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
 
@@ -814,7 +829,8 @@ function SponsorLogo({
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      // Range [0.1, 10] per user spec.
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {

@@ -13,6 +13,7 @@ import {
   Loader2,
   Wand2,
   FormInput,
+  Save,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -301,6 +302,47 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     }
   }
 
+  /**
+   * Save the current mockup as the default meet-the-speaker for the
+   * selected event. POSTs the PNG snapshot + JSON to the
+   * /api/admin/events/[id]/mockup-defaults endpoint.
+   */
+  const [savingDefault, setSavingDefault] = useState(false);
+  async function handleSaveAsDefault() {
+    const eventId = data.event.sourceEventId;
+    if (!eventId) {
+      alert(
+        "No event is currently selected. Use the 'Auto-fill from event' dropdown at the top to pick an event first.",
+      );
+      return;
+    }
+    setSavingDefault(true);
+    try {
+      const dataUrl = await getPngDataUrl();
+      const res = await fetch(`/api/admin/events/${eventId}/mockup-defaults`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "meet-the-speaker",
+          dataJson: JSON.stringify(data, null, 2),
+          pngBase64: dataUrl,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `HTTP ${res.status}`);
+      }
+      alert(
+        `✓ Saved as default meet-the-speaker for "${data.event.name}".\n\nThe PNG snapshot is now in /admin/images under brand-assets.`,
+      );
+    } catch (err) {
+      console.error("Save as default failed:", err);
+      alert(`Save as default failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSavingDefault(false);
+    }
+  }
+
   // --- render ---------------------------------------------------------
 
   return (
@@ -421,6 +463,20 @@ export function MeetTheSpeakerEditor({ events }: Props) {
         >
           <Download className="h-3.5 w-3.5" />
           {downloading ? "Exporting…" : "Download"}
+        </button>
+        <button
+          type="button"
+          onClick={handleSaveAsDefault}
+          disabled={savingDefault || !!parseError}
+          title={
+            data.event.sourceEventId
+              ? `Save as default meet-the-speaker for "${data.event.name}"`
+              : "Pick an event from the dropdown first"
+          }
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#D8004D] disabled:opacity-50"
+        >
+          {savingDefault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {savingDefault ? "Saving…" : "Save as event default"}
         </button>
         <ShareButtons
           getPngDataUrl={getPngDataUrl}

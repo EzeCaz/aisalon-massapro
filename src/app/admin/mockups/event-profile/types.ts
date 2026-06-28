@@ -146,7 +146,8 @@ export function resolvePlacement(p?: ImagePlacement) {
   return {
     focusX: clamp(p?.focusX ?? 50, 0, 100),
     focusY: clamp(p?.focusY ?? 50, 0, 100),
-    zoom: clamp(p?.zoom ?? 1, 1, 4),
+    // Zoom range [0.1, 10] per user spec.
+    zoom: clamp(p?.zoom ?? 1, 0.1, 10),
   };
 }
 

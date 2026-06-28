@@ -157,6 +157,91 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
       {/* ===== SPEAKERS ===== */}
       <Section title={`Speakers (${speakersSorted.length})`}>
+        {/* Speaker grid layout controls */}
+        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 mb-3">
+          <p className="text-xs font-semibold text-black/70 mb-2 uppercase tracking-wider">
+            Speaker grid layout
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Columns">
+              <select
+                value={String(data.speakersLayout?.columns ?? 1)}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
+                  })
+                }
+                className="form-input"
+              >
+                <option value="1">1 column</option>
+                <option value="2">2 columns</option>
+                <option value="3">3 columns</option>
+              </select>
+            </Field>
+            <Field label="Flow direction">
+              <select
+                value={data.speakersLayout?.flowDirection ?? "row"}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.flowDirection = e.target.value as "row" | "col";
+                  })
+                }
+                className="form-input"
+              >
+                <option value="row">Row-by-row (left→right, then wrap)</option>
+                <option value="col">Col-by-col (top→bottom, then next col)</option>
+              </select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Field label="Last row alignment">
+              <select
+                value={data.speakersLayout?.lastRowAlign ?? "spread"}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.lastRowAlign = e.target.value as "left" | "center" | "spread";
+                  })
+                }
+                className="form-input"
+              >
+                <option value="spread">Spread evenly</option>
+                <option value="center">Center</option>
+                <option value="left">Left-align</option>
+              </select>
+            </Field>
+            <Field label="Rows per column (comma-separated)">
+              <input
+                type="text"
+                value={(data.speakersLayout?.rowsPerColumn ?? []).join(",")}
+                placeholder="auto (e.g. 2,1,2)"
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    const txt = e.target.value.trim();
+                    if (!txt) {
+                      d.speakersLayout.rowsPerColumn = [];
+                    } else {
+                      d.speakersLayout.rowsPerColumn = txt
+                        .split(",")
+                        .map((s) => parseInt(s.trim(), 10))
+                        .filter((n) => !isNaN(n) && n > 0);
+                    }
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+          </div>
+          <p className="text-[0.65rem] text-black/50 mt-2">
+            Leave "Rows per column" empty to auto-distribute speakers evenly
+            across the chosen column count. Use the "Order" field on each
+            speaker card below to control the sort order.
+          </p>
+        </div>
+
         {speakersSorted.map((sp, idx) => (
           <SubCard
             key={`${sp.order}-${sp.fullName}`}
@@ -165,6 +250,34 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               update((d) => {
                 d.speakers = d.speakers.filter((s) => s.order !== sp.order);
               })
+            }
+            onMoveUp={
+              idx > 0
+                ? () =>
+                    update((d) => {
+                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const prev = d.speakers.find((s) => s.order === speakersSorted[idx - 1].order);
+                      if (target && prev) {
+                        const tmp = target.order;
+                        target.order = prev.order;
+                        prev.order = tmp;
+                      }
+                    })
+                : undefined
+            }
+            onMoveDown={
+              idx < speakersSorted.length - 1
+                ? () =>
+                    update((d) => {
+                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const nextSp = d.speakers.find((s) => s.order === speakersSorted[idx + 1].order);
+                      if (target && nextSp) {
+                        const tmp = target.order;
+                        target.order = nextSp.order;
+                        nextSp.order = tmp;
+                      }
+                    })
+                : undefined
             }
           >
             <div className="grid grid-cols-2 gap-3">
@@ -302,7 +415,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
+                  max="10"
                   value={sp.photoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -390,12 +503,12 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (×) — 1 = default, >1 zooms in (no white gap)">
+          <Field label="Image scale (×) — 0.1 = shrink to 10%, 10 = grow 10×">
             <input
               type="number"
               step="0.1"
-              min="1"
-              max="4"
+              min="0.1"
+              max="10"
               value={data.heroOverlay.imageScale ?? 1}
               onChange={(e) =>
                 update((d) => {
@@ -405,12 +518,12 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (Y) — 1 = full height, >1 zooms in">
+          <Field label="Image scale (Y) — 0.1 = shrink to 10%, 10 = grow 10×">
             <input
               type="number"
               step="0.1"
-              min="1"
-              max="4"
+              min="0.1"
+              max="10"
               value={data.heroOverlay.imageScaleY ?? 1}
               onChange={(e) =>
                 update((d) => {
@@ -728,25 +841,51 @@ function SubCard({
   title,
   children,
   onDelete,
+  onMoveUp,
+  onMoveDown,
 }: {
   title: string;
   children: React.ReactNode;
   onDelete?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   return (
     <div className="rounded-md border border-black/15 bg-white p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold text-black">{title}</span>
-        {onDelete && (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-red-500 hover:bg-red-50 p-1 rounded"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onMoveUp && (
+            <button
+              type="button"
+              onClick={onMoveUp}
+              className="text-black/50 hover:bg-black/5 p-1 rounded"
+              title="Move up"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+            </button>
+          )}
+          {onMoveDown && (
+            <button
+              type="button"
+              onClick={onMoveDown}
+              className="text-black/50 hover:bg-black/5 p-1 rounded"
+              title="Move down"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-red-500 hover:bg-red-50 p-1 rounded"
+              title="Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-2">{children}</div>
     </div>

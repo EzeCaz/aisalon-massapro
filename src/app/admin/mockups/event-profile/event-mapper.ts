@@ -79,25 +79,39 @@ function splitRole(role?: string | null): [string, string] {
   return [role.slice(0, idx).trim(), role.slice(idx + 1).trim()];
 }
 
+/** Format an ISO date as "June 18th 2026" — in Asia/Jerusalem local time. */
 function formatDate(iso: string): string {
   const d = new Date(iso);
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
   ];
-  const day = d.getUTCDate();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
+  const day = parseInt(get("day"), 10);
+  const monthIdx = parseInt(get("month"), 10) - 1;
+  const year = parseInt(get("year"), 10);
   const suffix =
     day % 10 === 1 && day !== 11 ? "st" :
     day % 10 === 2 && day !== 12 ? "nd" :
     day % 10 === 3 && day !== 13 ? "rd" : "th";
-  return `${months[d.getUTCMonth()]} ${day}${suffix} ${d.getUTCFullYear()}`;
+  return `${months[monthIdx]} ${day}${suffix} ${year}`;
 }
 
+/** Format an ISO date as "18:00" (HH:MM, 24h) — in Asia/Jerusalem local time. */
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  const h = String(d.getUTCHours()).padStart(2, "0");
-  const m = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jerusalem",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(d);
 }
 
 function formatVenue(e: DbEventForMapping): string {

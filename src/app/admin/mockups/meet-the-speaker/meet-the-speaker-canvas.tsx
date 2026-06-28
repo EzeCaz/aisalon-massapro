@@ -110,7 +110,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
         {(() => {
           // photoSize: 1 = 45% canvas width × 60% height (default).
           // Anchored to top-right, grows downward + leftward.
-          const sizeMult = Math.max(0.25, Math.min(3, data.speaker.photoSize ?? 1));
+          // Range [0.1, 10] per user spec (was 0.25-3).
+          const sizeMult = Math.max(0.1, Math.min(10, data.speaker.photoSize ?? 1));
           const widthPct = 45 * sizeMult;
           const heightPct = 60 * sizeMult;
           // Anchor top-right at 95% (5% margin from right); left shifts as width grows.
@@ -146,7 +147,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
 
         {/* ===== MEERKAT GRAPHIC (bottom-right corner) ===== */}
         {(() => {
-          const sizeMult = Math.max(0.25, Math.min(3, data.graphic.imageScale ?? 1));
+          // Range [0.1, 10] per user spec.
+          const sizeMult = Math.max(0.1, Math.min(10, data.graphic.imageScale ?? 1));
           const widthPct = 18 * sizeMult;
           const heightPct = 30 * sizeMult;
           // Anchor to bottom-right with 2% margin.
@@ -498,7 +500,8 @@ function EditableImage({
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      // Range [0.1, 10] per user spec.
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {
@@ -550,8 +553,10 @@ function EditableImage({
   function handleWheel(e: React.WheelEvent) {
     if (!editable || !onPlacementChange) return;
     e.preventDefault();
+    // Wheel scroll adjusts image zoom (transform: scale). Range [0.1, 10]
+    // per user spec.
     const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(1, Math.min(4, zoom + step));
+    const nextZoom = Math.max(0.1, Math.min(10, zoom + step));
     onPlacementChange(slot, { focusX, focusY, zoom: nextZoom });
   }
 
@@ -664,7 +669,8 @@ function SponsorLogo({
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 }) {
-  const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
+  // Range [0.1, 10] per user spec.
+  const sizeMult = Math.max(0.1, Math.min(10, sponsor.logoSize ?? 1));
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
 
@@ -698,7 +704,8 @@ function SponsorLogo({
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      // Range [0.1, 10] per user spec.
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {

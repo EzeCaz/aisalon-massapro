@@ -69,15 +69,15 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           // imageScale (X): 1 = default 58% width starting at 42% left.
           // 1.5 = 87% width starting at 13% left (bleeds further left).
           // 2 = 116% width starting at -16% left (overflows — usually
-          // unwanted). Min is clamped at 1 so the hero always covers at
-          // least the default area (no white gap on the right).
-          const scale = Math.max(1, Math.min(3, data.heroOverlay.imageScale ?? 1));
+          // unwanted). Min is 0.1 so the hero can shrink to 10% of the
+          // default width (per user spec: "up to 0.1 of the image size the
+          // smallest"). Max is 10 to allow dramatic enlargement.
+          const scale = Math.max(0.1, Math.min(10, data.heroOverlay.imageScale ?? 1));
           const heroWidth = 58 * scale; // % of canvas
           const heroLeft = Math.max(0, 100 - heroWidth); // anchor to right edge
-          // imageScaleY: 1 = full canvas height. Min is clamped at 1 so
-          // the hero always covers the full canvas height vertically
-          // (no white gap at the bottom).
-          const scaleY = Math.max(1, Math.min(3, data.heroOverlay.imageScaleY ?? 1));
+          // imageScaleY: 1 = full canvas height. Min is 0.1 so the hero
+          // can shrink to 10% of the canvas height vertically.
+          const scaleY = Math.max(0.1, Math.min(10, data.heroOverlay.imageScaleY ?? 1));
           const heroHeight = 100 * scaleY; // % of canvas
           const heroTop = 0; // anchored to top
           return (
@@ -281,47 +281,161 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </span>
         </div>
 
-        {/* ===== 4. SPEAKERS LIST (left column) ===== */}
-        <div
-          className="absolute flex flex-col gap-3"
-          style={{ left: "48px", top: "260px", width: "400px" }}
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <div
-              className="h-px flex-1"
-              style={{
-                background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
-              }}
-            />
-            <span
-              className="font-bold text-black uppercase tracking-widest"
-              style={{ fontSize: "12px", letterSpacing: "0.2em" }}
-            >
-              Speakers
-            </span>
-          </div>
-          {[...data.speakers]
+        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
+        {(() => {
+          // Sorted + filtered speakers (same as before).
+          const sortedSpeakers = [...data.speakers]
             .sort((a, b) => a.order - b.order)
-            // Pair each speaker with its index in the SORTED array (so
-            // slot.index matches what the editor's applyImagePick expects,
-            // which looks up `next.speakers.sort(...)[slot.index]`).
             .map((speaker, idx) => ({ speaker, idx }))
-            // Then hide invisible speakers (visible defaults to true).
-            .filter(({ speaker }) => speaker.visible !== false)
-            .map(({ speaker, idx }) => (
-              <SpeakerCard
-                key={`${speaker.order}-${speaker.fullName}`}
-                speaker={speaker}
-                accentColor={data.event.brandColors[0]}
-                editable={editable}
-                slot={{ kind: "speaker", index: idx }}
-                previewScale={previewScale}
-                onPickImage={onPickImage}
-                onPlacementChange={onPlacementChange}
-                onSizeChange={onSizeChange}
-              />
-            ))}
-        </div>
+            .filter(({ speaker }) => speaker.visible !== false);
+
+          const layout = data.speakersLayout ?? {};
+          const columns = layout.columns ?? 1;
+          const flow = layout.flowDirection ?? "row";
+          const lastRowAlign = layout.lastRowAlign ?? "spread";
+          // Default the grid width to 400px for 1 column, expanding for 2/3.
+          // Multi-column layouts need more horizontal space.
+          const gridWidth = columns === 1 ? 400 : columns === 2 ? 700 : 1000;
+
+          // Compute the grid cell position for each speaker based on
+          // flowDirection + rowsPerColumn. We build a 2D map of
+          // [row][col] → speakerIndex, then render.
+          const rowsPerColumn = layout.rowsPerColumn ?? [];
+
+          // Build the position map.
+          let positions: Array<{ row: number; col: number }> = [];
+          if (flow === "row") {
+            // Row-by-row: fill left-to-right, then wrap to next row.
+            positions = sortedSpeakers.map((_, i) => ({
+              row: Math.floor(i / columns),
+              col: i % columns,
+            }));
+          } else {
+            // Col-by-col: fill top-to-bottom in col 1, then col 2, etc.
+            // If rowsPerColumn is provided, use it to determine each
+            // column's height. Otherwise, distribute evenly.
+            if (rowsPerColumn.length >= columns) {
+              // Explicit row counts per column.
+              const colOffsets: number[] = [0];
+              for (let c = 1; c < columns; c++) {
+                colOffsets.push(colOffsets[c - 1] + rowsPerColumn[c - 1]);
+              }
+              positions = sortedSpeakers.map((_, i) => {
+                // Find which column this speaker belongs to.
+                let col = 0;
+                let row = i;
+                for (let c = 0; c < columns; c++) {
+                  if (i < colOffsets[c] + rowsPerColumn[c]) {
+                    col = c;
+                    row = i - colOffsets[c];
+                    break;
+                  }
+                }
+                return { row, col };
+              });
+            } else {
+              // Auto-distribute: ceil(N / columns) rows per column.
+              const rowsPerCol = Math.ceil(sortedSpeakers.length / columns);
+              positions = sortedSpeakers.map((_, i) => ({
+                col: Math.floor(i / rowsPerCol),
+                row: i % rowsPerCol,
+              }));
+            }
+          }
+
+          // Compute grid template columns + rows.
+          const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
+          const totalRows = maxRow + 1;
+
+          // For the last row, figure out how many cells are filled.
+          const lastRowCount = positions.filter((p) => p.row === maxRow).length;
+          const isLastRowIncomplete = lastRowCount < columns;
+
+          // Build a CSS grid template. We use display: grid with N equal
+          // columns. For the last row's spread/center alignment, we add
+          // empty padding cells (using grid-column-start) so the visible
+          // speakers spread across the full width.
+          return (
+            <div
+              className="absolute"
+              style={{ left: "48px", top: "260px", width: `${gridWidth}px` }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="h-px flex-1"
+                  style={{
+                    background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
+                  }}
+                />
+                <span
+                  className="font-bold text-black uppercase tracking-widest"
+                  style={{ fontSize: "12px", letterSpacing: "0.2em" }}
+                >
+                  Speakers
+                </span>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                  gap: "12px",
+                }}
+              >
+                {sortedSpeakers.map(({ speaker, idx }, i) => {
+                  const pos = positions[i];
+                  // For last-row spread alignment, push the speaker to
+                  // its column position via grid-column-start.
+                  let gridColumn: string | undefined = undefined;
+                  if (isLastRowIncomplete && pos.row === maxRow) {
+                    if (lastRowAlign === "spread") {
+                      // Spread: place speakers evenly across full width.
+                      // Use grid-column to span proportional columns.
+                      // For N speakers in the last row across `columns`
+                      // total columns, place each speaker at column
+                      // (i * columns / lastRowCount) + 1.
+                      const lastRowSpeakersBefore = positions.filter(
+                        (p) => p.row === maxRow && p.col < pos.col,
+                      ).length;
+                      const startCol =
+                        Math.round(
+                          (lastRowSpeakersBefore * columns) / lastRowCount,
+                        ) + 1;
+                      gridColumn = `${startCol}`;
+                    } else if (lastRowAlign === "center") {
+                      // Center: offset by half the empty cells.
+                      const empty = columns - lastRowCount;
+                      const startCol = pos.col + Math.floor(empty / 2) + 1;
+                      gridColumn = `${startCol}`;
+                    }
+                    // "left" = no special handling (default grid flow).
+                  }
+                  return (
+                    <div
+                      key={`${speaker.order}-${speaker.fullName}`}
+                      style={{
+                        gridColumnStart: gridColumn
+                          ? parseInt(gridColumn, 10)
+                          : pos.col + 1,
+                        gridRowStart: pos.row + 1,
+                      }}
+                    >
+                      <SpeakerCard
+                        speaker={speaker}
+                        accentColor={data.event.brandColors[0]}
+                        editable={editable}
+                        slot={{ kind: "speaker", index: idx }}
+                        previewScale={previewScale}
+                        onPickImage={onPickImage}
+                        onPlacementChange={onPlacementChange}
+                        onSizeChange={onSizeChange}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ===== 8. SPONSORS (bottom-right) ===== */}
         <div
@@ -523,8 +637,11 @@ function EditableImage({
   function handleWheel(e: React.WheelEvent) {
     if (!editable || !onPlacementChange) return;
     e.preventDefault();
+    // Wheel scroll adjusts the image's zoom (transform: scale).
+    // Range is 0.1 (smallest, per user spec) to 10 (largest, allows
+    // dramatic enlargement). Each wheel tick changes zoom by 0.1.
     const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(1, Math.min(4, zoom + step));
+    const nextZoom = Math.max(0.1, Math.min(10, zoom + step));
     onPlacementChange(slot, {
       focusX,
       focusY,
@@ -574,9 +691,10 @@ function EditableImage({
         case "sw": signedDiag = dx - dy; break;             // down-left grows
       }
       // 100px of drag = 1.0× size change (so dragging 50px = +0.5×).
+      // Range is 0.1 (smallest, per user spec) to 10 (largest).
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {
@@ -733,8 +851,9 @@ function SpeakerCard({
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
 }) {
-  // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
-  const photoSize = Math.max(0.25, Math.min(4, speaker.photoSize ?? 1));
+  // photoSize: 1 = 56px (default), 2 = 112px, 0.1 = 5.6px (smallest per
+  // user spec), 10 = 560px (largest). Clamped to [0.1, 10].
+  const photoSize = Math.max(0.1, Math.min(10, speaker.photoSize ?? 1));
   const photoPx = Math.round(56 * photoSize);
   return (
     <div className="flex items-start gap-3 rounded-lg bg-white/95 backdrop-blur-sm border border-black/10 p-2.5 shadow-sm">
@@ -854,7 +973,8 @@ function SponsorLogo({
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 }) {
-  const sizeMult = Math.max(0.25, Math.min(6, sponsor.logoSize ?? 1));
+  // logoSize: 1 = 32px height (default). Range [0.1, 10] per user spec.
+  const sizeMult = Math.max(0.1, Math.min(10, sponsor.logoSize ?? 1));
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
 
@@ -892,7 +1012,8 @@ function SponsorLogo({
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.25, Math.min(6, r.startSize + delta));
+      // Range [0.1, 10] per user spec.
+      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
       onSizeChange(slot, next);
     };
     const onUp = () => {

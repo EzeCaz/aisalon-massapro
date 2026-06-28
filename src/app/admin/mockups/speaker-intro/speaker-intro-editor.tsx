@@ -13,6 +13,7 @@ import {
   Loader2,
   Wand2,
   FormInput,
+  Save,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -330,6 +331,57 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /**
+   * Save the current mockup as the default for the selected event.
+   *
+   * Workflow:
+   *   1. Generate a PNG snapshot of the canvas (via html-to-image's toPng).
+   *   2. POST to /api/admin/events/[id]/mockup-defaults with:
+   *        - type: "speaker-intro"
+   *        - dataJson: the current SpeakerIntroData
+   *        - pngBase64: the data URL
+   *   3. The API uploads the PNG to Vercel Blob (brand-assets/) and
+   *      upserts an EventMockupDefault row. The PNG then shows up in
+   *      /admin/images under the brand-assets section, tagged with
+   *      the event name + mockup type.
+   */
+  const [savingDefault, setSavingDefault] = useState(false);
+  async function handleSaveAsDefault() {
+    const eventId = data.event.sourceEventId;
+    if (!eventId) {
+      alert(
+        "No event is currently selected. Use the 'Auto-fill from event' dropdown at the top to pick an event first.",
+      );
+      return;
+    }
+    setSavingDefault(true);
+    try {
+      const dataUrl = await getPngDataUrl();
+      const res = await fetch(`/api/admin/events/${eventId}/mockup-defaults`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "speaker-intro",
+          dataJson: JSON.stringify(data, null, 2),
+          pngBase64: dataUrl,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `HTTP ${res.status}`);
+      }
+      const result = await res.json();
+      alert(
+        `✓ Saved as default speaker-intro for "${data.event.name}".\n\nThe PNG snapshot is now in /admin/images under brand-assets.`,
+      );
+    } catch (err) {
+      console.error("Save as default failed:", err);
+      alert(`Save as default failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSavingDefault(false);
+    }
+  }
+
   // --- visibility toggle ----------------------------------------------
 
   /**
@@ -464,6 +516,20 @@ export function SpeakerIntroEditor({ events }: Props) {
         >
           <Download className="h-3.5 w-3.5" />
           {downloading ? "Exporting…" : "Download"}
+        </button>
+        <button
+          type="button"
+          onClick={handleSaveAsDefault}
+          disabled={savingDefault || !!parseError}
+          title={
+            data.event.sourceEventId
+              ? `Save as default speaker-intro for "${data.event.name}"`
+              : "Pick an event from the dropdown first"
+          }
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#D8004D] disabled:opacity-50"
+        >
+          {savingDefault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {savingDefault ? "Saving…" : "Save as event default"}
         </button>
         <ShareButtons
           getPngDataUrl={getPngDataUrl}

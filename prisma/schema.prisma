@@ -183,6 +183,9 @@ model Event {
   presentations PresentationFile[]
   rsvps         EventRsvp[]
   coHosts       EventCoHost[]
+  /// Saved mockup defaults (one per type). Set via the "Save as default
+  /// for event" button in each mockup editor.
+  mockupDefaults EventMockupDefault[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -260,6 +263,43 @@ model EventAgendaItem {
   panelists      Speaker[] @relation("AgendaPanelist")
   presentations  PresentationFile[] // files uploaded for this specific agenda item
   createdAt      DateTime @default(now())
+}
+
+// ---------------------------- Event Mockup Defaults ----------------------------
+
+/// One saved mockup default for an event. Each event can have at most one
+/// default per mockup type (speaker-intro, meet-the-speaker,
+/// agenda-profile, event-profile). When the admin clicks "Save as default
+/// for event" in a mockup editor, the canvas JSON is serialized into
+/// `dataJson`, and a PNG snapshot is uploaded to Vercel Blob (URL stored
+/// in `imageUrl`). The PNG is also added to /admin/images brand-assets
+/// with `caption` = `${eventName} — ${mockupType}`.
+///
+/// For the `event-profile` mockup type, saving also sets the event's
+/// mainImageId to point at the newly-created EventImage row (so the
+/// event's main image at /events/[slug] updates immediately).
+model EventMockupDefault {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Mockup type: "speaker-intro" | "meet-the-speaker" | "agenda-profile" | "event-profile"
+  type         String
+  /// Full JSON serialization of the mockup data (SpeakerIntroData, etc.)
+  dataJson     String
+  /// URL of the PNG snapshot in Vercel Blob (brand-assets/ prefix)
+  imageUrl     String
+  /// Caption shown in /admin/images — typically "${eventName} — ${type}"
+  caption      String?
+  /// Optional pointer to the EventImage row created from the snapshot
+  /// (so we can update the event's mainImage). Null when no EventImage
+  /// row was created (e.g. for non-event-profile mockup types, or when
+  /// the snapshot upload failed but we still saved the JSON).
+  eventImageId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([eventId, type])
+  @@index([eventId])
 }
 
 // ---------------------------- Event Images ----------------------------
