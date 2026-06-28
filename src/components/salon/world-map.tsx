@@ -343,23 +343,23 @@ export function WorldMap() {
               </svg>
             </div>
 
-            {/* Legend — full brand-book palette */}
+            {/* Legend — hosting cities, each shown with its assigned brand color */}
             <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-border">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
                 <span className="text-[0.6rem] font-bold uppercase tracking-wider text-foreground/60">
-                  Brand palette:
+                  Hosting cities:
                 </span>
-                {BRAND_COLORS_LIST.map(([name, hex]) => (
+                {CITIES.map((city) => (
                   <span
-                    key={name}
+                    key={city.name}
                     className="inline-flex items-center gap-1.5"
-                    title={name}
+                    title={`${city.name}, ${city.country}`}
                   >
                     <span
                       className="w-2.5 h-2.5 rounded-full ring-1 ring-foreground/10"
-                      style={{ backgroundColor: hex }}
+                      style={{ backgroundColor: BRAND_HEX[city.color] }}
                     />
-                    <span className="capitalize">{name}</span>
+                    <span>{city.name}</span>
                   </span>
                 ))}
               </div>
