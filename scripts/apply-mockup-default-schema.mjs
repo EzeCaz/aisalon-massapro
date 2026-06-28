@@ -12,8 +12,12 @@
 
 import { PrismaClient } from "@prisma/client";
 
-const VERCEL_TOKEN = "VERCEL_PAT_REDACTED";
-const PROJECT_ID = "prj_aoKtARAel8wlmcIlLRjjSPKshMLA";
+const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
+const PROJECT_ID = process.env.VERCEL_PROJECT_ID || "prj_aoKtARAel8wlmcIlLRjjSPKshMLA";
+if (!VERCEL_TOKEN) {
+  console.error("ERROR: set VERCEL_TOKEN env var (Vercel PAT with project env read access)");
+  process.exit(1);
+}
 
 async function getProdDatabaseUrl() {
   // Get the env var ID for DATABASE_URL
