@@ -90,13 +90,17 @@ export function SpeakersTabClient({
       if (eventFilter !== "ALL" && s.eventId !== eventFilter) return false;
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
+      // Defensive: API should always include `event`, but if a future
+      // code path returns a speaker without it we degrade gracefully
+      // instead of throwing "Cannot read properties of undefined".
+      const eventTitle = s.event?.title ?? "";
       return (
         s.name.toLowerCase().includes(q) ||
         (s.role || "").toLowerCase().includes(q) ||
         (s.company || "").toLowerCase().includes(q) ||
         (s.topic || "").toLowerCase().includes(q) ||
         (s.contactEmail || "").toLowerCase().includes(q) ||
-        s.event.title.toLowerCase().includes(q)
+        eventTitle.toLowerCase().includes(q)
       );
     });
   }, [speakers, search, eventFilter]);
@@ -240,17 +244,23 @@ export function SpeakersTabClient({
                     ) : null}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell align-top">
-                    <Link
-                      href={`/events/${s.event.slug}`}
-                      className="inline-flex items-center gap-1 text-[#820A7D] hover:underline"
-                      target="_blank"
-                    >
-                      {s.event.title}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                    <div className="text-xs text-black/50">
-                      {new Date(s.event.startsAt).toLocaleDateString()}
-                    </div>
+                    {s.event ? (
+                      <Link
+                        href={`/events/${s.event.slug}`}
+                        className="inline-flex items-center gap-1 text-[#820A7D] hover:underline"
+                        target="_blank"
+                      >
+                        {s.event.title}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-black/30 italic">no event</span>
+                    )}
+                    {s.event && (
+                      <div className="text-xs text-black/50">
+                        {new Date(s.event.startsAt).toLocaleDateString()}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell align-top">
                     {s.user ? (

@@ -83,8 +83,14 @@ export async function PATCH(
       userId: resolvedUserId,
       ...(order !== undefined ? { order: Number(order) } : {}),
     },
+    // IMPORTANT: include `event` + `user` + `_count` to match the shape
+    // returned by GET / POST — otherwise the client's handleSaved
+    // crashes on `speaker.event.slug` (the page-error "Cannot read
+    // properties of undefined (reading 'slug')" bug).
     include: {
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
       user: { select: { id: true, email: true, name: true } },
+      _count: { select: { images: true, presentations: true, messages: true } },
     },
   });
 

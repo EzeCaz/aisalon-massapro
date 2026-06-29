@@ -6,6 +6,8 @@ import { can, isSuperAdmin, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
+import { WhatsAppLinkEditor } from "./whatsapp-link-editor";
+import { getPublicSettings } from "@/lib/site-settings";
 
 export const metadata = { title: "Brand Images — AI Salon Tel Aviv" };
 
@@ -59,6 +61,9 @@ export default async function AdminImagesPage() {
 
   const isSuper = isSuperAdmin({ email: me.email, role: me.role });
 
+  // Load the current WhatsApp link so the editor can pre-fill the input.
+  const settings = await getPublicSettings();
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
@@ -92,6 +97,16 @@ export default async function AdminImagesPage() {
         </div>
 
         <ImagesGallery />
+
+        {/* WhatsApp group link editor — sits below the brand images gallery.
+            SUPER_ADMIN-only writes (enforced by the API), but visible to any
+            admin viewer so they can see the current value. */}
+        <div className="mt-8">
+          <WhatsAppLinkEditor
+            currentUrl={settings.whatsappGroupUrl}
+            canEdit={isSuper}
+          />
+        </div>
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
