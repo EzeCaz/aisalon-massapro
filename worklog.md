@@ -445,3 +445,32 @@ Stage Summary:
 - GitHub PAT saved to .env as GH_TOKEN; git remote URL updated to embed the PAT so the backup script can authenticate.
 - To back-fill the Vercel dpl_ IDs: either provide a VERCEL_TOKEN env var (so I can query the Vercel API automatically) or manually copy the dpl_ ID from the Vercel dashboard and re-run:
     scripts/make-milestone-backup.sh V5.10 MAJOR "download/v5.10-backup/notes.md" dpl_xxxxx --force
+
+---
+Task ID: v5.11
+Agent: main (Super Z)
+Task: Two follow-up fixes per user spec 2026-06-30: (1) Speaker-intro pin connector lines must move with their pin when Front/Back is clicked. (2) Event Lineup should show company after comma next to speaker title.
+
+Work Log:
+- Read worklog.md (last entry: V5.9+V5.10 backup).
+- Issue 1 (pin connector line z-index):
+  - Root cause: in V5.10, the per-pin z-index only moved the pin dot + label to the front/back. The connector line stayed in a shared SVG at z=1 (behind the hero image), so when the user clicked Front on a pin, the line detached from the pin and disappeared behind the hero image.
+  - Fix: refactored speaker-intro-canvas.tsx pin rendering. Removed the shared SVG. Each pin now renders as a single full-canvas wrapper div (absolute inset-0, zIndex = pin.z) containing THREE siblings: (a) its own SVG with the single connector line from (50,50) to (pin.x, pin.y), (b) the dot (CSS circle at pin position), (c) the label (text at pin position). All three share the same wrapper z-index, so clicking Front/Back on a pin moves the line + dot + label together as one unit.
+- Issue 2 (event lineup shows company):
+  - Located "The lineup" section in src/app/events/[slug]/tabs/agenda-tab.tsx (~line 1206).
+  - The Speaker type already had a 'company: string | null' field — no schema change needed. The lineup simply wasn't rendering it.
+  - Updated the role display: before = {s.role} → "VP Applied AI"; after = {s.role}{s.company ? `, ${s.company}` : ""} → "VP Applied AI, AI21".
+  - Only displayed when both role AND company are present. When company is null/empty, behavior is unchanged.
+  - Did NOT touch the agenda card speaker display (line ~1063, "name · role" inline) or the contact-speaker dialog (line ~436) — the user specifically said "On the event Line Up", which is the right column.
+- Build verification: npx next build → ✓ Compiled successfully in 14.8s.
+- Committed as V5.11 (commit 7662724): 2 files changed, 42 insertions(+), 38 deletions(-).
+- Pushed V5.11 to origin/main — triggers Vercel auto-deploy.
+- Ran V5.11 milestone backup: local tarball + Google Drive upload + GitHub release v5.11 + manifest.
+
+Stage Summary:
+- V5.11 PATCH: 2 follow-up fixes, both built and verified. Pushed + backed up.
+- Backup locations:
+  - Local: download/aisalon-massapro-V5.11-source.tar.gz
+  - Drive: shared folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
+  - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.11
+- Vercel dpl_ ID pending (no Vercel API token in env).
