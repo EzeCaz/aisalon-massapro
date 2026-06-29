@@ -121,11 +121,16 @@ export default async function LoginPage() {
       {/* Right — login form (white) */}
       <section className="flex flex-col justify-center p-8 sm:p-12 lg:p-16 bg-white">
         <div className="w-full max-w-sm mx-auto">
-          {/* Mobile-only logo with Falafel Meerkat mark */}
+          {/* Mobile-only logo with Falafel Meerkat mark.
+              NOTE: We deliberately use variant="horizontal" (no built-in
+              tagline) and render ONE combined subtitle line below —
+              "Empowering AI Connections in Tel Aviv" — so the slogan is
+              shown exactly once on mobile (previous version duplicated it
+              between the logo tagline and the subtitle). */}
           <div className="md:hidden mb-8 flex flex-col items-center text-center">
-            <AiSalonLogoServer variant="horizontal-tagline" color="black" className="text-[1.6rem]" markSrc={markUrl} />
+            <AiSalonLogoServer variant="horizontal" color="black" className="text-[1.6rem]" markSrc={markUrl} />
             <div className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/60">
-              Tel Aviv · Empowering AI Connections
+              Empowering AI Connections in Tel Aviv
             </div>
           </div>
 

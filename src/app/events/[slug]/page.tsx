@@ -15,7 +15,12 @@ type Params = { params: Promise<{ slug: string }> };
 export default async function EventDetailPage({ params }: Params) {
   const { slug } = await params;
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) redirect(`/login?callbackUrl=/events/${slug}`);
+  // Anonymous visitors get redirected to the PUBLIC event landing
+  // page (/e/[slug]) instead of /login. The public page shows the
+  // full event details + a "Join AI Salon" CTA that routes to
+  // /login?callbackUrl=/e/[slug]. This makes /events/[slug] reachable
+  // from the public events list without forcing a login wall.
+  if (!session?.user?.email) redirect(`/e/${slug}`);
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },

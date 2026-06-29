@@ -74,16 +74,86 @@ export type EventForEditor = {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Convert an ISO date string to a `datetime-local` input value
+ * ("YYYY-MM-DDTHH:mm") interpreted in the EVENT's timezone
+ * (Asia/Jerusalem for the Tel Aviv chapter), NOT the browser's
+ * local timezone.
+ *
+ * IMPORTANT — why we hard-code Asia/Jerusalem instead of using
+ * the browser's local time:
+ *   The admin form must always show the wall-clock time that the
+ *   event happens at IN THE EVENT'S CITY. If we used browser-local
+ *   time, an admin on a UTC server (or a VPN, or travelling) would
+ *   see the wrong pre-filled value, save it back, and silently
+ *   shift every event by hours. The mockups (speaker-intro /
+ *   agenda-profile / meet-the-speaker) all hard-code Asia/Jerusalem
+ *   for the same reason — this function keeps the source form
+ *   consistent with them.
+ *
+ * Mirrors `toLocalDatetimeInput` in admin-agenda-tab.tsx so the
+ * event start/end times and the agenda item times use the same
+ * conversion. Without this, an admin could save an event start of
+ * 18:00 IDT (15:00 UTC) but then see the agenda tab pre-fill
+ * 18:00 IDT while the event details tab pre-fills 15:00 — leading
+ * to the "3 hours ahead" mockup bug the user reported.
+ */
 function isoToLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jerusalem",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
   } catch {
     return "";
   }
+}
+
+/**
+ * Convert a `datetime-local` input value ("YYYY-MM-DDTHH:mm")
+ * interpreted in the EVENT's timezone (Asia/Jerusalem) back to a
+ * UTC ISO string for storage.
+ *
+ * Mirrors `fromLocalDatetimeInput` in admin-agenda-tab.tsx so the
+ * round-trip is symmetric. We compute the Asia/Jerusalem offset
+ * (UTC+2 IST / UTC+3 IDT) at the given wall-clock date and subtract
+ * it to get UTC.
+ */
+function localInputToUtcIso(local: string): string {
+  if (!local) return new Date(0).toISOString();
+  // Treat the wall-clock string as UTC first to get a stable Date obj.
+  const asIfUtc = new Date(local + ":00Z");
+  if (isNaN(asIfUtc.getTime())) {
+    // Fallback: let the server interpret as UTC.
+    return new Date(local).toISOString();
+  }
+  // Ask Intl for Asia/Jerusalem's offset on this date.
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jerusalem",
+    timeZoneName: "shortOffset",
+  }).formatToParts(asIfUtc);
+  const tzName = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+  const match = tzName.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  let offsetMinutes = 0;
+  if (match) {
+    const sign = match[1] === "+" ? 1 : -1;
+    const hours = parseInt(match[2], 10);
+    const minutes = match[3] ? parseInt(match[3], 10) : 0;
+    offsetMinutes = sign * (hours * 60 + minutes);
+  }
+  // Wall-clock IDT 15:00 = UTC 12:00 (subtract +3h offset).
+  const utc = new Date(asIfUtc.getTime() - offsetMinutes * 60000);
+  return utc.toISOString();
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,8 +238,8 @@ export function EventEditor({
           subtitle: subtitle.trim() || null,
           chapter: chapter.trim() || "Tel Aviv",
           slug: slug.trim() || undefined,
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: new Date(endsAt).toISOString(),
+          startsAt: localInputToUtcIso(startsAt),
+          endsAt: localInputToUtcIso(endsAt),
           venue: venue.trim() || null,
           address: address.trim() || null,
           city: city.trim() || null,
