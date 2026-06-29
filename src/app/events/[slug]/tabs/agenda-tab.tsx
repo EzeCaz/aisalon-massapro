@@ -434,7 +434,10 @@ function ContactSpeakerDialog({
               {speakerDisplayName}
             </div>
             {speaker.role && (
-              <div className="text-xs text-black/60 truncate">{speaker.role}</div>
+              <div className="text-xs text-black/60 truncate">
+                {speaker.role}
+                {speaker.company ? `, ${speaker.company}` : ""}
+              </div>
             )}
           </div>
         </div>
@@ -1061,7 +1064,13 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                         <span className="font-bold">Moderator: </span>
                       )}
                       {item.speaker.name}
-                      {item.speaker.role && <span> · {item.speaker.role}</span>}
+                      {item.speaker.role && (
+                        <span>
+                          {" · "}
+                          {item.speaker.role}
+                          {item.speaker.company ? `, ${item.speaker.company}` : ""}
+                        </span>
+                      )}
                     </div>
                   )}
                   {item.type === "PANEL" &&

@@ -503,10 +503,13 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
                   <User className="h-3.5 w-3.5 text-black/40" />
                   <h3 className="text-sm font-bold text-black">{speaker.name}</h3>
                   {speaker.role && (
-                    <span className="text-xs text-black/60">{speaker.role}</span>
+                    <span className="text-xs text-black/60">
+                      {speaker.role}
+                      {speaker.company ? `, ${speaker.company}` : ""}
+                    </span>
                   )}
-                  {speaker.company && (
-                    <span className="text-xs text-black/40">· {speaker.company}</span>
+                  {speaker.company && !speaker.role && (
+                    <span className="text-xs text-black/40">{speaker.company}</span>
                   )}
                   <Badge variant="secondary" className="bg-black/5 text-black/60 ml-auto">
                     {group.length} file{group.length === 1 ? "" : "s"}
