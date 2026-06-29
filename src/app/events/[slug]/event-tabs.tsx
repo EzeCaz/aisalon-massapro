@@ -9,6 +9,7 @@ import { SlideshowTab } from "./tabs/slideshow-tab";
 import { PresentationsTab } from "./tabs/presentations-tab";
 import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
 import { ManageEventTab } from "./tabs/manage-event-tab";
+import { EventPrepTab } from "./tabs/event-prep-tab";
 import type { CoHost } from "@/components/admin/event-editor";
 import type { Rsvp } from "@/components/events/rsvp-check-in-card";
 
@@ -150,6 +151,14 @@ export function EventTabs({
         <TabsTrigger value="presentations" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Presentations
         </TabsTrigger>
+        {canManageEvent && (
+          <TabsTrigger
+            value="event-prep"
+            className="data-[state=active]:bg-[#00E6FF]/20 data-[state=active]:text-[#007E72]"
+          >
+            🎯 Event prep
+          </TabsTrigger>
+        )}
         {isAdmin && (
           <TabsTrigger
             value="admin-agenda"
@@ -183,6 +192,31 @@ export function EventTabs({
       <TabsContent value="presentations" className="mt-6">
         <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
+      {canManageEvent && (
+        <TabsContent value="event-prep" className="mt-6">
+          <EventPrepTab
+            event={{
+              id: event.id,
+              slug: event.slug,
+              title: event.title,
+              speakers: event.speakers.map((s) => ({
+                id: s.id,
+                name: s.name,
+                role: s.role,
+                company: s.company,
+                photoUrl: s.photoUrl,
+              })),
+            }}
+            me={{
+              id: me.id,
+              name: me.name,
+              email: me.email,
+              role: me.role,
+              isSuperAdmin,
+            }}
+          />
+        </TabsContent>
+      )}
       {isAdmin && (
         <TabsContent value="admin-agenda" className="mt-6">
           <AdminAgendaTab

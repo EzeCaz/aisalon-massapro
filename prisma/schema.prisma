@@ -98,6 +98,9 @@ model User {
   eventCoHosts      EventCoHost[]    @relation("EventCoHostUser")
   coHostAddedBy     EventCoHost[]    @relation("EventCoHostAdder")
   // ----------------------------------------------------------------
+  // Event prep — suggestions this user has submitted (audit trail).
+  prepSuggestions   EventPrepSuggestion[] @relation("EventPrepSuggester")
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -186,6 +189,10 @@ model Event {
   /// Saved mockup defaults (one per type). Set via the "Save as default
   /// for event" button in each mockup editor.
   mockupDefaults EventMockupDefault[]
+  /// Event prep questions (generic + per-speaker) for the "Event prep" tab.
+  prepQuestions  EventPrepQuestion[]
+  /// Suggested edits to those questions (from admins/co-hosts).
+  prepSuggestions EventPrepSuggestion[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -218,6 +225,7 @@ model Speaker {
   // panelist (not the moderator).
   panelItems     EventAgendaItem[] @relation("AgendaPanelist")
   messages       SpeakerMessage[] // messages left by community members for this speaker
+  prepQuestions  EventPrepQuestion[] // personalized prep questions for this speaker
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -575,4 +583,91 @@ model SiteSetting {
   value     String
   updatedAt DateTime @updatedAt
   updatedBy String?
+}
+
+// ---------------------------- Event Prep ----------------------------
+
+/// A question prepared for an event's "Event prep" tab. Each event has:
+///   - GENERIC questions (scope="GENERIC", speakerId=null) — apply to all
+///     speakers on that event. Rendered on the right column of the tab.
+///   - SPEAKER questions (scope="SPEAKER", speakerId=<id>) — personalized
+///     for one speaker based on their expertise. Rendered in that speaker's
+///     box on the left column.
+///
+/// Questions are seeded by Super Admin via the "Generate questions" button
+/// or written directly. Super Admin can edit any field. Admins and
+/// Co-hosts of the event can SUGGEST changes (see EventPrepSuggestion).
+model EventPrepQuestion {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// The Speaker this question is for. null when scope="GENERIC".
+  speakerId   String?
+  speaker     Speaker? @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  /// "GENERIC" = applies to all speakers (rendered on the right column).
+  /// "SPEAKER"  = personalized for the linked speaker (left column box).
+  scope       String   @default("SPEAKER") // "GENERIC" | "SPEAKER"
+  /// The question text. Edited by Super Admin; suggested-edits by
+  /// admins/co-hosts create EventPrepSuggestion rows instead of mutating
+  /// this field directly.
+  text        String
+  /// Optional short tag (e.g. "behavioral economics", "edge AI") to help
+  /// admins scan the list. Free-form.
+  tag         String?
+  /// Order within the (event, scope, speaker) group. Default 0.
+  order       Int      @default(0)
+  suggestions EventPrepSuggestion[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([eventId, scope])
+  @@index([speakerId])
+}
+
+/// A suggested edit to a question, submitted by an Admin or Co-host.
+/// Super Admin can accept (apply the suggested text to the question +
+/// mark status="ACCEPTED") or reject (status="REJECTED"). The suggestion
+/// is preserved (never deleted) so the audit trail of who suggested what
+/// stays intact.
+///
+/// A user can also suggest a NEW question (questionId=null,
+/// scope+speakerId+text set) — Super Admin can promote it to a real
+/// EventPrepQuestion by accepting.
+model EventPrepSuggestion {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// The question this suggestion is about. null = suggestion for a NEW
+  /// question (not yet attached to any existing one).
+  questionId  String?
+  question    EventPrepQuestion? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /// When questionId is null (new-question suggestion), these fields
+  /// tell the Super Admin where the new question should go:
+  ///   - scope = "GENERIC" | "SPEAKER"
+  ///   - speakerId = which speaker (null when scope="GENERIC")
+  proposedScope     String?
+  proposedSpeakerId String?
+  /// The proposed new text for the question (when questionId is set),
+  /// OR the proposed text for a new question (when questionId is null).
+  proposedText      String
+  /// Optional proposed tag (only meaningful for new-question suggestions).
+  proposedTag       String?
+  /// Who suggested the change. Snapshot of name + email in case the
+  /// user is later deleted.
+  suggestedBy       String
+  suggestedByUserId String?
+  suggestedByUser   User?   @relation("EventPrepSuggester", fields: [suggestedByUserId], references: [id], onDelete: SetNull)
+  /// "PENDING" (default) | "ACCEPTED" | "REJECTED".
+  /// Only Super Admin can change this. Once ACCEPTED, the suggested
+  /// text is applied to the question (or a new question is created).
+  status            String  @default("PENDING")
+  /// Optional note from the Super Admin when accepting/rejecting.
+  reviewerNote      String?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([eventId, status])
+  @@index([questionId])
+  @@index([suggestedByUserId])
 }
