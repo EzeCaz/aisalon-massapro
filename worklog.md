@@ -399,3 +399,40 @@ Stage Summary:
     4. Watch Vercel, grab the dpl_ ID, re-run with the 4th arg
 - All 4 backups (local tarball, Drive, GitHub release, Vercel pin) are
   produced by ONE command, fully reproducible.
+
+---
+Task ID: V5.8
+Agent: main (claude)
+Task: (1) Member merge should copy secondary email to primary as secondary email. (2) Meet-the-speaker mockup autofill should let admin pick which speaker to feature.
+
+Work Log:
+- Task 1 — Merge email preservation (src/app/api/admin/members/merge/route.ts):
+  - Added `secondaryEmails: true` to the `include` on the user fetch (was missing — the relation existed but was never loaded).
+  - Added step 8b inside the merge transaction: for each secondary, copy its primary email to a new UserEmail row on primary (labeled "Merged from <name>"), then reassign its existing UserEmail rows to primary. Conflicting emails (already on primary) are deleted from the secondary — primary's copy wins.
+  - Critical fix: without this, deleting secondaries would (a) cascade-delete their UserEmail rows AND (b) lose their primary email entirely, silently breaking sign-in for any merged user.
+  - No schema change needed — UserEmail model + auth fallback (src/lib/auth.ts L119-131) + CRUD API at /api/admin/members/[id]/emails already existed since V4.x. The merge route just wasn't using them.
+  - Updated MergeMembersDialog preview text in admin-members-table.tsx to mention email preservation, so admins know the secondary's email isn't lost.
+
+- Task 2 — Meet-the-speaker speaker picker (src/app/admin/mockups/meet-the-speaker/meet-the-speaker-editor.tsx):
+  - Discovered mapEventToMeetTheSpeakerData() in event-mapper.ts ALREADY accepted a preferredSpeakerId parameter (L131) but the editor never passed it.
+  - Added `lastFetchedEvent` + `selectedSpeakerId` state. Modified handleEventPick to stash the fetched event so the speaker dropdown can render without an extra API call.
+  - Added handleSpeakerPick(speakerId) that re-runs the mapper with preferredSpeakerId, calling applyData() to update the canvas + JSON.
+  - Added a second <select> in the pink autofill row, mirroring the event picker's style (Calendar icon → User icon, same pink-tinted border, same flex layout). Disabled until an event is picked. Options show "name · role · company". Resets to "Default (first speaker)" when the event changes.
+  - Empty-state option text adapts: "Pick an event first" / "No speakers on this event" / "Default (first speaker)".
+
+- Side quest — secret scanner block (caught at git push):
+  - First push attempt was REJECTED by GitHub secret scanner because scripts/upload-backup-to-drive.py (committed locally in a prior WIP commit) had the OAuth client secret hardcoded.
+  - Refactored both scripts/upload-backup-to-drive.py AND scripts/google-drive-upload.py to read GDRIVE_CLIENT_ID + GDRIVE_CLIENT_SECRET from env vars. Added the secrets to .env (gitignored).
+  - Added scripts/.gdrive-token.json, download/aisalon-massapro-V*.tar.gz, download/v*-backup/, download/aisalon-massapro-V*-MANIFEST.txt to .gitignore so future backups don't trip the scanner.
+  - Rewrote the 3 unpushed commits (91b2b01, 29696fb, ca7544a) via `git reset --soft origin/main` + selective re-staging. Final commit a32cf2b contains only safe content (verified with `git diff --cached | grep -E "GOCSPX|npg_|ya29\\."` → no matches).
+
+- TypeScript validation: 26 errors before AND after my changes — all pre-existing in share-buttons.tsx, bulk-tags/route.ts, events/page.tsx, auth-guards.ts. Zero new errors introduced.
+
+- Pushed to origin/main as commit a32cf2b. Vercel auto-deploying.
+
+Stage Summary:
+- Both user-requested features shipped in V5.8 (commit a32cf2b).
+- Production: https://aisalon.massapro.com (Vercel deploying)
+- Preview: https://aisalon-massapro-<new-hash>-ezecazs-projects.vercel.app
+- Backup infrastructure (scripts/make-milestone-backup.sh + scripts/upload-backup-to-drive.py) is now safe to commit (env-based secrets) and ready for V5.8 milestone backup once Vercel finishes deploying.
+- Local-only artifacts (tarballs, manifests, OAuth token) are now gitignored — they live in /home/z/my-project/download/ and /home/z/my-project/scripts/.gdrive-token.json only.

@@ -1,0 +1,1872 @@
+Affiliate UTM docs:
+
+/home/z/my-project/shared/utm-tracking-spec.md
+
+# MassaPro UTM & Tracking Implementation — Full Specification
+
+**Audience**: Other AI agents working on the MassaPro codebase
+**Scope**: `/expert` page (`src/app/expert/page.tsx`), shared with homepage LeadForm (`src/components/LeadForm.tsx`), layout (`src/app/layout.tsx`), API (`src/app/api/submit-lead/route.ts`), Google Apps Script (`download/Massapro_GoogleSheet_Script.js`), and Backup Tracker (`src/lib/backup-tracker.ts`)
+**Last updated**: 2026-06-27
+
+---
+
+## 1. Overview — Where Data Flows
+
+The `/expert` page (and homepage) uses **5 parallel tracking channels** that all fire on the same user actions. Every channel is fire-and-forget — failures in one channel never block another.
+
+```
+User clicks CTA / submits form
+        │
+        ├─→ (1) Meta Pixel (Facebook)            → Facebook Ads Manager
+        ├─→ (2) Google Analytics 4 (gtag)        → GA4 Property G-Z2TP8Y923Q
+        ├─→ (3) MassaPro Affiliate Tracker       → aff.massapro.com dashboard
+        ├─→ (4) Backup Tracker (local SQLite)    → /api/track/* → Prisma DB
+        └─→ (5) Lead Submission API              → Google Calendar + Gmail + Google Sheet
+```
+
+All 5 channels are loaded globally in `src/app/layout.tsx` via Next.js `<Script>` tags. Page components just call `fbq()`, `gtag()`, `MassaProAffiliate.*`, and `BackupTracker.*` — these globals are guaranteed to exist (or be safely skipped if blocked).
+
+---
+
+## 2. UTM Parameter Capture (Frontend)
+
+### 2.1 Standard UTM Parameters (5)
+
+Captured from URL query string on page mount, stored in React state, sent with every lead submission.
+
+| URL Param       | State Key        | Sent As (API)   | Sheet Column |
+|-----------------|------------------|------------------|--------------|
+| `?utm_source=`  | `utmParams.utm_source`  | `utm_source`  | Q |
+| `?utm_medium=`  | `utmParams.utm_medium`  | `utm_medium`  | R |
+| `?utm_campaign=`| `utmParams.utm_campaign`| `utm_campaign`| S |
+| `?utm_content=` | `utmParams.utm_content` | `utm_content` | T |
+| `?utm_term=`    | `utmParams.utm_term`    | `utm_term`    | U |
+
+### 2.2 Affiliate ID — 3 URL Formats (Priority Order)
+
+The Affiliate ID is **not** a standard UTM param — MassaPro uses 3 custom URL formats. The frontend resolves them in this priority order:
+
+| Priority | URL Format               | Code Lookup                          | Example                          |
+|----------|--------------------------|--------------------------------------|----------------------------------|
+| 1 (highest) | `?Aff-Id=MP-XXX-001`  | `searchParams.get('Aff-Id')`         | `https://site.com/expert?Aff-Id=MP-ROBERTO-001` |
+| 2 (medium)  | `?Aff+Id=MP-XXX-001`  | `searchParams.get('Aff Id')`         | `https://site.com/expert?Aff+Id=MP-ROBERTO-001` (space encoded as `+`) |
+| 3 (lowest)  | `?utm=MP-XXX-001`     | `searchParams.get('utm')`            | `https://site.com/expert?utm=MP-ROBERTO-001` |
+
+**Sent As (API)**: `affId`
+**Sheet Column**: V (Affiliate ID)
+
+### 2.3 Frontend Implementation Pattern (Expert Page)
+
+```tsx
+// src/app/expert/page.tsx — HeroSection() component
+const searchParams = useSearchParams()
+
+// Capture UTM params once on mount (useState with initializer — never re-reads URL)
+const [utmParams] = useState(() => ({
+  utm_source: searchParams.get('utm_source') || '',
+  utm_medium: searchParams.get('utm_medium') || '',
+  utm_campaign: searchParams.get('utm_campaign') || '',
+  utm_content: searchParams.get('utm_content') || '',
+  utm_term: searchParams.get('utm_term') || '',
+}))
+
+// Resolve Affiliate ID with priority: Aff-Id > Aff Id > utm
+const [affId] = useState<string>(() => {
+  const affIdHyphen = searchParams.get('Aff-Id')
+  if (affIdHyphen) return affIdHyphen
+  const affIdSpace = searchParams.get('Aff Id')
+  if (affIdSpace) return affIdSpace
+  const utmGeneric = searchParams.get('utm')
+  if (utmGeneric) return utmGeneric
+  return ''
+})
+```
+
+**Why `useState(() => ...)`**: This initializer runs once on mount and caches the value. If the user navigates with different UTMs (client-side navigation), the original UTMs are preserved — this is intentional, so we always attribute to the **first** landing URL.
+
+---
+
+## 3. Event Flow — 4 Phases (Chronological Order)
+
+### Phase 1: CTA Click (`handleGetNowClick()`)
+
+Triggered when user clicks any "Get Started" / "Get Now" button. Scrolls to the form AND fires 3 tracking events.
+
+| Channel | Code | Event Name | Parameters |
+|---------|------|------------|------------|
+| Meta Pixel | `fbq('trackCustom', 'FreeConsultClick', {...})` | `FreeConsultClick` (custom) | `button_location`, `page_name: 'Expert'`, `cta: 'consultation'` |
+| MassaPro Affiliate | `MassaProAffiliate.trackEvent('btn_get_now')` | `btn_get_now` | (none) |
+| GA4 | `gtag('event', 'get_now', {...})` | `get_now` | `button_location`, `page_name: 'Expert'` |
+
+```tsx
+function handleGetNowClick(location: string) {
+  // Meta Pixel
+  if (typeof window !== 'undefined' && typeof (window as any).fbq === 'function') {
+    ;(window as any).fbq('trackCustom', 'FreeConsultClick', {
+      button_location: location,
+      page_name: 'Expert',
+      cta: 'consultation'
+    })
+  }
+  // MassaPro Affiliate Tracker
+  safeMassaProCall(() => {
+    if (typeof (window as any).MassaProAffiliate?.trackEvent === 'function') {
+      ;(window as any).MassaProAffiliate.trackEvent('btn_get_now')
+    }
+  })
+  // GA4
+  if (typeof window !== 'undefined' && typeof (window as any).gtag === 'function') {
+    ;(window as any).gtag('event', 'get_now', {
+      button_location: location,
+      page_name: 'Expert'
+    })
+  }
+  // Scroll to form
+  document.getElementById('expert-lead-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+```
+
+### Phase 2: Form Open (on mount)
+
+Fires once when the HeroSection mounts (form is always visible on `/expert`, unlike homepage where form is in a dialog).
+
+| Channel | Code | Event Name | Parameters |
+|---------|------|------------|------------|
+| MassaPro Affiliate | `MassaProAffiliate.trackLeadFormOpen()` | `lead_form_open` | (none) |
+| Meta Pixel | `fbq('trackCustom', 'LeadFormOpen')` | `LeadFormOpen` (custom) | (none) |
+| GA4 | `gtag('event', 'lead_form_open', {...})` | `lead_form_open` | `event_category: 'engagement'`, `event_label: 'Lead Form Opened'`, `page_name: 'Expert'` |
+
+```tsx
+const [formOpenTracked, setFormOpenTracked] = useState(false)
+
+useEffect(() => {
+  if (!formOpenTracked) {
+    setFormOpenTracked(true)
+    safeMassaProCall(() => MassaProAffiliate.trackLeadFormOpen())
+    fbq('trackCustom', 'LeadFormOpen')
+    gtag('event', 'lead_form_open', {
+      event_category: 'engagement',
+      event_label: 'Lead Form Opened',
+      page_name: 'Expert',
+    })
+  }
+}, [formOpenTracked])
+```
+
+### Phase 3: Form Submit (Step 1 → Step 2 → API)
+
+The expert form is a **2-step wizard**:
+- **Step 1**: Personal info (firstName, lastName, email, mobile, companyUrl) — client-side validation only, no API call, no tracking
+- **Step 2**: Calendar slot + notes — calls `/api/submit-lead` on submit
+
+#### Request Body Sent to `/api/submit-lead`:
+
+```typescript
+{
+  // Personal info
+  firstName, lastName, email, mobile, companyUrl,
+  // Hardcoded defaults (expert page doesn't collect these)
+  industry: 'Other',
+  country: 'United States',
+  // Appointment
+  appointmentDate, appointmentTime, appointmentSlotId, timezone,
+  serviceType: 'AI Secretary / Virtual Assistant',
+  planType: 'Not Sure Yet',
+  notes: notes || 'Lead from /expert page',
+  // UTM + Affiliate (critical — spread last so they're always included)
+  ...utmParams,   // utm_source, utm_medium, utm_campaign, utm_content, utm_term
+  affId,          // resolved Affiliate ID
+}
+```
+
+### Phase 4: Post-Submit Tracking (after successful API response)
+
+Fires **only if** the API returns `res.ok`. This is the conversion event — the user has successfully booked.
+
+| Channel | Code | Event Name | Parameters |
+|---------|------|------------|------------|
+| Meta Pixel | `fbq('track', 'Schedule')` | `Schedule` (STANDARD event) | (none) |
+| GA4 | `gtag('event', 'schedule', {...})` | `schedule` | `event_category: 'conversion'`, `event_label: 'Consultation Scheduled'`, `page_name: 'Expert'` |
+| MassaPro Affiliate | `MassaProAffiliate.trackLead({...})` | `trackLead` | `lead_name`, `lead_email`, `lead_phone`, `lead_company`, `plan_type: 'Not Sure Yet'`, `initial_status: 'Booked Call'` |
+| Backup Tracker | `BackupTracker.trackLead({...})` | `trackLead` | `name`, `email`, `phone`, `company`, `planType` |
+
+```tsx
+// After setSubmitted(true):
+fbq('track', 'Schedule')  // STANDARD Meta event (not trackCustom)
+gtag('event', 'schedule', {
+  event_category: 'conversion',
+  event_label: 'Consultation Scheduled',
+  page_name: 'Expert',
+})
+safeMassaProCall(() => {
+  MassaProAffiliate.trackLead({
+    lead_name: `${firstName} ${effectiveLastName}`,
+    lead_email: email,
+    lead_phone: mobile,
+    lead_company: companyUrl || '',
+    plan_type: 'Not Sure Yet',
+    initial_status: 'Booked Call',
+  })
+})
+try {
+  BackupTracker.trackLead({
+    name: `${firstName} ${effectiveLastName}`,
+    email,
+    phone: mobile,
+    company: companyUrl,
+    planType: 'Not Sure Yet',
+  })
+} catch {}
+```
+
+**Note**: `BackupTracker.trackLead()` internally reads UTMs from the URL again (via `getUtmParams()`) and the affid via `getAffid()`, so UTM data is double-captured for the local DB.
+
+---
+
+## 4. Server-Side Flow — `/api/submit-lead` (5 Steps)
+
+After the frontend POSTs to `/api/submit-lead`, the server runs **5 sequential steps**. Each step is independently try/caught — failures don't block later steps (except Step 1 validation and Step 2 slot conflict).
+
+### Step 1: Validate Required Fields
+```typescript
+const requiredFields = ['firstName', 'lastName', 'email', 'mobile', 'country',
+                         'appointmentSlotId', 'appointmentDate', 'appointmentTime']
+```
+Returns `400` if any missing.
+
+### Step 2: Check Slot Availability (Google Calendar)
+Calls `isSlotAvailable()` from `src/lib/google-calendar.ts`. Returns `409` if slot is already booked.
+
+### Step 3: Create Google Calendar Event (with Google Meet link)
+Calls `createCalendarEvent()` — creates a 30-min event, adds attendee, generates Meet link. The calendar event description includes the Affiliate ID:
+```
+Consultation with John Smith
+Industry: Other
+Service: AI Secretary / Virtual Assistant
+Plan: Not Sure Yet
+Notes: Lead from /expert page
+Company: www.example.com
+Phone: 15551234567
+Country: United States
+Affiliate: MP-ROBERTO-001
+```
+
+### Step 4: Send Confirmation Email (Gmail SMTP)
+Always attempts to send, even if Step 3 failed. Email includes the Meet link, date, and time (Israel time).
+
+### Step 5: Submit to Google Sheet (Google Apps Script Web App)
+POSTs the full lead data (including all 5 UTM params + affId) to `GOOGLE_SCRIPT_URL` (env var).
+
+```typescript
+await fetch(GOOGLE_SCRIPT_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    // ... all form fields ...
+    utm_source: body.utm_source || '',
+    utm_medium: body.utm_medium || '',
+    utm_campaign: body.utm_campaign || '',
+    utm_content: body.utm_content || '',
+    utm_term: body.utm_term || '',
+    affId: body.affId || '',
+  }),
+})
+```
+
+**Mobile Sanitization**: Before sending to the Sheet, the server strips `+`, `-`, spaces, parentheses, and leading `00` from the mobile number. Example: `+1 (555) 123-4567` → `15551234567`.
+
+---
+
+## 5. Google Sheet Structure (Columns A–V)
+
+The Google Apps Script (`download/Massapro_GoogleSheet_Script.js`) writes to a sheet tab named **"Site"** (auto-created if missing).
+
+| Col | Header | Source | Example |
+|-----|--------|--------|---------|
+| A | First Name | form | John |
+| B | Last Name | form (or "N/A") | Smith |
+| C | Company Name | form (usually empty) | |
+| D | Company URL | form | www.example.com |
+| E | Industry | hardcoded | Other |
+| F | Email | form | john@biz.com |
+| G | Mobile | form (sanitized) | 15551234567 |
+| H | Country | hardcoded | United States |
+| I | State | form (usually empty) | |
+| J | Appointment Date | form | 2026-06-28 |
+| K | Appointment Time | form | 10:00 |
+| L | Timezone | auto-detected | America/New_York |
+| M | Service Type | hardcoded | AI Secretary / Virtual Assistant |
+| N | Plan Type | hardcoded | Not Sure Yet |
+| O | Notes | form | Lead from /expert page |
+| P | Submitted At | server timestamp | 2026-06-27T18:03:26.514Z |
+| **Q** | **UTM Source** | URL `?utm_source=` | facebook |
+| **R** | **UTM Medium** | URL `?utm_medium=` | paid_social |
+| **S** | **UTM Campaign** | URL `?utm_campaign=` | spring_sale |
+| **T** | **UTM Content** | URL `?utm_content=` | hero_cta |
+| **U** | **UTM Term** | URL `?utm_term=` | ai+receptionist |
+| **V** | **Affiliate ID** | resolved from URL | MP-ROBERTO-001 |
+
+### Affiliate ID Resolution (Server-Side Fallback)
+
+The Google Apps Script has its own fallback resolver (`resolveAffiliateId()`):
+1. **Priority 1**: `data.affId` (already resolved by frontend — preferred)
+2. **Priority 2**: `data.utm_source` if it matches `/^MP-/i` (legacy fallback)
+3. **Priority 3**: empty string
+
+---
+
+## 6. Global Tracking Setup (`src/app/layout.tsx`)
+
+All tracking scripts are loaded **globally** in the root layout, so they're available on every page. Load order matters:
+
+### 6.1 Google Analytics 4 (gtag)
+```html
+<!-- Loaded twice (duplicate is intentional — both head scripts are identical) -->
+<script src="https://www.googletagmanager.com/gtag/js?id=G-Z2TP8Y923Q" strategy="afterInteractive" />
+<script id="google-analytics" strategy="afterInteractive">
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-Z2TP8Y923Q');
+</script>
+```
+**GA4 Property ID**: `G-Z2TP8Y923Q`
+
+### 6.2 Meta Pixel (Facebook)
+```html
+<script id="meta-pixel" strategy="afterInteractive">
+  !function(f,b,e,v,n,t,s){...}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '25763011723375825');   // Pixel ID #1
+  fbq('track', 'PageView');
+  fbq('init', '4314002965514089');    // Pixel ID #2
+  fbq('track', 'PageView');
+</script>
+```
+**Two Meta Pixel IDs are initialized** (both fire on every event):
+- `25763011723375825`
+- `4314002965514089`
+
+### 6.3 MassaPro Affiliate Tracker
+```html
+<script id="massapro-affiliate-tracker"
+  src="https://aff.massapro.com/massapro-affiliate-tracker.js"
+  strategy="afterInteractive" />
+<script id="massapro-affiliate-config" strategy="afterInteractive">
+  (function initAffiliate() {
+    if (typeof MassaProAffiliate !== 'undefined') {
+      MassaProAffiliate.config({ dashboardUrl: 'https://aff.massapro.com' });
+    } else {
+      setTimeout(initAffiliate, 100);  // Retry until loaded
+    }
+  })();
+</script>
+```
+
+### 6.4 Console Error Suppressor (Permanent)
+The tracker script at `aff.massapro.com` calls `console.error('[MassaPro] Lead tracking failed: {}')` asynchronously when its backend is unreachable. This permanent interceptor filters those messages:
+
+```js
+// Re-applied every 2s because Next.js dev tools re-wrap console.error
+function applyMassaProFilter() {
+  // Wraps console.error and console.warn to drop any message containing '[MassaPro]'
+}
+applyMassaProFilter();
+setTimeout(applyMassaProFilter, 0); setTimeout(applyMassaProFilter, 50);
+setTimeout(applyMassaProFilter, 200); setTimeout(applyMassaProFilter, 500);
+setTimeout(applyMassaProFilter, 1000);
+setInterval(applyMassaProFilter, 2000);
+```
+
+### 6.5 Global Form Submit Listener (Fallback)
+A document-level `submit` listener catches ANY form submission on the site (not just the expert form). It has a `data-massapro-handled` attribute check to avoid double-tracking:
+
+```js
+document.addEventListener('submit', function(e) {
+  if (formSubmitted) return;
+  var form = e.target;
+  // SKIP if this form handles its own tracking
+  if (form.getAttribute('data-massapro-handled')) return;
+  // ... extract email/name/phone/company from form fields ...
+  safeTrackLead({...});
+}, true);
+```
+
+**Both expert page forms have `data-massapro-handled="true"`** to prevent this fallback from double-firing.
+
+---
+
+## 7. Meta Pixel Event Reference
+
+| Event Name | Type | When | Code |
+|------------|------|------|------|
+| `PageView` | Standard | Auto on page load | `fbq('track', 'PageView')` |
+| `FreeConsultClick` | Custom | CTA click | `fbq('trackCustom', 'FreeConsultClick', { button_location, page_name: 'Expert', cta: 'consultation' })` |
+| `LeadFormOpen` | Custom | Form mounts | `fbq('trackCustom', 'LeadFormOpen')` |
+| `Schedule` | **Standard** | Successful booking | `fbq('track', 'Schedule')` |
+
+**Why `Schedule` is a standard event**: Meta's standard `Schedule` event is used for ad optimization (it counts as a conversion in Ads Manager). The other events are custom and only used for retargeting audiences.
+
+---
+
+## 8. GA4 Event Reference
+
+| Event Name | When | Parameters |
+|------------|------|------------|
+| `get_now` | CTA click | `button_location`, `page_name: 'Expert'` |
+| `lead_form_open` | Form mounts | `event_category: 'engagement'`, `event_label: 'Lead Form Opened'`, `page_name: 'Expert'` |
+| `schedule` | Successful booking | `event_category: 'conversion'`, `event_label: 'Consultation Scheduled'`, `page_name: 'Expert'` |
+
+**`page_name: 'Expert'`** is the differentiator — the homepage LeadForm uses `page_name: 'Home'` (or omits it), so you can segment traffic by landing page in GA4.
+
+---
+
+## 9. MassaPro Affiliate Tracker API Reference
+
+Global object: `window.MassaProAffiliate` (loaded from `https://aff.massapro.com/massapro-affiliate-tracker.js`)
+
+| Method | When | Parameters |
+|--------|------|------------|
+| `config({ dashboardUrl })` | On load | `{ dashboardUrl: 'https://aff.massapro.com' }` |
+| `trackEvent(eventId)` | CTA click | `'btn_get_now'` |
+| `trackLeadFormOpen()` | Form mounts | (none) |
+| `trackLead(data)` | Successful booking | `{ lead_name, lead_email, lead_phone, lead_company, plan_type, initial_status }` |
+| `getAttribution()` | Internal | Returns `{ affid }` — used by BackupTracker |
+
+**Safe wrapper** — always wrap calls in `safeMassaProCall()` because the tracker can throw if its backend is down:
+```ts
+function safeMassaProCall(fn: () => void) {
+  if (typeof window === 'undefined') return
+  try { fn() } catch {}
+}
+```
+
+---
+
+## 10. Backup Tracker API Reference (`src/lib/backup-tracker.ts`)
+
+Local SQLite fallback — writes to `/api/track/*` endpoints, which persist to Prisma DB (`prisma/schema.prisma`). Used as a safety net if aff.massapro.com goes down.
+
+| Method | Endpoint | Data |
+|--------|----------|------|
+| `trackPageView()` | `/api/track/pageview` | sessionId, affid, page, referrer, userAgent, utmSource, utmMedium, utmCampaign, utmContent, utmTerm |
+| `trackClick(eventType, eventId, metadata)` | `/api/track/click` | sessionId, affid, eventType, eventId, page, metadata |
+| `trackScroll(scrollPct, section)` | `/api/track/scroll` | sessionId, affid, page, scrollPct, section |
+| `trackLead(data)` | `/api/track/lead` | sessionId, affid, name, email, phone, company, planType, utm* |
+| `trackCart(planType, cartValue)` | `/api/track/cart` | sessionId, affid, planType, cartValue, page |
+| `trackPurchase(planType, revenue, source)` | `/api/track/purchase` | sessionId, affid, planType, revenue, source |
+
+**Session ID**: Generated once per browser session, stored in `sessionStorage` as `massapro_session_id`. Format: `sess_<timestamp>_<random>`.
+
+**Affid Resolution (Backup Tracker)**:
+1. URL param `?affid=` (lowercase)
+2. `MassaProAffiliate.getAttribution().affid`
+3. `'no_affiliate'` fallback
+
+---
+
+## 11. Complete UTM Test URLs
+
+Test the full UTM + Affiliate pipeline with these URLs:
+
+```
+# Full UTM + Affiliate (Aff-Id format — highest priority)
+https://receptionist.massapro.com/expert?utm_source=facebook&utm_medium=paid_social&utm_campaign=spring_launch&utm_content=hero_cta&utm_term=ai+receptionist&Aff-Id=MP-ROBERTO-001
+
+# Affiliate only (Aff+Id format — medium priority)
+https://receptionist.massapro.com/expert?Aff+Id=MP-MARIA-002
+
+# Affiliate only (utm format — lowest priority)
+https://receptionist.massapro.com/expert?utm=MP-JOHN-003
+
+# UTMs only (no affiliate)
+https://receptionist.massapro.com/expert?utm_source=google&utm_medium=cpc&utm_campaign=brand_search
+
+# No params (organic — all fields empty)
+https://receptionist.massapro.com/expert
+```
+
+**Verification**: After submitting the form, check:
+1. **Google Sheet "Site" tab** — columns Q–V should be populated
+2. **Google Calendar event description** — should contain `Affiliate: MP-XXX-001`
+3. **GA4 Realtime** — should show `schedule` event with `page_name: Expert`
+4. **Meta Pixel Helper** (Chrome extension) — should show `Schedule` event
+5. **aff.massapro.com dashboard** — should show the new lead attributed to the affiliate
+
+---
+
+## 12. Critical Implementation Notes for Other Agents
+
+### 12.1 Never Remove `data-massapro-handled="true"`
+Both expert page forms (`<form>` elements in Step 1 and Step 2) have this attribute. The global form submit listener in `layout.tsx` checks for it to avoid double-tracking. If you create a new form, either:
+- Add `data-massapro-handled="true"` and handle tracking yourself, OR
+- Don't add it and let the global listener handle tracking (but you lose granular control)
+
+### 12.2 Always Spread `...utmParams` and `affId` LAST in API Body
+When adding new fields to the `/api/submit-lead` request, always put `...utmParams` and `affId` at the END of the object literal. This ensures they're never accidentally overwritten by other fields.
+
+### 12.3 Use `safeMassaProCall()` for All Tracker Calls
+The external tracker script can throw if:
+- Its backend is unreachable
+- The script hasn't loaded yet
+- The browser blocks third-party scripts
+
+Always wrap calls in the safe wrapper. The console error suppressor handles the async `.catch()` errors from the tracker's internal fetch.
+
+### 12.4 The `lastName` Fallback
+The expert page form makes lastName optional (UI-wise), but the API requires it. The frontend uses `effectiveLastName = lastName.trim() || 'N/A'` to satisfy the API validation. Don't remove this without also updating the API's required fields list.
+
+### 12.5 Duplicate GA4 Script in Layout
+The GA4 gtag script is loaded **twice** in `layout.tsx` (lines 54-65 and 100-111). This is a known duplicate — both are identical. It doesn't cause double-tracking (gtag deduplicates by measurement ID), but you can remove one if cleaning up.
+
+### 12.6 Mobile Sanitization Happens Twice
+The mobile number is sanitized in **two places**:
+1. **Server-side** (`/api/submit-lead/route.ts` → `sanitizeMobile()`) before sending to Google Sheet
+2. **Server-side** (Google Apps Script → `sanitizeMobile()`) as a final safety net
+
+Don't rely on frontend sanitization — the server always re-sanitizes.
+
+### 12.7 Timezone Auto-Detection
+The expert form auto-detects the user's timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone` on mount. The slot picker (`WeeklySlotPicker`) uses **Israel time** for display, but the stored timezone is the user's local zone. The confirmation email shows Israel time.
+
+---
+
+## 13. File Reference Map
+
+| File | Role |
+|------|------|
+| `src/app/layout.tsx` | Global script loading (GA4, Meta Pixel, MassaPro tracker, console suppressor, form listener) |
+| `src/app/expert/page.tsx` | `/expert` page — 2-step form, UTM capture, all 4 tracking phases |
+| `src/components/LeadForm.tsx` | Homepage lead form — same tracking pattern as expert page (parity) |
+| `src/app/api/submit-lead/route.ts` | Server-side: validate → slot check → calendar → email → Google Sheet |
+| `src/lib/google-calendar.ts` | Google Calendar API wrapper (`isSlotAvailable`, `createCalendarEvent`) |
+| `src/lib/backup-tracker.ts` | Local SQLite backup tracker (fires to `/api/track/*`) |
+| `download/Massapro_GoogleSheet_Script.js` | Google Apps Script — writes to "Site" tab, columns A–V |
+| `prisma/schema.prisma` | Local DB schema for backup tracking (PageView, ClickEvent, ScrollEvent, Lead, CartEvent, PurchaseEvent) |
+
+---
+
+## 14. Adding a New Tracking Channel
+
+To add a new channel (e.g., TikTok Pixel, LinkedIn Insight Tag):
+
+1. **Load the script globally** in `src/app/layout.tsx` using `<Script strategy="afterInteractive">`
+2. **Add tracking calls** in the 4 phases:
+   - Phase 1 (CTA click): in `handleGetNowClick()`
+   - Phase 2 (Form open): in the `useEffect` that fires `trackLeadFormOpen`
+   - Phase 4 (Submit success): after `setSubmitted(true)` in `handleStep2Submit`
+3. **Wrap calls in a safe helper** (like `safeMassaProCall`) if the script can throw
+4. **Update this document** with the new channel's event names and parameters
+5. **Test** with the URLs in section 11
+
+---
+
+**End of spec.** Questions? Check the worklog at `/home/z/my-project/worklog.md` for historical context on why certain decisions were made.
+
+Doc number 2:
+/home/z/my-project/download/utm-implementation-reference.md
+
+
+================================================================================
+  MASSAPRO AFFILIATE DASHBOARD — COMPLETE INTEGRATION INSTRUCTIONS
+================================================================================
+  Version:        4.2
+  Last Updated:   2026-05-20
+  Dashboard:      https://aff-massapro.space-z.ai
+  Website:        https://receptionist.massapro.com
+  Payment:        ClickBank (aireceptio.pay.clickbank.net)
+
+
+================================================================================
+  ANSWERS TO PRE-INTEGRATION QUESTIONS
+================================================================================
+
+QUESTION 1: DASHBOARD URL MISMATCH — WHICH IS THE REAL PRODUCTION URL?
+-----------------------------------------------------------------------
+  ANSWER: The real production dashboard URL is:
+
+    https://aff-massapro.space-z.ai
+
+  The "preview" URL (https://preview-f43bf3a5-083a-4c86-b60b-5e47f8a89485
+  .space.chatglm.site) is a TEMPORARY development/preview URL. It was used
+  during the build process and may change or become unavailable at any time.
+
+  ACTION REQUIRED:
+  - Use https://aff-massapro.space-z.ai as the dashboardUrl in your
+    MassaProAffiliate.config() call
+  - Use https://aff-massapro.space-z.ai as the src for the tracker script
+  - Remove any references to the preview URL from your website code
+  - If your website currently has the preview URL, update it immediately
+
+
+QUESTION 2: TRACKER JS URL MISMATCH — WHICH URL SHOULD THE SITE USE?
+----------------------------------------------------------------------
+  ANSWER: The correct URL to load the tracker script is:
+
+    https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js
+
+  This is the same domain as the production dashboard. The tracker JS is
+  served as a static file from the /public directory of the Next.js app.
+
+  ACTION REQUIRED:
+  - If your site currently loads the script from the preview URL, change
+    it to: https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js
+  - Clear any browser/CDN cache that may be serving the old URL
+
+
+QUESTION 3: HAS trackEvent() BEEN ADDED TO THE HOSTED TRACKER JS?
+-------------------------------------------------------------------
+  ANSWER: YES. The hosted tracker JS is now version 4.1 and includes ALL
+  of these public methods:
+
+    - MassaProAffiliate.config({ dashboardUrl })
+    - MassaProAffiliate.trackEvent(eventId)
+    - MassaProAffiliate.trackLeadFormOpen()
+    - MassaProAffiliate.trackLead({ lead_name, lead_email, ... })
+    - MassaProAffiliate.trackCart({ plan_type, quantity, cart_value })
+    - MassaProAffiliate.trackPurchase({ order_id, revenue, ... })
+    - MassaProAffiliate.trackFunnelStep(stepName, extraData)
+    - MassaProAffiliate.getAttribution()
+    - MassaProAffiliate.getFirstTouch()
+    - MassaProAffiliate.getSessionId()
+    - MassaProAffiliate.getFunnelProgress()
+
+  The trackEvent() method was previously missing in earlier versions. It
+  has been added and is live on the production dashboard. The tracker JS
+  is served from:
+
+    https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js
+
+  No manual upload or update is needed on your part.
+
+  WHAT trackEvent() DOES:
+  - Fires a 1x1 pixel GET to /api/track/event (event analytics)
+  - Fires a POST to /api/track/click with event_type='button_click'
+    (click analytics with full UTM attribution)
+  - Both requests are recorded in the database
+
+  HOW TO VERIFY:
+  - Open your browser DevTools → Network tab
+  - Click a button that calls trackEvent()
+  - You should see a GET request to /api/track/event?event=...
+  - And a POST request to /api/track/click with event_type: "button_click"
+
+
+QUESTION 4: ARE ALL API ENDPOINTS DEPLOYED AND WORKING?
+---------------------------------------------------------
+  ANSWER: YES. All five tracking API endpoints are live on the dashboard:
+
+    1. POST/GET  /api/track/click      — Click & pageview tracking
+    2. POST      /api/track/lead       — Lead form submissions
+    3. POST/GET  /api/track/event      — Generic event tracking
+    4. POST      /api/track/purchase   — Cart, purchase, & funnel step events
+    5. PUT       /api/track/status     — Update lead/referral status
+
+  The /api/track/event endpoint was previously missing, which caused
+  silent 404 errors for all trackEvent() calls. This has been fixed:
+  the endpoint was created and deployed. It accepts both GET (pixel-based,
+  returns a 1x1 transparent GIF) and POST (JSON-based).
+
+  All endpoints support CORS (Access-Control-Allow-Origin: *) and do not
+  require an API key — they are public by design for client-side tracking.
+
+
+QUESTION 5: SHOULD BUTTON/PURCHASE EVENTS APPEAR IN THE INSTRUCTIONS?
+----------------------------------------------------------------------
+  ANSWER: YES. The tracker JS v3.0 supports full e-commerce funnel tracking.
+  All button events, cart events, and purchase events are documented in this
+  guide. Here is the summary:
+
+  BUTTON CLICK EVENTS (fire on every CTA button):
+    - MassaProAffiliate.trackEvent('btn_buy_basic')
+    - MassaProAffiliate.trackEvent('btn_buy_professional')
+    - MassaProAffiliate.trackEvent('btn_buy_enterprise')
+    - MassaProAffiliate.trackEvent('btn_get_now')
+
+  ADD-TO-CART EVENTS (fire on "Buy Now" buttons — NOT purchase):
+    - MassaProAffiliate.trackCart({ plan_type: 'Basic', cart_value: 500 })
+    - MassaProAffiliate.trackCart({ plan_type: 'Professional', cart_value: 1200 })
+    - MassaProAffiliate.trackCart({ plan_type: 'Enterprise', cart_value: 2000 })
+
+  META PIXEL (add_to_cart, NOT Purchase, on "Buy Now" buttons):
+    - fbq('track', 'AddToCart', { ... })   ← CORRECT for "Buy Now"
+    - fbq('track', 'Purchase', { ... })     ← WRONG for "Buy Now"
+
+  GOOGLE ANALYTICS (add_to_cart, NOT purchase, on "Buy Now" buttons):
+    - gtag('event', 'add_to_cart', { ... }) ← CORRECT for "Buy Now"
+    - gtag('event', 'purchase', { ... })    ← WRONG for "Buy Now"
+
+  PURCHASE EVENTS (fire ONLY via ClickBank server-side postback):
+    - POST /api/track/purchase with event_type: 'purchase'
+
+  CRITICAL RULE: "Buy Now" buttons redirect to ClickBank. The user has
+  NOT purchased yet — they are only initiating checkout. Therefore:
+    - In the affiliate dashboard: use trackCart() (not trackPurchase())
+    - In Meta Pixel: use AddToCart (not Purchase)
+    - In Google Analytics: use add_to_cart (not purchase)
+    - The real Purchase event fires server-side when ClickBank confirms
+      payment via their Instant Notification postback
+
+  This is documented in full detail below.
+
+
+================================================================================
+  FULL INTEGRATION GUIDE
+================================================================================
+
+---------------------------------------------------------------
+  STEP 1: EMBED THE TRACKER SCRIPT ON YOUR WEBSITE
+---------------------------------------------------------------
+
+Add these two <script> tags to EVERY page of receptionist.massapro.com,
+ideally just before the closing </body> tag or in your site-wide layout
+template. This must appear on ALL pages, not just the /all page.
+
+  <!-- MassaPro Affiliate Tracker v4.1 -->
+  <script src="https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js"></script>
+  <script>
+    MassaProAffiliate.config({
+      dashboardUrl: 'https://aff-massapro.space-z.ai'
+    });
+  </script>
+
+WHAT THIS DOES AUTOMATICALLY:
+  When a visitor arrives with ?affid=XXX in the URL, the script:
+    (a) Saves the affiliate ID in a 30-day cookie (massapro_affiliate)
+    (b) Saves first-touch UTM parameters in a separate 30-day cookie
+       (massapro_ft) — these are NEVER overwritten on return visits
+    (c) Creates a session cookie (massapro_session, 1-day expiry)
+    (d) Fires a click tracking event to /api/track/click
+    (e) Saves "landing" as the first funnel step
+
+  On subsequent page views (without ?affid=), the script:
+    (a) Reads the existing affiliate cookie
+    (b) Updates last-touch UTM parameters if new UTM params are present
+    (c) Does NOT overwrite first-touch UTMs
+
+COOKIE DETAILS:
+  Cookie name:          massapro_affiliate
+  Expiry:               30 days
+  SameSite:             Lax
+  Contents (JSON):      { affid, utm_source, utm_medium, utm_campaign,
+                          utm_content, utm_term, ft_utm_source,
+                          ft_utm_medium, ft_utm_campaign, ft_utm_content,
+                          ft_utm_term, landing_page, timestamp }
+
+  Cookie name:          massapro_ft
+  Expiry:               30 days
+  Purpose:              First-touch UTMs — set once, never updated
+
+  Cookie name:          massapro_session
+  Expiry:               1 day
+  Purpose:              Session tracking ID
+
+  Cookie name:          massapro_funnel
+  Expiry:               30 days
+  Purpose:              Funnel step progress (JSON array of step names)
+
+
+---------------------------------------------------------------
+  STEP 2: TRACK BUTTON CLICK EVENTS
+---------------------------------------------------------------
+
+Add MassaProAffiliate.trackEvent(eventId) to CTA buttons that do NOT
+redirect to ClickBank (informational CTAs, demo requests, navigation).
+
+  <!-- Hero CTA -->
+  <button onclick="MassaProAffiliate.trackEvent('btn_hero_demo')">
+    Book a Demo
+  </button>
+
+  <!-- Generic CTA -->
+  <button onclick="MassaProAffiliate.trackEvent('btn_get_now')">
+    Get Started Now
+  </button>
+
+  <!-- Navigation -->
+  <a href="/pricing"
+     onclick="MassaProAffiliate.trackEvent('nav_pricing')">
+    View Pricing
+  </a>
+
+EVENT ID NAMING CONVENTION:
+  Prefix    Category              Examples
+  ------    --------              --------
+  btn_      Button clicks         btn_hero_demo, btn_get_now
+  nav_      Navigation clicks     nav_pricing, nav_features
+  form_     Form interactions     form_started, form_submitted
+  video_    Video interactions    video_play, video_complete
+  scroll_   Scroll milestones     scroll_pricing, scroll_testimonials
+
+WHAT trackEvent() FIRES:
+  (1) GET /api/track/event?event=<eventId>&affid=<affid>
+      → Recorded in AffiliateEvent table (event analytics)
+  (2) POST /api/track/click with event_type='button_click'
+      → Recorded in Click table (click analytics with UTM attribution)
+
+NOTE: If no affiliate cookie exists (visitor not referred by an affiliate),
+trackEvent() still fires the event pixel but skips the click POST. The
+event is still recorded in the AffiliateEvent table for overall analytics.
+
+
+---------------------------------------------------------------
+  STEP 3: TRACK "BUY NOW" BUTTONS — ADD TO CART + GA + META
+---------------------------------------------------------------
+
+This is the most critical step. When a user clicks a "Buy Now" button
+on receptionist.massapro.com, they are redirected to ClickBank. The user
+has NOT purchased yet — they are initiating a checkout. Therefore:
+
+  - Affiliate dashboard:  trackCart()     (NOT trackPurchase())
+  - Meta Pixel:           AddToCart       (NOT Purchase)
+  - Google Analytics:     add_to_cart     (NOT purchase)
+
+WHY NOT PURCHASE?
+  - The user leaves the site and goes to ClickBank
+  - They may abandon the ClickBank checkout without paying
+  - Firing a Purchase event here would count every click as a sale
+  - That would inflate conversions and incorrectly award commissions
+  - The real Purchase event fires ONLY when ClickBank confirms payment
+    server-side via their Instant Notification postback (see Step 5)
+
+FOR EACH "BUY NOW" BUTTON, FIRE THREE THINGS:
+  (1) MassaProAffiliate.trackEvent('btn_buy_<plan>')   — button click
+  (2) MassaProAffiliate.trackCart({...})                — add to cart
+  (3) fbq('track', 'AddToCart', {...})                  — Meta AddToCart
+  (4) gtag('event', 'add_to_cart', {...})               — GA4 add_to_cart
+
+HERE IS THE COMPLETE CODE FOR ALL THREE "BUY NOW" BUTTONS:
+
+  <!-- ============================================ -->
+  <!-- BASIC PLAN — BUY NOW BUTTON                  -->
+  <!-- ============================================ -->
+  <a href="https://aireceptio.pay.clickbank.net/?plan=basic"
+     onclick="
+       var aff = MassaProAffiliate.getAttribution();
+       if (aff && aff.affid) {
+         this.href = this.href + '&cvendthru=' + encodeURIComponent(aff.affid);
+       }
+       MassaProAffiliate.trackEvent('btn_buy_basic');
+       MassaProAffiliate.trackCart({ plan_type: 'Basic', quantity: 1, cart_value: 500 });
+       fbq('track', 'AddToCart', {
+         value: 500,
+         currency: 'USD',
+         content_name: 'MassaPro Basic Plan',
+         content_type: 'product'
+       });
+       gtag('event', 'add_to_cart', {
+         currency: 'USD',
+         value: 500,
+         items: [{
+           item_id: 'basic',
+           item_name: 'MassaPro Basic Plan',
+           item_category: 'Subscription',
+           price: 500,
+           quantity: 1
+         }]
+       });
+     ">
+    Buy Now — Basic
+  </a>
+
+  <!-- ============================================ -->
+  <!-- PROFESSIONAL PLAN — BUY NOW BUTTON           -->
+  <!-- ============================================ -->
+  <a href="https://aireceptio.pay.clickbank.net/?plan=professional"
+     onclick="
+       var aff = MassaProAffiliate.getAttribution();
+       if (aff && aff.affid) {
+         this.href = this.href + '&cvendthru=' + encodeURIComponent(aff.affid);
+       }
+       MassaProAffiliate.trackEvent('btn_buy_professional');
+       MassaProAffiliate.trackCart({ plan_type: 'Professional', quantity: 1, cart_value: 1200 });
+       fbq('track', 'AddToCart', {
+         value: 1200,
+         currency: 'USD',
+         content_name: 'MassaPro Professional Plan',
+         content_type: 'product'
+       });
+       gtag('event', 'add_to_cart', {
+         currency: 'USD',
+         value: 1200,
+         items: [{
+           item_id: 'professional',
+           item_name: 'MassaPro Professional Plan',
+           item_category: 'Subscription',
+           price: 1200,
+           quantity: 1
+         }]
+       });
+     ">
+    Buy Now — Professional
+  </a>
+
+  <!-- ============================================ -->
+  <!-- ENTERPRISE PLAN — BUY NOW BUTTON             -->
+  <!-- ============================================ -->
+  <a href="https://aireceptio.pay.clickbank.net/?plan=enterprise"
+     onclick="
+       var aff = MassaProAffiliate.getAttribution();
+       if (aff && aff.affid) {
+         this.href = this.href + '&cvendthru=' + encodeURIComponent(aff.affid);
+       }
+       MassaProAffiliate.trackEvent('btn_buy_enterprise');
+       MassaProAffiliate.trackCart({ plan_type: 'Enterprise', quantity: 1, cart_value: 2000 });
+       fbq('track', 'AddToCart', {
+         value: 2000,
+         currency: 'USD',
+         content_name: 'MassaPro Enterprise Plan',
+         content_type: 'product'
+       });
+       gtag('event', 'add_to_cart', {
+         currency: 'USD',
+         value: 2000,
+         items: [{
+           item_id: 'enterprise',
+           item_name: 'MassaPro Enterprise Plan',
+           item_category: 'Subscription',
+           price: 2000,
+           quantity: 1
+         }]
+       });
+     ">
+    Buy Now — Enterprise
+  </a>
+
+WHAT EACH TRACKING CALL DOES:
+
+  trackEvent('btn_buy_basic'):
+    - Fires GET /api/track/event?event=btn_buy_basic
+      → Recorded in AffiliateEvent table
+    - Fires POST /api/track/click with event_type='button_click'
+      → Recorded in Click table
+
+  trackCart({ plan_type: 'Basic', cart_value: 500 }):
+    - Saves "add_to_cart" as a funnel step in the cookie
+    - Fires event pixel: add_to_cart_Basic
+    - Fires POST /api/track/purchase with event_type: 'add_to_cart'
+      → Recorded in PurchaseEvent table
+    - Does NOT trigger any commission
+
+  fbq('track', 'AddToCart', { ... }):
+    - Sends AddToCart event to Meta Pixel
+    - Used for ad optimization and retargeting
+    - NOT Purchase — the user has not paid yet
+
+  gtag('event', 'add_to_cart', { ... }):
+    - Sends add_to_cart event to Google Analytics 4
+    - Used for e-commerce funnel analysis
+    - NOT purchase — the user has not paid yet
+
+  cvendthru parameter:
+    - Appends the MassaPro affid to the ClickBank URL
+    - ClickBank includes this in the Instant Notification postback
+    - This is how we link a ClickBank sale back to the MassaPro affiliate
+    - Example: &cvendthru=massa001
+
+CART VALUES (actual production prices):
+  - Basic:        $500
+  - Professional: $1,200
+  - Enterprise:   $2,000
+
+
+---------------------------------------------------------------
+  STEP 4: TRACK LEAD FORM OPENS + SUBMISSIONS
+---------------------------------------------------------------
+
+TRACKING THE LEAD FORM FUNNEL:
+  There are two stages in the lead form journey:
+
+    (1) Lead Form Open  — The form modal/page is displayed to the user
+    (2) Lead Form Submit — The user fills out and submits the form
+
+  Track BOTH stages to measure form conversion rates in the admin
+  dashboard (CTA Clicks → Form Opens → Form Submissions).
+
+LEAD FORM OPEN — call when the form is displayed:
+  When a lead form modal opens or the contact form page loads, call
+  MassaProAffiliate.trackLeadFormOpen() to record that the user
+  saw the form (even if they don't submit it).
+
+    // Call when the lead form modal appears or form page loads
+    MassaProAffiliate.trackLeadFormOpen();
+
+  WHAT THIS DOES:
+    - Saves "lead_form_open" as a funnel step in the cookie
+    - Fires an event pixel: lead_form_open
+    - Fires a click tracking event with event_type='button_click',
+      event_id='lead_form_open'
+    - Appears in the admin dashboard as "Lead Forms Opened" metric
+    - Appears in the Lead Form Funnel visualization
+
+  EXAMPLE — on a modal form open:
+    <button onclick="
+      document.getElementById('leadFormModal').style.display = 'block';
+      MassaProAffiliate.trackLeadFormOpen();
+    ">
+      Book a Demo
+    </button>
+
+  EXAMPLE — on a form page load:
+    <script>
+      // If this is the lead form page, track the form open
+      if (window.location.pathname === '/contact') {
+        MassaProAffiliate.trackLeadFormOpen();
+      }
+    </script>
+
+LEAD FORM SUBMISSION — call when the user submits the form:
+  When a visitor submits a lead form (contact form, demo request, etc.),
+  call MassaProAffiliate.trackLead() to record the lead and attribute it
+  to the referring affiliate.
+
+  MassaProAffiliate.trackLead({
+    lead_name: 'John Smith',
+    lead_email: 'john@company.com',
+    lead_phone: '+1-555-0123',
+    lead_company: 'Acme Corp',
+    plan_type: 'Professional',
+    initial_status: 'Lead'
+  })
+  .then(function(result) {
+    console.log('Lead tracked:', result.data);
+  })
+  .catch(function(err) {
+    console.error('Lead tracking failed:', err);
+  });
+
+REQUIREMENTS:
+  - lead_name is REQUIRED
+  - An affiliate cookie MUST exist (visitor must have come via ?affid=XXX)
+  - If no affiliate cookie exists, the call is rejected with a warning
+
+COMMISSION TRIGGER:
+  If initial_status is set to 'Paying Customer', the signup commission
+  ($100 standard / $150 premium / custom) is immediately awarded. For
+  other statuses, the commission is awarded later when the status is
+  updated to 'Paying Customer' via /api/track/status.
+
+UTM ATTRIBUTION:
+  The trackLead() call automatically includes both first-touch and
+  last-touch UTM parameters from the cookies. No manual UTM passing
+  is needed — the tracker script handles it internally.
+
+
+---------------------------------------------------------------
+  STEP 5: TRACK COMPLETED PURCHASES VIA CLICKBANK POSTBACK
+---------------------------------------------------------------
+
+When ClickBank confirms a payment, it sends a server-to-server Instant
+Notification (INS) to a URL you configure in your ClickBank account.
+This is the ONLY accurate place to fire trackPurchase() because it
+confirms the user actually paid.
+
+DO NOT fire trackPurchase() on the client side. The user leaves
+receptionist.massapro.com when they click "Buy Now" and goes to
+ClickBank. You have no way to know client-side whether they completed
+payment.
+
+WHEN DOES THE REAL PURCHASE EVENT FIRE?
+
+  System              Event Name        When It Fires
+  ------------------  ----------------  ----------------------------------
+  Affiliate Dashboard  trackPurchase()   ClickBank postback (server-side)
+  Meta Pixel           Purchase          Thank-you page (after ClickBank)
+  Google Analytics     purchase          Thank-you page (after ClickBank)
+
+CLICKBANK POSTBACK SETUP:
+
+1. Log into your ClickBank account
+2. Go to Account Settings → My Site → Instant Notification
+3. Set the Notification URL to:
+
+     https://aff-massapro.space-z.ai/api/track/clickbank
+
+   (NOTE: This endpoint needs to be built — see implementation below.)
+
+4. Select notification types:
+   - SALE    (required — fires when a purchase is completed)
+   - BILL    (optional — fires for recurring billing)
+   - REFUND  (optional — fires when a refund is issued)
+   - CANCEL  (optional — fires when a subscription is cancelled)
+
+5. Save settings
+
+HOW THE CLICKBANK POSTBACK WORKS:
+
+  ClickBank sends a POST with data like:
+
+    cbreceipt    = "XXXXXXXX"         (Receipt ID — use as order_id)
+    cbpop        = "XXXXXXXX"         (Verification hash)
+    cbaffi       = "XXXXXXXX"         (ClickBank affiliate — NOT MassaPro)
+    cbitem       = "XX"               (Item number)
+    cbbfname     = "John"             (Buyer first name)
+    cblname      = "Smith"            (Buyer last name)
+    cbemail      = "john@example.com" (Buyer email)
+    cname        = "Product Name"     (Product name)
+    cprice       = "1200.00"           (Price paid — example for Professional)
+    ccur         = "USD"              (Currency)
+    ctype        = "SALE"             (Transaction type)
+    cvendthru    = "massa001"         (Vendor through-parameter — THIS IS
+                                       WHERE THE MASSAPRO AFFID APPEARS)
+
+  YOUR SERVER needs to:
+    (a) Verify the cbpop hash (security — confirms it is from ClickBank)
+    (b) Map the ClickBank item number to a MassaPro plan_type
+    (c) Extract the MassaPro affid from cvendthru
+    (d) Call /api/track/purchase with the purchase data
+    (e) Respond with HTTP 200 (ClickBank requires this to stop retrying)
+
+HOW cvendthru CARRIES THE MASSAPRO AFFID TO CLICKBANK:
+
+  When the user clicks "Buy Now" on receptionist.massapro.com, the
+  onclick handler reads the affiliate cookie and appends it:
+
+    https://aireceptio.pay.clickbank.net/?plan=basic&cvendthru=massa001
+
+  ClickBank stores this value and includes it in the postback. This is
+  how we link a confirmed ClickBank sale back to the correct MassaPro
+  affiliate. Without cvendthru, there is no way to know which MassaPro
+  affiliate referred the buyer.
+
+  Fallback: If cvendthru is missing, the server can search for an
+  existing referral by the buyer's email address:
+
+    GET /api/referrals?lead_email=john@example.com
+
+CLICKBANK POSTBACK SERVER ENDPOINT (TO BE IMPLEMENTED):
+
+  A new endpoint needs to be created:
+
+    POST https://aff-massapro.space-z.ai/api/track/clickbank
+
+  This endpoint will:
+    1. Receive the ClickBank Instant Notification POST
+    2. Verify the cbpop hash using your ClickBank secret key
+    3. Parse the transaction type (SALE, BILL, REFUND, etc.)
+    4. Extract the MassaPro affid from cvendthru
+    5. Map the ClickBank item number to a MassaPro plan_type
+    6. Call the /api/track/purchase logic with:
+         event_type:      'purchase'
+         order_id:        cbreceipt
+         revenue:         cprice
+         plan_type:       mapped from cbitem
+         affid:           from cvendthru
+         customer_email:  cbemail
+         customer_name:   cbbfname + " " + cblname
+    7. Respond with 200 OK
+
+  This will be implemented as part of the ClickBank integration phase.
+  It requires your ClickBank secret key for cbpop verification.
+
+META PURCHASE + GA4 PURCHASE (AFTER CLICKBANK PAYMENT):
+
+  For Meta and GA4, the Purchase event should fire on a thank-you page
+  that the user returns to after ClickBank payment. Configure ClickBank
+  to redirect to:
+
+    https://receptionist.massapro.com/thank-you
+
+  On that page, fire:
+
+    // Meta Pixel — Purchase (only on thank-you page)
+    fbq('track', 'Purchase', {
+      value: orderValue,
+      currency: 'USD',
+      content_name: planName
+    });
+
+    // GA4 — purchase (only on thank-you page)
+    gtag('event', 'purchase', {
+      transaction_id: orderReceipt,
+      value: orderValue,
+      currency: 'USD',
+      items: [{
+        item_id: planId,
+        item_name: planName,
+        item_category: 'Subscription',
+        price: orderValue,
+        quantity: 1
+      }]
+    });
+
+  Note: You will need to pass the order details from ClickBank to the
+  thank-you page via URL parameters or a session mechanism.
+
+
+---------------------------------------------------------------
+  STEP 6: TRACK FUNNEL STEPS (OPTIONAL)
+---------------------------------------------------------------
+
+You can track custom funnel milestones at any point in the customer
+journey. This helps visualize the conversion funnel in the dashboard.
+
+  MassaProAffiliate.trackFunnelStep('view_pricing');
+  MassaProAffiliate.trackFunnelStep('view_demo');
+  MassaProAffiliate.trackFunnelStep('checkout_start');
+
+WHAT THIS DOES:
+  - Saves the step name in the funnel cookie (massapro_funnel)
+  - Fires an event pixel: funnel_view_pricing
+  - Fires a click tracking event with event_type='funnel_step'
+
+FUNNEL STEPS ARE ACCUMULATIVE:
+  Each unique step name is added only once. Duplicates are ignored.
+
+  var progress = MassaProAffiliate.getFunnelProgress();
+  // Returns: { steps: ["landing", "view_pricing", "add_to_cart", ...] }
+
+AUTOMATIC FUNNEL STEPS:
+  The tracker automatically records:
+    - "landing"         — When visitor first arrives with ?affid=
+    - "lead_form_open"  — When trackLeadFormOpen() is called
+    - "lead_form"       — When trackLead() is called
+    - "add_to_cart"     — When trackCart() is called ("Buy Now" click)
+    - "purchase"        — When trackPurchase() is called (ClickBank postback)
+
+
+---------------------------------------------------------------
+  STEP 7: UPDATE LEAD STATUS (SERVER-TO-SERVER)
+---------------------------------------------------------------
+
+When a lead's status changes, call /api/track/status from your server
+or from the admin dashboard.
+
+  PUT https://aff-massapro.space-z.ai/api/track/status
+  Content-Type: application/json
+
+  {
+    "affid": "massa001",
+    "lead_email": "john@company.com",
+    "new_status": "Paying Customer",
+    "plan_type": "Professional",
+    "months_active": 1
+  }
+
+VALID STATUS VALUES:
+  - "Lead"
+  - "Booked Call"
+  - "Paying Customer"
+  - "Churned"
+
+LEGACY STATUS MAPPING (auto-converted):
+  - "Call Booked"       → "Booked Call"
+  - "Active Subscriber" → "Paying Customer"
+
+COMMISSION TRIGGERS ON STATUS UPDATE:
+  - Transitioning to "Paying Customer": awards signup commission immediately
+  - Incrementing months_active: awards recurring commission per month
+    (up to 12 months)
+
+INTERIM WORKFLOW (before ClickBank postback is built):
+  When a ClickBank sale is confirmed, an admin can manually update the
+  referral status to "Paying Customer" via the admin dashboard or the
+  /api/track/status endpoint. This triggers the commission manually.
+  While not ideal, it ensures affiliates get credited immediately.
+
+
+================================================================================
+  COMPLETE EVENT TRACKING SUMMARY
+================================================================================
+
+Below is a complete reference of which events fire where and when:
+
+  USER ACTION                  AFFILIATE DASHBOARD      META PIXEL          GA4
+  --------------------------   ----------------------   -----------------   ---------------
+  Page load (with ?affid=)     trackClick (auto)        PageView            page_view
+  CTA button (non-Buy Now)     trackEvent(eventId)      —                   —
+  Lead form opens              trackLeadFormOpen()      —                   —
+  "Buy Now" button click       trackEvent(eventId)      AddToCart           add_to_cart
+                               trackCart({...})
+  Lead form submission         trackLead({...})         Lead                generate_lead
+  Purchase confirmed           trackPurchase({...})     Purchase            purchase
+  (ClickBank postback)         (server-side only)       (thank-you page)    (thank-you page)
+
+IMPORTANT RULES:
+  - "Buy Now" button = AddToCart/add_to_cart, NEVER Purchase/purchase
+  - Purchase/purchase only fires AFTER ClickBank confirms payment
+  - Meta Purchase and GA4 purchase fire on the thank-you page
+  - Affiliate trackPurchase() fires server-side from ClickBank postback
+
+
+================================================================================
+  COMPLETE API REFERENCE
+================================================================================
+
++---------------------+--------+-------------------------------------------+
+| Endpoint            | Method | Purpose                                   |
++---------------------+--------+-------------------------------------------+
+| /api/track/click    | GET    | Pixel-based click tracking (returns GIF)  |
+| /api/track/click    | POST   | JSON click tracking with full attribution |
+| /api/track/lead     | POST   | Lead/referral submission                  |
+| /api/track/event    | GET    | Pixel-based event tracking (returns GIF)  |
+| /api/track/event    | POST   | JSON event tracking                       |
+| /api/track/purchase | POST   | Cart, purchase, and funnel step tracking  |
+| /api/track/status   | PUT    | Update lead/referral status               |
+| /api/track/clickbank| POST   | ClickBank Instant Notification handler    |
+|                     |        | (TO BE IMPLEMENTED — Phase 2)             |
++---------------------+--------+-------------------------------------------+
+
+All endpoints support CORS (Access-Control-Allow-Origin: *).
+All tracking endpoints are public (no API key required).
+
+
+--- /api/track/click (GET — Pixel) ---
+  Query params:
+    affid        (required) — Affiliate ID
+    utm_source   (optional) — Last-touch UTM source
+    utm_medium   (optional) — Last-touch UTM medium
+    utm_campaign (optional) — Last-touch UTM campaign
+    utm_content  (optional) — Last-touch UTM content
+    utm_term     (optional) — Last-touch UTM term
+    page_url     (optional) — Page URL where click occurred
+    event_type   (optional) — "pageview" or "button_click" (default: pageview)
+    event_id     (optional) — Event identifier (e.g., "btn_buy_basic")
+    session_id   (optional) — Session identifier
+  Returns: 1x1 transparent GIF (image/gif)
+
+
+--- /api/track/click (POST — JSON) ---
+  Body (JSON):
+    affid        (required) — Affiliate ID
+    utm_source   (optional) — Last-touch UTM source
+    utm_medium   (optional) — Last-touch UTM medium
+    utm_campaign (optional) — Last-touch UTM campaign
+    utm_content  (optional) — Last-touch UTM content
+    utm_term     (optional) — Last-touch UTM term
+    page_url     (optional) — Page URL
+    event_type   (optional) — "pageview" or "button_click"
+    event_id     (optional) — Event identifier
+    session_id   (optional) — Session identifier
+    ip_address   (optional) — IP address (auto-detected if not provided)
+    user_agent   (optional) — User agent (auto-detected if not provided)
+  Returns: { success: true, clickId: "..." }
+
+
+--- /api/track/lead (POST) ---
+  Body (JSON):
+    affid           (required) — Affiliate ID
+    lead_name       (required) — Lead's full name
+    lead_email      (optional) — Lead's email
+    lead_phone      (optional) — Lead's phone
+    lead_company    (optional) — Lead's company
+    plan_type       (optional) — "Basic", "Professional", "Enterprise"
+    initial_status  (optional) — "Lead", "Booked Call", "Paying Customer"
+    ft_utm_source   (auto)     — First-touch UTM (from tracker cookies)
+    ft_utm_medium   (auto)
+    ft_utm_campaign (auto)
+    ft_utm_content  (auto)
+    ft_utm_term     (auto)
+    lt_utm_source   (auto)     — Last-touch UTM (from tracker cookies)
+    lt_utm_medium   (auto)
+    lt_utm_campaign (auto)
+    lt_utm_content  (auto)
+    lt_utm_term     (auto)
+  Returns: { success: true, referral: { id, leadStatus, ... } }
+
+
+--- /api/track/event (GET — Pixel) ---
+  Query params:
+    event / eventName (required) — Event name (e.g., "btn_buy_basic")
+    affid            (optional)  — Affiliate ID
+    utm_campaign     (optional)  — UTM campaign
+    page_url         (optional)  — Page URL
+  Returns: 1x1 transparent GIF (image/gif)
+
+
+--- /api/track/event (POST — JSON) ---
+  Body (JSON):
+    eventName / event_name (required) — Event name
+    affid                 (optional)  — Affiliate ID
+    utm_campaign          (optional)  — UTM campaign
+    page_url              (optional)  — Page URL
+    session_id            (optional)  — Session ID
+    event_type            (optional)  — Event type label
+    event_label           (optional)  — Event label
+  Returns: { success: true, eventId: "..." }
+
+
+--- /api/track/purchase (POST) ---
+  Body (JSON):
+    affid           (optional)  — Affiliate ID (if known)
+    event_type      (required)  — "add_to_cart", "purchase", or "funnel_step"
+    order_id        (optional)  — Order ID (for purchases)
+    revenue         (optional)  — Payment amount (for purchases)
+    currency        (optional)  — "USD" (default)
+    plan_type       (optional)  — "Basic", "Professional", "Enterprise"
+    quantity        (optional)  — Quantity (default: 1)
+    cart_value      (optional)  — Cart value (for add_to_cart)
+    customer_email  (optional)  — Customer email (for purchase matching)
+    customer_name   (optional)  — Customer name
+    session_id      (optional)  — Session ID
+    ft_utm_source   (optional)  — First-touch UTM source
+    ft_utm_medium   (optional)  — First-touch UTM medium
+    ft_utm_campaign (optional)  — First-touch UTM campaign
+    ft_utm_content  (optional)  — First-touch UTM content
+    ft_utm_term     (optional)  — First-touch UTM term
+    lt_utm_source   (optional)  — Last-touch UTM source
+    lt_utm_medium   (optional)  — Last-touch UTM medium
+    lt_utm_campaign (optional)  — Last-touch UTM campaign
+    lt_utm_content  (optional)  — Last-touch UTM content
+    lt_utm_term     (optional)  — Last-touch UTM term
+    page_url        (optional)  — Page URL
+    funnel_steps    (optional)  — Array of funnel step names
+  Returns: { success: true, event: { id, eventType, affid, revenue, ... } }
+
+
+--- /api/track/status (PUT) ---
+  Body (JSON):
+    affid          (required)         — Affiliate ID
+    referral_id    (conditional)      — Referral ID (if known)
+    lead_email     (conditional)      — Lead email (if no referral_id)
+    new_status     (required)         — "Lead", "Booked Call",
+                                       "Paying Customer", "Churned"
+    plan_type      (optional)         — "Basic", "Professional", "Enterprise"
+    months_active  (optional)         — Number of active months (for recurring)
+  Returns: { success: true, referral: { id, leadStatus, ... } }
+
+
+================================================================================
+  DATA FLOW DIAGRAM — FULL FUNNEL
+================================================================================
+
+  Visitor arrives at:
+    https://receptionist.massapro.com/?affid=massa001&utm_source=google&utm_campaign=spring
+    |
+    v
+  [Tracker JS v4.1] — auto-runs on page load
+    |
+    +--> Saves cookies: massapro_affiliate (30d), massapro_ft (30d),
+    |                     massapro_session (1d), massapro_funnel (30d)
+    +--> Fires GET /api/track/click?affid=massa001&utm_source=google...
+    |    (recorded in Click table, affiliate.totalTraffic++)
+    |
+    v
+  Visitor clicks "Buy Now — Professional" button
+    |
+    v
+  [onclick] fires ALL of the following:
+    |
+    +--> trackEvent('btn_buy_professional')
+    |    - GET /api/track/event?event=btn_buy_professional
+    |    - POST /api/track/click (event_type='button_click')
+    |
+    +--> trackCart({ plan_type: 'Professional', cart_value: 1200 })
+    |    - Saves "add_to_cart" in funnel cookie
+    |    - Fires event pixel: add_to_cart_Professional
+    |    - POST /api/track/purchase (event_type='add_to_cart')
+    |      (recorded in PurchaseEvent table, NO commission)
+    |
+    +--> fbq('track', 'AddToCart', { value: 1200, ... })
+    |    (Meta Pixel — AddToCart event for ad optimization)
+    |
+    +--> gtag('event', 'add_to_cart', { value: 1200, ... })
+    |    (GA4 — add_to_cart event for funnel analysis)
+    |
+    +--> Appends &cvendthru=massa001 to ClickBank URL
+    |
+    +--> Browser navigates to ClickBank checkout
+    |
+    v
+  User completes payment on ClickBank
+    |
+    v
+  [ClickBank Instant Notification] — server-to-server POST
+    |
+    v
+  /api/track/clickbank (Phase 2 — to be built)
+    |
+    +--> Verifies cbpop hash
+    +--> Extracts affid=massa001 from cvendthru
+    +--> Maps cbitem to plan_type='Professional'
+    |
+    v
+  Calls /api/track/purchase with event_type: 'purchase'
+    |
+    +--> Records PurchaseEvent with full UTM attribution
+    +--> Commission engine runs:
+    |    - Finds/creates Referral (status: "Paying Customer")
+    |    - Creates CommissionLedger entry ($100 signup)
+    |    - Updates affiliate totalConversions, totalEarnings, approvedBalance
+    |
+    v
+  User returns to receptionist.massapro.com/thank-you
+    |
+    +--> fbq('track', 'Purchase', { value: 1200, ... })
+    |    (Meta Pixel — Purchase event for conversion tracking)
+    |
+    +--> gtag('event', 'purchase', { value: 1200, ... })
+    |    (GA4 — purchase event for conversion tracking)
+    |
+    v
+  [Dashboard] Affiliate sees conversion, commission, and earnings updated
+
+
+================================================================================
+  HOW UTM ATTRIBUTION WORKS
+================================================================================
+
+The MassaPro affiliate tracker uses a DUAL-TOUCH attribution model:
+
+FIRST-TOUCH (massapro_ft cookie):
+  - Captured ONCE when the visitor first arrives with ?affid=XXX
+  - Never overwritten, even if the visitor returns via a different UTM source
+  - Stored in the Referral and PurchaseEvent records as ft_utm_*
+  - Answers: "Which campaign originally brought this customer?"
+
+LAST-TOUCH (massapro_affiliate cookie):
+  - Updated every time the visitor arrives with new UTM parameters
+  - Stored in the Click records and in Referral/PurchaseEvent as lt_utm_*
+  - Answers: "Which campaign drove the most recent conversion?"
+
+EXAMPLE:
+  Day 1:  ?affid=massa001&utm_source=google&utm_campaign=spring_sale
+          First-touch: google / spring_sale
+          Last-touch:  google / spring_sale
+
+  Day 15: ?affid=massa001&utm_source=facebook&utm_campaign=retarget
+          First-touch: google / spring_sale  (UNCHANGED)
+          Last-touch:  facebook / retarget    (UPDATED)
+
+  Day 20: User clicks "Buy Now" → trackCart() fires with both UTMs
+          PurchaseEvent (add_to_cart) records:
+            ft_utm_source:   google
+            ft_utm_campaign: spring_sale
+            lt_utm_source:   facebook
+            lt_utm_campaign: retarget
+
+  Day 20: ClickBank confirms → trackPurchase() server-side
+          Same UTM attribution carried forward
+          Commission awarded to affiliate massa001
+
+
+================================================================================
+  COMMISSION ENGINE DETAILS
+================================================================================
+
+SIGNUP COMMISSION (one-time):
+  Triggered when a referral status becomes "Paying Customer":
+    - Via trackLead() with initial_status: 'Paying Customer'
+    - Via trackPurchase() with valid affid + customer_email
+      (server-side from ClickBank postback)
+    - Via PUT /api/track/status with new_status: 'Paying Customer'
+
+  Amounts:
+    Standard affiliate:  $100
+    Premium affiliate:   $150
+    Custom affiliate:    Per-affiliate override (customSignupComm field)
+
+  IMPORTANT: trackCart() does NOT trigger commissions. Only
+  trackPurchase() or a status update to "Paying Customer" triggers
+  the commission engine. This ensures commissions are only awarded
+  for confirmed payments.
+
+RECURRING COMMISSION (monthly, up to 12 months):
+  Triggered when months_active is incremented for a "Paying Customer"
+  via PUT /api/track/status.
+
+  Amounts per plan:
+    Enterprise:     $100/month
+    Professional:   $50/month
+    Basic:          $10/month
+
+  Custom affiliates may have different rates configured via:
+    customEnterprise, customProfess, customBasic fields
+
+COMMISSION LEDGER:
+  Every commission is recorded in the CommissionLedger table:
+    - type: "signup", "recurring", or "adjustment"
+    - amount: dollar amount
+    - description: human-readable note
+    - monthNumber: (for recurring) which month 1-12
+    - referralId: link to the Referral record
+
+AFFILIATE BALANCE TRACKING:
+  - totalEarnings:   sum of all commissions ever earned
+  - approvedBalance: commissions available for payout
+  - paidBalance:     total commissions already paid out
+
+
+================================================================================
+  CLICKBANK INTEGRATION — IMPLEMENTATION ROADMAP
+================================================================================
+
+PHASE 1 — IMPLEMENT NOW (client-side tracking on receptionist.massapro.com):
+  - Add tracker script to all pages
+  - Add trackEvent() to all CTA buttons
+  - Add trackCart() + fbq AddToCart + gtag add_to_cart to "Buy Now" buttons
+  - Add cvendthru=affid to ClickBank redirect URLs
+  - Add trackLead() to lead forms
+  - All data flows into the dashboard: clicks, button events, cart events, leads
+  - Affiliates see traffic, button clicks, and cart activity in real-time
+  - Commissions are NOT yet automated (no purchase confirmation from ClickBank)
+
+PHASE 2 — CLICKBANK POSTBACK (implement after ClickBank account setup):
+  - Create /api/track/clickbank endpoint on the dashboard
+  - Configure ClickBank Instant Notification URL
+  - Implement cbpop hash verification
+  - Map ClickBank item numbers to MassaPro plan types
+  - Extract MassaPro affid from cvendthru
+  - Auto-fire trackPurchase() on confirmed ClickBank sales
+  - Commissions auto-awarded when purchase is confirmed
+  - Handle refunds (mark referrals as "Churned")
+  - Create thank-you page on receptionist.massapro.com
+  - Fire fbq Purchase + gtag purchase on thank-you page
+
+INTERIM (between Phase 1 and Phase 2):
+  - When a ClickBank sale is confirmed, admin manually updates referral
+    status to "Paying Customer" via the admin dashboard or /api/track/status
+  - This triggers the commission manually
+  - Once Phase 2 is complete, this becomes fully automated
+
+
+================================================================================
+  SERVER-SIDE PURCHASE TRACKING (ADVANCED)
+================================================================================
+
+For the ClickBank postback or any server-side integration, call the
+purchase endpoint directly from your server:
+
+  POST https://aff-massapro.space-z.ai/api/track/purchase
+  Content-Type: application/json
+
+  {
+    "affid": "massa001",
+    "event_type": "purchase",
+    "order_id": "CBRECEIPT123",
+    "revenue": 1200,
+    "currency": "USD",
+    "plan_type": "Professional",
+    "customer_email": "john@company.com",
+    "customer_name": "John Smith",
+    "session_id": "sess_xxx",
+    "ft_utm_source": "google",
+    "ft_utm_medium": "cpc",
+    "ft_utm_campaign": "spring_sale",
+    "lt_utm_source": "facebook",
+    "lt_utm_medium": "social",
+    "lt_utm_campaign": "retarget",
+    "page_url": "https://receptionist.massapro.com/all",
+    "funnel_steps": ["landing", "view_pricing", "add_to_cart", "purchase"]
+  }
+
+For server-side calls, pass affid and UTM parameters explicitly (server
+code does not have access to browser cookies). The affid comes from the
+ClickBank cvendthru parameter.
+
+
+================================================================================
+  TESTING YOUR INTEGRATION
+================================================================================
+
+1. TEST CLICK TRACKING:
+   Visit with an affiliate link:
+     https://receptionist.massapro.com/?affid=massa001&utm_source=test
+   Check DevTools console for click tracking request.
+   Verify in dashboard: Admin → Clicks tab shows the new click.
+
+2. TEST BUTTON EVENT TRACKING:
+   Click a CTA button with trackEvent().
+   Check DevTools → Network for requests to /api/track/event and
+   /api/track/click.
+
+3. TEST "BUY NOW" CART TRACKING:
+   Click a "Buy Now" button.
+   Check DevTools console for:
+     [MassaPro] Cart event tracked: { success: true, ... }
+   Verify: PurchaseEvents table shows the add_to_cart event.
+   Verify: NO commission was created (cart does not trigger commissions).
+   Verify: ClickBank redirect URL includes &cvendthru=massa001.
+
+4. TEST META ADDTOCART:
+   Click a "Buy Now" button.
+   Check Meta Pixel Helper browser extension — should show AddToCart
+   event (NOT Purchase).
+
+5. TEST GA4 add_to_cart:
+   Click a "Buy Now" button.
+   Check GA4 DebugView — should show add_to_cart event (NOT purchase).
+
+6. TEST LEAD TRACKING:
+   Submit a lead form.
+   Check console: [MassaPro] Lead tracked: { success: true, ... }
+
+7. TEST PURCHASE TRACKING (after ClickBank postback):
+   Make a test purchase via ClickBank.
+   Verify dashboard shows: Referral with "Paying Customer" status,
+   Commission ledger with signup commission, Affiliate earnings updated.
+
+8. MANUAL COMMISSION TEST (before ClickBank postback):
+   PUT https://aff-massapro.space-z.ai/api/track/status
+   { "affid": "massa001", "lead_email": "test@example.com",
+     "new_status": "Paying Customer", "plan_type": "Professional" }
+   Verify the commission was created.
+
+9. VERIFY COOKIES:
+   DevTools → Application → Cookies → receptionist.massapro.com:
+     - massapro_affiliate: contains affid + UTM data
+     - massapro_ft: first-touch UTM data
+     - massapro_session: session ID
+     - massapro_funnel: ["landing", "add_to_cart"] after Buy Now click
+
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+PROBLEM: trackEvent() calls seem to do nothing
+  CAUSE:  Tracker script not loaded or config() not called.
+  FIX:    Ensure both <script> tags are present and dashboardUrl is
+          set to 'https://aff-massapro.space-z.ai'.
+
+PROBLEM: No affiliate data being tracked
+  CAUSE:  Visitor did not arrive via ?affid= link.
+  FIX:    Always test with an affiliate link: ?affid=XXX
+
+PROBLEM: Leads not attributed to affiliates
+  CAUSE:  Affiliate cookie expired (30 days) or never set.
+  FIX:    Ensure visitors arrive via affiliate links. Check cookie in
+          DevTools.
+
+PROBLEM: "Buy Now" click doesn't pass affid to ClickBank
+  CAUSE:  onclick handler not modifying href before redirect, or
+          affiliate cookie doesn't exist.
+  FIX:    Check that onclick runs before the href redirect. Verify
+          MassaProAffiliate.getAttribution() returns a valid affid.
+          Test with a ?affid=XXX link first.
+
+PROBLEM: Cart events show but no commissions created
+  CAUSE:  This is CORRECT. trackCart() does NOT trigger commissions.
+          Only trackPurchase() (ClickBank postback) or a status update
+          triggers commissions.
+  FIX:    No fix needed. Implement ClickBank postback (Phase 2) or
+          manually update referral status via /api/track/status.
+
+PROBLEM: Meta Pixel shows Purchase on "Buy Now" click
+  CAUSE:  Wrong Meta event fired — should be AddToCart, not Purchase.
+  FIX:    Change fbq('track', 'Purchase', ...) to
+          fbq('track', 'AddToCart', ...) on "Buy Now" buttons.
+
+PROBLEM: GA4 shows purchase event on "Buy Now" click
+  CAUSE:  Wrong GA4 event fired — should be add_to_cart, not purchase.
+  FIX:    Change gtag('event', 'purchase', ...) to
+          gtag('event', 'add_to_cart', ...) on "Buy Now" buttons.
+
+PROBLEM: Console shows 404 for /api/track/event
+  CAUSE:  Old bug — endpoint was missing in earlier deployment.
+  FIX:    This is fixed. Clear browser cache and reload. If still
+          seeing 404s, add cache-buster to tracker URL:
+          ?v=3
+
+PROBLEM: Old tracker JS being served (cache issue)
+  CAUSE:  Browser/CDN caching old version.
+  FIX:    Hard-refresh (Ctrl+Shift+R) or add cache-buster:
+          src="https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js?v=3"
+
+PROBLEM: Purchase events don't create commissions (after ClickBank setup)
+  CAUSE:  (a) cvendthru missing from ClickBank URL
+          (b) affid invalid or affiliate inactive
+          (c) customer_email not provided
+  FIX:    Ensure cvendthru is appended, affid is valid, and
+          customer_email is included in the purchase payload.
+
+
+================================================================================
+  MINIMUM CODE FOR COMPLETE INTEGRATION
+================================================================================
+
+Below is ALL the code you need to add to receptionist.massapro.com:
+
+  <!-- ============================================ -->
+  <!-- STEP 1: Load the tracker (on EVERY page)     -->
+  <!-- ============================================ -->
+  <script src="https://aff-massapro.space-z.ai/massapro-affiliate-tracker.js"></script>
+  <script>
+    MassaProAffiliate.config({
+      dashboardUrl: 'https://aff-massapro.space-z.ai'
+    });
+  </script>
+
+  <!-- ============================================ -->
+  <!-- STEP 2: Non-purchasing CTA buttons            -->
+  <!-- ============================================ -->
+  <button onclick="MassaProAffiliate.trackEvent('btn_hero_demo')">
+    Book a Demo
+  </button>
+  <button onclick="MassaProAffiliate.trackEvent('btn_get_now')">
+    Get Started Now
+  </button>
+
+  <!-- ============================================ -->
+  <!-- STEP 3: "Buy Now" buttons                     -->
+  <!--   Fires: trackEvent + trackCart + fbq AddToCart + gtag add_to_cart -->
+  <!--   Appends cvendthru=affid to ClickBank URL    -->
+  <!-- ============================================ -->
+  <a href="https://aireceptio.pay.clickbank.net/?plan=basic"
+     onclick="var aff=MassaProAffiliate.getAttribution();if(aff&&aff.affid){this.href+='&cvendthru='+encodeURIComponent(aff.affid);}MassaProAffiliate.trackEvent('btn_buy_basic');MassaProAffiliate.trackCart({plan_type:'Basic',quantity:1,cart_value:500});fbq('track','AddToCart',{value:500,currency:'USD',content_name:'MassaPro Basic Plan'});gtag('event','add_to_cart',{currency:'USD',value:500,items:[{item_id:'basic',item_name:'MassaPro Basic Plan',price:500,quantity:1}]});">
+    Buy Now — Basic
+  </a>
+
+  <a href="https://aireceptio.pay.clickbank.net/?plan=professional"
+     onclick="var aff=MassaProAffiliate.getAttribution();if(aff&&aff.affid){this.href+='&cvendthru='+encodeURIComponent(aff.affid);}MassaProAffiliate.trackEvent('btn_buy_professional');MassaProAffiliate.trackCart({plan_type:'Professional',quantity:1,cart_value:1200});fbq('track','AddToCart',{value:1200,currency:'USD',content_name:'MassaPro Professional Plan'});gtag('event','add_to_cart',{currency:'USD',value:1200,items:[{item_id:'professional',item_name:'MassaPro Professional Plan',price:1200,quantity:1}]});">
+    Buy Now — Professional
+  </a>
+
+  <a href="https://aireceptio.pay.clickbank.net/?plan=enterprise"
+     onclick="var aff=MassaProAffiliate.getAttribution();if(aff&&aff.affid){this.href+='&cvendthru='+encodeURIComponent(aff.affid);}MassaProAffiliate.trackEvent('btn_buy_enterprise');MassaProAffiliate.trackCart({plan_type:'Enterprise',quantity:1,cart_value:2000});fbq('track','AddToCart',{value:2000,currency:'USD',content_name:'MassaPro Enterprise Plan'});gtag('event','add_to_cart',{currency:'USD',value:2000,items:[{item_id:'enterprise',item_name:'MassaPro Enterprise Plan',price:2000,quantity:1}]});">
+    Buy Now — Enterprise
+  </a>
+
+  <!-- ============================================ -->
+  <!-- STEP 4: Lead form submission handler           -->
+  <!-- ============================================ -->
+  <script>
+    function onLeadFormSubmit(formData) {
+      MassaProAffiliate.trackLead({
+        lead_name: formData.name,
+        lead_email: formData.email,
+        lead_phone: formData.phone,
+        lead_company: formData.company,
+        plan_type: formData.plan_type || 'Basic',
+        initial_status: 'Lead'
+      });
+    }
+  </script>
+
+  <!-- ============================================ -->
+  <!-- STEP 5: Thank-you page (after ClickBank)      -->
+  <!--   Fires: fbq Purchase + gtag purchase         -->
+  <!--   (only on the thank-you page, NOT on Buy Now) -->
+  <!-- ============================================ -->
+  <script>
+    // This code goes on /thank-you page ONLY
+    // Pass order details from ClickBank via URL params or session
+    fbq('track', 'Purchase', {
+      value: orderValue,
+      currency: 'USD',
+      content_name: planName
+    });
+    gtag('event', 'purchase', {
+      transaction_id: orderId,
+      value: orderValue,
+      currency: 'USD',
+      items: [{
+        item_id: planId,
+        item_name: planName,
+        price: orderValue,
+        quantity: 1
+      }]
+    });
+  </script>
+
+  <!-- ============================================ -->
+  <!-- STEP 6: Purchase confirmation                 -->
+  <!--   (handled server-side via ClickBank postback) -->
+  <!--   See "CLICKBANK INTEGRATION ROADMAP" above    -->
+  <!--   Until then, manually update via admin panel  -->
+  <!-- ============================================ -->
+
+
+================================================================================
+  END OF INSTRUCTIONS
+================================================================================
+
