@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { Menu, X, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BrandLogo } from "./brand-logo";
 
 const SECTIONS = [
   { id: "cover", label: "Home" },
@@ -64,23 +63,6 @@ export function SiteNav() {
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Brand lockup — "aisalon" + tagline */}
-          <Link
-            href="/resources/ai-human-flourishing/#cover"
-            className="flex items-center gap-3 group"
-            aria-label="AI Salon home"
-          >
-            <BrandLogo size="md" className="flex-none" />
-            <span className="flex flex-col leading-none">
-              <span className="font-display text-lg font-bold lowercase tracking-tight">
-                aisalon
-              </span>
-              <span className="tagline text-[0.55rem] text-muted-foreground mt-0.5 hidden sm:block">
-                Empowering AI Connections
-              </span>
-            </span>
-          </Link>
-
           {/* Desktop nav */}
           <nav className="hidden lg:flex items-center gap-0.5">
             {SECTIONS.map((s) => (
