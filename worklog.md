@@ -501,3 +501,40 @@ Stage Summary:
   - Drive: shared folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
   - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.12
 - Vercel dpl_ ID pending (no Vercel API token in env).
+
+---
+Task ID: v5.13
+Agent: main (Super Z)
+Task: Three bug fixes reported by user on 2026-06-30 against the speaker-intro mockup editor: (1) Speaker role change doesn't apply (Panelist → Speaker); (2) Order number input writes wrong value (press 5 → writes 7) on multiple speakers at the same time; (3) Hero image crops to original box size, crop remains even when scrolling out / enlarging container, image is "not full".
+
+Work Log:
+- Read worklog.md (last entry: V5.12 — 'role, company' pattern across event speaker displays).
+- Read speaker-intro-form-view.tsx (full file, 1001 lines), types.ts, speaker-intro-canvas.tsx (relevant sections), speaker-intro-editor.tsx (applyImagePick handler).
+- Root cause analysis:
+  - Bugs 1 & 2 share the same root cause: the form used find(s => s.order === sp.order) to identify speakers in every onChange handler. This is unsafe because order values can collide (find returns the first match — wrong speaker) and because sp.order in the closure becomes stale after a re-sort. The SubCard key was also based on the sorted index, so when sort order changed React remounted inputs and lost focus.
+  - Bug 3: hero image always used object-cover, which always crops to fill. Even when user zooms out (transform: scale < 1) or enlarges the container (imageScale up), object-cover re-covers the new container — the crop remains. Also, when picking a new hero image, the previous image's imagePlacement (focusX, focusY, zoom) carried over, making the new image look "cropped to the original size of the box".
+- Fix for Bugs 1 & 2 (speaker-intro-form-view.tsx):
+  - Changed speakersSorted from [...data.speakers].sort(...) to data.speakers.map((sp, origIdx) => ({sp, origIdx})).sort(...). The original array index is stable across re-sorts (we only push to end of data.speakers, never insert in middle).
+  - Changed SubCard key from `spk-${idx}` (sorted index) to `spk-${origIdx}` (original index). Now React doesn't remount inputs when sort order changes.
+  - Changed all 9 speaker onChange handlers (Order, Role, Full name, Title, Company, Bio, Session title, Session time, Photo URL, Photo size, Visible) from find(s => s.order === sp.order) to direct index access d.speakers[origIdx]. Never returns the wrong speaker.
+  - Changed delete handler from filter(s => s.order !== sp.order) (deletes ALL speakers with the same order value!) to splice(origIdx, 1) (deletes only the targeted speaker).
+- Fix for Bug 3 (3 files):
+  - types.ts: added `fit?: "cover" | "contain"` field to heroOverlay. Default "cover" (no behavior change for existing data).
+  - speaker-intro-form-view.tsx: added "Image fit" select dropdown in Hero section with 2 options (Cover / Contain), with explanatory labels.
+  - speaker-intro-canvas.tsx: pass objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"} to EditableImage for the hero. EditableImage already supports both objectFit values via its className logic, no internal changes needed.
+  - speaker-intro-editor.tsx: when applyImagePick detects a hero URL change, now also resets imagePlacement to {focusX: 50, focusY: 50, zoom: 1} so the new image starts at default pan/zoom (not inheriting previous image's crop).
+- Build verification: npx next build → ✓ Compiled successfully in 14.1s. (PrismaClientInitializationError warnings are unrelated — local env has no DATABASE_URL, production has it set.)
+- Committed as V5.13 (commit f73707c): 4 files changed, 69 insertions(+), 17 deletions(-).
+- Pushed V5.13 to origin/main — triggers Vercel auto-deploy.
+- Ran V5.13 milestone backup: local tarball (6.0M, 280 files, SHA256 87a18a6e...) + Google Drive upload + GitHub release v5.13 + manifest. Vercel dpl_ ID pending.
+
+Stage Summary:
+- V5.13 PATCH: 3 bug fixes, all built and verified. Pushed + backed up.
+- Backup locations:
+  - Local: download/aisalon-massapro-V5.13-source.tar.gz
+  - Drive: shared folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
+  - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.13
+- Vercel dpl_ ID pending (no Vercel API token in env). To back-fill later:
+    set -a && . .env && set +a && bash scripts/make-milestone-backup.sh V5.13 PATCH scripts/v5.13-notes.md dpl_xxxxx
+- Speaker identity is now stable: the form uses the original array index (not order) for both React keys and lookups. Role changes, order changes, and deletions all land on the correct speaker.
+- Hero image now has a fit toggle: "Cover" (default, original behavior) or "Contain" (full image visible, letterboxed if needed). New hero images also start at default pan/zoom instead of inheriting the previous image's crop.
