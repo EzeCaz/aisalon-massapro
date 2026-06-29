@@ -1,0 +1,861 @@
+     1→"use client";
+     2→
+     3→import { useCallback } from "react";
+     4→import { Plus, Trash2 } from "lucide-react";
+     5→import type { SpeakerIntroData } from "../speaker-intro/types";
+     6→
+     7→/**
+     8→ * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
+     9→ *
+    10→ * Renders every editable field as a labeled input (text / number / textarea)
+    11→ * grouped by section. The user can toggle between this form view and the
+    12→ * raw JSON editor — both stay in sync via the same `data` object.
+    13→ *
+    14→ * Why a form view?
+    15→ *   - Non-technical users find a form easier to scan/edit than raw JSON.
+    16→ *   - Reduces the risk of typos that break the JSON parser.
+    17→ *   - Lets us group related fields visually (event / speakers / hero / etc).
+    18→ *
+    19→ * The form is fully controlled — every change calls `onChange(next)` with
+    20→ * a new SpeakerIntroData object. The parent owns the source of truth.
+    21→ */
+    22→type Props = {
+    23→  data: SpeakerIntroData;
+    24→  onChange: (next: SpeakerIntroData) => void;
+    25→};
+    26→
+    27→export function SpeakerIntroFormView({ data, onChange }: Props) {
+    28→  const update = useCallback(
+    29→    (recipe: (draft: SpeakerIntroData) => void) => {
+    30→      const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    31→      recipe(next);
+    32→      onChange(next);
+    33→    },
+    34→    [data, onChange],
+    35→  );
+    36→
+    37→  // sort speakers by order for display
+    38→  const speakersSorted = [...data.speakers].sort((a, b) => a.order - b.order);
+    39→
+    40→  return (
+    41→    <div className="space-y-5 p-4 bg-white text-black max-h-[640px] overflow-y-auto text-sm">
+    42→      {/* ===== EVENT ===== */}
+    43→      <Section title="Event">
+    44→        <Field label="Event name">
+    45→          <input
+    46→            type="text"
+    47→            value={data.event.name}
+    48→            onChange={(e) => update((d) => { d.event.name = e.target.value; })}
+    49→            className="form-input"
+    50→          />
+    51→        </Field>
+    52→        <div className="grid grid-cols-2 gap-3">
+    53→          <Field label="Date">
+    54→            <input
+    55→              type="text"
+    56→              value={data.event.date}
+    57→              onChange={(e) => update((d) => { d.event.date = e.target.value; })}
+    58→              className="form-input"
+    59→              placeholder="June 18th 2026"
+    60→            />
+    61→          </Field>
+    62→          <Field label="Time">
+    63→            <input
+    64→              type="text"
+    65→              value={data.event.time}
+    66→              onChange={(e) => update((d) => { d.event.time = e.target.value; })}
+    67→              className="form-input"
+    68→              placeholder="18:00"
+    69→            />
+    70→          </Field>
+    71→        </div>
+    72→        <Field label="Venue">
+    73→          <input
+    74→            type="text"
+    75→            value={data.event.venue}
+    76→            onChange={(e) => update((d) => { d.event.venue = e.target.value; })}
+    77→            className="form-input"
+    78→          />
+    79→        </Field>
+    80→        <Field label="Topic">
+    81→          <input
+    82→            type="text"
+    83→            value={data.event.topic}
+    84→            onChange={(e) => update((d) => { d.event.topic = e.target.value; })}
+    85→            className="form-input"
+    86→          />
+    87→        </Field>
+    88→        <div className="grid grid-cols-2 gap-3">
+    89→          <Field label="Event name font scale (×)">
+    90→            <input
+    91→              type="number"
+    92→              step="0.1"
+    93→              min="0.3"
+    94→              max="3"
+    95→              value={data.event.nameFontScale ?? 1}
+    96→              onChange={(e) =>
+    97→                update((d) => {
+    98→                  d.event.nameFontScale = parseFloat(e.target.value) || 1;
+    99→                })
+   100→              }
+   101→              className="form-input"
+   102→            />
+   103→            <span className="text-[0.6rem] text-black/40 mt-0.5">
+   104→              Base: 44px · current: {Math.round(44 * (data.event.nameFontScale ?? 1))}px
+   105→            </span>
+   106→          </Field>
+   107→          <Field label="Topic font scale (×)">
+   108→            <input
+   109→              type="number"
+   110→              step="0.1"
+   111→              min="0.3"
+   112→              max="3"
+   113→              value={data.event.topicFontScale ?? 1}
+   114→              onChange={(e) =>
+   115→                update((d) => {
+   116→                  d.event.topicFontScale = parseFloat(e.target.value) || 1;
+   117→                })
+   118→              }
+   119→              className="form-input"
+   120→            />
+   121→            <span className="text-[0.6rem] text-black/40 mt-0.5">
+   122→              Base: 24px · current: {Math.round(24 * (data.event.topicFontScale ?? 1))}px
+   123→            </span>
+   124→          </Field>
+   125→        </div>
+   126→        <Field label="QR code URL">
+   127→          <input
+   128→            type="url"
+   129→            value={data.qrCodeUrl}
+   130→            onChange={(e) => update((d) => { d.qrCodeUrl = e.target.value; })}
+   131→            className="form-input"
+   132→          />
+   133→        </Field>
+   134→        <div className="grid grid-cols-2 gap-3">
+   135→          <Field label="Brand color 1">
+   136→            <ColorInput
+   137→              value={data.event.brandColors[0]}
+   138→              onChange={(v) => update((d) => { d.event.brandColors[0] = v; })}
+   139→            />
+   140→          </Field>
+   141→          <Field label="Brand color 2">
+   142→            <ColorInput
+   143→              value={data.event.brandColors[1]}
+   144→              onChange={(v) => update((d) => { d.event.brandColors[1] = v; })}
+   145→            />
+   146→          </Field>
+   147→        </div>
+   148→        <Field label="Footer credit">
+   149→          <input
+   150→            type="text"
+   151→            value={data.footerCredit ?? ""}
+   152→            onChange={(e) => update((d) => { d.footerCredit = e.target.value || undefined; })}
+   153→            className="form-input"
+   154→          />
+   155→        </Field>
+   156→      </Section>
+   157→
+   158→      {/* ===== SPEAKERS ===== */}
+   159→      <Section title={`Speakers (${speakersSorted.length})`}>
+   160→        {speakersSorted.map((sp, idx) => (
+   161→          <SubCard
+   162→            key={`spk-${idx}`}
+   163→            title={`#${sp.order} · ${sp.fullName || "Untitled"}`}
+   164→            onDelete={() =>
+   165→              update((d) => {
+   166→                d.speakers = d.speakers.filter((s) => s.order !== sp.order);
+   167→              })
+   168→            }
+   169→          >
+   170→            <div className="grid grid-cols-2 gap-3">
+   171→              <Field label="Order">
+   172→                <input
+   173→                  type="number"
+   174→                  min={1}
+   175→                  value={sp.order}
+   176→                  onChange={(e) =>
+   177→                    update((d) => {
+   178→                      const target = d.speakers.find((s) => s.order === sp.order);
+   179→                      if (target) target.order = parseInt(e.target.value, 10) || 1;
+   180→                    })
+   181→                  }
+   182→                  className="form-input"
+   183→                />
+   184→              </Field>
+   185→              <Field label="Role">
+   186→                <select
+   187→                  value={sp.role}
+   188→                  onChange={(e) =>
+   189→                    update((d) => {
+   190→                      const target = d.speakers.find((s) => s.order === sp.order);
+   191→                      if (target) target.role = e.target.value as SpeakerIntroData["speakers"][number]["role"];
+   192→                    })
+   193→                  }
+   194→                  className="form-input"
+   195→                >
+   196→                  <option value="Speaker">Speaker</option>
+   197→                  <option value="Moderator">Moderator</option>
+   198→                  <option value="Panelist">Panelist</option>
+   199→                  <option value="Host">Host</option>
+   200→                </select>
+   201→              </Field>
+   202→            </div>
+   203→            <Field label="Full name">
+   204→              <input
+   205→                type="text"
+   206→                value={sp.fullName}
+   207→                onChange={(e) =>
+   208→                  update((d) => {
+   209→                    const target = d.speakers.find((s) => s.order === sp.order);
+   210→                    if (target) target.fullName = e.target.value;
+   211→                  })
+   212→                }
+   213→                className="form-input"
+   214→              />
+   215→            </Field>
+   216→            <div className="grid grid-cols-2 gap-3">
+   217→              <Field label="Title">
+   218→                <input
+   219→                  type="text"
+   220→                  value={sp.title}
+   221→                  onChange={(e) =>
+   222→                    update((d) => {
+   223→                      const target = d.speakers.find((s) => s.order === sp.order);
+   224→                      if (target) target.title = e.target.value;
+   225→                    })
+   226→                  }
+   227→                  className="form-input"
+   228→                />
+   229→              </Field>
+   230→              <Field label="Company">
+   231→                <input
+   232→                  type="text"
+   233→                  value={sp.company}
+   234→                  onChange={(e) =>
+   235→                    update((d) => {
+   236→                      const target = d.speakers.find((s) => s.order === sp.order);
+   237→                      if (target) target.company = e.target.value;
+   238→                    })
+   239→                  }
+   240→                  className="form-input"
+   241→                />
+   242→              </Field>
+   243→            </div>
+   244→            <Field label="Bio">
+   245→              <textarea
+   246→                value={sp.bio ?? ""}
+   247→                onChange={(e) =>
+   248→                  update((d) => {
+   249→                    const target = d.speakers.find((s) => s.order === sp.order);
+   250→                    if (target) target.bio = e.target.value || undefined;
+   251→                  })
+   252→                }
+   253→                className="form-input min-h-[60px] resize-y"
+   254→                rows={2}
+   255→              />
+   256→            </Field>
+   257→            <div className="grid grid-cols-2 gap-3">
+   258→              <Field label="Session title">
+   259→                <input
+   260→                  type="text"
+   261→                  value={sp.sessionTitle ?? ""}
+   262→                  onChange={(e) =>
+   263→                    update((d) => {
+   264→                      const target = d.speakers.find((s) => s.order === sp.order);
+   265→                      if (target) target.sessionTitle = e.target.value || undefined;
+   266→                    })
+   267→                  }
+   268→                  className="form-input"
+   269→                />
+   270→              </Field>
+   271→              <Field label="Session time (HH:MM)">
+   272→                <input
+   273→                  type="text"
+   274→                  value={sp.sessionTime ?? ""}
+   275→                  onChange={(e) =>
+   276→                    update((d) => {
+   277→                      const target = d.speakers.find((s) => s.order === sp.order);
+   278→                      if (target) target.sessionTime = e.target.value || undefined;
+   279→                    })
+   280→                  }
+   281→                  className="form-input"
+   282→                  placeholder="18:30"
+   283→                />
+   284→              </Field>
+   285→            </div>
+   286→            <Field label="Photo URL">
+   287→              <input
+   288→                type="url"
+   289→                value={sp.photoUrl}
+   290→                onChange={(e) =>
+   291→                  update((d) => {
+   292→                    const target = d.speakers.find((s) => s.order === sp.order);
+   293→                    if (target) target.photoUrl = e.target.value;
+   294→                  })
+   295→                }
+   296→                className="form-input"
+   297→              />
+   298→            </Field>
+   299→            <div className="grid grid-cols-2 gap-3">
+   300→              <Field label="Photo size (×)">
+   301→                <input
+   302→                  type="number"
+   303→                  step="0.1"
+   304→                  min="0.1"
+   305→                  value={sp.photoSize ?? 1}
+   306→                  onChange={(e) =>
+   307→                    update((d) => {
+   308→                      const target = d.speakers.find((s) => s.order === sp.order);
+   309→                      if (target) target.photoSize = parseFloat(e.target.value) || 1;
+   310→                    })
+   311→                  }
+   312→                  className="form-input"
+   313→                />
+   314→              </Field>
+   315→              <Field label="Visible">
+   316→                <select
+   317→                  value={sp.visible === false ? "false" : "true"}
+   318→                  onChange={(e) =>
+   319→                    update((d) => {
+   320→                      const target = d.speakers.find((s) => s.order === sp.order);
+   321→                      if (target) target.visible = e.target.value === "true";
+   322→                    })
+   323→                  }
+   324→                  className="form-input"
+   325→                >
+   326→                  <option value="true">Yes</option>
+   327→                  <option value="false">No (hidden)</option>
+   328→                </select>
+   329→              </Field>
+   330→            </div>
+   331→          </SubCard>
+   332→        ))}
+   333→        <AddButton
+   334→          label="Add speaker"
+   335→          onClick={() =>
+   336→            update((d) => {
+   337→              const nextOrder = Math.max(0, ...d.speakers.map((s) => s.order)) + 1;
+   338→              d.speakers.push({
+   339→                order: nextOrder,
+   340→                role: "Speaker",
+   341→                fullName: "New Speaker",
+   342→                title: "",
+   343→                company: "",
+   344→                photoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   345→              });
+   346→            })
+   347→          }
+   348→        />
+   349→      </Section>
+   350→
+   351→      {/* ===== HERO ===== */}
+   352→      <Section title="Hero image & overlay">
+   353→        <Field label="Hero image URL">
+   354→          <input
+   355→            type="url"
+   356→            value={data.heroOverlay.imageUrl}
+   357→            onChange={(e) => update((d) => { d.heroOverlay.imageUrl = e.target.value; })}
+   358→            className="form-input"
+   359→          />
+   360→        </Field>
+   361→        <Field label="Gradient colors (comma-separated)">
+   362→          <input
+   363→            type="text"
+   364→            value={data.heroOverlay.gradientColors.join(", ")}
+   365→            onChange={(e) =>
+   366→              update((d) => {
+   367→                d.heroOverlay.gradientColors = e.target.value
+   368→                  .split(",")
+   369→                  .map((s) => s.trim())
+   370→                  .filter(Boolean);
+   371→              })
+   372→            }
+   373→            className="form-input"
+   374→          />
+   375→        </Field>
+   376→        <div className="grid grid-cols-2 gap-3">
+   377→          <Field label="Gradient opacity">
+   378→            <input
+   379→              type="number"
+   380→              step="0.05"
+   381→              min="0"
+   382→              max="1"
+   383→              value={data.heroOverlay.gradientOpacity}
+   384→              onChange={(e) =>
+   385→                update((d) => {
+   386→                  d.heroOverlay.gradientOpacity = parseFloat(e.target.value) || 0;
+   387→                })
+   388→              }
+   389→              className="form-input"
+   390→            />
+   391→          </Field>
+   392→          <Field label="Image scale X (×) — only limit is canvas border">
+   393→            <input
+   394→              type="number"
+   395→              step="0.05"
+   396→              min="0.01"
+   397→              value={data.heroOverlay.imageScale ?? 1}
+   398→              onChange={(e) =>
+   399→                update((d) => {
+   400→                  d.heroOverlay.imageScale = parseFloat(e.target.value) || 1;
+   401→                })
+   402→              }
+   403→              className="form-input"
+   404→            />
+   405→          </Field>
+   406→          <Field label="Image scale Y (×) — only limit is canvas border">
+   407→            <input
+   408→              type="number"
+   409→              step="0.05"
+   410→              min="0.01"
+   411→              value={data.heroOverlay.imageScaleY ?? 1}
+   412→              onChange={(e) =>
+   413→                update((d) => {
+   414→                  d.heroOverlay.imageScaleY = parseFloat(e.target.value) || 1;
+   415→                })
+   416→              }
+   417→              className="form-input"
+   418→            />
+   419→          </Field>
+   420→        </div>
+   421→        <Field label="Show triangle overlay?">
+   422→          <select
+   423→            value={data.heroOverlay.showTriangleOverlay === false ? "false" : "true"}
+   424→            onChange={(e) =>
+   425→              update((d) => {
+   426→                d.heroOverlay.showTriangleOverlay = e.target.value === "true";
+   427→              })
+   428→            }
+   429→            className="form-input"
+   430→          >
+   431→            <option value="true">Yes (default)</option>
+   432→            <option value="false">No (hidden — auto-disabled when hero image changes)</option>
+   433→          </select>
+   434→        </Field>
+   435→
+   436→        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+   437→            Per user spec 2026-06-28: "Move all 'Capabilities' controls
+   438→            (toggles, inputs, visibility settings) from the canvas slider
+   439→            to the Left Sidebar for all mockup pages."
+   440→            Default z-order: heroZ=2 (front), triangleZ=1 (behind hero).
+   441→            Front/Back buttons override dynamically. */}
+   442→        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+   443→          <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+   444→            Layer z-index (Front = on top)
+   445→          </div>
+   446→          <div className="grid grid-cols-2 gap-2">
+   447→            <div>
+   448→              <div className="text-[0.6rem] text-black/60 mb-1">Hero (z={data.heroZ ?? 2})</div>
+   449→              <div className="flex items-center gap-1">
+   450→                <button
+   451→                  type="button"
+   452→                  onClick={() =>
+   453→                    update((d) => {
+   454→                      const tz = d.triangleZ ?? 1;
+   455→                      d.heroZ = tz + 1;
+   456→                    })
+   457→                  }
+   458→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   459→                  title="Bring hero to front (above triangle)"
+   460→                >
+   461→                  Front
+   462→                </button>
+   463→                <button
+   464→                  type="button"
+   465→                  onClick={() =>
+   466→                    update((d) => {
+   467→                      const tz = d.triangleZ ?? 1;
+   468→                      d.heroZ = tz - 1;
+   469→                    })
+   470→                  }
+   471→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   472→                  title="Send hero to back (below triangle)"
+   473→                >
+   474→                  Back
+   475→                </button>
+   476→              </div>
+   477→            </div>
+   478→            <div>
+   479→              <div className="text-[0.6rem] text-black/60 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
+   480→              <div className="flex items-center gap-1">
+   481→                <button
+   482→                  type="button"
+   483→                  onClick={() =>
+   484→                    update((d) => {
+   485→                      const hz = d.heroZ ?? 2;
+   486→                      d.triangleZ = hz + 1;
+   487→                    })
+   488→                  }
+   489→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   490→                  title="Bring triangle to front (above hero)"
+   491→                >
+   492→                  Front
+   493→                </button>
+   494→                <button
+   495→                  type="button"
+   496→                  onClick={() =>
+   497→                    update((d) => {
+   498→                      const hz = d.heroZ ?? 2;
+   499→                      d.triangleZ = hz - 1;
+   500→                    })
+   501→                  }
+   502→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   503→                  title="Send triangle to back (below hero)"
+   504→                >
+   505→                  Back
+   506→                </button>
+   507→              </div>
+   508→            </div>
+   509→          </div>
+   510→          <p className="text-[0.55rem] text-black/40 leading-tight">
+   511→            Default: hero on top, triangle behind. Click Front/Back to override.
+   512→          </p>
+   513→        </div>
+   514→      </Section>
+   515→
+   516→      {/* ===== LOCATION PINS ===== */}
+   517→      <Section title={`Location pins (${data.locationPins.length})`}>
+   518→        {data.locationPins.map((pin, idx) => (
+   519→          <SubCard
+   520→            key={`pin-${idx}`}
+   521→            title={pin.label || `Pin #${idx + 1}`}
+   522→            onDelete={() =>
+   523→              update((d) => {
+   524→                d.locationPins.splice(idx, 1);
+   525→              })
+   526→            }
+   527→          >
+   528→            <div className="grid grid-cols-3 gap-3">
+   529→              <Field label="Label">
+   530→                <input
+   531→                  type="text"
+   532→                  value={pin.label}
+   533→                  onChange={(e) =>
+   534→                    update((d) => {
+   535→                      d.locationPins[idx].label = e.target.value;
+   536→                    })
+   537→                  }
+   538→                  className="form-input"
+   539→                />
+   540→              </Field>
+   541→              <Field label="X (%)">
+   542→                <input
+   543→                  type="number"
+   544→                  min="0"
+   545→                  max="100"
+   546→                  value={pin.x}
+   547→                  onChange={(e) =>
+   548→                    update((d) => {
+   549→                      d.locationPins[idx].x = parseFloat(e.target.value) || 0;
+   550→                    })
+   551→                  }
+   552→                  className="form-input"
+   553→                />
+   554→              </Field>
+   555→              <Field label="Y (%)">
+   556→                <input
+   557→                  type="number"
+   558→                  min="0"
+   559→                  max="100"
+   560→                  value={pin.y}
+   561→                  onChange={(e) =>
+   562→                    update((d) => {
+   563→                      d.locationPins[idx].y = parseFloat(e.target.value) || 0;
+   564→                    })
+   565→                  }
+   566→                  className="form-input"
+   567→                />
+   568→              </Field>
+   569→            </div>
+   570→          </SubCard>
+   571→        ))}
+   572→        <AddButton
+   573→          label="Add pin"
+   574→          onClick={() =>
+   575→            update((d) => {
+   576→              d.locationPins.push({ label: "New", x: 50, y: 50 });
+   577→            })
+   578→          }
+   579→        />
+   580→      </Section>
+   581→
+   582→      {/* ===== SPONSORS / COLLABORATORS ===== */}
+   583→      <Section title={`Collaborators (${data.collaborators.length})`}>
+   584→        {data.collaborators.map((s, idx) => (
+   585→          <SubCard
+   586→            key={`coll-${idx}`}
+   587→            title={s.name || `#${idx + 1}`}
+   588→            onDelete={() =>
+   589→              update((d) => {
+   590→                d.collaborators.splice(idx, 1);
+   591→              })
+   592→            }
+   593→          >
+   594→            <Field label="Name">
+   595→              <input
+   596→                type="text"
+   597→                value={s.name}
+   598→                onChange={(e) =>
+   599→                  update((d) => {
+   600→                    d.collaborators[idx].name = e.target.value;
+   601→                  })
+   602→                }
+   603→                className="form-input"
+   604→              />
+   605→            </Field>
+   606→            <Field label="Logo URL">
+   607→              <input
+   608→                type="url"
+   609→                value={s.logoUrl}
+   610→                onChange={(e) =>
+   611→                  update((d) => {
+   612→                    d.collaborators[idx].logoUrl = e.target.value;
+   613→                  })
+   614→                }
+   615→                className="form-input"
+   616→              />
+   617→            </Field>
+   618→            <div className="grid grid-cols-2 gap-3">
+   619→              <Field label="Logo size (×)">
+   620→                <input
+   621→                  type="number"
+   622→                  step="0.1"
+   623→                  min="0.1"
+   624→                  value={s.logoSize ?? 1}
+   625→                  onChange={(e) =>
+   626→                    update((d) => {
+   627→                      d.collaborators[idx].logoSize = parseFloat(e.target.value) || 1;
+   628→                    })
+   629→                  }
+   630→                  className="form-input"
+   631→                />
+   632→              </Field>
+   633→              <Field label="Theme">
+   634→                <select
+   635→                  value={s.theme ?? "light"}
+   636→                  onChange={(e) =>
+   637→                    update((d) => {
+   638→                      d.collaborators[idx].theme = e.target.value as "light" | "dark";
+   639→                    })
+   640→                  }
+   641→                  className="form-input"
+   642→                >
+   643→                  <option value="light">Light</option>
+   644→                  <option value="dark">Dark</option>
+   645→                </select>
+   646→              </Field>
+   647→            </div>
+   648→          </SubCard>
+   649→        ))}
+   650→        <AddButton
+   651→          label="Add collaborator"
+   652→          onClick={() =>
+   653→            update((d) => {
+   654→              d.collaborators.push({
+   655→                name: "New",
+   656→                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   657→                theme: "light",
+   658→              });
+   659→            })
+   660→          }
+   661→        />
+   662→      </Section>
+   663→
+   664→      <Section title={`Sponsors (${data.sponsors.length})`}>
+   665→        {data.sponsors.map((s, idx) => (
+   666→          <SubCard
+   667→            key={`spo-${idx}`}
+   668→            title={s.name || `#${idx + 1}`}
+   669→            onDelete={() =>
+   670→              update((d) => {
+   671→                d.sponsors.splice(idx, 1);
+   672→              })
+   673→            }
+   674→          >
+   675→            <Field label="Name">
+   676→              <input
+   677→                type="text"
+   678→                value={s.name}
+   679→                onChange={(e) =>
+   680→                  update((d) => {
+   681→                    d.sponsors[idx].name = e.target.value;
+   682→                  })
+   683→                }
+   684→                className="form-input"
+   685→              />
+   686→            </Field>
+   687→            <Field label="Logo URL">
+   688→              <input
+   689→                type="url"
+   690→                value={s.logoUrl}
+   691→                onChange={(e) =>
+   692→                  update((d) => {
+   693→                    d.sponsors[idx].logoUrl = e.target.value;
+   694→                  })
+   695→                }
+   696→                className="form-input"
+   697→              />
+   698→            </Field>
+   699→            <div className="grid grid-cols-2 gap-3">
+   700→              <Field label="Logo size (×)">
+   701→                <input
+   702→                  type="number"
+   703→                  step="0.1"
+   704→                  min="0.1"
+   705→                  value={s.logoSize ?? 1}
+   706→                  onChange={(e) =>
+   707→                    update((d) => {
+   708→                      d.sponsors[idx].logoSize = parseFloat(e.target.value) || 1;
+   709→                    })
+   710→                  }
+   711→                  className="form-input"
+   712→                />
+   713→              </Field>
+   714→              <Field label="Theme">
+   715→                <select
+   716→                  value={s.theme ?? "light"}
+   717→                  onChange={(e) =>
+   718→                    update((d) => {
+   719→                      d.sponsors[idx].theme = e.target.value as "light" | "dark";
+   720→                    })
+   721→                  }
+   722→                  className="form-input"
+   723→                >
+   724→                  <option value="light">Light</option>
+   725→                  <option value="dark">Dark</option>
+   726→                </select>
+   727→              </Field>
+   728→            </div>
+   729→          </SubCard>
+   730→        ))}
+   731→        <AddButton
+   732→          label="Add sponsor"
+   733→          onClick={() =>
+   734→            update((d) => {
+   735→              d.sponsors.push({
+   736→                name: "New",
+   737→                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   738→                theme: "light",
+   739→              });
+   740→            })
+   741→          }
+   742→        />
+   743→      </Section>
+   744→
+   745→      {/* ===== BRANDING ===== */}
+   746→      <Section title="Branding (bottom-right)">
+   747→        <Field label="Image URL">
+   748→          <input
+   749→            type="url"
+   750→            value={data.branding?.imageUrl ?? ""}
+   751→            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+   752→            onChange={(e) =>
+   753→              update((d) => {
+   754→                d.branding = { ...(d.branding ?? {}), imageUrl: e.target.value || undefined };
+   755→              })
+   756→            }
+   757→            className="form-input"
+   758→          />
+   759→        </Field>
+   760→        <Field label="Height (px)">
+   761→          <input
+   762→            type="number"
+   763→            min="16"
+   764→            max="200"
+   765→            value={data.branding?.height ?? 48}
+   766→            onChange={(e) =>
+   767→              update((d) => {
+   768→                d.branding = { ...(d.branding ?? {}), height: parseInt(e.target.value, 10) || 48 };
+   769→              })
+   770→            }
+   771→            className="form-input"
+   772→          />
+   773→        </Field>
+   774→      </Section>
+   775→    </div>
+   776→  );
+   777→}
+   778→
+   779→// ---- Helper sub-components ----
+   780→
+   781→function Section({ title, children }: { title: string; children: React.ReactNode }) {
+   782→  return (
+   783→    <section>
+   784→      <h3 className="text-xs font-bold text-black uppercase tracking-wider mb-2 pb-1 border-b border-black/10">
+   785→        {title}
+   786→      </h3>
+   787→      <div className="space-y-3">{children}</div>
+   788→    </section>
+   789→  );
+   790→}
+   791→
+   792→function Field({ label, children }: { label: string; children: React.ReactNode }) {
+   793→  return (
+   794→    <label className="block">
+   795→      <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
+   796→      {children}
+   797→    </label>
+   798→  );
+   799→}
+   800→
+   801→function SubCard({
+   802→  title,
+   803→  children,
+   804→  onDelete,
+   805→}: {
+   806→  title: string;
+   807→  children: React.ReactNode;
+   808→  onDelete?: () => void;
+   809→}) {
+   810→  return (
+   811→    <div className="rounded-md border border-black/15 bg-white p-3">
+   812→      <div className="flex items-center justify-between mb-2">
+   813→        <span className="text-xs font-bold text-black">{title}</span>
+   814→        {onDelete && (
+   815→          <button
+   816→            type="button"
+   817→            onClick={onDelete}
+   818→            className="text-red-500 hover:bg-red-50 p-1 rounded"
+   819→            title="Delete"
+   820→          >
+   821→            <Trash2 className="h-3.5 w-3.5" />
+   822→          </button>
+   823→        )}
+   824→      </div>
+   825→      <div className="space-y-2">{children}</div>
+   826→    </div>
+   827→  );
+   828→}
+   829→
+   830→function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+   831→  return (
+   832→    <button
+   833→      type="button"
+   834→      onClick={onClick}
+   835→      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/60 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
+   836→    >
+   837→      <Plus className="h-3.5 w-3.5" />
+   838→      {label}
+   839→    </button>
+   840→  );
+   841→}
+   842→
+   843→function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+   844→  return (
+   845→    <div className="flex items-center gap-2">
+   846→      <input
+   847→        type="color"
+   848→        value={value}
+   849→        onChange={(e) => onChange(e.target.value)}
+   850→        className="h-7 w-9 rounded border border-black/15 cursor-pointer"
+   851→      />
+   852→      <input
+   853→        type="text"
+   854→        value={value}
+   855→        onChange={(e) => onChange(e.target.value)}
+   856→        className="form-input flex-1"
+   857→      />
+   858→    </div>
+   859→  );
+   860→}
+   861→
