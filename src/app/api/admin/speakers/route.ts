@@ -104,6 +104,15 @@ export async function POST(req: NextRequest) {
       userId: linkedUserId,
       order: nextOrder,
     },
+    // IMPORTANT: include `event` + `user` + `_count` so the client can
+    // update its local state without re-fetching. Without `event`, the
+    // speakers-tab-client tries to read `speaker.event.slug` and crashes
+    // with "Cannot read properties of undefined (reading 'slug')".
+    include: {
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
+      user: { select: { id: true, email: true, name: true } },
+      _count: { select: { images: true, presentations: true, messages: true } },
+    },
   });
 
   return NextResponse.json({ speaker });

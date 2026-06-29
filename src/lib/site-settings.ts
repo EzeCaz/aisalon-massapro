@@ -31,6 +31,8 @@ export const K_FAVICON = "favicon";
 export const K_LOGIN_HERO = "loginHero";
 /** Canonical key for the login-page banner image (background / OG image). */
 export const K_LOGIN_BANNER = "loginBanner";
+/** Canonical key for the WhatsApp "Join our group" link shown in the header. */
+export const K_WHATSAPP_GROUP_URL = "whatsappGroupUrl";
 
 /**
  * All keys that can be written via the admin API. This is the authoritative
@@ -40,6 +42,7 @@ export const ALL_KEYS: ReadonlySet<string> = new Set([
   K_FAVICON,
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
+  K_WHATSAPP_GROUP_URL,
 ]);
 
 /**
@@ -57,6 +60,9 @@ export const DEFAULTS: Record<string, string> = {
   // UI that no banner is selected, but the runtime code falls back to the
   // favicon's meerkat instead of 404'ing.
   [K_LOGIN_BANNER]: "/images/falafel-meerkat.jpg",
+  // Default WhatsApp group invite link — the AI Salon TLV community group.
+  // Admin can override at /admin/images (no redeploy needed).
+  [K_WHATSAPP_GROUP_URL]: "https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3",
 };
 
 /** Public shape returned by getPublicSettings(). */
@@ -64,6 +70,7 @@ export type PublicSettings = {
   favicon: string;
   loginHero: string;
   loginBanner: string;
+  whatsappGroupUrl: string;
 };
 
 /**
@@ -94,6 +101,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     favicon: map.get(K_FAVICON) ?? DEFAULTS[K_FAVICON],
     loginHero: map.get(K_LOGIN_HERO) ?? DEFAULTS[K_LOGIN_HERO],
     loginBanner: map.get(K_LOGIN_BANNER) ?? DEFAULTS[K_LOGIN_BANNER],
+    whatsappGroupUrl: map.get(K_WHATSAPP_GROUP_URL) ?? DEFAULTS[K_WHATSAPP_GROUP_URL],
   };
 }
 

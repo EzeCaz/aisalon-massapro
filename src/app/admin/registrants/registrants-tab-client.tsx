@@ -146,6 +146,10 @@ export function RegistrantsTabClient({
   const [search, setSearch] = React.useState("");
   const [eventFilter, setEventFilter] = React.useState<string>("ALL");
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  // Link-state filter — "ALL" / "UNLINKED" / "LINKED".
+  // "UNLINKED" is the most common admin task: finding registrants that
+  // need to be linked to a member account. Restored from V3.8 spec.
+  const [linkFilter, setLinkFilter] = React.useState<string>("ALL");
   const [adding, setAdding] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   // Edit-registrant state — opens the EditRegistrantDialog when the
@@ -192,6 +196,12 @@ export function RegistrantsTabClient({
     return rsvps.filter((r) => {
       if (eventFilter !== "ALL" && r.eventId !== eventFilter) return false;
       if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+      // Link-state filter — UNLINKED shows only registrants with no
+      // linked User row; LINKED shows only those with one. The most
+      // common admin workflow is UNLINKED → "Link to member" or bulk
+      // "Look for members".
+      if (linkFilter === "UNLINKED" && r.userId) return false;
+      if (linkFilter === "LINKED" && !r.userId) return false;
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
       return (
@@ -200,7 +210,7 @@ export function RegistrantsTabClient({
         r.event.title.toLowerCase().includes(q)
       );
     });
-  }, [rsvps, search, eventFilter, statusFilter]);
+  }, [rsvps, search, eventFilter, statusFilter, linkFilter]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -505,6 +515,16 @@ export function RegistrantsTabClient({
           <option value="GOING">Going</option>
           <option value="MAYBE">Maybe</option>
           <option value="NOT_GOING">Not going</option>
+        </select>
+        <select
+          value={linkFilter}
+          onChange={(e) => setLinkFilter(e.target.value)}
+          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          title="Filter by whether the registrant is linked to a member account"
+        >
+          <option value="ALL">All · linked & unlinked</option>
+          <option value="UNLINKED">Unlinked only</option>
+          <option value="LINKED">Linked only</option>
         </select>
         <button
           type="button"
