@@ -90,6 +90,16 @@ export type LocationPin = {
   /** Position on the hero canvas, in % from left/top. */
   x: number;
   y: number;
+  /**
+   * Per-pin z-index. Default 50 (in front of hero image + triangle,
+   * at the same level as text sections).
+   *
+   * Per user spec 2026-06-30: "On the mockups/speaker-intro add to the
+   * Location pins (4) the same front or back capabilities as the images".
+   * Front/Back buttons in the form view let the user send a pin behind
+   * the hero image (z < heroZ) or bring it above other layers.
+   */
+  z?: number;
 };
 
 export type SpeakerIntroData = {

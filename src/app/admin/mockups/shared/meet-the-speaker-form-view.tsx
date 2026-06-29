@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, RotateCw, Trash2 } from "lucide-react";
 import type { MeetTheSpeakerData } from "../meet-the-speaker/types";
+import { GradientColorPicker } from "./gradient-color-picker";
 
 /**
  * MeetTheSpeakerFormView — structured form view of MeetTheSpeakerData.
@@ -243,18 +244,13 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
       {/* ===== HERO OVERLAY ===== */}
       <Section title="Hero overlay (gradient)">
         <Field label="Gradient colors (comma-separated)">
-          <input
-            type="text"
-            value={data.heroOverlay.gradientColors.join(", ")}
-            onChange={(e) =>
+          <GradientColorPicker
+            colors={data.heroOverlay.gradientColors}
+            onChange={(next) =>
               update((d) => {
-                d.heroOverlay.gradientColors = e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
+                d.heroOverlay.gradientColors = next;
               })
             }
-            className="form-input"
           />
         </Field>
         <Field label="Gradient opacity">
@@ -278,16 +274,21 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             (toggles, inputs, visibility settings) from the canvas slider
             to the Left Sidebar for all mockup pages."
             Default z-order: heroZ=1 (back), photoZ=3 (front), graphicZ=4 (top).
-            Front/Back buttons override dynamically. */}
+            Front/Back buttons override dynamically.
+
+            Per user spec 2026-06-30: "to the Layer z-index (Front = on top)
+            below the front button add a rotate button for all the creatives,
+            Hero (z=5), Photo (z=3), and Graphic (z=4)" — each creative gets
+            a Rotate button that advances by 90° (0 → 90 → 180 → 270 → 0). */}
         <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
           <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
             Layer z-index (Front = on top)
           </div>
           <div className="grid grid-cols-3 gap-2">
             {([
-              { key: "hero", label: "Hero", zVal: data.heroZ ?? 1 },
-              { key: "photo", label: "Photo", zVal: data.photoZ ?? 3 },
-              { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 4 },
+              { key: "hero", label: "Hero", zVal: data.heroZ ?? 1, rot: data.heroOverlay.rotation ?? 0 },
+              { key: "photo", label: "Photo", zVal: data.photoZ ?? 3, rot: data.speaker.photoRotation ?? 0 },
+              { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 4, rot: data.graphic.rotation ?? 0 },
             ] as const).map((layer) => (
               <div key={layer.key}>
                 <div className="text-[0.6rem] text-black/60 mb-1">
@@ -335,11 +336,31 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                     Back
                   </button>
                 </div>
+                {/* Rotate button — advances by 90° on each click.
+                    Per user spec 2026-06-30: "below the front button add a
+                    rotate button for all the creatives, Hero / Photo / Graphic". */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const next = (layer.rot + 90) % 360;
+                      if (layer.key === "hero") d.heroOverlay.rotation = next;
+                      else if (layer.key === "photo") d.speaker.photoRotation = next;
+                      else d.graphic.rotation = next;
+                    })
+                  }
+                  className="mt-1 w-full inline-flex items-center justify-center gap-1 rounded border border-black/15 bg-white px-1 py-1 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                  title={`Rotate ${layer.label} by 90° (current: ${layer.rot}°)`}
+                >
+                  <RotateCw className="h-3 w-3" />
+                  <span>Rotate {layer.rot}°</span>
+                </button>
               </div>
             ))}
           </div>
           <p className="text-[0.55rem] text-black/40 leading-tight">
             Default: hero (back) → photo → graphic (top). Click Front/Back to override.
+            Rotate button cycles 0° → 90° → 180° → 270° → 0°.
           </p>
         </div>
       </Section>
