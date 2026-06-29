@@ -2973,10 +2973,14 @@ function BulkLinkSpeakerDialog({
  */
 function areNamesSimilar(a: string, b: string): boolean {
   if (!a || !b) return false;
+  // Use Unicode-aware regex (\p{L} = any letter, \p{N} = any number) so that
+  // non-ASCII names (Hebrew, Arabic, Cyrillic, etc.) are NOT stripped out.
+  // The previous /[^\w\s]/g only kept [A-Za-z0-9_] — Hebrew chars were
+  // wiped, making identical Hebrew names look "not even close".
   const norm = (s: string) =>
     s
       .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .split(/\s+/)
       .filter((t) => t.length >= 2);
   const ta = norm(a);
@@ -3122,9 +3126,11 @@ function MergeMembersDialog({
 
         <p className="text-xs text-black/60 -mt-2">
           Pick the <strong>primary account</strong> to keep. All other selected
-          accounts will be deleted, and their data (tags, photos, presentations,
-          messages, speaker links, bio, interests) will be combined into the
-          primary. Nothing is erased.
+          accounts will be deleted, and <strong>all their information will be
+          transferred to the primary member&apos;s account</strong> — tags,
+          photos, presentations, messages, speaker links, bio, interests, and
+          login emails (attached as secondary emails so the user can still sign
+          in with any of their old addresses). Nothing is erased.
         </p>
 
         {/* Name similarity check */}

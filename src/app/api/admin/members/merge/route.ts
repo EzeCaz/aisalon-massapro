@@ -451,10 +451,14 @@ export async function POST(req: NextRequest) {
  */
 function areNamesSimilar(a: string, b: string): boolean {
   if (!a || !b) return false;
+  // Use Unicode-aware regex (\p{L} = any letter, \p{N} = any number) so that
+  // non-ASCII names (Hebrew, Arabic, Cyrillic, etc.) are NOT stripped out.
+  // The previous /[^\\w\\s]/g only kept [A-Za-z0-9_] — Hebrew chars were
+  // wiped, making identical Hebrew names look "not even close".
   const norm = (s: string) =>
     s
       .toLowerCase()
-      .replace(/[^\w\s]/g, " ")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
       .split(/\s+/)
       .filter((t) => t.length >= 2);
   const ta = norm(a);

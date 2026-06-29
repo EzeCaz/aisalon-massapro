@@ -481,83 +481,92 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Event picker row */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-black">
-          <Calendar className="h-4 w-4 text-[#FF005A]" />
-          Auto-fill from event:
-        </div>
-        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
-          <select
-            value={selectedEventSlug}
-            onChange={(e) => handleEventPick(e.target.value)}
-            disabled={loadingEvent}
-            className="flex-1 max-w-md rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
-          >
-            <option value="">
-              {events.length === 0
-                ? "No events found"
-                : "— Pick an event to auto-fill all fields —"}
-            </option>
-            {events.map((ev) => (
-              <option key={ev.id} value={ev.slug}>
-                {new Date(ev.startsAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}{" "}
-                · {ev.title}
-                {ev.venue ? ` @ ${ev.venue}` : ""}
+      {/* Event + speaker picker — stacked on two rows so each dropdown
+          gets the full width. Event picker on top, speaker picker below. */}
+      <div className="space-y-2 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
+        {/* Row 1: Event picker */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-black whitespace-nowrap">
+            <Calendar className="h-4 w-4 text-[#FF005A]" />
+            Auto-fill from event:
+          </div>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <select
+              value={selectedEventSlug}
+              onChange={(e) => handleEventPick(e.target.value)}
+              disabled={loadingEvent}
+              className="flex-1 rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
+            >
+              <option value="">
+                {events.length === 0
+                  ? "No events found"
+                  : "— Pick an event to auto-fill all fields —"}
               </option>
-            ))}
-          </select>
-          {loadingEvent && (
-            <Loader2 className="h-4 w-4 animate-spin text-[#FF005A]" />
-          )}
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.slug}>
+                  {new Date(ev.startsAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}{" "}
+                  · {ev.title}
+                  {ev.venue ? ` @ ${ev.venue}` : ""}
+                </option>
+              ))}
+            </select>
+            {loadingEvent && (
+              <Loader2 className="h-4 w-4 animate-spin text-[#FF005A] shrink-0" />
+            )}
+          </div>
         </div>
 
-        {/* Speaker picker — appears once an event has been picked.
+        {/* Row 2: Speaker picker — appears once an event has been picked.
             Re-runs the mapper with the selected speaker instead of the
             default first-by-order. */}
-        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-sm font-bold text-black whitespace-nowrap">
             <User className="h-4 w-4 text-[#FF005A]" />
             Speaker:
           </div>
-          <select
-            value={selectedSpeakerId}
-            onChange={(e) => handleSpeakerPick(e.target.value)}
-            disabled={!lastFetchedEvent || loadingEvent}
-            className="flex-1 max-w-md rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
-          >
-            <option value="">
-              {!lastFetchedEvent
-                ? "— Pick an event first —"
-                : lastFetchedEvent.speakers.length === 0
-                  ? "No speakers on this event"
-                  : "— Default (first speaker) —"}
-            </option>
-            {[...(lastFetchedEvent?.speakers ?? [])]
-              .sort((a, b) => a.order - b.order)
-              .map((sp) => (
-                <option key={sp.id} value={sp.id}>
-                  {sp.name}
-                  {sp.role ? ` · ${sp.role}` : ""}
-                  {sp.company ? ` · ${sp.company}` : ""}
-                </option>
-              ))}
-          </select>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <select
+              value={selectedSpeakerId}
+              onChange={(e) => handleSpeakerPick(e.target.value)}
+              disabled={!lastFetchedEvent || loadingEvent}
+              className="flex-1 rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
+            >
+              <option value="">
+                {!lastFetchedEvent
+                  ? "— Pick an event first —"
+                  : lastFetchedEvent.speakers.length === 0
+                    ? "No speakers on this event"
+                    : "— Default (first speaker) —"}
+              </option>
+              {[...(lastFetchedEvent?.speakers ?? [])]
+                .sort((a, b) => a.order - b.order)
+                .map((sp) => (
+                  <option key={sp.id} value={sp.id}>
+                    {sp.name}
+                    {sp.role ? ` · ${sp.role}` : ""}
+                    {sp.company ? ` · ${sp.company}` : ""}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
 
-        {data.event.sourceEventSlug && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#FF005A]/10 px-2 py-1 text-[0.65rem] font-semibold text-[#FF005A]">
-            <Wand2 className="h-3 w-3" />
-            Auto-filled from &ldquo;{data.event.name.slice(0, 40)}{data.event.name.length > 40 ? "…" : ""}&rdquo;
+        {/* Status row */}
+        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#FF005A]/10">
+          {data.event.sourceEventSlug && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#FF005A]/10 px-2 py-1 text-[0.65rem] font-semibold text-[#FF005A]">
+              <Wand2 className="h-3 w-3" />
+              Auto-filled from &ldquo;{data.event.name.slice(0, 40)}{data.event.name.length > 40 ? "…" : ""}&rdquo;
+            </span>
+          )}
+          <span className="text-xs text-black/40">
+            (you can still edit any field in the JSON below)
           </span>
-        )}
-        <span className="text-xs text-black/40">
-          (you can still edit any field in the JSON below)
-        </span>
+        </div>
       </div>
 
       {/* Toolbar */}

@@ -29,6 +29,7 @@ export function needsOnboarding(user: OnboardingAwareUser | null): boolean {
  * checkboxes — see /api/user/onboarding for the serialization format.
  */
 export const INTERESTED_IN_OPTIONS = [
+  "Be a member",
   "Be a guest speaker",
   "Host an event in our offices",
   "Become a premium sponsor",
