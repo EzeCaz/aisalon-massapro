@@ -474,3 +474,30 @@ Stage Summary:
   - Drive: shared folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
   - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.11
 - Vercel dpl_ ID pending (no Vercel API token in env).
+
+---
+Task ID: v5.12
+Agent: main (Super Z)
+Task: Apply the 'role, company' formatting pattern (from V5.11 lineup fix) to the remaining speaker displays on the event page for consistency. Then backup.
+
+Work Log:
+- Read worklog.md (last entry: V5.11).
+- Applied 'role, company' pattern to 3 more places:
+  1. Agenda card speaker inline display (~line 1063 of agenda-tab.tsx): "Yehoshua Cohen · VP Applied AI" → "Yehoshua Cohen · VP Applied AI, AI21"
+  2. Contact-speaker dialog header (~line 436 of agenda-tab.tsx): {speaker.role} → {speaker.role}{speaker.company ? `, ${speaker.company}` : ""}
+  3. Presentations tab speaker section header (~line 505 of presentations-tab.tsx): merged two separate spans (role · company) into one span with "role, company" format. Edge case: when company exists but role is null, company still renders alone.
+- Intentionally did NOT change:
+  - photos-tab.tsx speaker checkbox lists (filterable line items — separate lines aid scanning)
+  - admin-agenda-tab.tsx (already uses " — role (company)" format with parens)
+- Build verification: npx next build → ✓ Compiled successfully in 14.6s.
+- Committed as V5.12 (commit 5db7cfb): 2 files changed, 17 insertions(+), 5 deletions(-).
+- Pushed V5.12 to origin/main — triggers Vercel auto-deploy.
+- Ran V5.12 milestone backup: local tarball + Google Drive upload + GitHub release v5.12 + manifest.
+
+Stage Summary:
+- V5.12 PATCH: 'role, company' pattern now consistent across agenda card, contact dialog, presentations tab, and the lineup (from V5.11).
+- Backup locations:
+  - Local: download/aisalon-massapro-V5.12-source.tar.gz
+  - Drive: shared folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
+  - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.12
+- Vercel dpl_ ID pending (no Vercel API token in env).
