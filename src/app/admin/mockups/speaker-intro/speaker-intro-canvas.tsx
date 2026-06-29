@@ -458,7 +458,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </span>
         </SectionBox>
 
-        {/* ===== 4. SPEAKERS LIST (left column) ===== */}
+        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "speakers"}
@@ -473,7 +473,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col gap-3"
-          style={{ left: "48px", top: "260px", width: "400px", zIndex: sectionZFor("speakers") }}
+          style={{ left: "48px", top: "260px", width: `${(data.speakersLayout?.columns ?? 1) === 1 ? 400 : (data.speakersLayout?.columns ?? 1) === 2 ? 700 : 1000}px`, zIndex: sectionZFor("speakers") }}
           accentColor="#FF005A"
           label="Speakers"
           guideId="speakers"
@@ -492,27 +492,106 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               Speakers
             </span>
           </div>
-          {[...data.speakers]
-            .sort((a, b) => a.order - b.order)
-            // Pair each speaker with its index in the SORTED array (so
-            // slot.index matches what the editor's applyImagePick expects,
-            // which looks up `next.speakers.sort(...)[slot.index]`).
-            .map((speaker, idx) => ({ speaker, idx }))
-            // Then hide invisible speakers (visible defaults to true).
-            .filter(({ speaker }) => speaker.visible !== false)
-            .map(({ speaker, idx }) => (
-              <SpeakerCard
-                key={`${speaker.order}-${speaker.fullName}`}
-                speaker={speaker}
-                accentColor={data.event.brandColors[0]}
-                editable={editable}
-                slot={{ kind: "speaker", index: idx }}
-                previewScale={previewScale}
-                onPickImage={onPickImage}
-                onPlacementChange={onPlacementChange}
-                onSizeChange={onSizeChange}
-              />
-            ))}
+          {(() => {
+            // Sorted + filtered speakers (paired with their sort index).
+            const sortedSpeakers = [...data.speakers]
+              .sort((a, b) => a.order - b.order)
+              .map((speaker, idx) => ({ speaker, idx }))
+              .filter(({ speaker }) => speaker.visible !== false);
+
+            const layout = data.speakersLayout ?? {};
+            const columns = layout.columns ?? 1;
+            const flow = layout.flowDirection ?? "row";
+            const lastRowAlign = layout.lastRowAlign ?? "spread";
+            const rowsPerColumn = layout.rowsPerColumn ?? [];
+
+            // Build the position map for each speaker.
+            let positions: Array<{ row: number; col: number }> = [];
+            if (flow === "row") {
+              positions = sortedSpeakers.map((_, i) => ({
+                row: Math.floor(i / columns),
+                col: i % columns,
+              }));
+            } else {
+              if (rowsPerColumn.length >= columns) {
+                const colOffsets: number[] = [0];
+                for (let c = 1; c < columns; c++) {
+                  colOffsets.push(colOffsets[c - 1] + rowsPerColumn[c - 1]);
+                }
+                positions = sortedSpeakers.map((_, i) => {
+                  let col = 0;
+                  let row = i;
+                  for (let c = 0; c < columns; c++) {
+                    if (i < colOffsets[c] + rowsPerColumn[c]) {
+                      col = c;
+                      row = i - colOffsets[c];
+                      break;
+                    }
+                  }
+                  return { row, col };
+                });
+              } else {
+                const rowsPerCol = Math.ceil(sortedSpeakers.length / columns);
+                positions = sortedSpeakers.map((_, i) => ({
+                  col: Math.floor(i / rowsPerCol),
+                  row: i % rowsPerCol,
+                }));
+              }
+            }
+
+            const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
+            const lastRowCount = positions.filter((p) => p.row === maxRow).length;
+            const isLastRowIncomplete = lastRowCount < columns;
+
+            return (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                  gap: "12px",
+                }}
+              >
+                {sortedSpeakers.map(({ speaker, idx }, i) => {
+                  const pos = positions[i];
+                  let gridColumnStart = pos.col + 1;
+                  if (isLastRowIncomplete && pos.row === maxRow) {
+                    if (lastRowAlign === "spread") {
+                      const lastRowSpeakersBefore = positions.filter(
+                        (p) => p.row === maxRow && p.col < pos.col,
+                      ).length;
+                      gridColumnStart =
+                        Math.round(
+                          (lastRowSpeakersBefore * columns) / lastRowCount,
+                        ) + 1;
+                    } else if (lastRowAlign === "center") {
+                      const empty = columns - lastRowCount;
+                      gridColumnStart = pos.col + Math.floor(empty / 2) + 1;
+                    }
+                  }
+                  return (
+                    <div
+                      key={`${speaker.order}-${speaker.fullName}`}
+                      style={{
+                        gridColumnStart,
+                        gridRowStart: pos.row + 1,
+                      }}
+                    >
+                      <SpeakerCard
+                        speaker={speaker}
+                        accentColor={data.event.brandColors[0]}
+                        editable={editable}
+                        slot={{ kind: "speaker", index: idx }}
+                        previewScale={previewScale}
+                        onPickImage={onPickImage}
+                        onPlacementChange={onPlacementChange}
+                        onSizeChange={onSizeChange}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </SectionBox>
 
         {/* ===== 8. SPONSORS (bottom-right) ===== */}

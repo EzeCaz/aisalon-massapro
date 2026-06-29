@@ -157,6 +157,94 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
       {/* ===== SPEAKERS ===== */}
       <Section title={`Speakers (${speakersSorted.length})`}>
+        {/* Speaker grid layout controls */}
+        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 mb-3">
+          <p className="text-xs font-semibold text-black/70 mb-2 uppercase tracking-wider">
+            Speaker grid layout
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Columns">
+              <select
+                value={String(data.speakersLayout?.columns ?? 1)}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
+                  })
+                }
+                className="form-input"
+              >
+                <option value="1">1 column</option>
+                <option value="2">2 columns</option>
+                <option value="3">3 columns</option>
+              </select>
+            </Field>
+            <Field label="Flow direction">
+              <select
+                value={data.speakersLayout?.flowDirection ?? "row"}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.flowDirection = e.target.value as "row" | "col";
+                  })
+                }
+                className="form-input"
+              >
+                <option value="row">Row-by-row (left→right, then wrap)</option>
+                <option value="col">Col-by-col (top→bottom, then next col)</option>
+              </select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Field label="Last row alignment">
+              <select
+                value={data.speakersLayout?.lastRowAlign ?? "spread"}
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    d.speakersLayout.lastRowAlign = e.target.value as "left" | "center" | "spread";
+                  })
+                }
+                className="form-input"
+              >
+                <option value="spread">Spread evenly</option>
+                <option value="center">Center</option>
+                <option value="left">Left-align</option>
+              </select>
+            </Field>
+            <Field label="Rows per column (comma-separated)">
+              <input
+                type="text"
+                value={(data.speakersLayout?.rowsPerColumn ?? []).join(",")}
+                placeholder="auto (e.g. 2,1,2)"
+                onChange={(e) =>
+                  update((d) => {
+                    if (!d.speakersLayout) d.speakersLayout = {};
+                    const txt = e.target.value.trim();
+                    if (!txt) {
+                      d.speakersLayout.rowsPerColumn = [];
+                    } else {
+                      d.speakersLayout.rowsPerColumn = txt
+                        .split(",")
+                        .map((s) => parseInt(s.trim(), 10))
+                        .filter((n) => !isNaN(n) && n > 0);
+                    }
+                  })
+                }
+                className="form-input"
+              />
+            </Field>
+          </div>
+          <p className="text-[0.65rem] text-black/50 mt-2">
+            {(() => {
+              const cols = data.speakersLayout?.columns ?? 1;
+              const n = speakersSorted.length;
+              if (n === 0) return "No speakers yet.";
+              const rows = Math.ceil(n / cols);
+              return `${n} speaker${n === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"} · ${rows} row${rows === 1 ? "" : "s"} (ordered by # field)`;
+            })()}
+          </p>
+        </div>
         {speakersSorted.map((sp, idx) => (
           <SubCard
             key={`spk-${idx}`}

@@ -114,6 +114,29 @@ export type SpeakerIntroData = {
   };
   /** Vertical stack of speakers on the left column. */
   speakers: Speaker[];
+  /**
+   * Speaker grid layout controls. When omitted, the canvas renders the
+   * speakers as a single vertical column (the original behavior).
+   *
+   *   - columns: 1 | 2 | 3 — how many speaker cards per row.
+   *   - rowsPerColumn: explicit row count per column index (1-indexed).
+   *       Example: columns=3, rowsPerColumn=[2, 1, 2] means col 1 has 2
+   *       rows, col 2 has 1 row, col 3 has 2 rows. When omitted or
+   *       shorter than `columns`, the canvas auto-wraps based on speaker
+   *       count.
+   *   - flowDirection: "row" (fill left-to-right, then wrap to next row)
+   *       or "col" (fill top-to-bottom in col 1, then col 2, etc.).
+   *       Default "row".
+   *   - lastRowAlign: "left" | "center" | "spread" — how to align the
+   *       last row when it has fewer speakers than columns. Default
+   *       "spread" (per user spec).
+   */
+  speakersLayout?: {
+    columns?: 1 | 2 | 3;
+    rowsPerColumn?: number[];
+    flowDirection?: "row" | "col";
+    lastRowAlign?: "left" | "center" | "spread";
+  };
   /** "In collaboration with:" logos (bottom-right). */
   collaborators: Sponsor[];
   /** "Sponsored by:" logos (bottom-right, below collaborators). */
@@ -226,6 +249,6 @@ export function resolvePlacement(p?: ImagePlacement): {
   return {
     focusX: clamp(p?.focusX ?? 50, 0, 100),
     focusY: clamp(p?.focusY ?? 50, 0, 100),
-    zoom: clamp(p?.zoom ?? 1, 1, 4),
+    zoom: clamp(p?.zoom ?? 1, 0.1, 10),
   };
 }

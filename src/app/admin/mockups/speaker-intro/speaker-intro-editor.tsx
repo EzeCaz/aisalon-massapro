@@ -14,6 +14,7 @@ import {
   Wand2,
   FormInput,
   LayoutPanelTop,
+  Save,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -67,6 +68,7 @@ export function SpeakerIntroEditor({ events }: Props) {
   const [viewMode, setViewMode] = useState<"form" | "json">("form");
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.5);
   /** Edit mode = image areas are interactive (drag/wheel/click). */
   const [editMode, setEditMode] = useState<boolean>(false);
@@ -268,6 +270,7 @@ export function SpeakerIntroEditor({ events }: Props) {
     const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
     if (slot.kind === "hero") {
       next.heroOverlay.imageScale = newMultiplier;
+      next.heroOverlay.imageScaleY = newMultiplier;
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
       if (sp) sp.photoSize = newMultiplier;
@@ -461,6 +464,48 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /**
+   * Save the current mockup as the speaker-intro default for the selected
+   * event. Uploads the PNG snapshot to /admin/images (brand-assets) and
+   * creates an EventMockupDefault row. The event page can then load this
+   * default to show the speaker-intro image.
+   */
+  async function handleSaveAsDefault() {
+    if (!data.event.sourceEventId) {
+      alert("Please pick an event from the dropdown first — the mockup is saved per event.");
+      return;
+    }
+    if (!canvasRef.current) return;
+    setSaving(true);
+    try {
+      const pngDataUrl = await getPngDataUrl();
+      const res = await fetch(
+        `/api/admin/events/${encodeURIComponent(data.event.sourceEventId)}/mockup-defaults`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "speaker-intro",
+            dataJson: JSON.stringify(data),
+            pngBase64: pngDataUrl,
+          }),
+        },
+      );
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.error || `HTTP ${res.status}`);
+      }
+      alert(
+        `✓ Saved as speaker-intro default for "${data.event.name}".\n\nThe PNG snapshot is now in /admin/images under brand-assets.`,
+      );
+    } catch (err) {
+      console.error("Save as default failed:", err);
+      alert(`Save as default failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // --- visibility toggle ----------------------------------------------
 
   /**
@@ -583,6 +628,20 @@ export function SpeakerIntroEditor({ events }: Props) {
         >
           <Download className="h-3.5 w-3.5" />
           {downloading ? "Exporting…" : "Download"}
+        </button>
+        <button
+          type="button"
+          onClick={handleSaveAsDefault}
+          disabled={saving || !!parseError || !data.event.sourceEventId}
+          className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#CC0048] disabled:opacity-50"
+          title={
+            data.event.sourceEventId
+              ? `Save as speaker-intro default for "${data.event.name}"`
+              : "Pick an event from the dropdown first"
+          }
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? "Saving…" : "Save as event default"}
         </button>
         <ShareButtons
           getPngDataUrl={getPngDataUrl}

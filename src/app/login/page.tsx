@@ -48,6 +48,9 @@ export default async function LoginPage() {
 
   const settings = await getPublicSettings();
   const heroUrl = settings.loginHero || "/images/falafel-meerkat.jpg";
+  // The meerkat mark in the logo uses the admin-selected loginBanner brand
+  // asset (falls back to the hardcoded falafel-meerkat.jpg if not set).
+  const markUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
 
   // Is the hero an external URL (Vercel Blob) or a relative path?
   const heroIsExternal = heroUrl.startsWith("http");
@@ -62,7 +65,7 @@ export default async function LoginPage() {
       <section className="relative hidden md:flex flex-col justify-between p-12 ais-poly-bg overflow-hidden">
         {/* Top-left: stacked aisalon logo with Falafel Meerkat mark (white) */}
         <div className="relative z-10 text-white">
-          <AiSalonLogoServer variant="horizontal-tagline" color="white" className="text-[2.4rem]" />
+          <AiSalonLogoServer variant="horizontal-tagline" color="white" className="text-[2.4rem]" markSrc={markUrl} />
         </div>
 
         {/* Center: dynamic brand hero image + chapter tagline */}
@@ -120,7 +123,7 @@ export default async function LoginPage() {
         <div className="w-full max-w-sm mx-auto">
           {/* Mobile-only logo with Falafel Meerkat mark */}
           <div className="md:hidden mb-8 flex flex-col items-center text-center">
-            <AiSalonLogoServer variant="horizontal-tagline" color="black" className="text-[1.6rem]" />
+            <AiSalonLogoServer variant="horizontal-tagline" color="black" className="text-[1.6rem]" markSrc={markUrl} />
             <div className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/60">
               Tel Aviv · Empowering AI Connections
             </div>

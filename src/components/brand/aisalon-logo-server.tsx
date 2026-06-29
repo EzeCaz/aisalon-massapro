@@ -9,6 +9,8 @@ type Props = {
   className?: string;
   color?: Color;
   tagline?: boolean;
+  /** Optional override for the meerkat mark image URL (e.g. loginBanner from site-settings). */
+  markSrc?: string;
 };
 
 /**
@@ -19,12 +21,17 @@ type Props = {
  * (`/images/falafel-meerkat.jpg`) is the brand mark shown on the top-left
  * of every page (including login). It replaces the previous SVG polyhedron
  * mark while still pairing with the lowercase `aisalon` wordmark.
+ *
+ * The `markSrc` prop lets the caller override the mascot image — used on
+ * the login page where the admin-selected `loginBanner` brand-asset
+ * should appear instead of the hardcoded fallback.
  */
 export function AiSalonLogoServer({
   variant = "horizontal",
   className,
   color = "black",
   tagline: taglineProp,
+  markSrc,
 }: Props) {
   const tagline = taglineProp ?? variant.includes("tagline");
   const text = color === "white" ? "text-white" : "text-black";
@@ -33,7 +40,7 @@ export function AiSalonLogoServer({
   if (variant === "monogram") {
     return (
       <span className={cn("inline-flex items-baseline font-extrabold tracking-tight", text, className)}>
-        <MeerkatMarkServer height="1em" className="mr-[0.15em]" />
+        <MeerkatMarkServer height="1em" className="mr-[0.15em]" src={markSrc} />
         <span className="text-[1em]">ais</span>
       </span>
     );
@@ -42,7 +49,7 @@ export function AiSalonLogoServer({
   if (variant === "stacked" || variant === "stacked-tagline") {
     return (
       <span className={cn("inline-flex flex-col items-start leading-[0.9]", text, className)}>
-        <MeerkatMarkServer height="1.4em" className="mb-[0.2em]" />
+        <MeerkatMarkServer height="1.4em" className="mb-[0.2em]" src={markSrc} />
         <span className="text-[1.6em] font-extrabold tracking-tight">ai</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">sa</span>
         <span className="text-[1.6em] font-extrabold tracking-tight">lon</span>
@@ -58,7 +65,7 @@ export function AiSalonLogoServer({
   return (
     <span className={cn("inline-flex flex-col items-start leading-none", text, className)}>
       <span className="inline-flex items-end">
-        <MeerkatMarkServer height="1.5em" className="mr-[0.2em]" />
+        <MeerkatMarkServer height="1.5em" className="mr-[0.2em]" src={markSrc} />
         <span className="text-[1.6em] font-extrabold tracking-tight lowercase">aisalon</span>
       </span>
       {tagline && (
@@ -91,13 +98,17 @@ export function AiSalonLogoServer({
 export function MeerkatMarkServer({
   className,
   height = "1.5em",
+  src,
 }: {
   className?: string;
   height?: string;
+  src?: string;
 }) {
+  const imgSrc = src || "/images/falafel-meerkat.jpg";
+  const isExternal = imgSrc.startsWith("http");
   return (
     <Image
-      src="/images/falafel-meerkat.jpg"
+      src={imgSrc}
       alt="AI Salon Falafel Meerkat"
       width={624}
       height={1686}
@@ -113,7 +124,7 @@ export function MeerkatMarkServer({
         verticalAlign: "middle",
       }}
       priority
-      unoptimized
+      unoptimized={isExternal}
     />
   );
 }
