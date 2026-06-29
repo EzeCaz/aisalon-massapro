@@ -38,3 +38,4 @@ dev.log
 scripts/get-prod-db-url.mjs
 scripts/patch-salon-paths.py
 /tmp/prod_db_url.txt
+old-deployment/
