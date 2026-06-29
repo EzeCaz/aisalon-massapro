@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { EventProfileData, SessionType } from "../event-profile/types";
 import { sessionTypeLabel, isAutoHiddenSessionType } from "../event-profile/types";
+import { GradientColorPicker } from "./gradient-color-picker";
 
 /**
  * EventProfileFormView — structured form view of EventProfileData.
@@ -135,18 +136,13 @@ export function EventProfileFormView({ data, onChange }: Props) {
           />
         </Field>
         <Field label="Gradient colors (comma-separated)">
-          <input
-            type="text"
-            value={data.heroOverlay.gradientColors.join(", ")}
-            onChange={(e) =>
+          <GradientColorPicker
+            colors={data.heroOverlay.gradientColors}
+            onChange={(next) =>
               update((d) => {
-                d.heroOverlay.gradientColors = e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
+                d.heroOverlay.gradientColors = next;
               })
             }
-            className="form-input"
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">

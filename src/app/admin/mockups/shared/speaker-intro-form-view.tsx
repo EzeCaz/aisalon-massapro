@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { SpeakerIntroData } from "../speaker-intro/types";
+import { GradientColorPicker } from "./gradient-color-picker";
 
 /**
  * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
@@ -447,18 +448,13 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           />
         </Field>
         <Field label="Gradient colors (comma-separated)">
-          <input
-            type="text"
-            value={data.heroOverlay.gradientColors.join(", ")}
-            onChange={(e) =>
+          <GradientColorPicker
+            colors={data.heroOverlay.gradientColors}
+            onChange={(next) =>
               update((d) => {
-                d.heroOverlay.gradientColors = e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
+                d.heroOverlay.gradientColors = next;
               })
             }
-            className="form-input"
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -655,13 +651,69 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 />
               </Field>
             </div>
+            {/* Per-pin z-index controls — same pattern as Hero/Triangle
+                z-index in the Hero overlay section above.
+                Per user spec 2026-06-30: "On the mockups/speaker-intro add
+                to the Location pins (4) the same front or back capabilities
+                as the images". Default z=50 (in front of hero image +
+                triangle, at text-section level). Front/Back buttons cycle
+                above/below the hero image (which sits at heroZ, default 2). */}
+            <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
+                  Layer z-index
+                </span>
+                <span className="text-[0.55rem] font-mono text-black/50">
+                  z={pin.z ?? 50}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      // Bring to front: above all other pins + hero.
+                      const peers = d.locationPins.map((p) => p.z ?? 50);
+                      const heroZ = d.heroZ ?? 2;
+                      const maxPeer = Math.max(...peers, heroZ);
+                      d.locationPins[idx].z = maxPeer + 1;
+                    })
+                  }
+                  className="rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Bring this pin to front (above hero + other pins)"
+                >
+                  Front
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      // Send to back: below hero image (so the pin appears
+                      // hidden behind the hero photo). Useful for layering
+                      // effects where pins peek out from behind the image.
+                      const peers = d.locationPins.map((p) => p.z ?? 50);
+                      const heroZ = d.heroZ ?? 2;
+                      const minPeer = Math.min(...peers, heroZ);
+                      d.locationPins[idx].z = minPeer - 1;
+                    })
+                  }
+                  className="rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Send this pin to back (behind hero image)"
+                >
+                  Back
+                </button>
+              </div>
+              <p className="text-[0.55rem] text-black/40 leading-tight">
+                Default z=50 (in front of hero). Click Back to hide behind the hero image.
+              </p>
+            </div>
           </SubCard>
         ))}
         <AddButton
           label="Add pin"
           onClick={() =>
             update((d) => {
-              d.locationPins.push({ label: "New", x: 50, y: 50 });
+              d.locationPins.push({ label: "New", x: 50, y: 50, z: 50 });
             })
           }
         />

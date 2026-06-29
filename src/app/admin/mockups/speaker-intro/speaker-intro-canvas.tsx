@@ -287,12 +287,18 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             </div>
           )}
 
-          {/* 7. LOCATION PINS — overlay with connector lines */}
+          {/* 7. LOCATION PINS — overlay with connector lines
+              Per user spec 2026-06-30: each pin gets its own z-index
+              (Front/Back capability). The connector lines stay in a
+              shared SVG (they're thin guide lines, no per-line z needed).
+              The pin dots + labels render as HTML elements at each pin's
+              own z-index so they can layer in front of / behind the hero. */}
           <svg
             className="absolute inset-0 w-full h-full pointer-events-none"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden
+            style={{ zIndex: 1 }}
           >
             {/* Connector lines from center to each pin */}
             {data.locationPins.map((pin, i) => (
@@ -308,35 +314,49 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 strokeDasharray="0.5 0.5"
               />
             ))}
-            {/* Pin dots */}
-            {data.locationPins.map((pin, i) => (
-              <circle
-                key={`dot-${i}`}
-                cx={pin.x}
-                cy={pin.y}
-                r="0.8"
-                fill={data.event.brandColors[0]}
-                stroke="white"
-                strokeWidth="0.3"
-              />
-            ))}
           </svg>
-          {/* Pin labels (HTML so they can wrap properly) */}
-          {data.locationPins.map((pin, i) => (
-            <span
-              key={`label-${i}`}
-              className="absolute text-white font-semibold uppercase tracking-wider drop-shadow pointer-events-none"
-              style={{
-                left: `${pin.x}%`,
-                top: `${pin.y}%`,
-                transform: "translate(-50%, -120%)",
-                fontSize: "11px",
-                letterSpacing: "0.12em",
-              }}
-            >
-              {pin.label}
-            </span>
-          ))}
+          {/* Pin dots + labels (HTML, per-pin z-index).
+              Each pin is a wrapper div positioned at (x%, y%) with the
+              pin's own z-index. The dot is a small CSS circle; the label
+              sits above the dot. */}
+          {data.locationPins.map((pin, i) => {
+            const pinZ = pin.z ?? 50;
+            const dotColor = data.event.brandColors[0] ?? "#FF005A";
+            return (
+              <div
+                key={`pin-${i}`}
+                className="absolute pointer-events-none"
+                style={{
+                  left: `${pin.x}%`,
+                  top: `${pin.y}%`,
+                  zIndex: pinZ,
+                }}
+              >
+                {/* Dot — small circle, centered on the pin's (x,y) */}
+                <div
+                  className="absolute rounded-full border-2 border-white shadow"
+                  style={{
+                    width: "10px",
+                    height: "10px",
+                    backgroundColor: dotColor,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                  aria-hidden
+                />
+                {/* Label — positioned above the dot */}
+                <span
+                  className="absolute text-white font-semibold uppercase tracking-wider drop-shadow whitespace-nowrap"
+                  style={{
+                    transform: "translate(-50%, -180%)",
+                    fontSize: "11px",
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  {pin.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
           );
         })()}

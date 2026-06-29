@@ -146,6 +146,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
         {(() => {
           const sx = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
           const sy = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
+          const heroRot = data.heroOverlay.rotation ?? 0;
           return (
         <div
           className="absolute pointer-events-none"
@@ -155,6 +156,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             width: `${55 * sx}%`,
             height: `${85 * sy}%`,
             zIndex: heroZ,
+            ...(heroRot ? { transform: `rotate(${heroRot}deg)` } : {}),
+            transformOrigin: "center center",
           }}
           aria-hidden
         >
@@ -203,6 +206,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           const heightPct = 60 * sizeMult;
           // Anchor top-right at 95% (5% margin from right); left shifts as width grows.
           const leftPct = Math.max(35, 95 - widthPct);
+          const photoRot = data.speaker.photoRotation ?? 0;
           return (
             <div
               className="absolute"
@@ -212,6 +216,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 width: `${widthPct}%`,
                 height: `${heightPct}%`,
                 zIndex: photoZ,
+                ...(photoRot ? { transform: `rotate(${photoRot}deg)` } : {}),
+                transformOrigin: "center center",
               }}
             >
               <EditableImage
@@ -241,6 +247,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           // Anchor to bottom-right with 2% margin.
           const leftPct = Math.max(40, 98 - widthPct);
           const topPct = Math.max(20, 98 - heightPct);
+          const graphicRot = data.graphic.rotation ?? 0;
           return (
             <div
               className="absolute pointer-events-auto"
@@ -250,6 +257,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 width: `${widthPct}%`,
                 height: `${heightPct}%`,
                 zIndex: graphicZ,
+                ...(graphicRot ? { transform: `rotate(${graphicRot}deg)` } : {}),
+                transformOrigin: "center center",
               }}
             >
               <EditableImage

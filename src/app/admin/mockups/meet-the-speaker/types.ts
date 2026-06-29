@@ -75,6 +75,12 @@ export type MeetTheSpeakerData = {
      * 1.5 = 67%, 2 = 90%. Useful for tighter headshots.
      */
     photoSize?: number;
+    /**
+     * Rotation in degrees (0, 90, 180, 270). Each click of the "Rotate"
+     * button in the z-index section advances by 90°. Applied via CSS
+     * `transform: rotate(<deg>deg)` on the photo's container.
+     */
+    photoRotation?: number;
   };
   /** Event context (auto-filled from the event picker). */
   event: {
@@ -98,6 +104,12 @@ export type MeetTheSpeakerData = {
      * 2 = 40%, 0.5 = 10%.
      */
     imageScale?: number;
+    /**
+     * Rotation in degrees (0, 90, 180, 270). Each click of the "Rotate"
+     * button in the z-index section advances by 90°. Applied via CSS
+     * `transform: rotate(<deg>deg)` on the graphic's container.
+     */
+    rotation?: number;
   };
   /** Geometric triangle overlays on the right side (behind speaker photo). */
   heroOverlay: {
@@ -109,6 +121,13 @@ export type MeetTheSpeakerData = {
     /** Vertical scale multiplier for the hero overlay container.
      *  1 = 85% canvas height (default). 0.5 = 42.5%, 2 = 170%. */
     imageScaleY?: number;
+    /**
+     * Rotation in degrees (0, 90, 180, 270) for the hero overlay
+     * (gradient triangles). Each click of the "Rotate" button in the
+     * z-index section advances by 90°. Applied via CSS
+     * `transform: rotate(<deg>deg)` on the overlay container.
+     */
+    rotation?: number;
   };
   /** "In collaboration with:" logos (bottom-right). */
   collaborators: Sponsor[];
