@@ -1223,7 +1223,12 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm text-black">{s.name}</div>
-                    {s.role && <div className="text-xs text-black/60">{s.role}</div>}
+                    {s.role && (
+                      <div className="text-xs text-black/60">
+                        {s.role}
+                        {s.company ? `, ${s.company}` : ""}
+                      </div>
+                    )}
                     {s.topic && (
                       <div className="mt-2 text-xs font-medium text-[#007E72] italic leading-snug">
                         &ldquo;{s.topic}&rdquo;

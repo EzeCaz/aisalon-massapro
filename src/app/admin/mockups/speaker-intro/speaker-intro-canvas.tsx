@@ -287,55 +287,52 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             </div>
           )}
 
-          {/* 7. LOCATION PINS — overlay with connector lines
+          {/* 7. LOCATION PINS — per-pin connector line + dot + label
               Per user spec 2026-06-30: each pin gets its own z-index
-              (Front/Back capability). The connector lines stay in a
-              shared SVG (they're thin guide lines, no per-line z needed).
-              The pin dots + labels render as HTML elements at each pin's
-              own z-index so they can layer in front of / behind the hero. */}
-          <svg
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden
-            style={{ zIndex: 1 }}
-          >
-            {/* Connector lines from center to each pin */}
-            {data.locationPins.map((pin, i) => (
-              <line
-                key={`line-${i}`}
-                x1="50"
-                y1="50"
-                x2={pin.x}
-                y2={pin.y}
-                stroke="white"
-                strokeWidth="0.25"
-                strokeOpacity="0.6"
-                strokeDasharray="0.5 0.5"
-              />
-            ))}
-          </svg>
-          {/* Pin dots + labels (HTML, per-pin z-index).
-              Each pin is a wrapper div positioned at (x%, y%) with the
-              pin's own z-index. The dot is a small CSS circle; the label
-              sits above the dot. */}
+              (Front/Back capability). When the user clicks Front on a
+              pin, BOTH the pin (dot + label) AND its connector line must
+              come forward together. So each pin renders as a single
+              full-canvas wrapper div containing:
+                - its own SVG with the single connector line (50,50 → pin.x,pin.y)
+                - the dot (CSS circle at pin position)
+                - the label (text at pin position)
+              All three siblings share the same wrapper z-index. */}
           {data.locationPins.map((pin, i) => {
             const pinZ = pin.z ?? 50;
             const dotColor = data.event.brandColors[0] ?? "#FF005A";
             return (
               <div
                 key={`pin-${i}`}
-                className="absolute pointer-events-none"
-                style={{
-                  left: `${pin.x}%`,
-                  top: `${pin.y}%`,
-                  zIndex: pinZ,
-                }}
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: pinZ }}
               >
+                {/* Connector line — full-canvas SVG with this pin's
+                    single line from canvas center (50,50) to (pin.x, pin.y).
+                    viewBox 0 0 100 100 + preserveAspectRatio none means the
+                    SVG coords are percentage-of-canvas, matching pin.x/y. */}
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <line
+                    x1="50"
+                    y1="50"
+                    x2={pin.x}
+                    y2={pin.y}
+                    stroke="white"
+                    strokeWidth="0.25"
+                    strokeOpacity="0.6"
+                    strokeDasharray="0.5 0.5"
+                  />
+                </svg>
                 {/* Dot — small circle, centered on the pin's (x,y) */}
                 <div
                   className="absolute rounded-full border-2 border-white shadow"
                   style={{
+                    left: `${pin.x}%`,
+                    top: `${pin.y}%`,
                     width: "10px",
                     height: "10px",
                     backgroundColor: dotColor,
@@ -347,6 +344,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 <span
                   className="absolute text-white font-semibold uppercase tracking-wider drop-shadow whitespace-nowrap"
                   style={{
+                    left: `${pin.x}%`,
+                    top: `${pin.y}%`,
                     transform: "translate(-50%, -180%)",
                     fontSize: "11px",
                     letterSpacing: "0.12em",
