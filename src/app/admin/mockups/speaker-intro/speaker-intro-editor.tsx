@@ -117,6 +117,14 @@ export function SpeakerIntroEditor({ events }: Props) {
       next.heroOverlay.imageUrl = url;
       if (prevUrl && url && prevUrl !== url) {
         next.heroOverlay.showTriangleOverlay = false;
+        // Also reset the image placement (pan/zoom) so the new image starts
+        // at default focus=50/50, zoom=1. Otherwise the previous image's
+        // crop/zoom carries over to the new image, making it look "cropped
+        // to the original size of the box" even after the user picks a
+        // different image. (Per user spec 2026-06-30: "when selecting this
+        // image as the hero image, actually crops the images... and even
+        // when i scroll out and reduce the image, the crop still there".)
+        next.heroOverlay.imagePlacement = { focusX: 50, focusY: 50, zoom: 1 };
       }
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];

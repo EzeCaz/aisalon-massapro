@@ -155,6 +155,23 @@ export type SpeakerIntroData = {
   heroOverlay: {
     /** Background hero image URL (Tel Aviv skyline + meerkat). */
     imageUrl: string;
+    /**
+     * How the hero image is fit inside its container.
+     *   - "cover" (default): image is scaled to FILL the container, cropping
+     *     any overflow. Best for landscape photos that match the container
+     *     aspect ratio.
+     *   - "contain": image is scaled to fit ENTIRELY inside the container,
+     *     letterboxing (transparent bars) if the aspect ratios differ. Best
+     *     for brand assets, logos, or any image whose full content must be
+     *     visible (per user spec 2026-06-30: "when selecting this image as
+     *     the hero image, actually crops the images... and the image is not
+     *     full even if the image container box is much larger").
+     *
+     * With "contain", the user's zoom (placement.zoom) acts as a true
+     * scale multiplier on top of the fit — zoom < 1 shrinks the image
+     * inside the container, zoom > 1 grows it past the container edges.
+     */
+    fit?: "cover" | "contain";
     /** Triangle gradient colors, left to right. */
     gradientColors: string[];
     /** Opacity of the gradient overlay (0-1). */

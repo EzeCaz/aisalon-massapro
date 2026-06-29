@@ -232,7 +232,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             sizeMultiplier={data.heroOverlay.imageScale ?? 1}
             sizeLabel="hero scale"
             containerClass="absolute inset-0"
-            objectFit="cover"
+            objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
           />
           </div>
 

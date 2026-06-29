@@ -35,8 +35,21 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
     [data, onChange],
   );
 
-  // sort speakers by order for display
-  const speakersSorted = [...data.speakers].sort((a, b) => a.order - b.order);
+  // Attach the ORIGINAL array index to each speaker so we have a stable
+  // identity that survives re-sorting when the user changes the `order`
+  // field. Using `order` itself as the identity (via find(s => s.order === sp.order))
+  // is unsafe because:
+  //   1. order values can collide (e.g. user types 5 when another speaker is
+  //      already 5, or prior corruption left duplicates) — `find` returns the
+  //      first match, so edits land on the wrong speaker.
+  //   2. even without collisions, when the user types a new order value the
+  //      speaker moves in the sorted list, so the closure's `sp.order` no
+  //      longer matches the speaker the user is editing.
+  // The original index is stable across re-sorts (we only ever push to the
+  // end of `data.speakers`, never insert in the middle).
+  const speakersSorted = data.speakers
+    .map((sp, origIdx) => ({ sp, origIdx }))
+    .sort((a, b) => a.sp.order - b.sp.order);
 
   return (
     <div className="space-y-5 p-4 bg-white text-black max-h-[640px] overflow-y-auto text-sm">
@@ -246,13 +259,13 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             })()}
           </p>
         </div>
-        {speakersSorted.map((sp, idx) => (
+        {speakersSorted.map(({ sp, origIdx }) => (
           <SubCard
-            key={`spk-${idx}`}
+            key={`spk-${origIdx}`}
             title={`#${sp.order} · ${sp.fullName || "Untitled"}`}
             onDelete={() =>
               update((d) => {
-                d.speakers = d.speakers.filter((s) => s.order !== sp.order);
+                d.speakers.splice(origIdx, 1);
               })
             }
           >
@@ -264,7 +277,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.order}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.order = parseInt(e.target.value, 10) || 1;
                     })
                   }
@@ -276,7 +289,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.role}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.role = e.target.value as SpeakerIntroData["speakers"][number]["role"];
                     })
                   }
@@ -295,7 +308,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 value={sp.fullName}
                 onChange={(e) =>
                   update((d) => {
-                    const target = d.speakers.find((s) => s.order === sp.order);
+                    const target = d.speakers[origIdx];
                     if (target) target.fullName = e.target.value;
                   })
                 }
@@ -309,7 +322,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.title}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.title = e.target.value;
                     })
                   }
@@ -322,7 +335,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.company}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.company = e.target.value;
                     })
                   }
@@ -335,7 +348,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 value={sp.bio ?? ""}
                 onChange={(e) =>
                   update((d) => {
-                    const target = d.speakers.find((s) => s.order === sp.order);
+                    const target = d.speakers[origIdx];
                     if (target) target.bio = e.target.value || undefined;
                   })
                 }
@@ -350,7 +363,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.sessionTitle ?? ""}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.sessionTitle = e.target.value || undefined;
                     })
                   }
@@ -363,7 +376,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.sessionTime ?? ""}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.sessionTime = e.target.value || undefined;
                     })
                   }
@@ -378,7 +391,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 value={sp.photoUrl}
                 onChange={(e) =>
                   update((d) => {
-                    const target = d.speakers.find((s) => s.order === sp.order);
+                    const target = d.speakers[origIdx];
                     if (target) target.photoUrl = e.target.value;
                   })
                 }
@@ -394,7 +407,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.photoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.photoSize = parseFloat(e.target.value) || 1;
                     })
                   }
@@ -406,7 +419,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   value={sp.visible === false ? "false" : "true"}
                   onChange={(e) =>
                     update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
+                      const target = d.speakers[origIdx];
                       if (target) target.visible = e.target.value === "true";
                     })
                   }
@@ -446,6 +459,20 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             onChange={(e) => update((d) => { d.heroOverlay.imageUrl = e.target.value; })}
             className="form-input"
           />
+        </Field>
+        <Field label="Image fit (how the image fills the container)">
+          <select
+            value={data.heroOverlay.fit ?? "cover"}
+            onChange={(e) =>
+              update((d) => {
+                d.heroOverlay.fit = e.target.value as "cover" | "contain";
+              })
+            }
+            className="form-input"
+          >
+            <option value="cover">Cover — fill container, crop overflow (default, best for landscape photos)</option>
+            <option value="contain">Contain — fit entire image inside container, letterbox if needed (best for brand assets / logos)</option>
+          </select>
         </Field>
         <Field label="Gradient colors (comma-separated)">
           <GradientColorPicker
