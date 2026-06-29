@@ -157,127 +157,14 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
       {/* ===== SPEAKERS ===== */}
       <Section title={`Speakers (${speakersSorted.length})`}>
-        {/* Speaker grid layout controls */}
-        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 mb-3">
-          <p className="text-xs font-semibold text-black/70 mb-2 uppercase tracking-wider">
-            Speaker grid layout
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Columns">
-              <select
-                value={String(data.speakersLayout?.columns ?? 1)}
-                onChange={(e) =>
-                  update((d) => {
-                    if (!d.speakersLayout) d.speakersLayout = {};
-                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
-                  })
-                }
-                className="form-input"
-              >
-                <option value="1">1 column</option>
-                <option value="2">2 columns</option>
-                <option value="3">3 columns</option>
-              </select>
-            </Field>
-            <Field label="Flow direction">
-              <select
-                value={data.speakersLayout?.flowDirection ?? "row"}
-                onChange={(e) =>
-                  update((d) => {
-                    if (!d.speakersLayout) d.speakersLayout = {};
-                    d.speakersLayout.flowDirection = e.target.value as "row" | "col";
-                  })
-                }
-                className="form-input"
-              >
-                <option value="row">Row-by-row (left→right, then wrap)</option>
-                <option value="col">Col-by-col (top→bottom, then next col)</option>
-              </select>
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            <Field label="Last row alignment">
-              <select
-                value={data.speakersLayout?.lastRowAlign ?? "spread"}
-                onChange={(e) =>
-                  update((d) => {
-                    if (!d.speakersLayout) d.speakersLayout = {};
-                    d.speakersLayout.lastRowAlign = e.target.value as "left" | "center" | "spread";
-                  })
-                }
-                className="form-input"
-              >
-                <option value="spread">Spread evenly</option>
-                <option value="center">Center</option>
-                <option value="left">Left-align</option>
-              </select>
-            </Field>
-            <Field label="Rows per column (comma-separated)">
-              <input
-                type="text"
-                value={(data.speakersLayout?.rowsPerColumn ?? []).join(",")}
-                placeholder="auto (e.g. 2,1,2)"
-                onChange={(e) =>
-                  update((d) => {
-                    if (!d.speakersLayout) d.speakersLayout = {};
-                    const txt = e.target.value.trim();
-                    if (!txt) {
-                      d.speakersLayout.rowsPerColumn = [];
-                    } else {
-                      d.speakersLayout.rowsPerColumn = txt
-                        .split(",")
-                        .map((s) => parseInt(s.trim(), 10))
-                        .filter((n) => !isNaN(n) && n > 0);
-                    }
-                  })
-                }
-                className="form-input"
-              />
-            </Field>
-          </div>
-          <p className="text-[0.65rem] text-black/50 mt-2">
-            Leave "Rows per column" empty to auto-distribute speakers evenly
-            across the chosen column count. Use the "Order" field on each
-            speaker card below to control the sort order.
-          </p>
-        </div>
-
         {speakersSorted.map((sp, idx) => (
           <SubCard
-            key={`${sp.order}-${sp.fullName}`}
+            key={`spk-${idx}`}
             title={`#${sp.order} · ${sp.fullName || "Untitled"}`}
             onDelete={() =>
               update((d) => {
                 d.speakers = d.speakers.filter((s) => s.order !== sp.order);
               })
-            }
-            onMoveUp={
-              idx > 0
-                ? () =>
-                    update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
-                      const prev = d.speakers.find((s) => s.order === speakersSorted[idx - 1].order);
-                      if (target && prev) {
-                        const tmp = target.order;
-                        target.order = prev.order;
-                        prev.order = tmp;
-                      }
-                    })
-                : undefined
-            }
-            onMoveDown={
-              idx < speakersSorted.length - 1
-                ? () =>
-                    update((d) => {
-                      const target = d.speakers.find((s) => s.order === sp.order);
-                      const nextSp = d.speakers.find((s) => s.order === speakersSorted[idx + 1].order);
-                      if (target && nextSp) {
-                        const tmp = target.order;
-                        target.order = nextSp.order;
-                        nextSp.order = tmp;
-                      }
-                    })
-                : undefined
             }
           >
             <div className="grid grid-cols-2 gap-3">
@@ -415,7 +302,6 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="10"
                   value={sp.photoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -503,12 +389,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (×) — 0.1 = shrink to 10%, 10 = grow 10×">
+          <Field label="Image scale X (×) — only limit is canvas border">
             <input
               type="number"
-              step="0.1"
-              min="0.1"
-              max="10"
+              step="0.05"
+              min="0.01"
               value={data.heroOverlay.imageScale ?? 1}
               onChange={(e) =>
                 update((d) => {
@@ -518,12 +403,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               className="form-input"
             />
           </Field>
-          <Field label="Image scale (Y) — 0.1 = shrink to 10%, 10 = grow 10×">
+          <Field label="Image scale Y (×) — only limit is canvas border">
             <input
               type="number"
-              step="0.1"
-              min="0.1"
-              max="10"
+              step="0.05"
+              min="0.01"
               value={data.heroOverlay.imageScaleY ?? 1}
               onChange={(e) =>
                 update((d) => {
@@ -548,13 +432,92 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             <option value="false">No (hidden — auto-disabled when hero image changes)</option>
           </select>
         </Field>
+
+        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+            Per user spec 2026-06-28: "Move all 'Capabilities' controls
+            (toggles, inputs, visibility settings) from the canvas slider
+            to the Left Sidebar for all mockup pages."
+            Default z-order: heroZ=2 (front), triangleZ=1 (behind hero).
+            Front/Back buttons override dynamically. */}
+        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+          <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+            Layer z-index (Front = on top)
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[0.6rem] text-black/60 mb-1">Hero (z={data.heroZ ?? 2})</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const tz = d.triangleZ ?? 1;
+                      d.heroZ = tz + 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Bring hero to front (above triangle)"
+                >
+                  Front
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const tz = d.triangleZ ?? 1;
+                      d.heroZ = tz - 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Send hero to back (below triangle)"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+            <div>
+              <div className="text-[0.6rem] text-black/60 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const hz = d.heroZ ?? 2;
+                      d.triangleZ = hz + 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Bring triangle to front (above hero)"
+                >
+                  Front
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const hz = d.heroZ ?? 2;
+                      d.triangleZ = hz - 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Send triangle to back (below hero)"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="text-[0.55rem] text-black/40 leading-tight">
+            Default: hero on top, triangle behind. Click Front/Back to override.
+          </p>
+        </div>
       </Section>
 
       {/* ===== LOCATION PINS ===== */}
       <Section title={`Location pins (${data.locationPins.length})`}>
         {data.locationPins.map((pin, idx) => (
           <SubCard
-            key={`${pin.label}-${idx}`}
+            key={`pin-${idx}`}
             title={pin.label || `Pin #${idx + 1}`}
             onDelete={() =>
               update((d) => {
@@ -658,7 +621,6 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
                   value={s.logoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -740,7 +702,6 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
                   value={s.logoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -841,51 +802,25 @@ function SubCard({
   title,
   children,
   onDelete,
-  onMoveUp,
-  onMoveDown,
 }: {
   title: string;
   children: React.ReactNode;
   onDelete?: () => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
 }) {
   return (
     <div className="rounded-md border border-black/15 bg-white p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-bold text-black">{title}</span>
-        <div className="flex items-center gap-1">
-          {onMoveUp && (
-            <button
-              type="button"
-              onClick={onMoveUp}
-              className="text-black/50 hover:bg-black/5 p-1 rounded"
-              title="Move up"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-            </button>
-          )}
-          {onMoveDown && (
-            <button
-              type="button"
-              onClick={onMoveDown}
-              className="text-black/50 hover:bg-black/5 p-1 rounded"
-              title="Move down"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-red-500 hover:bg-red-50 p-1 rounded"
-              title="Delete"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="text-red-500 hover:bg-red-50 p-1 rounded"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
       <div className="space-y-2">{children}</div>
     </div>

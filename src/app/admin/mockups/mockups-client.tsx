@@ -177,11 +177,13 @@ const MOCKUP_TEMPLATES: AssetCard[] = [
       "Tel Aviv visual on the left, large rounded purple 'Agenda:' container on the right with the full session timeline.",
     url: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782398174646-99bf83.png",
     kind: "template",
+    editorHref: "/admin/mockups/agenda-profile",
+    editorLabel: "Open editor",
   },
   {
     title: "4. Event Profile",
     description:
-      "Full event-page-style mockup: hero image + title + date/venue + agenda list (breaks/networking auto-hidden) + speakers grid + QR code.",
+      "Visual-first, minimal-text promotional overview: full-canvas TLV hero with triangle gradient overlay, 4 location pins (Sarona, Dizengoff, Neve Tzedek, Yafo), bold event title top-left, sponsor logos bottom-right.",
     url: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782398263781-ias5la.png",
     kind: "template",
     editorHref: "/admin/mockups/event-profile",

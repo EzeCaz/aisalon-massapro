@@ -24,20 +24,7 @@ export const SAMPLE_DATA: EventProfileData = {
     gradientOpacity: 0.55,
     imagePlacement: { focusX: 50, focusY: 50, zoom: 1 },
     imageScale: 1,
-    showTriangleOverlay: true,
   },
-  // Canonical TLV location pins — the 4 neighborhoods featured in the
-  // Event Profile reference image (Sarona, Dizengoff, Neve Tzedek, Yafo).
-  locationPins: [
-    { x: 32, y: 42, label: "Sarona" },
-    { x: 58, y: 28, label: "Dizengoff" },
-    { x: 45, y: 70, label: "Neve Tzedek" },
-    { x: 75, y: 60, label: "Yafo" },
-  ],
-  // Layer z-indices. Per layer-management spec: triangle strictly
-  // BEHIND hero by default (triangleZ=1, heroZ=2).
-  heroZ: 2,
-  triangleZ: 1,
   sessions: [
     {
       order: 1,

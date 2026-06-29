@@ -168,9 +168,8 @@ export function EventProfileFormView({ data, onChange }: Props) {
           <Field label="Image scale (×)">
             <input
               type="number"
-              step="0.1"
-              min="0.1"
-              max="4"
+              step="0.05"
+              min="0.01"
               value={data.heroOverlay.imageScale ?? 1}
               onChange={(e) =>
                 update((d) => {
@@ -181,6 +180,87 @@ export function EventProfileFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
+
+        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+            Per user spec 2026-06-28: "Move all 'Capabilities' controls
+            (toggles, inputs, visibility settings) from the canvas slider
+            to the Left Sidebar for all mockup pages."
+            Default z-order: heroZ=2 (front), triangleZ=1 (behind hero).
+            Triangle controls are only meaningful for event-profile
+            (which has a triangle SVG); agenda-profile ignores them. */}
+        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+          <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+            Layer z-index (Front = on top)
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[0.6rem] text-black/60 mb-1">Hero (z={data.heroZ ?? 2})</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const tz = d.triangleZ ?? 1;
+                      d.heroZ = tz + 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Bring hero to front (above triangle)"
+                >
+                  Front
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const tz = d.triangleZ ?? 1;
+                      d.heroZ = tz - 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Send hero to back (below triangle)"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+            <div>
+              <div className="text-[0.6rem] text-black/60 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const hz = d.heroZ ?? 2;
+                      d.triangleZ = hz + 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Bring triangle to front (above hero) — event-profile only"
+                >
+                  Front
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((d) => {
+                      const hz = d.heroZ ?? 2;
+                      d.triangleZ = hz - 1;
+                    })
+                  }
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  title="Send triangle to back (below hero) — event-profile only"
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="text-[0.55rem] text-black/40 leading-tight">
+            Default: hero on top, triangle behind. Click Front/Back to override.
+            (Triangle controls apply only to event-profile mockups.)
+          </p>
+        </div>
       </Section>
 
       {/* ===== SESSIONS ===== */}
@@ -189,9 +269,9 @@ export function EventProfileFormView({ data, onChange }: Props) {
           Sessions marked BREAK / NETWORKING / CHECKIN are auto-hidden when
           auto-filled from an event. Toggle visibility per row below.
         </p>
-        {sessionsSorted.map((session) => (
+        {sessionsSorted.map((session, idx) => (
           <SubCard
-            key={`sess-${session.order}`}
+            key={`sess-${idx}`}
             title={`#${session.order} · ${session.title || "Untitled"}`}
             onDelete={() =>
               update((d) => {
@@ -336,9 +416,9 @@ export function EventProfileFormView({ data, onChange }: Props) {
 
       {/* ===== SPEAKERS ===== */}
       <Section title={`Speakers (${speakersSorted.length} · ${speakersSorted.filter((s) => s.visible !== false).length} visible)`}>
-        {speakersSorted.map((sp) => (
+        {speakersSorted.map((sp, idx) => (
           <SubCard
-            key={`sp-${sp.order}`}
+            key={`sp-${idx}`}
             title={`#${sp.order} · ${sp.fullName || "Untitled"}`}
             onDelete={() =>
               update((d) => {
@@ -452,7 +532,6 @@ export function EventProfileFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
                   value={sp.photoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -540,7 +619,6 @@ export function EventProfileFormView({ data, onChange }: Props) {
                 type="number"
                 step="0.1"
                 min="0.25"
-                max="6"
                 value={s.logoSize ?? 1}
                 onChange={(e) =>
                   update((d) => {
@@ -594,7 +672,6 @@ export function EventProfileFormView({ data, onChange }: Props) {
                 type="number"
                 step="0.1"
                 min="0.25"
-                max="6"
                 value={s.logoSize ?? 1}
                 onChange={(e) =>
                   update((d) => {

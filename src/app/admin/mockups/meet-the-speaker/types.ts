@@ -9,6 +9,11 @@
  * "for future use"; if it's here, the canvas renders it.
  */
 
+// Re-export SectionLayout from the shared module so callers can import
+// everything from this file.
+export type { SectionLayout, SectionPos, SectionId } from "../shared/section-edit";
+import type { SectionLayout } from "../shared/section-edit";
+
 export type SpeakerRole = "Speaker" | "Moderator" | "Panelist" | "Host";
 
 /**
@@ -98,6 +103,12 @@ export type MeetTheSpeakerData = {
   heroOverlay: {
     gradientColors: string[];
     gradientOpacity: number;
+    /** Horizontal scale multiplier for the hero overlay container.
+     *  1 = 55% canvas width (default). 0.5 = 27.5%, 2 = 110%. */
+    imageScale?: number;
+    /** Vertical scale multiplier for the hero overlay container.
+     *  1 = 85% canvas height (default). 0.5 = 42.5%, 2 = 170%. */
+    imageScaleY?: number;
   };
   /** "In collaboration with:" logos (bottom-right). */
   collaborators: Sponsor[];
@@ -107,6 +118,28 @@ export type MeetTheSpeakerData = {
   qrCodeUrl: string;
   /** Optional small footer credit text. */
   footerCredit?: string;
+  /**
+   * Section layout — per-section draggable position + scale, set when
+   * the user toggles "Edit sections" and drags/resizes text sections
+   * (header, speaker-info, topic, bio, event-meta, sponsors, branding,
+   * qr, footer). Stored as % of canvas so it survives preview-scale
+   * changes.
+   */
+  sectionLayout?: SectionLayout;
+  /**
+   * Hero overlay (gradient triangles) z-index. Default 1.
+   * Controlled by the Front/Back buttons in section edit mode.
+   */
+  heroZ?: number;
+  /**
+   * Speaker photo z-index. Default 3 (above hero overlay).
+   * Controlled by the Front/Back buttons in section edit mode.
+   */
+  photoZ?: number;
+  /**
+   * Brand graphic (meerkat) z-index. Default 4.
+   */
+  graphicZ?: number;
 };
 
 /**
@@ -132,8 +165,7 @@ export function resolvePlacement(p?: ImagePlacement): {
   return {
     focusX: clamp(p?.focusX ?? 50, 0, 100),
     focusY: clamp(p?.focusY ?? 50, 0, 100),
-    // Zoom range [0.1, 10] per user spec.
-    zoom: clamp(p?.zoom ?? 1, 0.1, 10),
+    zoom: clamp(p?.zoom ?? 1, 1, 4),
   };
 }
 

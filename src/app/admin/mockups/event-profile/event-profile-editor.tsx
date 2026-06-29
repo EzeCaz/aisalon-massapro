@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Copy, Check, Download, RotateCcw, Code, AlertCircle,
-  ImageIcon, Calendar, Loader2, Wand2, FormInput, Save,
+  ImageIcon, Calendar, Loader2, Wand2, FormInput, LayoutPanelTop,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -12,6 +12,7 @@ import type {
   ImageSlot,
   EventPickListItem,
 } from "./types";
+import type { SectionId, SectionPos } from "../shared/section-edit";
 import { SAMPLE_DATA } from "./sample-data";
 import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
@@ -52,6 +53,8 @@ export function EventProfileEditor({ events }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.32);
   const [editMode, setEditMode] = useState<boolean>(false);
+  /** Sections edit mode = text sections are draggable + resizeable. */
+  const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
@@ -62,8 +65,13 @@ export function EventProfileEditor({ events }: Props) {
 
   const applyData = useCallback((next: EventProfileData) => {
     setData(next);
-    setJsonText(JSON.stringify(next, null, 2));
     setParseError(null);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
   }, []);
 
   function applyImagePick(slot: ImageSlot, url: string): EventProfileData {
@@ -214,6 +222,121 @@ export function EventProfileEditor({ events }: Props) {
     }
   }
 
+  // --- section edit callbacks -----------------------------------------
+
+  /** Apply a section move (drag) — updates data.sectionLayout[id].pos. */
+  function handleSectionMove(id: SectionId, pos: SectionPos) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.pos = pos;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a section resize — updates data.sectionLayout[id].scale. */
+  function handleSectionResize(id: SectionId, scale: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.scale = scale;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a section box resize (mid-edge handle) — updates
+   *  data.sectionLayout[id].boxSize = { width, height } in canvas px. */
+  function handleSectionBoxResize(id: SectionId, size: { width?: number; height?: number }) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.boxSize = size;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a section z-index change (Front/Back in ObjectPropertiesPanel). */
+  function handleSectionZChange(id: SectionId, z: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.z = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a hero X scale change (slider). */
+  function handleHeroScaleXChange(n: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    next.heroOverlay.imageScale = n;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a hero Y scale change (slider). */
+  function handleHeroScaleYChange(n: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    next.heroOverlay.imageScaleY = n;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a hero z-index change (Front/Back button). */
+  function handleHeroZChange(z: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    next.heroZ = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a triangle z-index change (Front/Back button). */
+  function handleTriangleZChange(z: number) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    next.triangleZ = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   // --- visibility toggles ---
   function toggleSessionVisible(sortedIdx: number) {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
@@ -272,51 +395,6 @@ export function EventProfileEditor({ events }: Props) {
     }
   }
 
-  /**
-   * Save the current mockup as the default event-profile for the selected
-   * event. Also updates the event's mainImage to point at the snapshot —
-   * so /events/[slug] immediately shows the new event profile picture.
-   */
-  const [savingDefault, setSavingDefault] = useState(false);
-  async function handleSaveAsDefault() {
-    const eventId = data.event.sourceEventId;
-    if (!eventId) {
-      alert(
-        "No event is currently selected. Use the 'Auto-fill from event' dropdown at the top to pick an event first.",
-      );
-      return;
-    }
-    setSavingDefault(true);
-    try {
-      const dataUrl = await getPngDataUrl();
-      const res = await fetch(`/api/admin/events/${eventId}/mockup-defaults`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "event-profile",
-          dataJson: JSON.stringify(data, null, 2),
-          pngBase64: dataUrl,
-        }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `HTTP ${res.status}`);
-      }
-      const result = await res.json();
-      alert(
-        `✓ Saved as default event-profile for "${data.event.name}".\n\n` +
-        `The PNG snapshot is now in /admin/images under brand-assets, ` +
-        `and the event's main image has been updated.` +
-        (result.eventImage ? `\n\nEvent main image updated.` : ""),
-      );
-    } catch (err) {
-      console.error("Save as default failed:", err);
-      alert(`Save as default failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setSavingDefault(false);
-    }
-  }
-
   return (
     <div className="space-y-4">
       {/* Event picker row */}
@@ -358,18 +436,6 @@ export function EventProfileEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        <button
-          type="button"
-          onClick={() => setEditMode((s) => !s)}
-          className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
-            editMode
-              ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-              : "border border-black/15 bg-white text-black hover:bg-black/5"
-          }`}
-        >
-          <ImageIcon className="h-3.5 w-3.5" />
-          {editMode ? "Editing images (on)" : "Edit images"}
-        </button>
         {/* View-mode toggle: Form vs JSON */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
@@ -420,35 +486,37 @@ export function EventProfileEditor({ events }: Props) {
           <Download className="h-3.5 w-3.5" />
           {downloading ? "Exporting…" : "Download"}
         </button>
-        <button
-          type="button"
-          onClick={handleSaveAsDefault}
-          disabled={savingDefault || !!parseError}
-          title={
-            data.event.sourceEventId
-              ? `Save as default event-profile for "${data.event.name}" (also updates event main image)`
-              : "Pick an event from the dropdown first"
-          }
-          className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#D8004D] disabled:opacity-50"
-        >
-          {savingDefault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          {savingDefault ? "Saving…" : "Save as event default"}
-        </button>
         <ShareButtons
           getPngDataUrl={getPngDataUrl}
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`event-profile-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
         <span className="ml-auto text-xs text-black/40">
-          Canvas: 1200 × 1500 (4:5) · Edits auto-saved to this browser
+          Canvas: 1200 × 1200 (1:1 square — visual-first) · Edits auto-saved to this browser
         </span>
       </div>
 
-      {editMode && (
+      {(editMode || sectionsEditMode) && (
         <div className="rounded-md border border-[#0066FF]/30 bg-[#0066FF]/5 px-3 py-2 text-xs text-[#0066FF]">
-          <strong>Edit mode is ON.</strong> Hover the hero image or any speaker
-          photo to see a <em>Replace</em> button. Drag to pan. Scroll to zoom.
-          Double-click to reset placement.
+          {editMode && (
+            <>
+              <strong>Image edit mode is ON.</strong> Hover the hero image or any speaker
+              photo to see a <em>Replace</em> button. Drag to pan. Scroll to zoom.
+              Double-click to reset placement.
+            </>
+          )}
+          {sectionsEditMode && (
+            <div className={editMode ? "mt-3" : ""}>
+              <strong>Section edit mode is ON.</strong>{" "}
+              Drag any text section (header, topic, agenda, speakers, sponsors,
+              QR+branding) to reposition. Drag the 8 pink handles (4 corners +
+              4 mid-edges) to resize. Layout persists in the JSON under{" "}
+              <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-[0.65rem]">sectionLayout</code>.
+              Use the <strong>Hero layer</strong> Front/Back buttons at the
+              bottom-left of the canvas to control whether the hero overlay
+              sits above or below the text layers.
+            </div>
+          )}
         </div>
       )}
 
@@ -616,16 +684,47 @@ export function EventProfileEditor({ events }: Props) {
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
-          className="rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+          className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
+        {/* Edit images + Edit sections — floating at the top-right of the
+            Live Preview box, per user spec. The buttons stay visible
+            regardless of scroll position inside the preview area. */}
+        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
+          <button
+            type="button"
+            onClick={() => setEditMode((s) => !s)}
+            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
+              editMode
+                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                : "border border-black/15 bg-white text-black hover:bg-black/5"
+            }`}
+            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+            {editMode ? "Editing images" : "Edit images"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSectionsEditMode((s) => !s)}
+            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
+              sectionsEditMode
+                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                : "border border-black/15 bg-white text-black hover:bg-black/5"
+            }`}
+            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+          >
+            <LayoutPanelTop className="h-3.5 w-3.5" />
+            {sectionsEditMode ? "Editing sections" : "Edit sections"}
+          </button>
+        </div>
           <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/40 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 3000 (2× DPR)
+            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 2400 (2× DPR)
           </div>
           <div
             className="relative mx-auto"
             style={{
               width: `${1200 * previewScale}px`,
-              height: `${1500 * previewScale}px`,
+              height: `${1200 * previewScale}px`,
             }}
           >
             <div
@@ -634,17 +733,26 @@ export function EventProfileEditor({ events }: Props) {
                 transform: `scale(${previewScale})`,
                 transformOrigin: "top left",
                 width: "1200px",
-                height: "1500px",
+                height: "1200px",
               }}
             >
               <EventProfileCanvas
                 ref={canvasRef}
                 data={data}
                 editable={editMode}
+                sectionsEditable={sectionsEditMode}
                 previewScale={previewScale}
                 onPickImage={handlePickImage}
                 onPlacementChange={handlePlacementChange}
                 onSizeChange={handleSizeChange}
+                onSectionMove={handleSectionMove}
+                onSectionResize={handleSectionResize}
+                onSectionBoxResize={handleSectionBoxResize}
+                onHeroZChange={handleHeroZChange}
+                onTriangleZChange={handleTriangleZChange}
+                onHeroScaleXChange={handleHeroScaleXChange}
+                onHeroScaleYChange={handleHeroScaleYChange}
+                onSectionZChange={handleSectionZChange}
               />
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, type ReactNode } from "react";
+import { forwardRef, useRef, useState, useEffect, type ReactNode } from "react";
 import Image from "next/image";
 import type {
   SpeakerIntroData,
@@ -9,6 +9,17 @@ import type {
   ImageSlot,
 } from "./types";
 import { resolvePlacement } from "./types";
+import {
+  GuideProvider,
+  GuideOverlay,
+  SectionBox,
+  ObjectPropertiesPanel,
+  useCanvasScrollIsolation,
+  useNonPassiveWheel,
+  type SectionId,
+  type SectionPos,
+  type SectionBoxSize,
+} from "../shared/section-edit";
 
 /**
  * SpeakerIntroCanvas — the data-driven mockup renderer.
@@ -28,6 +39,16 @@ import { resolvePlacement } from "./types";
  *   - Drag the image → pans (updates focusX/focusY via onPlacementChange).
  *   - Wheel on the image → zooms (updates zoom).
  *   - Double-click → resets placement to default.
+ *
+ * Sections-editable mode (sectionsEditable=true):
+ *   - Text sections (header, topic, speakers, sponsors, collaborators,
+ *     branding, qr, footer) get wrapped in <SectionBox> which makes
+ *     them draggable + 8-handle resizeable.
+ *   - Layout persists in `data.sectionLayout[id] = { pos, scale }`.
+ *   - Alignment guides appear when dragging (cyan lines at canvas edges,
+ *     centers, and peer box edges).
+ *   - Text sections always render at zIndex >= 50 so they stay above
+ *     images and overlays.
  */
 
 const CANVAS_W = 1200;
@@ -38,46 +59,144 @@ type Props = {
   className?: string;
   /** When true, image areas become interactive (drag/wheel/click). */
   editable?: boolean;
+  /** When true, text sections become draggable + resizeable. */
+  sectionsEditable?: boolean;
   /** Called when the user clicks "Replace" on an image slot. */
   onPickImage?: (slot: ImageSlot) => void;
   /** Called whenever an image is dragged / zoomed. */
   onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
-  /** Called when the user drags a resize corner handle. */
+  /** Called when the user drags a resize corner handle on an image. */
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  /** Called when a section is dragged to a new position. */
+  onSectionMove?: (id: SectionId, pos: SectionPos) => void;
+  /** Called when a section is resized via a corner/edge handle. */
+  onSectionResize?: (id: SectionId, scale: number) => void;
+  /** Called when a section is resized via a mid-edge handle — updates the
+   *  box's explicit width/height in canvas px. */
+  onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
+  /** Called when the hero overlay z-index changes (front/back button). */
+  onHeroZChange?: (z: number) => void;
+  /** Called when the triangle overlay z-index changes (front/back button). */
+  onTriangleZChange?: (z: number) => void;
+  /** Called when the hero overlay X scale changes (slider). */
+  onHeroScaleXChange?: (n: number) => void;
+  /** Called when the hero overlay Y scale changes (slider). */
+  onHeroScaleYChange?: (n: number) => void;
+  /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
+  onSectionZChange?: (id: SectionId, z: number) => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
 };
 
 export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
   function SpeakerIntroCanvas(
-    { data, className, editable, onPickImage, onPlacementChange, onSizeChange, previewScale = 1 },
+    {
+      data,
+      className,
+      editable,
+      sectionsEditable,
+      onPickImage,
+      onPlacementChange,
+      onSizeChange,
+      onSectionMove,
+      onSectionResize,
+      onSectionBoxResize,
+      onHeroZChange,
+      onTriangleZChange,
+      onHeroScaleXChange,
+      onHeroScaleYChange,
+      onSectionZChange,
+      previewScale = 1,
+    },
     ref,
   ) {
+    // Default z-index for hero / triangle / text layers.
+    //
+    // User spec (Section 3 — Layering & Rendering Logic, 2026-06-28):
+    //   "Z-Index consistency: 'Show Triangle Overlay' must always render
+    //    BEHIND 'Hero Image' when visible."
+    //
+    // Implementation note: the triangle is INSIDE the hero div (as a
+    // sibling of the hero EditableImage). Both layers live in the hero
+    // div's stacking context. The hero EditableImage is wrapped in a
+    // div with explicit zIndex = triangleZ + 1, so the image always
+    // renders IN FRONT of the triangle by default. The Front/Back
+    // buttons in the left sidebar can override this dynamically.
+    //
+    // Text always sits at zIndex >= 50 so it's always on top of overlays
+    // and images (unless the user manually brings a layer above 50 with
+    // the Front button — at which point they're explicitly opting in).
+    const heroZ = data.heroZ ?? 2;
+    const triangleZ = data.triangleZ ?? 1;
+    const TEXT_Z = 50; // base text layer z; specific sections override above this
+
+    // --- Section 4: Scroll Isolation ---
+    // Disable parent/window scrolling when the user hovers over the canvas
+    // or actively edits a component. The canvas itself doesn't scroll (it's
+    // a fixed mockup preview), so there's no reason to let wheel events
+    // bubble to the parent workspace.
+    useCanvasScrollIsolation(
+      ref as React.RefObject<HTMLDivElement | null>,
+      !!(editable || sectionsEditable),
+    );
+
+    // --- Section 1: ObjectPropertiesPanel selection state ---
+    // Tracks which SectionBox is currently selected. When set, the
+    // ObjectPropertiesPanel is rendered at the top-right of the canvas
+    // with X/Y coordinate inputs + Front/Back layer toggles.
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+
+    // Reset selection when sections-edit mode is turned off.
+    useEffect(() => {
+      if (!sectionsEditable) setSelectedId(null);
+    }, [sectionsEditable]);
+
+    /** Compute the z-index for a given section. Falls back to a sensible
+     *  default based on the section id (text sections at TEXT_Z+). */
+    function sectionZFor(id: SectionId): number {
+      const explicit = data.sectionLayout?.[id]?.z;
+      if (typeof explicit === "number") return explicit;
+      // Default z by section type
+      if (id === "footer") return TEXT_Z + 1;
+      return TEXT_Z;
+    }
+
+    /** All peer z-indices in the same stacking context (used by
+     *  ObjectPropertiesPanel's Front/Back to compute max/min). */
+    const sectionPeerZs: number[] = Object.keys(data.sectionLayout ?? {}).map(
+      (id) => sectionZFor(id),
+    );
+
     return (
-      <div
-        ref={ref}
-        className={`relative bg-white overflow-hidden ${className ?? ""}`}
-        style={{
-          width: `${CANVAS_W}px`,
-          height: `${CANVAS_H}px`,
-          fontFamily:
-            "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-        }}
-      >
+      <GuideProvider canvasRef={ref as React.RefObject<HTMLDivElement | null>} enabled={!!(editable || sectionsEditable)}>
+        <div
+          ref={ref}
+          className={`relative bg-white overflow-hidden ${className ?? ""}`}
+          style={{
+            width: `${CANVAS_W}px`,
+            height: `${CANVAS_H}px`,
+            fontFamily:
+              "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+          }}
+        >
         {/* ===== 5. HERO VISUAL (right side, behind everything else on right) ===== */}
         {(() => {
           // imageScale (X): 1 = default 58% width starting at 42% left.
-          // 1.5 = 87% width starting at 13% left (bleeds further left).
-          // 2 = 116% width starting at -16% left (overflows — usually
-          // unwanted). Min is 0.1 so the hero can shrink to 10% of the
-          // default width (per user spec: "up to 0.1 of the image size the
-          // smallest"). Max is 10 to allow dramatic enlargement.
-          const scale = Math.max(0.1, Math.min(10, data.heroOverlay.imageScale ?? 1));
+          //   - scale < 1 shrinks the hero (anchored to the right edge).
+          //   - scale > 1.72 grows the hero beyond the canvas width; the
+          //     overflow is clipped by the canvas's `overflow-hidden`.
+          //   - The ONLY limitation is the canvas border — no arbitrary
+          //     min/max clamp is applied here. (User spec 2026-06-28.)
+          const scale = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
           const heroWidth = 58 * scale; // % of canvas
-          const heroLeft = Math.max(0, 100 - heroWidth); // anchor to right edge
-          // imageScaleY: 1 = full canvas height. Min is 0.1 so the hero
-          // can shrink to 10% of the canvas height vertically.
-          const scaleY = Math.max(0.1, Math.min(10, data.heroOverlay.imageScaleY ?? 1));
+          // Anchor to the right edge: as scale grows past 100/58 ≈ 1.72,
+          // heroLeft would go negative; we clamp to 0 so the right edge
+          // stays anchored to the canvas right border and the bleed goes
+          // off the LEFT side (clipped by overflow-hidden).
+          const heroLeft = Math.max(0, 100 - heroWidth);
+          // imageScaleY: 1 = full canvas height. scale < 1 shrinks
+          // vertically; scale > 1 bleeds off the bottom (clipped).
+          const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
           const heroHeight = 100 * scaleY; // % of canvas
           const heroTop = 0; // anchored to top
           return (
@@ -88,9 +207,18 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             top: `${heroTop}%`,
             width: `${heroWidth}%`,
             height: `${heroHeight}%`,
+            zIndex: heroZ,
           }}
         >
-          {/* Background image (Tel Aviv skyline + beach) */}
+          {/* Background image (Tel Aviv skyline + beach).
+              Wrapped in a div with explicit zIndex = triangleZ + 1 so the
+              hero image always renders IN FRONT of the triangle overlay
+              (per Section 3 of user spec 2026-06-28). The Front/Back
+              controls in the sidebar can override this dynamically. */}
+          <div
+            className="absolute inset-0"
+            style={{ zIndex: triangleZ + 1 }}
+          >
           <EditableImage
             slot={{ kind: "hero" }}
             src={data.heroOverlay.imageUrl}
@@ -106,9 +234,11 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             containerClass="absolute inset-0"
             objectFit="cover"
           />
+          </div>
 
           {/* 6. TRIANGLE GRADIENT OVERLAY — hidden when user picks a new hero image */}
           {data.heroOverlay.showTriangleOverlay !== false && (
+            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
             <svg
               className="absolute inset-0 w-full h-full pointer-events-none"
               viewBox="0 0 100 100"
@@ -154,6 +284,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               {/* Smaller counter-triangle for geometric depth */}
               <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
             </svg>
+            </div>
           )}
 
           {/* 7. LOCATION PINS — overlay with connector lines */}
@@ -211,9 +342,24 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         })()}
 
         {/* ===== 1. EVENT HEADER (top-left) ===== */}
-        <div
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "header"}
+          onSelect={() => setSelectedId("header")}
+          pos={data.sectionLayout?.header?.pos}
+          scale={data.sectionLayout?.header?.scale ?? 1}
+          boxSize={data.sectionLayout?.header?.boxSize}
+          onMove={(p) => onSectionMove?.("header", p)}
+          onResize={(s) => onSectionResize?.("header", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
           className="absolute"
-          style={{ left: "48px", top: "40px", maxWidth: "640px" }}
+          style={{ left: "48px", top: "40px", maxWidth: "640px", zIndex: sectionZFor("header") }}
+          accentColor="#FF005A"
+          label="Header"
+          guideId="header"
         >
           <h1
             className="font-extrabold text-black leading-none tracking-tight"
@@ -239,12 +385,27 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           >
             {data.event.venue}
           </p>
-        </div>
+        </SectionBox>
 
         {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) ===== */}
-        <div
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "topic"}
+          onSelect={() => setSelectedId("topic")}
+          pos={data.sectionLayout?.topic?.pos}
+          scale={data.sectionLayout?.topic?.scale ?? 1}
+          boxSize={data.sectionLayout?.topic?.boxSize}
+          onMove={(p) => onSectionMove?.("topic", p)}
+          onResize={(s) => onSectionResize?.("topic", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
           className="absolute flex items-start gap-3"
-          style={{ left: "48px", top: "160px", maxWidth: "440px" }}
+          style={{ left: "48px", top: "160px", maxWidth: "440px", zIndex: sectionZFor("topic") }}
+          accentColor="#FF005A"
+          label="Topic"
+          guideId="topic"
         >
           <div
             className="shrink-0 self-stretch rounded-sm"
@@ -260,12 +421,28 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           >
             {data.event.topic}
           </h2>
-        </div>
+        </SectionBox>
 
         {/* ===== 3. QR CODE (top-right) ===== */}
-        <div
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "qr"}
+          onSelect={() => setSelectedId("qr")}
+          pos={data.sectionLayout?.qr?.pos}
+          scale={data.sectionLayout?.qr?.scale ?? 1}
+          boxSize={data.sectionLayout?.qr?.boxSize}
+          onMove={(p) => onSectionMove?.("qr", p)}
+          onResize={(s) => onSectionResize?.("qr", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("qr", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
           className="absolute flex flex-col items-center gap-1"
-          style={{ right: "48px", top: "40px" }}
+          style={{ right: "48px", top: "40px", zIndex: sectionZFor("qr") }}
+          anchor="top-right"
+          accentColor="#FF005A"
+          label="QR"
+          guideId="qr"
         >
           <div
             className="rounded-md bg-white p-2 shadow-md"
@@ -279,168 +456,85 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           >
             Register here
           </span>
-        </div>
+        </SectionBox>
 
-        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
-        {(() => {
-          // Sorted + filtered speakers (same as before).
-          const sortedSpeakers = [...data.speakers]
-            .sort((a, b) => a.order - b.order)
-            .map((speaker, idx) => ({ speaker, idx }))
-            .filter(({ speaker }) => speaker.visible !== false);
-
-          const layout = data.speakersLayout ?? {};
-          const columns = layout.columns ?? 1;
-          const flow = layout.flowDirection ?? "row";
-          const lastRowAlign = layout.lastRowAlign ?? "spread";
-          // Default the grid width to 400px for 1 column, expanding for 2/3.
-          // Multi-column layouts need more horizontal space.
-          const gridWidth = columns === 1 ? 400 : columns === 2 ? 700 : 1000;
-
-          // Compute the grid cell position for each speaker based on
-          // flowDirection + rowsPerColumn. We build a 2D map of
-          // [row][col] → speakerIndex, then render.
-          const rowsPerColumn = layout.rowsPerColumn ?? [];
-
-          // Build the position map.
-          let positions: Array<{ row: number; col: number }> = [];
-          if (flow === "row") {
-            // Row-by-row: fill left-to-right, then wrap to next row.
-            positions = sortedSpeakers.map((_, i) => ({
-              row: Math.floor(i / columns),
-              col: i % columns,
-            }));
-          } else {
-            // Col-by-col: fill top-to-bottom in col 1, then col 2, etc.
-            // If rowsPerColumn is provided, use it to determine each
-            // column's height. Otherwise, distribute evenly.
-            if (rowsPerColumn.length >= columns) {
-              // Explicit row counts per column.
-              const colOffsets: number[] = [0];
-              for (let c = 1; c < columns; c++) {
-                colOffsets.push(colOffsets[c - 1] + rowsPerColumn[c - 1]);
-              }
-              positions = sortedSpeakers.map((_, i) => {
-                // Find which column this speaker belongs to.
-                let col = 0;
-                let row = i;
-                for (let c = 0; c < columns; c++) {
-                  if (i < colOffsets[c] + rowsPerColumn[c]) {
-                    col = c;
-                    row = i - colOffsets[c];
-                    break;
-                  }
-                }
-                return { row, col };
-              });
-            } else {
-              // Auto-distribute: ceil(N / columns) rows per column.
-              const rowsPerCol = Math.ceil(sortedSpeakers.length / columns);
-              positions = sortedSpeakers.map((_, i) => ({
-                col: Math.floor(i / rowsPerCol),
-                row: i % rowsPerCol,
-              }));
-            }
-          }
-
-          // Compute grid template columns + rows.
-          const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
-          const totalRows = maxRow + 1;
-
-          // For the last row, figure out how many cells are filled.
-          const lastRowCount = positions.filter((p) => p.row === maxRow).length;
-          const isLastRowIncomplete = lastRowCount < columns;
-
-          // Build a CSS grid template. We use display: grid with N equal
-          // columns. For the last row's spread/center alignment, we add
-          // empty padding cells (using grid-column-start) so the visible
-          // speakers spread across the full width.
-          return (
+        {/* ===== 4. SPEAKERS LIST (left column) ===== */}
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "speakers"}
+          onSelect={() => setSelectedId("speakers")}
+          pos={data.sectionLayout?.speakers?.pos}
+          scale={data.sectionLayout?.speakers?.scale ?? 1}
+          boxSize={data.sectionLayout?.speakers?.boxSize}
+          onMove={(p) => onSectionMove?.("speakers", p)}
+          onResize={(s) => onSectionResize?.("speakers", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
+          className="absolute flex flex-col gap-3"
+          style={{ left: "48px", top: "260px", width: "400px", zIndex: sectionZFor("speakers") }}
+          accentColor="#FF005A"
+          label="Speakers"
+          guideId="speakers"
+        >
+          <div className="flex items-center gap-2 mb-1">
             <div
-              className="absolute"
-              style={{ left: "48px", top: "260px", width: `${gridWidth}px` }}
+              className="h-px flex-1"
+              style={{
+                background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
+              }}
+            />
+            <span
+              className="font-bold text-black uppercase tracking-widest"
+              style={{ fontSize: "12px", letterSpacing: "0.2em" }}
             >
-              <div className="flex items-center gap-2 mb-3">
-                <div
-                  className="h-px flex-1"
-                  style={{
-                    background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
-                  }}
-                />
-                <span
-                  className="font-bold text-black uppercase tracking-widest"
-                  style={{ fontSize: "12px", letterSpacing: "0.2em" }}
-                >
-                  Speakers
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                  gap: "12px",
-                }}
-              >
-                {sortedSpeakers.map(({ speaker, idx }, i) => {
-                  const pos = positions[i];
-                  // For last-row spread alignment, push the speaker to
-                  // its column position via grid-column-start.
-                  let gridColumn: string | undefined = undefined;
-                  if (isLastRowIncomplete && pos.row === maxRow) {
-                    if (lastRowAlign === "spread") {
-                      // Spread: place speakers evenly across full width.
-                      // Use grid-column to span proportional columns.
-                      // For N speakers in the last row across `columns`
-                      // total columns, place each speaker at column
-                      // (i * columns / lastRowCount) + 1.
-                      const lastRowSpeakersBefore = positions.filter(
-                        (p) => p.row === maxRow && p.col < pos.col,
-                      ).length;
-                      const startCol =
-                        Math.round(
-                          (lastRowSpeakersBefore * columns) / lastRowCount,
-                        ) + 1;
-                      gridColumn = `${startCol}`;
-                    } else if (lastRowAlign === "center") {
-                      // Center: offset by half the empty cells.
-                      const empty = columns - lastRowCount;
-                      const startCol = pos.col + Math.floor(empty / 2) + 1;
-                      gridColumn = `${startCol}`;
-                    }
-                    // "left" = no special handling (default grid flow).
-                  }
-                  return (
-                    <div
-                      key={`${speaker.order}-${speaker.fullName}`}
-                      style={{
-                        gridColumnStart: gridColumn
-                          ? parseInt(gridColumn, 10)
-                          : pos.col + 1,
-                        gridRowStart: pos.row + 1,
-                      }}
-                    >
-                      <SpeakerCard
-                        speaker={speaker}
-                        accentColor={data.event.brandColors[0]}
-                        editable={editable}
-                        slot={{ kind: "speaker", index: idx }}
-                        previewScale={previewScale}
-                        onPickImage={onPickImage}
-                        onPlacementChange={onPlacementChange}
-                        onSizeChange={onSizeChange}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
+              Speakers
+            </span>
+          </div>
+          {[...data.speakers]
+            .sort((a, b) => a.order - b.order)
+            // Pair each speaker with its index in the SORTED array (so
+            // slot.index matches what the editor's applyImagePick expects,
+            // which looks up `next.speakers.sort(...)[slot.index]`).
+            .map((speaker, idx) => ({ speaker, idx }))
+            // Then hide invisible speakers (visible defaults to true).
+            .filter(({ speaker }) => speaker.visible !== false)
+            .map(({ speaker, idx }) => (
+              <SpeakerCard
+                key={`${speaker.order}-${speaker.fullName}`}
+                speaker={speaker}
+                accentColor={data.event.brandColors[0]}
+                editable={editable}
+                slot={{ kind: "speaker", index: idx }}
+                previewScale={previewScale}
+                onPickImage={onPickImage}
+                onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
+              />
+            ))}
+        </SectionBox>
 
         {/* ===== 8. SPONSORS (bottom-right) ===== */}
-        <div
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "sponsors"}
+          onSelect={() => setSelectedId("sponsors")}
+          pos={data.sectionLayout?.sponsors?.pos}
+          scale={data.sectionLayout?.sponsors?.scale ?? 1}
+          boxSize={data.sectionLayout?.sponsors?.boxSize}
+          onMove={(p) => onSectionMove?.("sponsors", p)}
+          onResize={(s) => onSectionResize?.("sponsors", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("sponsors", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
           className="absolute flex flex-col items-end gap-2"
-          style={{ right: "48px", bottom: "100px" }}
+          style={{ right: "48px", bottom: "100px", zIndex: sectionZFor("sponsors") }}
+          anchor="top-right"
+          accentColor="#FF005A"
+          label="Sponsored by"
+          guideId="sponsors"
         >
           {data.collaborators.length > 0 && (
             <div className="flex flex-col items-end gap-1.5">
@@ -488,14 +582,30 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               </div>
             </div>
           )}
-        </div>
+        </SectionBox>
 
         {/* ===== 9. BRANDING (bottom-right corner) ===== */}
         {/* Replaced the text "ai salon" wordmark with the meerkat brand image
             per user request (Task ID: mockup-editor-v2). */}
-        <div
+        <SectionBox
+          active={sectionsEditable}
+          selected={selectedId === "branding"}
+          onSelect={() => setSelectedId("branding")}
+          pos={data.sectionLayout?.branding?.pos}
+          scale={data.sectionLayout?.branding?.scale ?? 1}
+          boxSize={data.sectionLayout?.branding?.boxSize}
+          onMove={(p) => onSectionMove?.("branding", p)}
+          onResize={(s) => onSectionResize?.("branding", s)}
+          onBoxResize={(sz) => onSectionBoxResize?.("branding", sz)}
+          previewScale={previewScale}
+          canvasW={CANVAS_W}
+          canvasH={CANVAS_H}
           className="absolute flex items-center gap-2"
-          style={{ right: "48px", bottom: "32px" }}
+          style={{ right: "48px", bottom: "32px", zIndex: sectionZFor("branding") }}
+          anchor="top-right"
+          accentColor="#FF005A"
+          label="Branding"
+          guideId="branding"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -507,18 +617,68 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               objectFit: "contain",
             }}
           />
-        </div>
+        </SectionBox>
 
         {/* Optional footer credit (bottom-left) */}
         {data.footerCredit && (
-          <span
-            className="absolute text-black/40"
-            style={{ left: "48px", bottom: "32px", fontSize: "11px" }}
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "footer"}
+            onSelect={() => setSelectedId("footer")}
+            pos={data.sectionLayout?.footer?.pos}
+            scale={data.sectionLayout?.footer?.scale ?? 1}
+            boxSize={data.sectionLayout?.footer?.boxSize}
+            onMove={(p) => onSectionMove?.("footer", p)}
+            onResize={(s) => onSectionResize?.("footer", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("footer", sz)}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            className="absolute"
+            style={{ left: "48px", bottom: "32px", fontSize: "11px", zIndex: sectionZFor("footer") }}
+            accentColor="#FF005A"
+            label="Footer"
+            guideId="footer"
           >
-            {data.footerCredit}
-          </span>
+            <span className="text-black/40">
+              {data.footerCredit}
+            </span>
+          </SectionBox>
         )}
+
+        {/* ===== OBJECT PROPERTIES PANEL (Section 1) =====
+            Floating panel (top-right of canvas, only when a section is
+            selected) with X/Y coordinate inputs + Front/Back layer
+            toggles + box size W/H inputs (for mid-edge-resized boxes).
+            Per user spec 2026-06-28:
+              "Every selected element (image or section) must display an
+               active properties panel (or floating tooltip) containing:
+                 - Positioning: X and Y coordinate inputs for precise
+                   placement.
+                 - Layering: Front and Back toggles to reorder the
+                   z-index of the currently selected element." */}
+        {sectionsEditable && selectedId && (
+          <ObjectPropertiesPanel
+            label={selectedId}
+            pos={data.sectionLayout?.[selectedId]?.pos}
+            onPosChange={(p) => onSectionMove?.(selectedId, p)}
+            z={sectionZFor(selectedId)}
+            onZChange={(z) => onSectionZChange?.(selectedId, z)}
+            peers={sectionPeerZs}
+            onDeselect={() => setSelectedId(null)}
+            showBoxSize
+            boxSize={data.sectionLayout?.[selectedId]?.boxSize}
+            onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
+            scale={data.sectionLayout?.[selectedId]?.scale ?? 1}
+            onScaleChange={(s) => onSectionResize?.(selectedId, s)}
+          />
+        )}
+
+        {/* Alignment guides overlay (rendered last so it sits on top of
+            all canvas content but below the SectionBox handles). */}
+        <GuideOverlay />
       </div>
+    </GuideProvider>
     );
   },
 );
@@ -634,14 +794,21 @@ function EditableImage({
     window.addEventListener("mouseup", onUp);
   }
 
-  function handleWheel(e: React.WheelEvent) {
+  const containerRef = useRef<HTMLDivElement>(null);
+    // Attach a NON-PASSIVE wheel listener so preventDefault
+    // actually stops the parent workspace from scrolling.
+    // React's onWheel is passive by default → preventDefault
+    // is a no-op there + logs a console warning.
+    useNonPassiveWheel(containerRef, handleWheel, !!editable);
+
+    function handleWheel(e: WheelEvent) {
     if (!editable || !onPlacementChange) return;
-    e.preventDefault();
-    // Wheel scroll adjusts the image's zoom (transform: scale).
-    // Range is 0.1 (smallest, per user spec) to 10 (largest, allows
-    // dramatic enlargement). Each wheel tick changes zoom by 0.1.
-    const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(0.1, Math.min(10, zoom + step));
+    // preventDefault + stopPropagation are already called by the
+    // useNonPassiveWheel hook (non-passive native listener), so
+    // the parent workspace does not scroll while the user spins
+    // the wheel over a hovered image.
+const step = e.deltaY < 0 ? 0.1 : -0.1;
+    const nextZoom = Math.max(0.01, zoom + step);
     onPlacementChange(slot, {
       focusX,
       focusY,
@@ -682,19 +849,20 @@ function EditableImage({
       const dx = ev.clientX - r.startX;
       const dy = ev.clientY - r.startY;
       // For each corner, compute the signed diagonal distance so that
-      // moving "outward" (away from the image center) increases the size.
+      // moving "outward" (away from the image center) increases the size
+      // and moving "toward the center" decreases it. The SW and NE
+      // formulas were previously inverted — fixed per user spec.
       let signedDiag: number;
       switch (r.corner) {
         case "se": signedDiag = dx + dy; break;            // down-right grows
         case "nw": signedDiag = -(dx + dy); break;          // up-left grows
-        case "ne": signedDiag = -dx + dy; break;            // up-right grows
-        case "sw": signedDiag = dx - dy; break;             // down-left grows
+        case "ne": signedDiag = dx - dy; break;             // up-right grows (dx>0 grows, dy<0 grows)
+        case "sw": signedDiag = -dx + dy; break;            // down-left grows (dx<0 grows, dy>0 grows)
       }
       // 100px of drag = 1.0× size change (so dragging 50px = +0.5×).
-      // Range is 0.1 (smallest, per user spec) to 10 (largest).
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
+      const next = Math.max(0.01, r.startSize + delta);
       onSizeChange(slot, next);
     };
     const onUp = () => {
@@ -708,7 +876,7 @@ function EditableImage({
 
   return (
     <div
-      id={`editable-img-${slotKey(slot)}`}
+      ref={containerRef} id={`editable-img-${slotKey(slot)}`}
       className={`${containerClass} group`}
       style={{
         cursor: editable ? "grab" : "default",
@@ -716,7 +884,6 @@ function EditableImage({
         outlineOffset: editable ? "-2px" : undefined,
       }}
       onMouseDown={handleMouseDown}
-      onWheel={handleWheel}
       onDoubleClick={handleDoubleClick}
     >
       <Image
@@ -851,9 +1018,8 @@ function SpeakerCard({
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
 }) {
-  // photoSize: 1 = 56px (default), 2 = 112px, 0.1 = 5.6px (smallest per
-  // user spec), 10 = 560px (largest). Clamped to [0.1, 10].
-  const photoSize = Math.max(0.1, Math.min(10, speaker.photoSize ?? 1));
+  // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
+  const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
   const photoPx = Math.round(56 * photoSize);
   return (
     <div className="flex items-start gap-3 rounded-lg bg-white/95 backdrop-blur-sm border border-black/10 p-2.5 shadow-sm">
@@ -973,8 +1139,7 @@ function SponsorLogo({
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
 }) {
-  // logoSize: 1 = 32px height (default). Range [0.1, 10] per user spec.
-  const sizeMult = Math.max(0.1, Math.min(10, sponsor.logoSize ?? 1));
+  const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
   const heightPx = Math.round(32 * sizeMult);
   const minWidthPx = Math.round(80 * sizeMult);
 
@@ -1007,13 +1172,12 @@ function SponsorLogo({
       switch (r.corner) {
         case "se": signedDiag = dx + dy; break;
         case "nw": signedDiag = -(dx + dy); break;
-        case "ne": signedDiag = -dx + dy; break;
-        case "sw": signedDiag = dx - dy; break;
+        case "ne": signedDiag = dx - dy; break;     // up-right grows (dx>0 grows, dy<0 grows)
+        case "sw": signedDiag = -dx + dy; break;    // down-left grows (dx<0 grows, dy>0 grows)
       }
       const sensitivity = 100 * previewScale;
       const delta = signedDiag / sensitivity;
-      // Range [0.1, 10] per user spec.
-      const next = Math.max(0.1, Math.min(10, r.startSize + delta));
+      const next = Math.max(0.01, r.startSize + delta);
       onSizeChange(slot, next);
     };
     const onUp = () => {
@@ -1092,7 +1256,8 @@ function SponsorLogo({
  * Renders to a <canvas> so it's high-DPI ready.
  */
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+// `useState` and `useEffect` are imported at the top of this file (line 3)
+// — no need to re-import here.
 
 function QrCode({ url, size }: { url: string; size: number }) {
   const [dataUrl, setDataUrl] = useState<string>("");

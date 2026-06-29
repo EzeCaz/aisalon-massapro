@@ -134,8 +134,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           <input
             type="number"
             step="0.1"
-            min="0.1"
-            max="4"
+            min="0.01"
             value={data.speaker.photoSize ?? 1}
             onChange={(e) =>
               update((d) => {
@@ -229,8 +228,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           <input
             type="number"
             step="0.1"
-            min="0.1"
-            max="4"
+            min="0.01"
             value={data.graphic.imageScale ?? 1}
             onChange={(e) =>
               update((d) => {
@@ -274,6 +272,76 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+
+        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+            Per user spec 2026-06-28: "Move all 'Capabilities' controls
+            (toggles, inputs, visibility settings) from the canvas slider
+            to the Left Sidebar for all mockup pages."
+            Default z-order: heroZ=1 (back), photoZ=3 (front), graphicZ=4 (top).
+            Front/Back buttons override dynamically. */}
+        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+          <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+            Layer z-index (Front = on top)
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { key: "hero", label: "Hero", zVal: data.heroZ ?? 1 },
+              { key: "photo", label: "Photo", zVal: data.photoZ ?? 3 },
+              { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 4 },
+            ] as const).map((layer) => (
+              <div key={layer.key}>
+                <div className="text-[0.6rem] text-black/60 mb-1">
+                  {layer.label} (z={layer.zVal})
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      update((d) => {
+                        const peers = [
+                          d.heroZ ?? 1,
+                          d.photoZ ?? 3,
+                          d.graphicZ ?? 4,
+                        ];
+                        const max = Math.max(...peers);
+                        if (layer.key === "hero") d.heroZ = max + 1;
+                        else if (layer.key === "photo") d.photoZ = max + 1;
+                        else d.graphicZ = max + 1;
+                      })
+                    }
+                    className="flex-1 rounded border border-black/15 bg-white px-1 py-1 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                    title={`Bring ${layer.label} to front`}
+                  >
+                    Front
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      update((d) => {
+                        const peers = [
+                          d.heroZ ?? 1,
+                          d.photoZ ?? 3,
+                          d.graphicZ ?? 4,
+                        ];
+                        const min = Math.min(...peers);
+                        if (layer.key === "hero") d.heroZ = min - 1;
+                        else if (layer.key === "photo") d.photoZ = min - 1;
+                        else d.graphicZ = min - 1;
+                      })
+                    }
+                    className="flex-1 rounded border border-black/15 bg-white px-1 py-1 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                    title={`Send ${layer.label} to back`}
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[0.55rem] text-black/40 leading-tight">
+            Default: hero (back) → photo → graphic (top). Click Front/Back to override.
+          </p>
+        </div>
       </Section>
 
       {/* ===== SPONSORS ===== */}
@@ -318,7 +386,6 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
                   value={s.logoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {
@@ -400,7 +467,6 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  max="4"
                   value={s.logoSize ?? 1}
                   onChange={(e) =>
                     update((d) => {

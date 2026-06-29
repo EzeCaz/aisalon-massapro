@@ -112,21 +112,13 @@ export type EventProfileData = {
     gradientColors: string[];
     gradientOpacity: number;
     imagePlacement?: ImagePlacement;
-    /** Horizontal scale multiplier for the hero image. 1 = full canvas
-     *  width (default). 0.5 = half width, 2 = double width (overflows). */
+    /** Horizontal scale multiplier for the hero image. 1 = default
+     *  (full canvas width). 0.5 = half, 2 = double. */
     imageScale?: number;
-    /** Vertical scale multiplier for the hero image. 1 = full canvas
-     *  height (default). 0.5 = top half only, 2 = double height. */
+    /** Vertical scale multiplier for the hero image. 1 = default
+     *  (top 450px). 0.5 = top 225px, 2 = 900px. */
     imageScaleY?: number;
-    /** Whether to render the triangle gradient overlay. Defaults true.
-     *  Per layer-management spec: when "Yes", the triangle strictly
-     *  renders BEHIND the hero image (controlled by triangleZ default). */
-    showTriangleOverlay?: boolean;
   };
-  /** Optional location pins overlaid on the hero. Used by the
-   *  visual-first Event Profile layout. Defaults to the 4 canonical
-   *  TLV pins if absent. */
-  locationPins?: { x: number; y: number; label: string }[];
   /** Agenda list — sessions in chronological order. */
   sessions: Session[];
   /** Speakers grid — all speakers, ordered by first session time. */
@@ -146,20 +138,10 @@ export type EventProfileData = {
    */
   sectionLayout?: SectionLayout;
   /**
-   * Hero overlay z-index. Default 2 (above triangle, below text).
-   * Set higher to bring the hero on top of other layers, lower to send
-   * it behind. Controlled by the Front/Back buttons in section edit mode.
+   * Hero overlay z-index. Default 1.
+   * Controlled by the Front/Back buttons in section edit mode.
    */
   heroZ?: number;
-  /**
-   * Triangle overlay z-index. Default 1 (BEHIND hero, below text).
-   *
-   * Per layer-management spec: "The 'Show Triangle Overlay' must
-   * strictly remain behind the 'Hero Image' component whenever the
-   * visibility toggle is set to 'Yes.'" The Front/Back buttons let the
-   * user override this if they want, but the default respects the spec.
-   */
-  triangleZ?: number;
 };
 
 /** Image slot identifiers for the picker. */

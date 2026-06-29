@@ -5,17 +5,17 @@ import { db } from "@/lib/db";
 import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
-import { EventProfileEditor } from "./event-profile-editor";
+import { AgendaProfileEditor } from "./agenda-profile-editor";
 import type { EventPickListItem } from "./types";
 
-export const metadata = { title: "Event Profile Mockup — AI Salon Tel Aviv" };
+export const metadata = { title: "Agenda Profile Mockup — AI Salon Tel Aviv" };
 
 export const dynamic = "force-dynamic";
 
 /**
  * /admin/mockups/event-profile
  *
- * Full event-page-style mockup. Pick an event from the dropdown to
+ * Full agenda-page-style mockup. Pick an event from the dropdown to
  * auto-fill the hero, agenda (with breaks / networking auto-hidden),
  * and speakers grid. Toggle visibility per session / speaker. Edit
  * any field in the JSON. Download a print-quality PNG.
@@ -23,10 +23,10 @@ export const dynamic = "force-dynamic";
  * Permission gate: ADMIN + SUPER_ADMIN (same as /admin/mockups).
  */
 
-export default async function EventProfileMockupPage() {
+export default async function AgendaProfileMockupPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
-    redirect("/login?callbackUrl=/admin/mockups/event-profile");
+    redirect("/login?callbackUrl=/admin/mockups/agenda-profile");
   }
 
   let me = await db.user.findUnique({
@@ -66,24 +66,22 @@ export default async function EventProfileMockupPage() {
 
         <div className="mb-6">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            Mockup Builder · Template 3 of 4
+            Mockup Builder · Template 3 of 4 (Agenda)
           </p>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
-            Event Profile Mockup
+            Agenda Profile Mockup
           </h1>
           <p className="mt-2 text-sm text-black/60 max-w-3xl leading-relaxed">
-            Visual-first, minimal-text promotional overview — deconstructs
-            the canonical Event Profile reference image: full-canvas TLV
-            hero with triangle gradient overlay, 4 location pins (Sarona,
-            Dizengoff, Neve Tzedek, Yafo), bold event title top-left, and
-            sponsor logos bottom-right. <strong>Agenda + speakers grid
-            have moved to <code className="rounded bg-black/5 px-1 py-0.5 font-mono">/admin/mockups/agenda-profile</code>.</strong>
-            Edit any field in the JSON on the left, then download a
-            print-quality PNG.
+            Full agenda-page-style mockup. Pick an event from the dropdown to
+            auto-fill the hero, agenda (with <strong>breaks and networking
+            sessions auto-hidden</strong>), and speakers grid (ordered by
+            session time). Toggle visibility per session or speaker using the
+            checkboxes. Edit any field in the JSON on the left, then download
+            a print-quality PNG.
           </p>
         </div>
 
-        <EventProfileEditor events={events} />
+        <AgendaProfileEditor events={events} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
