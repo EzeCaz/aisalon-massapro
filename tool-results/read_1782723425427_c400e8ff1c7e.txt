@@ -1,0 +1,750 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useEffect, useRef, useState, useCallback } from "react";
+     4→     4→import {
+     5→     5→  Copy,
+     6→     6→  Check,
+     7→     7→  Download,
+     8→     8→  RotateCcw,
+     9→     9→  Code,
+    10→    10→  AlertCircle,
+    11→    11→  ImageIcon,
+    12→    12→  Calendar,
+    13→    13→  Loader2,
+    14→    14→  Wand2,
+    15→    15→  FormInput,
+    16→    16→  LayoutPanelTop,
+    17→    17→} from "lucide-react";
+    18→    18→import { toPng } from "html-to-image";
+    19→    19→import type {
+    20→    20→  MeetTheSpeakerData,
+    21→    21→  ImagePlacement,
+    22→    22→  ImageSlot,
+    23→    23→  EventPickListItem,
+    24→    24→} from "./types";
+    25→    25→import type { SectionId, SectionPos } from "../shared/section-edit";
+    26→    26→import { SAMPLE_DATA } from "./sample-data";
+    27→    27→import { MeetTheSpeakerCanvas } from "./meet-the-speaker-canvas";
+    28→    28→import { ImagePickerModalShared } from "../shared/image-picker-modal";
+    29→    29→import { ShareButtons } from "../shared/share-buttons";
+    30→    30→import { MeetTheSpeakerFormView } from "../shared/meet-the-speaker-form-view";
+    31→    31→import {
+    32→    32→  mapEventToMeetTheSpeakerData,
+    33→    33→  type DbEventForMapping,
+    34→    34→} from "./event-mapper";
+    35→    35→
+    36→    36→/**
+    37→    37→ * MeetTheSpeakerEditor — the editor + live preview surface.
+    38→    38→ *
+    39→    39→ * Mirrors the Speaker Intro editor pattern:
+    40→    40→ *   1. Pick an event from the dropdown → auto-fill all fields.
+    41→    41→ *   2. Toggle "Edit images" → click any image to replace it from the
+    42→    42→ *      brand library. Drag to pan. Scroll to zoom.
+    43→    43→ *   3. Edit the JSON directly for fine-grained control.
+    44→    44→ *   4. Download a print-quality PNG.
+    45→    45→ */
+    46→    46→
+    47→    47→const STORAGE_KEY = "meet-the-speaker-data-v1";
+    48→    48→
+    49→    49→type Props = {
+    50→    50→  events: EventPickListItem[];
+    51→    51→};
+    52→    52→
+    53→    53→export function MeetTheSpeakerEditor({ events }: Props) {
+    54→    54→  const [data, setData] = useState<MeetTheSpeakerData>(SAMPLE_DATA);
+    55→    55→  const [jsonText, setJsonText] = useState<string>(() =>
+    56→    56→    JSON.stringify(SAMPLE_DATA, null, 2),
+    57→    57→  );
+    58→    58→  const [parseError, setParseError] = useState<string | null>(null);
+    59→    59→  /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
+    60→    60→  const [viewMode, setViewMode] = useState<"form" | "json">("form");
+    61→    61→  const [copied, setCopied] = useState(false);
+    62→    62→  const [downloading, setDownloading] = useState(false);
+    63→    63→  const [previewScale, setPreviewScale] = useState<number>(0.5);
+    64→    64→  const [editMode, setEditMode] = useState<boolean>(false);
+    65→    65→  /** Sections edit mode = text sections are draggable + resizeable. */
+    66→    66→  const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
+    67→    67→  const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
+    68→    68→  const [loadingEvent, setLoadingEvent] = useState(false);
+    69→    69→  const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
+    70→    70→
+    71→    71→  const canvasRef = useRef<HTMLDivElement>(null);
+    72→    72→  const previewContainerRef = useRef<HTMLDivElement>(null);
+    73→    73→  const rafRef = useRef<number | null>(null);
+    74→    74→
+    75→    75→  // --- helpers ---------------------------------------------------------
+    76→    76→
+    77→    77→  const applyData = useCallback((next: MeetTheSpeakerData) => {
+    78→    78→    setData(next);
+    79→    79→    setParseError(null);
+    80→    80→    if (rafRef.current === null) {
+    81→    81→      rafRef.current = requestAnimationFrame(() => {
+    82→    82→        rafRef.current = null;
+    83→    83→        setJsonText(JSON.stringify(next, null, 2));
+    84→    84→      });
+    85→    85→    }
+    86→    86→  }, []);
+    87→    87→
+    88→    88→  function applyImagePick(slot: ImageSlot, url: string): MeetTheSpeakerData {
+    89→    89→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    90→    90→    if (slot.kind === "speaker-photo") {
+    91→    91→      next.speaker.photoUrl = url;
+    92→    92→    } else if (slot.kind === "graphic") {
+    93→    93→      next.graphic.imageUrl = url;
+    94→    94→    } else {
+    95→    95→      const arr =
+    96→    96→        slot.group === "collaborators" ? next.collaborators : next.sponsors;
+    97→    97→      const item = arr[slot.index];
+    98→    98→      if (item) item.logoUrl = url;
+    99→    99→    }
+   100→   100→    return next;
+   101→   101→  }
+   102→   102→
+   103→   103→  function applyPlacementChange(
+   104→   104→    slot: ImageSlot,
+   105→   105→    placement: ImagePlacement,
+   106→   106→  ): MeetTheSpeakerData {
+   107→   107→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   108→   108→    if (slot.kind === "speaker-photo") {
+   109→   109→      next.speaker.photoPlacement = placement;
+   110→   110→    } else if (slot.kind === "graphic") {
+   111→   111→      next.graphic.imagePlacement = placement;
+   112→   112→    }
+   113→   113→    // sponsors use object-contain — no placement.
+   114→   114→    return next;
+   115→   115→  }
+   116→   116→
+   117→   117→  function urlForSlot(slot: ImageSlot): string | undefined {
+   118→   118→    if (slot.kind === "speaker-photo") return data.speaker.photoUrl;
+   119→   119→    if (slot.kind === "graphic") return data.graphic.imageUrl;
+   120→   120→    const arr =
+   121→   121→      slot.group === "collaborators" ? data.collaborators : data.sponsors;
+   122→   122→    return arr[slot.index]?.logoUrl;
+   123→   123→  }
+   124→   124→
+   125→   125→  // --- auto-scale preview ---------------------------------------------
+   126→   126→
+   127→   127→  useEffect(() => {
+   128→   128→    const el = previewContainerRef.current;
+   129→   129→    if (!el) return;
+   130→   130→    const compute = () => {
+   131→   131→      const avail = el.clientWidth - 32;
+   132→   132→      const scale = Math.min(1, Math.max(0.2, avail / 1200));
+   133→   133→      setPreviewScale(scale);
+   134→   134→    };
+   135→   135→    compute();
+   136→   136→    const ro = new ResizeObserver(compute);
+   137→   137→    ro.observe(el);
+   138→   138→    return () => ro.disconnect();
+   139→   139→  }, [viewMode]);
+   140→   140→
+   141→   141→  // --- localStorage hydration -----------------------------------------
+   142→   142→
+   143→   143→  useEffect(() => {
+   144→   144→    try {
+   145→   145→      const saved = localStorage.getItem(STORAGE_KEY);
+   146→   146→      if (saved) {
+   147→   147→        const parsed = JSON.parse(saved) as MeetTheSpeakerData;
+   148→   148→        setData(parsed);
+   149→   149→        setJsonText(JSON.stringify(parsed, null, 2));
+   150→   150→      }
+   151→   151→    } catch {
+   152→   152→      // ignore
+   153→   153→    }
+   154→   154→  }, []);
+   155→   155→
+   156→   156→  useEffect(() => {
+   157→   157→    try {
+   158→   158→      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+   159→   159→    } catch {
+   160→   160→      // ignore
+   161→   161→    }
+   162→   162→  }, [data]);
+   163→   163→
+   164→   164→  // --- JSON textarea → data ------------------------------------------
+   165→   165→
+   166→   166→  const handleJsonChange = useCallback((next: string) => {
+   167→   167→    setJsonText(next);
+   168→   168→    try {
+   169→   169→      const parsed = JSON.parse(next) as MeetTheSpeakerData;
+   170→   170→      if (!parsed || typeof parsed !== "object") {
+   171→   171→        throw new Error("Root must be an object");
+   172→   172→      }
+   173→   173→      if (!parsed.speaker || !parsed.event) {
+   174→   174→        throw new Error("Missing required fields: speaker, event");
+   175→   175→      }
+   176→   176→      setData(parsed);
+   177→   177→      setParseError(null);
+   178→   178→    } catch (err) {
+   179→   179→      setParseError(err instanceof Error ? err.message : "Invalid JSON");
+   180→   180→    }
+   181→   181→  }, []);
+   182→   182→
+   183→   183→  // --- event picker ---------------------------------------------------
+   184→   184→
+   185→   185→  async function handleEventPick(slug: string) {
+   186→   186→    setSelectedEventSlug(slug);
+   187→   187→    if (!slug) return;
+   188→   188→    setLoadingEvent(true);
+   189→   189→    setParseError(null);
+   190→   190→    try {
+   191→   191→      const res = await fetch(`/api/events/${slug}`, { cache: "no-store" });
+   192→   192→      if (!res.ok) {
+   193→   193→        throw new Error(`Failed to load event (HTTP ${res.status})`);
+   194→   194→      }
+   195→   195→      const json = (await res.json()) as { event: DbEventForMapping };
+   196→   196→      const mapped = mapEventToMeetTheSpeakerData(json.event);
+   197→   197→      applyData(mapped);
+   198→   198→    } catch (err) {
+   199→   199→      setParseError(err instanceof Error ? err.message : "Failed to load event");
+   200→   200→    } finally {
+   201→   201→      setLoadingEvent(false);
+   202→   202→    }
+   203→   203→  }
+   204→   204→
+   205→   205→  // --- image picker callbacks ----------------------------------------
+   206→   206→
+   207→   207→  function handlePickImage(slot: ImageSlot) {
+   208→   208→    setPickerSlot(slot);
+   209→   209→  }
+   210→   210→
+   211→   211→  function handlePickerSelect(url: string) {
+   212→   212→    if (!pickerSlot) return;
+   213→   213→    const next = applyImagePick(pickerSlot, url);
+   214→   214→    applyData(next);
+   215→   215→    setPickerSlot(null);
+   216→   216→  }
+   217→   217→
+   218→   218→  function handlePlacementChange(slot: ImageSlot, placement: ImagePlacement) {
+   219→   219→    const next = applyPlacementChange(slot, placement);
+   220→   220→    setData(next);
+   221→   221→    if (rafRef.current === null) {
+   222→   222→      rafRef.current = requestAnimationFrame(() => {
+   223→   223→        rafRef.current = null;
+   224→   224→        setJsonText(JSON.stringify(next, null, 2));
+   225→   225→      });
+   226→   226→    }
+   227→   227→  }
+   228→   228→
+   229→   229→  /** Apply a resize drag — updates the size multiplier on the targeted slot
+   230→   230→   *  (photoSize for speaker, imageScale for graphic, logoSize for sponsor). */
+   231→   231→  function applySizeChange(slot: ImageSlot, newMultiplier: number): MeetTheSpeakerData {
+   232→   232→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   233→   233→    if (slot.kind === "speaker-photo") {
+   234→   234→      next.speaker.photoSize = newMultiplier;
+   235→   235→    } else if (slot.kind === "graphic") {
+   236→   236→      next.graphic.imageScale = newMultiplier;
+   237→   237→    } else {
+   238→   238→      const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
+   239→   239→      const item = arr[slot.index];
+   240→   240→      if (item) item.logoSize = newMultiplier;
+   241→   241→    }
+   242→   242→    return next;
+   243→   243→  }
+   244→   244→
+   245→   245→  function handleSizeChange(slot: ImageSlot, newMultiplier: number) {
+   246→   246→    const next = applySizeChange(slot, newMultiplier);
+   247→   247→    setData(next);
+   248→   248→    if (rafRef.current === null) {
+   249→   249→      rafRef.current = requestAnimationFrame(() => {
+   250→   250→        rafRef.current = null;
+   251→   251→        setJsonText(JSON.stringify(next, null, 2));
+   252→   252→      });
+   253→   253→    }
+   254→   254→  }
+   255→   255→
+   256→   256→  // --- section edit callbacks -----------------------------------------
+   257→   257→
+   258→   258→  /** Apply a section move (drag) — updates data.sectionLayout[id].pos. */
+   259→   259→  function handleSectionMove(id: SectionId, pos: SectionPos) {
+   260→   260→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   261→   261→    if (!next.sectionLayout) next.sectionLayout = {};
+   262→   262→    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+   263→   263→    next.sectionLayout[id]!.pos = pos;
+   264→   264→    setData(next);
+   265→   265→    if (rafRef.current === null) {
+   266→   266→      rafRef.current = requestAnimationFrame(() => {
+   267→   267→        rafRef.current = null;
+   268→   268→        setJsonText(JSON.stringify(next, null, 2));
+   269→   269→      });
+   270→   270→    }
+   271→   271→  }
+   272→   272→
+   273→   273→  /** Apply a section resize — updates data.sectionLayout[id].scale. */
+   274→   274→  function handleSectionResize(id: SectionId, scale: number) {
+   275→   275→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   276→   276→    if (!next.sectionLayout) next.sectionLayout = {};
+   277→   277→    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+   278→   278→    next.sectionLayout[id]!.scale = scale;
+   279→   279→    setData(next);
+   280→   280→    if (rafRef.current === null) {
+   281→   281→      rafRef.current = requestAnimationFrame(() => {
+   282→   282→        rafRef.current = null;
+   283→   283→        setJsonText(JSON.stringify(next, null, 2));
+   284→   284→      });
+   285→   285→    }
+   286→   286→  }
+   287→   287→
+   288→   288→  /** Apply a section box resize (mid-edge handle) — updates
+   289→   289→   *  data.sectionLayout[id].boxSize = { width, height } in canvas px. */
+   290→   290→  function handleSectionBoxResize(id: SectionId, size: { width?: number; height?: number }) {
+   291→   291→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   292→   292→    if (!next.sectionLayout) next.sectionLayout = {};
+   293→   293→    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+   294→   294→    next.sectionLayout[id]!.boxSize = size;
+   295→   295→    setData(next);
+   296→   296→    if (rafRef.current === null) {
+   297→   297→      rafRef.current = requestAnimationFrame(() => {
+   298→   298→        rafRef.current = null;
+   299→   299→        setJsonText(JSON.stringify(next, null, 2));
+   300→   300→      });
+   301→   301→    }
+   302→   302→  }
+   303→   303→
+   304→   304→  /** Apply a section z-index change (Front/Back in ObjectPropertiesPanel). */
+   305→   305→  function handleSectionZChange(id: SectionId, z: number) {
+   306→   306→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   307→   307→    if (!next.sectionLayout) next.sectionLayout = {};
+   308→   308→    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+   309→   309→    next.sectionLayout[id]!.z = z;
+   310→   310→    setData(next);
+   311→   311→    if (rafRef.current === null) {
+   312→   312→      rafRef.current = requestAnimationFrame(() => {
+   313→   313→        rafRef.current = null;
+   314→   314→        setJsonText(JSON.stringify(next, null, 2));
+   315→   315→      });
+   316→   316→    }
+   317→   317→  }
+   318→   318→
+   319→   319→  /** Apply a hero X scale change (slider). */
+   320→   320→  function handleHeroScaleXChange(n: number) {
+   321→   321→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   322→   322→    next.heroOverlay.imageScale = n;
+   323→   323→    setData(next);
+   324→   324→    if (rafRef.current === null) {
+   325→   325→      rafRef.current = requestAnimationFrame(() => {
+   326→   326→        rafRef.current = null;
+   327→   327→        setJsonText(JSON.stringify(next, null, 2));
+   328→   328→      });
+   329→   329→    }
+   330→   330→  }
+   331→   331→
+   332→   332→  /** Apply a hero Y scale change (slider). */
+   333→   333→  function handleHeroScaleYChange(n: number) {
+   334→   334→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   335→   335→    next.heroOverlay.imageScaleY = n;
+   336→   336→    setData(next);
+   337→   337→    if (rafRef.current === null) {
+   338→   338→      rafRef.current = requestAnimationFrame(() => {
+   339→   339→        rafRef.current = null;
+   340→   340→        setJsonText(JSON.stringify(next, null, 2));
+   341→   341→      });
+   342→   342→    }
+   343→   343→  }
+   344→   344→
+   345→   345→  /** Apply a layer z-index change (Hero / Photo / Graphic Front/Back). */
+   346→   346→  function handleLayerZChange(layer: "hero" | "photo" | "graphic", z: number) {
+   347→   347→    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+   348→   348→    if (layer === "hero") next.heroZ = z;
+   349→   349→    else if (layer === "photo") next.photoZ = z;
+   350→   350→    else next.graphicZ = z;
+   351→   351→    setData(next);
+   352→   352→    if (rafRef.current === null) {
+   353→   353→      rafRef.current = requestAnimationFrame(() => {
+   354→   354→        rafRef.current = null;
+   355→   355→        setJsonText(JSON.stringify(next, null, 2));
+   356→   356→      });
+   357→   357→    }
+   358→   358→  }
+   359→   359→
+   360→   360→  // --- toolbar actions ------------------------------------------------
+   361→   361→
+   362→   362→  function handleReset() {
+   363→   363→    if (
+   364→   364→      !confirm(
+   365→   365→        "Reset to the sample data? Any local edits you've made will be lost.",
+   366→   366→      )
+   367→   367→    ) {
+   368→   368→      return;
+   369→   369→    }
+   370→   370→    applyData(SAMPLE_DATA);
+   371→   371→    setSelectedEventSlug("");
+   372→   372→  }
+   373→   373→
+   374→   374→  async function handleCopyJson() {
+   375→   375→    try {
+   376→   376→      await navigator.clipboard.writeText(jsonText);
+   377→   377→      setCopied(true);
+   378→   378→      setTimeout(() => setCopied(false), 2000);
+   379→   379→    } catch {
+   380→   380→      // ignore
+   381→   381→    }
+   382→   382→  }
+   383→   383→
+   384→   384→  /** Export the canvas to a PNG data URL (used by Share buttons + Download). */
+   385→   385→  const getPngDataUrl = useCallback(async (): Promise<string> => {
+   386→   386→    if (!canvasRef.current) {
+   387→   387→      throw new Error("Canvas not ready");
+   388→   388→    }
+   389→   389→    return toPng(canvasRef.current, {
+   390→   390→      pixelRatio: 2,
+   391→   391→      cacheBust: true,
+   392→   392→      backgroundColor: "#ffffff",
+   393→   393→    });
+   394→   394→  }, []);
+   395→   395→
+   396→   396→  async function handleDownloadPng() {
+   397→   397→    if (!canvasRef.current) return;
+   398→   398→    setDownloading(true);
+   399→   399→    try {
+   400→   400→      const dataUrl = await getPngDataUrl();
+   401→   401→      const link = document.createElement("a");
+   402→   402→      const slug = data.speaker.fullName
+   403→   403→        .toLowerCase()
+   404→   404→        .replace(/[^a-z0-9]+/g, "-")
+   405→   405→        .replace(/^-|-$/g, "");
+   406→   406→      link.download = `meet-the-speaker-${slug || "mockup"}-${Date.now()}.png`;
+   407→   407→      link.href = dataUrl;
+   408→   408→      link.click();
+   409→   409→    } catch (err) {
+   410→   410→      console.error("PNG export failed:", err);
+   411→   411→      alert("PNG export failed — see console for details.");
+   412→   412→    } finally {
+   413→   413→      setDownloading(false);
+   414→   414→    }
+   415→   415→  }
+   416→   416→
+   417→   417→  // --- render ---------------------------------------------------------
+   418→   418→
+   419→   419→  return (
+   420→   420→    <div className="space-y-4">
+   421→   421→      {/* Event picker row */}
+   422→   422→      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
+   423→   423→        <div className="flex items-center gap-2 text-sm font-bold text-black">
+   424→   424→          <Calendar className="h-4 w-4 text-[#FF005A]" />
+   425→   425→          Auto-fill from event:
+   426→   426→        </div>
+   427→   427→        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+   428→   428→          <select
+   429→   429→            value={selectedEventSlug}
+   430→   430→            onChange={(e) => handleEventPick(e.target.value)}
+   431→   431→            disabled={loadingEvent}
+   432→   432→            className="flex-1 max-w-md rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
+   433→   433→          >
+   434→   434→            <option value="">
+   435→   435→              {events.length === 0
+   436→   436→                ? "No events found"
+   437→   437→                : "— Pick an event to auto-fill all fields —"}
+   438→   438→            </option>
+   439→   439→            {events.map((ev) => (
+   440→   440→              <option key={ev.id} value={ev.slug}>
+   441→   441→                {new Date(ev.startsAt).toLocaleDateString("en-US", {
+   442→   442→                  month: "short",
+   443→   443→                  day: "numeric",
+   444→   444→                  year: "numeric",
+   445→   445→                })}{" "}
+   446→   446→                · {ev.title}
+   447→   447→                {ev.venue ? ` @ ${ev.venue}` : ""}
+   448→   448→              </option>
+   449→   449→            ))}
+   450→   450→          </select>
+   451→   451→          {loadingEvent && (
+   452→   452→            <Loader2 className="h-4 w-4 animate-spin text-[#FF005A]" />
+   453→   453→          )}
+   454→   454→        </div>
+   455→   455→        {data.event.sourceEventSlug && (
+   456→   456→          <span className="inline-flex items-center gap-1 rounded-full bg-[#FF005A]/10 px-2 py-1 text-[0.65rem] font-semibold text-[#FF005A]">
+   457→   457→            <Wand2 className="h-3 w-3" />
+   458→   458→            Auto-filled from &ldquo;{data.event.name.slice(0, 40)}{data.event.name.length > 40 ? "…" : ""}&rdquo;
+   459→   459→          </span>
+   460→   460→        )}
+   461→   461→        <span className="text-xs text-black/40">
+   462→   462→          (you can still edit any field in the JSON below)
+   463→   463→        </span>
+   464→   464→      </div>
+   465→   465→
+   466→   466→      {/* Toolbar */}
+   467→   467→      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
+   468→   468→        {/* View-mode toggle: Form vs JSON */}
+   469→   469→        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+   470→   470→          <button
+   471→   471→            type="button"
+   472→   472→            onClick={() => setViewMode("form")}
+   473→   473→            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition ${
+   474→   474→              viewMode === "form"
+   475→   475→                ? "bg-[#FF005A] text-white"
+   476→   476→                : "text-black hover:bg-black/5"
+   477→   477→            }`}
+   478→   478→          >
+   479→   479→            <FormInput className="h-3.5 w-3.5" />
+   480→   480→            Form
+   481→   481→          </button>
+   482→   482→          <button
+   483→   483→            type="button"
+   484→   484→            onClick={() => setViewMode("json")}
+   485→   485→            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition border-l border-black/10 ${
+   486→   486→              viewMode === "json"
+   487→   487→                ? "bg-[#FF005A] text-white"
+   488→   488→                : "text-black hover:bg-black/5"
+   489→   489→            }`}
+   490→   490→          >
+   491→   491→            <Code className="h-3.5 w-3.5" />
+   492→   492→            JSON
+   493→   493→          </button>
+   494→   494→        </div>
+   495→   495→        <button
+   496→   496→          type="button"
+   497→   497→          onClick={handleReset}
+   498→   498→          className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+   499→   499→        >
+   500→   500→          <RotateCcw className="h-3.5 w-3.5" /> Reset to sample
+   501→   501→        </button>
+   502→   502→        <button
+   503→   503→          type="button"
+   504→   504→          onClick={handleCopyJson}
+   505→   505→          className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+   506→   506→        >
+   507→   507→          {copied ? (
+   508→   508→            <>
+   509→   509→              <Check className="h-3.5 w-3.5" /> Copied!
+   510→   510→            </>
+   511→   511→          ) : (
+   512→   512→            <>
+   513→   513→              <Copy className="h-3.5 w-3.5" /> Copy JSON
+   514→   514→            </>
+   515→   515→          )}
+   516→   516→        </button>
+   517→   517→        <button
+   518→   518→          type="button"
+   519→   519→          onClick={handleDownloadPng}
+   520→   520→          disabled={downloading || !!parseError}
+   521→   521→          className="inline-flex items-center gap-1.5 rounded-md bg-black text-white font-semibold px-3 py-1.5 text-xs hover:bg-black/90 disabled:opacity-50"
+   522→   522→        >
+   523→   523→          <Download className="h-3.5 w-3.5" />
+   524→   524→          {downloading ? "Exporting…" : "Download"}
+   525→   525→        </button>
+   526→   526→        <ShareButtons
+   527→   527→          getPngDataUrl={getPngDataUrl}
+   528→   528→          title={`${data.speaker.fullName} — ${data.speaker.topic}`}
+   529→   529→          filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+   530→   530→        />
+   531→   531→        <span className="ml-auto text-xs text-black/40">
+   532→   532→          Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+   533→   533→        </span>
+   534→   534→      </div>
+   535→   535→
+   536→   536→      {/* Edit-mode hint */}
+   537→   537→      {(editMode || sectionsEditMode) && (
+   538→   538→        <div className="rounded-md border border-[#0066FF]/30 bg-[#0066FF]/5 px-3 py-2 text-xs text-[#0066FF]">
+   539→   539→          {editMode && (
+   540→   540→            <>
+   541→   541→              <strong>Image edit mode is ON.</strong> Hover the speaker photo, meerkat
+   542→   542→              graphic, or sponsor logos to see a <em>Replace</em> button. Drag
+   543→   543→              images to pan. Scroll on an image to zoom. Double-click to reset
+   544→   544→              placement. Use <code className="font-mono">photoSize</code>,{" "}
+   545→   545→              <code className="font-mono">imageScale</code>, and{" "}
+   546→   546→              <code className="font-mono">logoSize</code> in the JSON to resize
+   547→   547→              containers.
+   548→   548→            </>
+   549→   549→          )}
+   550→   550→          {sectionsEditMode && (
+   551→   551→            <div className={editMode ? "mt-3" : ""}>
+   552→   552→              <strong>Section edit mode is ON.</strong>{" "}
+   553→   553→              Drag any text section (speaker info, event details, sponsors,
+   554→   554→              branding) or the QR code to reposition. Drag the 8 pink handles
+   555→   555→              (4 corners + 4 mid-edges) to resize. Layout persists in the JSON
+   556→   556→              under <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-[0.65rem]">sectionLayout</code>.
+   557→   557→              Use the <strong>Layers</strong> Front/Back buttons at the
+   558→   558→              bottom-left of the canvas to control whether the Hero overlay,
+   559→   559→              Photo, or Brand graphic sits above or below the text layers.
+   560→   560→            </div>
+   561→   561→          )}
+   562→   562→        </div>
+   563→   563→      )}
+   564→   564→
+   565→   565→      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+   566→   566→        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
+   567→   567→        {viewMode === "form" ? (
+   568→   568→          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
+   569→   569→            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
+   570→   570→              <div className="flex items-center gap-2">
+   571→   571→                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
+   572→   572→                <span className="text-[0.7rem] font-mono text-black/60">
+   573→   573→                  meet-the-speaker.form
+   574→   574→                </span>
+   575→   575→              </div>
+   576→   576→              <span className="text-[0.65rem] font-mono text-[#27C93F]">
+   577→   577→                LIVE
+   578→   578→              </span>
+   579→   579→            </div>
+   580→   580→            <MeetTheSpeakerFormView
+   581→   581→              data={data}
+   582→   582→              onChange={(next) => applyData(next)}
+   583→   583→            />
+   584→   584→          </div>
+   585→   585→        ) : (
+   586→   586→          <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
+   587→   587→            <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
+   588→   588→              <div className="flex items-center gap-2">
+   589→   589→                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
+   590→   590→                <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+   591→   591→                <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
+   592→   592→                <span className="ml-3 text-[0.7rem] font-mono text-white/40">
+   593→   593→                  meet-the-speaker.data.json
+   594→   594→                </span>
+   595→   595→              </div>
+   596→   596→              <span
+   597→   597→                className={`text-[0.65rem] font-mono ${
+   598→   598→                  parseError ? "text-[#FF5F56]" : "text-[#27C93F]"
+   599→   599→                }`}
+   600→   600→              >
+   601→   601→                {parseError ? "ERROR" : "VALID"}
+   602→   602→              </span>
+   603→   603→            </div>
+   604→   604→            <textarea
+   605→   605→              value={jsonText}
+   606→   606→              onChange={(e) => handleJsonChange(e.target.value)}
+   607→   607→              spellCheck={false}
+   608→   608→              className="flex-1 min-h-[640px] w-full resize-none bg-[#0a0a0a] text-white/85 font-mono text-[0.72rem] leading-relaxed p-4 outline-none"
+   609→   609→              style={{ tabSize: 2 }}
+   610→   610→            />
+   611→   611→            {parseError && (
+   612→   612→              <div className="border-t border-[#FF5F56]/40 bg-[#FF5F56]/10 px-4 py-2.5 flex items-start gap-2">
+   613→   613→                <AlertCircle className="h-4 w-4 shrink-0 text-[#FF5F56] mt-0.5" />
+   614→   614→                <div className="flex-1 min-w-0">
+   615→   615→                  <p className="text-[0.7rem] font-mono text-[#FF5F56] break-words">
+   616→   616→                    {parseError}
+   617→   617→                  </p>
+   618→   618→                  <p className="text-[0.65rem] text-white/40 mt-1">
+   619→   619→                    The canvas still shows the last valid state — fix the JSON
+   620→   620→                    to live-update.
+   621→   621→                  </p>
+   622→   622→                </div>
+   623→   623→              </div>
+   624→   624→            )}
+   625→   625→          </div>
+   626→   626→        )}
+   627→   627→
+   628→   628→        {/* Right: live preview */}
+   629→   629→        <div
+   630→   630→          ref={previewContainerRef}
+   631→   631→          className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+   632→   632→        >
+   633→   633→        {/* Edit images + Edit sections — floating at the top-right of the
+   634→   634→            Live Preview box, per user spec. The buttons stay visible
+   635→   635→            regardless of scroll position inside the preview area. */}
+   636→   636→        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
+   637→   637→          <button
+   638→   638→            type="button"
+   639→   639→            onClick={() => setEditMode((s) => !s)}
+   640→   640→            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
+   641→   641→              editMode
+   642→   642→                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+   643→   643→                : "border border-black/15 bg-white text-black hover:bg-black/5"
+   644→   644→            }`}
+   645→   645→            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+   646→   646→          >
+   647→   647→            <ImageIcon className="h-3.5 w-3.5" />
+   648→   648→            {editMode ? "Editing images" : "Edit images"}
+   649→   649→          </button>
+   650→   650→          <button
+   651→   651→            type="button"
+   652→   652→            onClick={() => setSectionsEditMode((s) => !s)}
+   653→   653→            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
+   654→   654→              sectionsEditMode
+   655→   655→                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+   656→   656→                : "border border-black/15 bg-white text-black hover:bg-black/5"
+   657→   657→            }`}
+   658→   658→            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+   659→   659→          >
+   660→   660→            <LayoutPanelTop className="h-3.5 w-3.5" />
+   661→   661→            {sectionsEditMode ? "Editing sections" : "Edit sections"}
+   662→   662→          </button>
+   663→   663→        </div>
+   664→   664→          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/40 mb-3">
+   665→   665→            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
+   666→   666→          </div>
+   667→   667→          <div
+   668→   668→            className="relative mx-auto"
+   669→   669→            style={{
+   670→   670→              width: `${1200 * previewScale}px`,
+   671→   671→              height: `${800 * previewScale}px`,
+   672→   672→            }}
+   673→   673→          >
+   674→   674→            <div
+   675→   675→              className="absolute top-0 left-0 origin-top-left shadow-2xl"
+   676→   676→              style={{
+   677→   677→                transform: `scale(${previewScale})`,
+   678→   678→                transformOrigin: "top left",
+   679→   679→                width: "1200px",
+   680→   680→                height: "800px",
+   681→   681→              }}
+   682→   682→            >
+   683→   683→              <MeetTheSpeakerCanvas
+   684→   684→                ref={canvasRef}
+   685→   685→                data={data}
+   686→   686→                editable={editMode}
+   687→   687→                sectionsEditable={sectionsEditMode}
+   688→   688→                previewScale={previewScale}
+   689→   689→                onPickImage={handlePickImage}
+   690→   690→                onPlacementChange={handlePlacementChange}
+   691→   691→                onSizeChange={handleSizeChange}
+   692→   692→                onSectionMove={handleSectionMove}
+   693→   693→                onSectionResize={handleSectionResize}
+   694→   694→                onSectionBoxResize={handleSectionBoxResize}
+   695→   695→                onLayerZChange={handleLayerZChange}
+   696→   696→                onHeroScaleXChange={handleHeroScaleXChange}
+   697→   697→                onHeroScaleYChange={handleHeroScaleYChange}
+   698→   698→                onSectionZChange={handleSectionZChange}
+   699→   699→              />
+   700→   700→            </div>
+   701→   701→          </div>
+   702→   702→        </div>
+   703→   703→      </div>
+   704→   704→
+   705→   705→      {/* Component breakdown reminder */}
+   706→   706→      <details className="rounded-lg border border-black/10 bg-white p-4">
+   707→   707→        <summary className="cursor-pointer text-sm font-bold text-black">
+   708→   708→          Component breakdown (editable regions)
+   709→   709→        </summary>
+   710→   710→        <ol className="mt-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-black/70">
+   711→   711→          <li><strong>1. Header</strong> — pink &ldquo;Meet the speaker&rdquo; title</li>
+   712→   712→          <li><strong>2. Speaker Name</strong> — large bold name</li>
+   713→   713→          <li><strong>3. Speaker Title</strong> — job title</li>
+   714→   714→          <li><strong>4. Speaker Company</strong> — company name</li>
+   715→   715→          <li><strong>5. Topic</strong> — talk title + description</li>
+   716→   716→          <li><strong>6. Bio</strong> — main bio paragraph</li>
+   717→   717→          <li><strong>7. Expertise</strong> — optional second paragraph</li>
+   718→   718→          <li><strong>8. Speaker Photo</strong> — large portrait</li>
+   719→   719→          <li><strong>9. Meerkat Graphic</strong> — bottom-right brand graphic</li>
+   720→   720→          <li><strong>10. Gradient Overlay</strong> — geometric triangles</li>
+   721→   721→          <li><strong>11. QR Code</strong> — top-right, &ldquo;Register here&rdquo;</li>
+   722→   722→          <li><strong>12. Event Title</strong> — bottom-right</li>
+   723→   723→          <li><strong>13. Event Date/Time</strong> — bottom-right</li>
+   724→   724→          <li><strong>14. Event Venue</strong> — bottom-right</li>
+   725→   725→          <li><strong>15. Sponsors</strong> — collaborators + sponsors</li>
+   726→   726→          <li><strong>16. Branding</strong> — ai salon wordmark</li>
+   727→   727→        </ol>
+   728→   728→        <p className="mt-3 text-xs text-black/50">
+   729→   729→          Pick an event at the top to auto-fill everything. Toggle{" "}
+   730→   730→          <strong>Edit images</strong> to swap the photo/graphic/logos from
+   731→   731→          the brand library. Drag images on the canvas to pan; scroll to
+   732→   732→          zoom. Use <code className="rounded bg-black/5 px-1 py-0.5 font-mono">photoSize</code>,{" "}
+   733→   733→          <code className="rounded bg-black/5 px-1 py-0.5 font-mono">imageScale</code>,{" "}
+   734→   734→          <code className="rounded bg-black/5 px-1 py-0.5 font-mono">logoSize</code> in the
+   735→   735→          JSON to make any image larger or smaller.
+   736→   736→        </p>
+   737→   737→      </details>
+   738→   738→
+   739→   739→      {/* Image picker modal */}
+   740→   740→      <ImagePickerModalShared
+   741→   741→        open={pickerSlot !== null}
+   742→   742→        onClose={() => setPickerSlot(null)}
+   743→   743→        onPick={handlePickerSelect}
+   744→   744→        eventSlug={selectedEventSlug || data.event.sourceEventSlug || undefined}
+   745→   745→        currentUrl={pickerSlot ? urlForSlot(pickerSlot) : undefined}
+   746→   746→      />
+   747→   747→    </div>
+   748→   748→  );
+   749→   749→}
+   750→   750→
