@@ -808,7 +808,9 @@ function CtaCard({
       <div className="rounded-xl border-2 border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-white p-5 space-y-3">
         <div className="flex items-center gap-2 text-[#FF005A]">
           <Ticket className="h-5 w-5" />
-          <span className="font-bold text-sm uppercase tracking-wider">Register to attend</span>
+          <span className="font-bold text-sm uppercase tracking-wider">
+            {me ? "Register to attend" : "Join AI Salon"}
+          </span>
         </div>
         <p className="text-xs text-black/70 leading-relaxed">
           {me
@@ -827,7 +829,7 @@ function CtaCard({
             </>
           ) : (
             <>
-              Register to event <ArrowRight className="h-4 w-4" />
+              {me ? "Register to event" : "Join AI Salon"} <ArrowRight className="h-4 w-4" />
             </>
           )}
         </button>

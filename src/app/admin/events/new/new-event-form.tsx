@@ -62,36 +62,88 @@ export function NewEventForm() {
   const [showExtractPanel, setShowExtractPanel] = React.useState(false);
 
   // Auto-fill endsAt to start + 2 hours when startsAt changes and endsAt
-  // is empty (the most common case).
+  // is empty (the most common case). The datetime-local string is naive
+  // (no TZ), so we add 2 hours directly to the wall-clock components —
+  // no Date object needed (which would drag in browser TZ).
   React.useEffect(() => {
     if (startsAt && !endsAt) {
-      const start = new Date(startsAt);
-      if (!isNaN(start.getTime())) {
-        const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
-        // Format to "YYYY-MM-DDTHH:MM" for datetime-local input
-        const pad = (n: number) => String(n).padStart(2, "0");
-        setEndsAt(
-          `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}`
-        );
+      // startsAt is "YYYY-MM-DDTHH:MM" — parse parts, add 2h, reformat.
+      const m = startsAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+      if (m) {
+        const [, y, mo, d, h, mi] = m;
+        const endHour = (parseInt(h, 10) + 2) % 24;
+        const dayBump = parseInt(h, 10) + 2 >= 24 ? 1 : 0;
+        // If we rolled past midnight, bump the day. (Month/year rollover
+        // is rare for 2h bump but technically possible at month-end —
+        // handled by Date arithmetic for correctness.)
+        if (dayBump) {
+          const dt = new Date(
+            parseInt(y, 10),
+            parseInt(mo, 10) - 1,
+            parseInt(d, 10) + 1,
+            endHour,
+            parseInt(mi, 10)
+          );
+          const pad = (n: number) => String(n).padStart(2, "0");
+          setEndsAt(
+            `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+          );
+        } else {
+          setEndsAt(`${y}-${mo}-${d}T${String(endHour).padStart(2, "0")}:${mi}`);
+        }
       }
     }
   }, [startsAt, endsAt]);
 
   /**
-   * Convert an ISO 8601 string (e.g. "2026-06-18T18:00:00") to the
-   * "YYYY-MM-DDTHH:MM" format expected by <input type="datetime-local">.
-   * Returns "" if the input is null/invalid.
+   * Convert an ISO 8601 string to "YYYY-MM-DDTHH:MM" interpreted in
+   * Asia/Jerusalem (event timezone). See event-editor.tsx for the
+   * full rationale — short version: the admin form must show
+   * wall-clock time in the event's city, NOT the browser's local TZ.
    */
   function isoToLocalInput(iso: string | null | undefined): string {
     if (!iso) return "";
     try {
       const d = new Date(iso);
       if (isNaN(d.getTime())) return "";
-      const pad = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Jerusalem",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(d);
+      const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
+      return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
     } catch {
       return "";
     }
+  }
+
+  /**
+   * Convert "YYYY-MM-DDTHH:MM" (Asia/Jerusalem wall-clock) → UTC ISO.
+   * Mirrors `fromLocalDatetimeInput` in admin-agenda-tab.tsx.
+   */
+  function localInputToUtcIso(local: string): string {
+    if (!local) return new Date(0).toISOString();
+    const asIfUtc = new Date(local + ":00Z");
+    if (isNaN(asIfUtc.getTime())) return new Date(local).toISOString();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Jerusalem",
+      timeZoneName: "shortOffset",
+    }).formatToParts(asIfUtc);
+    const tzName = parts.find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+    const match = tzName.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    let offsetMinutes = 0;
+    if (match) {
+      const sign = match[1] === "+" ? 1 : -1;
+      const hours = parseInt(match[2], 10);
+      const minutes = match[3] ? parseInt(match[3], 10) : 0;
+      offsetMinutes = sign * (hours * 60 + minutes);
+    }
+    return new Date(asIfUtc.getTime() - offsetMinutes * 60000).toISOString();
   }
 
   async function handleExtract() {
@@ -165,8 +217,8 @@ export function NewEventForm() {
           city: city.trim() || null,
           country: country.trim() || null,
           mapUrl: mapUrl.trim() || null,
-          startsAt: new Date(startsAt).toISOString(),
-          endsAt: new Date(endsAt).toISOString(),
+          startsAt: localInputToUtcIso(startsAt),
+          endsAt: localInputToUtcIso(endsAt),
           description: description.trim() || null,
           takeaways: takeaways.trim() || null,
           intendedFor: intendedFor.trim() || null,
