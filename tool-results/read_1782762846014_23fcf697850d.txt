@@ -1,0 +1,1464 @@
+     1→"use client";
+     2→
+     3→import { forwardRef, useRef, useState, useEffect, type ReactNode } from "react";
+     4→import Image from "next/image";
+     5→import type {
+     6→  SpeakerIntroData,
+     7→  Speaker,
+     8→  ImagePlacement,
+     9→  ImageSlot,
+    10→} from "./types";
+    11→import { resolvePlacement } from "./types";
+    12→import {
+    13→  GuideProvider,
+    14→  GuideOverlay,
+    15→  SectionBox,
+    16→  ObjectPropertiesPanel,
+    17→  useCanvasScrollIsolation,
+    18→  useNonPassiveWheel,
+    19→  type SectionId,
+    20→  type SectionPos,
+    21→  type SectionBoxSize,
+    22→} from "../shared/section-edit";
+    23→
+    24→/**
+    25→ * SpeakerIntroCanvas — the data-driven mockup renderer.
+    26→ *
+    27→ * Takes a `SpeakerIntroData` object and renders the full Speaker Intro
+    28→ * mockup as a 3:2 landscape canvas. Every component is a separate
+    29→ * absolutely-positioned div bound to a field in `data`. Edit the JSON
+    30→ * in the parent editor and the canvas re-renders live.
+    31→ *
+    32→ * Canvas size: 1200×800 (3:2). The parent scales it down via CSS
+    33→ * transform for the on-screen preview; the underlying DOM stays at
+    34→ * 1200×800 so PNG export is print-quality.
+    35→ *
+    36→ * Editable mode (editable=true):
+    37→ *   - Image areas show a dashed blue outline + a "Replace" button.
+    38→ *   - Click the button → opens the image picker (onPickImage).
+    39→ *   - Drag the image → pans (updates focusX/focusY via onPlacementChange).
+    40→ *   - Wheel on the image → zooms (updates zoom).
+    41→ *   - Double-click → resets placement to default.
+    42→ *
+    43→ * Sections-editable mode (sectionsEditable=true):
+    44→ *   - Text sections (header, topic, speakers, sponsors, collaborators,
+    45→ *     branding, qr, footer) get wrapped in <SectionBox> which makes
+    46→ *     them draggable + 8-handle resizeable.
+    47→ *   - Layout persists in `data.sectionLayout[id] = { pos, scale }`.
+    48→ *   - Alignment guides appear when dragging (cyan lines at canvas edges,
+    49→ *     centers, and peer box edges).
+    50→ *   - Text sections always render at zIndex >= 50 so they stay above
+    51→ *     images and overlays.
+    52→ */
+    53→
+    54→const CANVAS_W = 1200;
+    55→const CANVAS_H = 800;
+    56→
+    57→type Props = {
+    58→  data: SpeakerIntroData;
+    59→  className?: string;
+    60→  /** When true, image areas become interactive (drag/wheel/click). */
+    61→  editable?: boolean;
+    62→  /** When true, text sections become draggable + resizeable. */
+    63→  sectionsEditable?: boolean;
+    64→  /** Called when the user clicks "Replace" on an image slot. */
+    65→  onPickImage?: (slot: ImageSlot) => void;
+    66→  /** Called whenever an image is dragged / zoomed. */
+    67→  onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
+    68→  /** Called when the user drags a resize corner handle on an image. */
+    69→  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+    70→  /** Called when a section is dragged to a new position. */
+    71→  onSectionMove?: (id: SectionId, pos: SectionPos) => void;
+    72→  /** Called when a section is resized via a corner/edge handle. */
+    73→  onSectionResize?: (id: SectionId, scale: number) => void;
+    74→  /** Called when a section is resized via a mid-edge handle — updates the
+    75→   *  box's explicit width/height in canvas px. */
+    76→  onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
+    77→  /** Called when the hero overlay z-index changes (front/back button). */
+    78→  onHeroZChange?: (z: number) => void;
+    79→  /** Called when the triangle overlay z-index changes (front/back button). */
+    80→  onTriangleZChange?: (z: number) => void;
+    81→  /** Called when the hero overlay X scale changes (slider). */
+    82→  onHeroScaleXChange?: (n: number) => void;
+    83→  /** Called when the hero overlay Y scale changes (slider). */
+    84→  onHeroScaleYChange?: (n: number) => void;
+    85→  /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
+    86→  onSectionZChange?: (id: SectionId, z: number) => void;
+    87→  /** The current scale of the preview (used to convert screen-drag to canvas-%). */
+    88→  previewScale?: number;
+    89→};
+    90→
+    91→export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
+    92→  function SpeakerIntroCanvas(
+    93→    {
+    94→      data,
+    95→      className,
+    96→      editable,
+    97→      sectionsEditable,
+    98→      onPickImage,
+    99→      onPlacementChange,
+   100→      onSizeChange,
+   101→      onSectionMove,
+   102→      onSectionResize,
+   103→      onSectionBoxResize,
+   104→      onHeroZChange,
+   105→      onTriangleZChange,
+   106→      onHeroScaleXChange,
+   107→      onHeroScaleYChange,
+   108→      onSectionZChange,
+   109→      previewScale = 1,
+   110→    },
+   111→    ref,
+   112→  ) {
+   113→    // Default z-index for hero / triangle / text layers.
+   114→    //
+   115→    // User spec (Section 3 — Layering & Rendering Logic, 2026-06-28):
+   116→    //   "Z-Index consistency: 'Show Triangle Overlay' must always render
+   117→    //    BEHIND 'Hero Image' when visible."
+   118→    //
+   119→    // Implementation note: the triangle is INSIDE the hero div (as a
+   120→    // sibling of the hero EditableImage). Both layers live in the hero
+   121→    // div's stacking context. The hero EditableImage is wrapped in a
+   122→    // div with explicit zIndex = triangleZ + 1, so the image always
+   123→    // renders IN FRONT of the triangle by default. The Front/Back
+   124→    // buttons in the left sidebar can override this dynamically.
+   125→    //
+   126→    // Text always sits at zIndex >= 50 so it's always on top of overlays
+   127→    // and images (unless the user manually brings a layer above 50 with
+   128→    // the Front button — at which point they're explicitly opting in).
+   129→    const heroZ = data.heroZ ?? 2;
+   130→    const triangleZ = data.triangleZ ?? 1;
+   131→    const TEXT_Z = 50; // base text layer z; specific sections override above this
+   132→
+   133→    // --- Section 4: Scroll Isolation ---
+   134→    // Disable parent/window scrolling when the user hovers over the canvas
+   135→    // or actively edits a component. The canvas itself doesn't scroll (it's
+   136→    // a fixed mockup preview), so there's no reason to let wheel events
+   137→    // bubble to the parent workspace.
+   138→    useCanvasScrollIsolation(
+   139→      ref as React.RefObject<HTMLDivElement | null>,
+   140→      !!(editable || sectionsEditable),
+   141→    );
+   142→
+   143→    // --- Section 1: ObjectPropertiesPanel selection state ---
+   144→    // Tracks which SectionBox is currently selected. When set, the
+   145→    // ObjectPropertiesPanel is rendered at the top-right of the canvas
+   146→    // with X/Y coordinate inputs + Front/Back layer toggles.
+   147→    const [selectedId, setSelectedId] = useState<string | null>(null);
+   148→
+   149→    // Reset selection when sections-edit mode is turned off.
+   150→    useEffect(() => {
+   151→      if (!sectionsEditable) setSelectedId(null);
+   152→    }, [sectionsEditable]);
+   153→
+   154→    /** Compute the z-index for a given section. Falls back to a sensible
+   155→     *  default based on the section id (text sections at TEXT_Z+). */
+   156→    function sectionZFor(id: SectionId): number {
+   157→      const explicit = data.sectionLayout?.[id]?.z;
+   158→      if (typeof explicit === "number") return explicit;
+   159→      // Default z by section type
+   160→      if (id === "footer") return TEXT_Z + 1;
+   161→      return TEXT_Z;
+   162→    }
+   163→
+   164→    /** All peer z-indices in the same stacking context (used by
+   165→     *  ObjectPropertiesPanel's Front/Back to compute max/min). */
+   166→    const sectionPeerZs: number[] = Object.keys(data.sectionLayout ?? {}).map(
+   167→      (id) => sectionZFor(id),
+   168→    );
+   169→
+   170→    return (
+   171→      <GuideProvider canvasRef={ref as React.RefObject<HTMLDivElement | null>} enabled={!!(editable || sectionsEditable)}>
+   172→        <div
+   173→          ref={ref}
+   174→          className={`relative bg-white overflow-hidden ${className ?? ""}`}
+   175→          style={{
+   176→            width: `${CANVAS_W}px`,
+   177→            height: `${CANVAS_H}px`,
+   178→            fontFamily:
+   179→              "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+   180→          }}
+   181→        >
+   182→        {/* ===== 5. HERO VISUAL (right side, behind everything else on right) ===== */}
+   183→        {(() => {
+   184→          // imageScale (X): 1 = default 58% width starting at 42% left.
+   185→          //   - scale < 1 shrinks the hero (anchored to the right edge).
+   186→          //   - scale > 1.72 grows the hero beyond the canvas width; the
+   187→          //     overflow is clipped by the canvas's `overflow-hidden`.
+   188→          //   - The ONLY limitation is the canvas border — no arbitrary
+   189→          //     min/max clamp is applied here. (User spec 2026-06-28.)
+   190→          const scale = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
+   191→          const heroWidth = 58 * scale; // % of canvas
+   192→          // Anchor to the right edge: as scale grows past 100/58 ≈ 1.72,
+   193→          // heroLeft would go negative; we clamp to 0 so the right edge
+   194→          // stays anchored to the canvas right border and the bleed goes
+   195→          // off the LEFT side (clipped by overflow-hidden).
+   196→          const heroLeft = Math.max(0, 100 - heroWidth);
+   197→          // imageScaleY: 1 = full canvas height. scale < 1 shrinks
+   198→          // vertically; scale > 1 bleeds off the bottom (clipped).
+   199→          const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
+   200→          const heroHeight = 100 * scaleY; // % of canvas
+   201→          const heroTop = 0; // anchored to top
+   202→          return (
+   203→        <div
+   204→          className="absolute"
+   205→          style={{
+   206→            left: `${heroLeft}%`,
+   207→            top: `${heroTop}%`,
+   208→            width: `${heroWidth}%`,
+   209→            height: `${heroHeight}%`,
+   210→            zIndex: heroZ,
+   211→          }}
+   212→        >
+   213→          {/* Background image (Tel Aviv skyline + beach).
+   214→              Wrapped in a div with explicit zIndex = triangleZ + 1 so the
+   215→              hero image always renders IN FRONT of the triangle overlay
+   216→              (per Section 3 of user spec 2026-06-28). The Front/Back
+   217→              controls in the sidebar can override this dynamically. */}
+   218→          <div
+   219→            className="absolute inset-0"
+   220→            style={{ zIndex: triangleZ + 1 }}
+   221→          >
+   222→          <EditableImage
+   223→            slot={{ kind: "hero" }}
+   224→            src={data.heroOverlay.imageUrl}
+   225→            alt="Tel Aviv skyline"
+   226→            placement={data.heroOverlay.imagePlacement}
+   227→            editable={editable}
+   228→            previewScale={previewScale}
+   229→            onPickImage={onPickImage}
+   230→            onPlacementChange={onPlacementChange}
+   231→            onSizeChange={onSizeChange}
+   232→            sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+   233→            sizeLabel="hero scale"
+   234→            containerClass="absolute inset-0"
+   235→            objectFit="cover"
+   236→          />
+   237→          </div>
+   238→
+   239→          {/* 6. TRIANGLE GRADIENT OVERLAY — hidden when user picks a new hero image */}
+   240→          {data.heroOverlay.showTriangleOverlay !== false && (
+   241→            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
+   242→            <svg
+   243→              className="absolute inset-0 w-full h-full pointer-events-none"
+   244→              viewBox="0 0 100 100"
+   245→              preserveAspectRatio="none"
+   246→              aria-hidden
+   247→            >
+   248→              <defs>
+   249→                <linearGradient
+   250→                  id="tri-grad"
+   251→                  x1="0%"
+   252→                  y1="0%"
+   253→                  x2="100%"
+   254→                  y2="100%"
+   255→                >
+   256→                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
+   257→                    <stop
+   258→                      key={i}
+   259→                      offset={`${(i / (arr.length - 1)) * 100}%`}
+   260→                      stopColor={color}
+   261→                      stopOpacity={data.heroOverlay.gradientOpacity}
+   262→                    />
+   263→                  ))}
+   264→                </linearGradient>
+   265→                <linearGradient
+   266→                  id="tri-grad-2"
+   267→                  x1="100%"
+   268→                  y1="0%"
+   269→                  x2="0%"
+   270→                  y2="100%"
+   271→                >
+   272→                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
+   273→                    <stop
+   274→                      key={i}
+   275→                      offset={`${(i / (arr.length - 1)) * 100}%`}
+   276→                      stopColor={color}
+   277→                      stopOpacity={data.heroOverlay.gradientOpacity * 0.7}
+   278→                    />
+   279→                  ))}
+   280→                </linearGradient>
+   281→              </defs>
+   282→              {/* Right-pointing large triangle covering ~60% of hero */}
+   283→              <polygon points="0,0 100,50 0,100" fill="url(#tri-grad)" />
+   284→              {/* Smaller counter-triangle for geometric depth */}
+   285→              <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
+   286→            </svg>
+   287→            </div>
+   288→          )}
+   289→
+   290→          {/* 7. LOCATION PINS — per-pin connector line + dot + label
+   291→              Per user spec 2026-06-30: each pin gets its own z-index
+   292→              (Front/Back capability). When the user clicks Front on a
+   293→              pin, BOTH the pin (dot + label) AND its connector line must
+   294→              come forward together. So each pin renders as a single
+   295→              full-canvas wrapper div containing:
+   296→                - its own SVG with the single connector line (50,50 → pin.x,pin.y)
+   297→                - the dot (CSS circle at pin position)
+   298→                - the label (text at pin position)
+   299→              All three siblings share the same wrapper z-index. */}
+   300→          {data.locationPins.map((pin, i) => {
+   301→            const pinZ = pin.z ?? 50;
+   302→            const dotColor = data.event.brandColors[0] ?? "#FF005A";
+   303→            return (
+   304→              <div
+   305→                key={`pin-${i}`}
+   306→                className="absolute inset-0 pointer-events-none"
+   307→                style={{ zIndex: pinZ }}
+   308→              >
+   309→                {/* Connector line — full-canvas SVG with this pin's
+   310→                    single line from canvas center (50,50) to (pin.x, pin.y).
+   311→                    viewBox 0 0 100 100 + preserveAspectRatio none means the
+   312→                    SVG coords are percentage-of-canvas, matching pin.x/y. */}
+   313→                <svg
+   314→                  className="absolute inset-0 w-full h-full pointer-events-none"
+   315→                  viewBox="0 0 100 100"
+   316→                  preserveAspectRatio="none"
+   317→                  aria-hidden
+   318→                >
+   319→                  <line
+   320→                    x1="50"
+   321→                    y1="50"
+   322→                    x2={pin.x}
+   323→                    y2={pin.y}
+   324→                    stroke="white"
+   325→                    strokeWidth="0.25"
+   326→                    strokeOpacity="0.6"
+   327→                    strokeDasharray="0.5 0.5"
+   328→                  />
+   329→                </svg>
+   330→                {/* Dot — small circle, centered on the pin's (x,y) */}
+   331→                <div
+   332→                  className="absolute rounded-full border-2 border-white shadow"
+   333→                  style={{
+   334→                    left: `${pin.x}%`,
+   335→                    top: `${pin.y}%`,
+   336→                    width: "10px",
+   337→                    height: "10px",
+   338→                    backgroundColor: dotColor,
+   339→                    transform: "translate(-50%, -50%)",
+   340→                  }}
+   341→                  aria-hidden
+   342→                />
+   343→                {/* Label — positioned above the dot */}
+   344→                <span
+   345→                  className="absolute text-white font-semibold uppercase tracking-wider drop-shadow whitespace-nowrap"
+   346→                  style={{
+   347→                    left: `${pin.x}%`,
+   348→                    top: `${pin.y}%`,
+   349→                    transform: "translate(-50%, -180%)",
+   350→                    fontSize: "11px",
+   351→                    letterSpacing: "0.12em",
+   352→                  }}
+   353→                >
+   354→                  {pin.label}
+   355→                </span>
+   356→              </div>
+   357→            );
+   358→          })}
+   359→        </div>
+   360→          );
+   361→        })()}
+   362→
+   363→        {/* ===== 1. EVENT HEADER (top-left) ===== */}
+   364→        <SectionBox
+   365→          active={sectionsEditable}
+   366→          selected={selectedId === "header"}
+   367→          onSelect={() => setSelectedId("header")}
+   368→          pos={data.sectionLayout?.header?.pos}
+   369→          scale={data.sectionLayout?.header?.scale ?? 1}
+   370→          boxSize={data.sectionLayout?.header?.boxSize}
+   371→          onMove={(p) => onSectionMove?.("header", p)}
+   372→          onResize={(s) => onSectionResize?.("header", s)}
+   373→          onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
+   374→          previewScale={previewScale}
+   375→          canvasW={CANVAS_W}
+   376→          canvasH={CANVAS_H}
+   377→          className="absolute"
+   378→          style={{ left: "48px", top: "40px", maxWidth: "640px", zIndex: sectionZFor("header") }}
+   379→          accentColor="#FF005A"
+   380→          label="Header"
+   381→          guideId="header"
+   382→        >
+   383→          <h1
+   384→            className="font-extrabold text-black leading-none tracking-tight"
+   385→            style={{ fontSize: `${44 * (data.event.nameFontScale ?? 1)}px` }}
+   386→          >
+   387→            {data.event.name}
+   388→          </h1>
+   389→          <p
+   390→            className="mt-3 text-black/70 font-semibold"
+   391→            style={{ fontSize: "16px" }}
+   392→          >
+   393→            {data.event.date}
+   394→            {data.event.time && (
+   395→              <>
+   396→                <span className="mx-2 text-black/30">·</span>
+   397→                {data.event.time}
+   398→              </>
+   399→            )}
+   400→          </p>
+   401→          <p
+   402→            className="mt-1 text-black/60"
+   403→            style={{ fontSize: "14px" }}
+   404→          >
+   405→            {data.event.venue}
+   406→          </p>
+   407→        </SectionBox>
+   408→
+   409→        {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) ===== */}
+   410→        <SectionBox
+   411→          active={sectionsEditable}
+   412→          selected={selectedId === "topic"}
+   413→          onSelect={() => setSelectedId("topic")}
+   414→          pos={data.sectionLayout?.topic?.pos}
+   415→          scale={data.sectionLayout?.topic?.scale ?? 1}
+   416→          boxSize={data.sectionLayout?.topic?.boxSize}
+   417→          onMove={(p) => onSectionMove?.("topic", p)}
+   418→          onResize={(s) => onSectionResize?.("topic", s)}
+   419→          onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
+   420→          previewScale={previewScale}
+   421→          canvasW={CANVAS_W}
+   422→          canvasH={CANVAS_H}
+   423→          className="absolute flex items-start gap-3"
+   424→          style={{ left: "48px", top: "160px", maxWidth: "440px", zIndex: sectionZFor("topic") }}
+   425→          accentColor="#FF005A"
+   426→          label="Topic"
+   427→          guideId="topic"
+   428→        >
+   429→          <div
+   430→            className="shrink-0 self-stretch rounded-sm"
+   431→            style={{
+   432→              width: "6px",
+   433→              background: `linear-gradient(180deg, ${data.event.brandColors[0]}, ${data.event.brandColors[1]})`,
+   434→            }}
+   435→            aria-hidden
+   436→          />
+   437→          <h2
+   438→            className="font-extrabold text-black leading-tight"
+   439→            style={{ fontSize: `${24 * (data.event.topicFontScale ?? 1)}px` }}
+   440→          >
+   441→            {data.event.topic}
+   442→          </h2>
+   443→        </SectionBox>
+   444→
+   445→        {/* ===== 3. QR CODE (top-right) ===== */}
+   446→        <SectionBox
+   447→          active={sectionsEditable}
+   448→          selected={selectedId === "qr"}
+   449→          onSelect={() => setSelectedId("qr")}
+   450→          pos={data.sectionLayout?.qr?.pos}
+   451→          scale={data.sectionLayout?.qr?.scale ?? 1}
+   452→          boxSize={data.sectionLayout?.qr?.boxSize}
+   453→          onMove={(p) => onSectionMove?.("qr", p)}
+   454→          onResize={(s) => onSectionResize?.("qr", s)}
+   455→          onBoxResize={(sz) => onSectionBoxResize?.("qr", sz)}
+   456→          previewScale={previewScale}
+   457→          canvasW={CANVAS_W}
+   458→          canvasH={CANVAS_H}
+   459→          className="absolute flex flex-col items-center gap-1"
+   460→          style={{ right: "48px", top: "40px", zIndex: sectionZFor("qr") }}
+   461→          anchor="top-right"
+   462→          accentColor="#FF005A"
+   463→          label="QR"
+   464→          guideId="qr"
+   465→        >
+   466→          <div
+   467→            className="rounded-md bg-white p-2 shadow-md"
+   468→            style={{ width: "96px", height: "96px" }}
+   469→          >
+   470→            <QrCode url={data.qrCodeUrl} size={80} />
+   471→          </div>
+   472→          <span
+   473→            className="text-black font-semibold uppercase tracking-wider"
+   474→            style={{ fontSize: "10px", letterSpacing: "0.15em" }}
+   475→          >
+   476→            Register here
+   477→          </span>
+   478→        </SectionBox>
+   479→
+   480→        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
+   481→        <SectionBox
+   482→          active={sectionsEditable}
+   483→          selected={selectedId === "speakers"}
+   484→          onSelect={() => setSelectedId("speakers")}
+   485→          pos={data.sectionLayout?.speakers?.pos}
+   486→          scale={data.sectionLayout?.speakers?.scale ?? 1}
+   487→          boxSize={data.sectionLayout?.speakers?.boxSize}
+   488→          onMove={(p) => onSectionMove?.("speakers", p)}
+   489→          onResize={(s) => onSectionResize?.("speakers", s)}
+   490→          onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
+   491→          previewScale={previewScale}
+   492→          canvasW={CANVAS_W}
+   493→          canvasH={CANVAS_H}
+   494→          className="absolute flex flex-col gap-3"
+   495→          style={{ left: "48px", top: "260px", width: `${(data.speakersLayout?.columns ?? 1) === 1 ? 400 : (data.speakersLayout?.columns ?? 1) === 2 ? 700 : 1000}px`, zIndex: sectionZFor("speakers") }}
+   496→          accentColor="#FF005A"
+   497→          label="Speakers"
+   498→          guideId="speakers"
+   499→        >
+   500→          <div className="flex items-center gap-2 mb-1">
+   501→            <div
+   502→              className="h-px flex-1"
+   503→              style={{
+   504→                background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
+   505→              }}
+   506→            />
+   507→            <span
+   508→              className="font-bold text-black uppercase tracking-widest"
+   509→              style={{ fontSize: "12px", letterSpacing: "0.2em" }}
+   510→            >
+   511→              Speakers
+   512→            </span>
+   513→          </div>
+   514→          {(() => {
+   515→            // Sorted + filtered speakers (paired with their sort index).
+   516→            const sortedSpeakers = [...data.speakers]
+   517→              .sort((a, b) => a.order - b.order)
+   518→              .map((speaker, idx) => ({ speaker, idx }))
+   519→              .filter(({ speaker }) => speaker.visible !== false);
+   520→
+   521→            const layout = data.speakersLayout ?? {};
+   522→            const columns = layout.columns ?? 1;
+   523→            const flow = layout.flowDirection ?? "row";
+   524→            const lastRowAlign = layout.lastRowAlign ?? "spread";
+   525→            const rowsPerColumn = layout.rowsPerColumn ?? [];
+   526→
+   527→            // Build the position map for each speaker.
+   528→            let positions: Array<{ row: number; col: number }> = [];
+   529→            if (flow === "row") {
+   530→              positions = sortedSpeakers.map((_, i) => ({
+   531→                row: Math.floor(i / columns),
+   532→                col: i % columns,
+   533→              }));
+   534→            } else {
+   535→              if (rowsPerColumn.length >= columns) {
+   536→                const colOffsets: number[] = [0];
+   537→                for (let c = 1; c < columns; c++) {
+   538→                  colOffsets.push(colOffsets[c - 1] + rowsPerColumn[c - 1]);
+   539→                }
+   540→                positions = sortedSpeakers.map((_, i) => {
+   541→                  let col = 0;
+   542→                  let row = i;
+   543→                  for (let c = 0; c < columns; c++) {
+   544→                    if (i < colOffsets[c] + rowsPerColumn[c]) {
+   545→                      col = c;
+   546→                      row = i - colOffsets[c];
+   547→                      break;
+   548→                    }
+   549→                  }
+   550→                  return { row, col };
+   551→                });
+   552→              } else {
+   553→                const rowsPerCol = Math.ceil(sortedSpeakers.length / columns);
+   554→                positions = sortedSpeakers.map((_, i) => ({
+   555→                  col: Math.floor(i / rowsPerCol),
+   556→                  row: i % rowsPerCol,
+   557→                }));
+   558→              }
+   559→            }
+   560→
+   561→            const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
+   562→            const lastRowCount = positions.filter((p) => p.row === maxRow).length;
+   563→            const isLastRowIncomplete = lastRowCount < columns;
+   564→
+   565→            return (
+   566→              <div
+   567→                style={{
+   568→                  display: "grid",
+   569→                  gridTemplateColumns: `repeat(${columns}, 1fr)`,
+   570→                  gap: "12px",
+   571→                }}
+   572→              >
+   573→                {sortedSpeakers.map(({ speaker, idx }, i) => {
+   574→                  const pos = positions[i];
+   575→                  let gridColumnStart = pos.col + 1;
+   576→                  if (isLastRowIncomplete && pos.row === maxRow) {
+   577→                    if (lastRowAlign === "spread") {
+   578→                      const lastRowSpeakersBefore = positions.filter(
+   579→                        (p) => p.row === maxRow && p.col < pos.col,
+   580→                      ).length;
+   581→                      gridColumnStart =
+   582→                        Math.round(
+   583→                          (lastRowSpeakersBefore * columns) / lastRowCount,
+   584→                        ) + 1;
+   585→                    } else if (lastRowAlign === "center") {
+   586→                      const empty = columns - lastRowCount;
+   587→                      gridColumnStart = pos.col + Math.floor(empty / 2) + 1;
+   588→                    }
+   589→                  }
+   590→                  return (
+   591→                    <div
+   592→                      key={`${speaker.order}-${speaker.fullName}`}
+   593→                      style={{
+   594→                        gridColumnStart,
+   595→                        gridRowStart: pos.row + 1,
+   596→                      }}
+   597→                    >
+   598→                      <SpeakerCard
+   599→                        speaker={speaker}
+   600→                        accentColor={data.event.brandColors[0]}
+   601→                        editable={editable}
+   602→                        slot={{ kind: "speaker", index: idx }}
+   603→                        previewScale={previewScale}
+   604→                        onPickImage={onPickImage}
+   605→                        onPlacementChange={onPlacementChange}
+   606→                        onSizeChange={onSizeChange}
+   607→                      />
+   608→                    </div>
+   609→                  );
+   610→                })}
+   611→              </div>
+   612→            );
+   613→          })()}
+   614→        </SectionBox>
+   615→
+   616→        {/* ===== 8. SPONSORS (bottom-right) ===== */}
+   617→        <SectionBox
+   618→          active={sectionsEditable}
+   619→          selected={selectedId === "sponsors"}
+   620→          onSelect={() => setSelectedId("sponsors")}
+   621→          pos={data.sectionLayout?.sponsors?.pos}
+   622→          scale={data.sectionLayout?.sponsors?.scale ?? 1}
+   623→          boxSize={data.sectionLayout?.sponsors?.boxSize}
+   624→          onMove={(p) => onSectionMove?.("sponsors", p)}
+   625→          onResize={(s) => onSectionResize?.("sponsors", s)}
+   626→          onBoxResize={(sz) => onSectionBoxResize?.("sponsors", sz)}
+   627→          previewScale={previewScale}
+   628→          canvasW={CANVAS_W}
+   629→          canvasH={CANVAS_H}
+   630→          className="absolute flex flex-col items-end gap-2"
+   631→          style={{ right: "48px", bottom: "100px", zIndex: sectionZFor("sponsors") }}
+   632→          anchor="top-right"
+   633→          accentColor="#FF005A"
+   634→          label="Sponsored by"
+   635→          guideId="sponsors"
+   636→        >
+   637→          {data.collaborators.length > 0 && (
+   638→            <div className="flex flex-col items-end gap-1.5">
+   639→              <span
+   640→                className="text-black/60 font-semibold uppercase tracking-wider"
+   641→                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+   642→              >
+   643→                In collaboration with
+   644→              </span>
+   645→              <div className="flex items-center gap-3">
+   646→                {data.collaborators.map((s, i) => (
+   647→                  <SponsorLogo
+   648→                    key={`collab-${s.name}`}
+   649→                    sponsor={s}
+   650→                    editable={editable}
+   651→                    slot={{ kind: "sponsor", group: "collaborators", index: i }}
+   652→                    onPickImage={onPickImage}
+   653→                    onSizeChange={onSizeChange}
+   654→                    previewScale={previewScale}
+   655→                  />
+   656→                ))}
+   657→              </div>
+   658→            </div>
+   659→          )}
+   660→          {data.sponsors.length > 0 && (
+   661→            <div className="flex flex-col items-end gap-1.5">
+   662→              <span
+   663→                className="text-black/60 font-semibold uppercase tracking-wider"
+   664→                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+   665→              >
+   666→                Sponsored by
+   667→              </span>
+   668→              <div className="flex items-center gap-3">
+   669→                {data.sponsors.map((s, i) => (
+   670→                  <SponsorLogo
+   671→                    key={`sponsor-${s.name}`}
+   672→                    sponsor={s}
+   673→                    editable={editable}
+   674→                    slot={{ kind: "sponsor", group: "sponsors", index: i }}
+   675→                    onPickImage={onPickImage}
+   676→                    onSizeChange={onSizeChange}
+   677→                    previewScale={previewScale}
+   678→                  />
+   679→                ))}
+   680→              </div>
+   681→            </div>
+   682→          )}
+   683→        </SectionBox>
+   684→
+   685→        {/* ===== 9. BRANDING (bottom-right corner) ===== */}
+   686→        {/* Replaced the text "ai salon" wordmark with the meerkat brand image
+   687→            per user request (Task ID: mockup-editor-v2). */}
+   688→        <SectionBox
+   689→          active={sectionsEditable}
+   690→          selected={selectedId === "branding"}
+   691→          onSelect={() => setSelectedId("branding")}
+   692→          pos={data.sectionLayout?.branding?.pos}
+   693→          scale={data.sectionLayout?.branding?.scale ?? 1}
+   694→          boxSize={data.sectionLayout?.branding?.boxSize}
+   695→          onMove={(p) => onSectionMove?.("branding", p)}
+   696→          onResize={(s) => onSectionResize?.("branding", s)}
+   697→          onBoxResize={(sz) => onSectionBoxResize?.("branding", sz)}
+   698→          previewScale={previewScale}
+   699→          canvasW={CANVAS_W}
+   700→          canvasH={CANVAS_H}
+   701→          className="absolute flex items-center gap-2"
+   702→          style={{ right: "48px", bottom: "32px", zIndex: sectionZFor("branding") }}
+   703→          anchor="top-right"
+   704→          accentColor="#FF005A"
+   705→          label="Branding"
+   706→          guideId="branding"
+   707→        >
+   708→          {/* eslint-disable-next-line @next/next/no-img-element */}
+   709→          <img
+   710→            src={data.branding?.imageUrl ?? "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"}
+   711→            alt="ai salon"
+   712→            style={{
+   713→              height: `${(data.branding?.height ?? 48)}px`,
+   714→              width: "auto",
+   715→              objectFit: "contain",
+   716→            }}
+   717→          />
+   718→        </SectionBox>
+   719→
+   720→        {/* Optional footer credit (bottom-left) */}
+   721→        {data.footerCredit && (
+   722→          <SectionBox
+   723→            active={sectionsEditable}
+   724→            selected={selectedId === "footer"}
+   725→            onSelect={() => setSelectedId("footer")}
+   726→            pos={data.sectionLayout?.footer?.pos}
+   727→            scale={data.sectionLayout?.footer?.scale ?? 1}
+   728→            boxSize={data.sectionLayout?.footer?.boxSize}
+   729→            onMove={(p) => onSectionMove?.("footer", p)}
+   730→            onResize={(s) => onSectionResize?.("footer", s)}
+   731→            onBoxResize={(sz) => onSectionBoxResize?.("footer", sz)}
+   732→            previewScale={previewScale}
+   733→            canvasW={CANVAS_W}
+   734→            canvasH={CANVAS_H}
+   735→            className="absolute"
+   736→            style={{ left: "48px", bottom: "32px", fontSize: "11px", zIndex: sectionZFor("footer") }}
+   737→            accentColor="#FF005A"
+   738→            label="Footer"
+   739→            guideId="footer"
+   740→          >
+   741→            <span className="text-black/40">
+   742→              {data.footerCredit}
+   743→            </span>
+   744→          </SectionBox>
+   745→        )}
+   746→
+   747→        {/* ===== OBJECT PROPERTIES PANEL (Section 1) =====
+   748→            Floating panel (top-right of canvas, only when a section is
+   749→            selected) with X/Y coordinate inputs + Front/Back layer
+   750→            toggles + box size W/H inputs (for mid-edge-resized boxes).
+   751→            Per user spec 2026-06-28:
+   752→              "Every selected element (image or section) must display an
+   753→               active properties panel (or floating tooltip) containing:
+   754→                 - Positioning: X and Y coordinate inputs for precise
+   755→                   placement.
+   756→                 - Layering: Front and Back toggles to reorder the
+   757→                   z-index of the currently selected element." */}
+   758→        {sectionsEditable && selectedId && (
+   759→          <ObjectPropertiesPanel
+   760→            label={selectedId}
+   761→            pos={data.sectionLayout?.[selectedId]?.pos}
+   762→            onPosChange={(p) => onSectionMove?.(selectedId, p)}
+   763→            z={sectionZFor(selectedId)}
+   764→            onZChange={(z) => onSectionZChange?.(selectedId, z)}
+   765→            peers={sectionPeerZs}
+   766→            onDeselect={() => setSelectedId(null)}
+   767→            showBoxSize
+   768→            boxSize={data.sectionLayout?.[selectedId]?.boxSize}
+   769→            onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
+   770→            scale={data.sectionLayout?.[selectedId]?.scale ?? 1}
+   771→            onScaleChange={(s) => onSectionResize?.(selectedId, s)}
+   772→          />
+   773→        )}
+   774→
+   775→        {/* Alignment guides overlay (rendered last so it sits on top of
+   776→            all canvas content but below the SectionBox handles). */}
+   777→        <GuideOverlay />
+   778→      </div>
+   779→    </GuideProvider>
+   780→    );
+   781→  },
+   782→);
+   783→
+   784→/**
+   785→ * EditableImage — wraps a next/image with placement (object-position + scale)
+   786→ * and (optionally) edit-mode interactions: click-to-replace, drag-to-pan,
+   787→ * wheel-to-zoom, double-click-to-reset.
+   788→ *
+   789→ * Used for the hero background and the speaker headshots.
+   790→ */
+   791→function EditableImage({
+   792→  slot,
+   793→  src,
+   794→  alt,
+   795→  placement,
+   796→  editable,
+   797→  previewScale,
+   798→  onPickImage,
+   799→  onPlacementChange,
+   800→  onSizeChange,
+   801→  sizeMultiplier,
+   802→  sizeLabel,
+   803→  containerClass,
+   804→  objectFit,
+   805→}: {
+   806→  slot: ImageSlot;
+   807→  src: string;
+   808→  alt: string;
+   809→  placement?: ImagePlacement;
+   810→  editable?: boolean;
+   811→  previewScale: number;
+   812→  onPickImage?: (slot: ImageSlot) => void;
+   813→  onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+   814→  /** Called when the user drags a resize corner handle. Receives the new
+   815→   *  size multiplier (e.g. 1.5 = 150% of default). */
+   816→  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+   817→  /** Current size multiplier (read from data). Used to seed the resize
+   818→   *  drag delta. Defaults to 1. */
+   819→  sizeMultiplier?: number;
+   820→  /** Small label shown next to the resize readout (e.g. "photo", "logo"). */
+   821→  sizeLabel?: string;
+   822→  containerClass: string;
+   823→  objectFit: "cover" | "contain";
+   824→}) {
+   825→  const { focusX, focusY, zoom } = resolvePlacement(placement);
+   826→  // We track drag state on a ref so we don't re-render on every mousemove.
+   827→  const dragRef = useRef<{
+   828→    startX: number;
+   829→    startY: number;
+   830→    startFocusX: number;
+   831→    startFocusY: number;
+   832→  } | null>(null);
+   833→  // Resize drag state — separate from pan drag so they don't conflict.
+   834→  const resizeRef = useRef<{
+   835→    startX: number;
+   836→    startY: number;
+   837→    startSize: number;
+   838→    /** Which corner is being dragged. The corner determines whether
+   839→     *  moving the mouse up-left grows or shrinks the image. */
+   840→    corner: "nw" | "ne" | "se" | "sw";
+   841→  } | null>(null);
+   842→
+   843→  function handleMouseDown(e: React.MouseEvent) {
+   844→    if (!editable || !onPlacementChange) return;
+   845→    // Only start a drag on left-click outside the Replace button.
+   846→    if (e.button !== 0) return;
+   847→    e.preventDefault();
+   848→    dragRef.current = {
+   849→      startX: e.clientX,
+   850→      startY: e.clientY,
+   851→      startFocusX: focusX,
+   852→      startFocusY: focusY,
+   853→    };
+   854→    // Switch to grabbing cursor.
+   855→    (e.currentTarget as HTMLElement).style.cursor = "grabbing";
+   856→
+   857→    const onMove = (ev: MouseEvent) => {
+   858→      const d = dragRef.current;
+   859→      if (!d) return;
+   860→      const dx = ev.clientX - d.startX;
+   861→      const dy = ev.clientY - d.startY;
+   862→      // Convert screen-pixel delta to % of container.
+   863→      // The container's pixel width at screen-scale is:
+   864→      //   containerWidthPx (canvas) * previewScale.
+   865→      // We don't know containerWidthPx here without measuring it; use a
+   866→      // reasonable approximation: 1% per (previewScale * 6) px, which gives
+   867→      // ~6 px of drag = 1% on the canvas at scale=1.
+   868→      const sensitivity = 6 * previewScale;
+   869→      const nextFocusX = Math.max(
+   870→        0,
+   871→        Math.min(100, d.startFocusX - dx / sensitivity),
+   872→      );
+   873→      const nextFocusY = Math.max(
+   874→        0,
+   875→        Math.min(100, d.startFocusY - dy / sensitivity),
+   876→      );
+   877→      onPlacementChange(slot, {
+   878→        focusX: nextFocusX,
+   879→        focusY: nextFocusY,
+   880→        zoom,
+   881→      });
+   882→    };
+   883→    const onUp = () => {
+   884→      dragRef.current = null;
+   885→      window.removeEventListener("mousemove", onMove);
+   886→      window.removeEventListener("mouseup", onUp);
+   887→      // Restore cursor.
+   888→      const el = document.getElementById(`editable-img-${slotKey(slot)}`);
+   889→      if (el) el.style.cursor = "grab";
+   890→    };
+   891→    window.addEventListener("mousemove", onMove);
+   892→    window.addEventListener("mouseup", onUp);
+   893→  }
+   894→
+   895→  const containerRef = useRef<HTMLDivElement>(null);
+   896→    // Attach a NON-PASSIVE wheel listener so preventDefault
+   897→    // actually stops the parent workspace from scrolling.
+   898→    // React's onWheel is passive by default → preventDefault
+   899→    // is a no-op there + logs a console warning.
+   900→    useNonPassiveWheel(containerRef, handleWheel, !!editable);
+   901→
+   902→    function handleWheel(e: WheelEvent) {
+   903→    if (!editable || !onPlacementChange) return;
+   904→    // preventDefault + stopPropagation are already called by the
+   905→    // useNonPassiveWheel hook (non-passive native listener), so
+   906→    // the parent workspace does not scroll while the user spins
+   907→    // the wheel over a hovered image.
+   908→const step = e.deltaY < 0 ? 0.1 : -0.1;
+   909→    const nextZoom = Math.max(0.01, zoom + step);
+   910→    onPlacementChange(slot, {
+   911→      focusX,
+   912→      focusY,
+   913→      zoom: nextZoom,
+   914→    });
+   915→  }
+   916→
+   917→  function handleDoubleClick() {
+   918→    if (!editable || !onPlacementChange) return;
+   919→    onPlacementChange(slot, { focusX: 50, focusY: 50, zoom: 1 });
+   920→  }
+   921→
+   922→  /**
+   923→   * handleResizeMouseDown — starts a resize drag from one of the 4 corner
+   924→   * handles. The corner determines the direction:
+   925→   *   - SE (bottom-right): drag down-right = grow, up-left = shrink
+   926→   *   - NW (top-left):     drag up-left   = grow, down-right = shrink
+   927→   *   - NE (top-right):    drag up-right  = grow, down-left = shrink
+   928→   *   - SW (bottom-left):  drag down-left = grow, up-right = shrink
+   929→   *
+   930→   * We use the diagonal distance (dx + dy with appropriate sign) so the
+   931→   * resize feels natural regardless of which corner is grabbed.
+   932→   */
+   933→  function handleResizeMouseDown(
+   934→    e: React.MouseEvent,
+   935→    corner: "nw" | "ne" | "se" | "sw",
+   936→  ) {
+   937→    if (!editable || !onSizeChange) return;
+   938→    if (e.button !== 0) return;
+   939→    e.preventDefault();
+   940→    e.stopPropagation(); // don't trigger pan-drag
+   941→    const startSize = sizeMultiplier ?? 1;
+   942→    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+   943→
+   944→    const onMove = (ev: MouseEvent) => {
+   945→      const r = resizeRef.current;
+   946→      if (!r) return;
+   947→      const dx = ev.clientX - r.startX;
+   948→      const dy = ev.clientY - r.startY;
+   949→      // For each corner, compute the signed diagonal distance so that
+   950→      // moving "outward" (away from the image center) increases the size
+   951→      // and moving "toward the center" decreases it. The SW and NE
+   952→      // formulas were previously inverted — fixed per user spec.
+   953→      let signedDiag: number;
+   954→      switch (r.corner) {
+   955→        case "se": signedDiag = dx + dy; break;            // down-right grows
+   956→        case "nw": signedDiag = -(dx + dy); break;          // up-left grows
+   957→        case "ne": signedDiag = dx - dy; break;             // up-right grows (dx>0 grows, dy<0 grows)
+   958→        case "sw": signedDiag = -dx + dy; break;            // down-left grows (dx<0 grows, dy>0 grows)
+   959→      }
+   960→      // 100px of drag = 1.0× size change (so dragging 50px = +0.5×).
+   961→      const sensitivity = 100 * previewScale;
+   962→      const delta = signedDiag / sensitivity;
+   963→      const next = Math.max(0.01, r.startSize + delta);
+   964→      onSizeChange(slot, next);
+   965→    };
+   966→    const onUp = () => {
+   967→      resizeRef.current = null;
+   968→      window.removeEventListener("mousemove", onMove);
+   969→      window.removeEventListener("mouseup", onUp);
+   970→    };
+   971→    window.addEventListener("mousemove", onMove);
+   972→    window.addEventListener("mouseup", onUp);
+   973→  }
+   974→
+   975→  return (
+   976→    <div
+   977→      ref={containerRef} id={`editable-img-${slotKey(slot)}`}
+   978→      className={`${containerClass} group`}
+   979→      style={{
+   980→        cursor: editable ? "grab" : "default",
+   981→        outline: editable ? "2px dashed rgba(0, 102, 255, 0.7)" : undefined,
+   982→        outlineOffset: editable ? "-2px" : undefined,
+   983→      }}
+   984→      onMouseDown={handleMouseDown}
+   985→      onDoubleClick={handleDoubleClick}
+   986→    >
+   987→      <Image
+   988→        src={src}
+   989→        alt={alt}
+   990→        fill
+   991→        unoptimized
+   992→        className={objectFit === "cover" ? "object-cover" : "object-contain"}
+   993→        sizes="700px"
+   994→        style={{
+   995→          objectPosition: `${focusX}% ${focusY}%`,
+   996→          // Apply a tiny overscan (1.005x) on top of the user's zoom to
+   997→          // eliminate the 1px white gap that appears at the container
+   998→          // edge due to subpixel rendering. This is the well-known
+   999→          // "CSS transform scale(1) shows hairline gap" bug — adding a
+  1000→          // 0.5% overscan forces the image to spill 1-2px past each
+  1001→          // edge, which the parent's overflow:hidden then clips cleanly.
+  1002→          transform: `scale(${zoom * 1.005})`,
+  1003→          transformOrigin: "center center",
+  1004→          // Force GPU compositing so the transform is applied on a
+  1005→          // separate layer — eliminates the闪烁 / shimmer that can
+  1006→          // happen during drag-pan on Chrome.
+  1007→          willChange: "transform",
+  1008→          backfaceVisibility: "hidden",
+  1009→          transition: dragRef.current ? "none" : "transform 80ms ease-out",
+  1010→        }}
+  1011→        draggable={false}
+  1012→      />
+  1013→      {/* Replace button (only in edit mode) */}
+  1014→      {editable && onPickImage && (
+  1015→        <button
+  1016→          type="button"
+  1017→          onClick={(e) => {
+  1018→            e.stopPropagation();
+  1019→            onPickImage(slot);
+  1020→          }}
+  1021→          className="absolute top-1 left-1 z-10 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md hover:bg-[#0052CC] opacity-0 group-hover:opacity-100 transition"
+  1022→          style={{ pointerEvents: "auto" }}
+  1023→        >
+  1024→          Replace
+  1025→        </button>
+  1026→      )}
+  1027→      {/* Placement readout (only in edit mode) */}
+  1028→      {editable && (
+  1029→        <div className="absolute bottom-1 right-1 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none">
+  1030→          {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
+  1031→        </div>
+  1032→      )}
+  1033→      {/* Resize corner handles (only when size-control is enabled) */}
+  1034→      {editable && onSizeChange && (
+  1035→        <>
+  1036→          {/* Size readout (top-center pill) */}
+  1037→          <div
+  1038→            className="absolute top-1 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-2 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap"
+  1039→          >
+  1040→            {sizeLabel ?? "size"}: {(sizeMultiplier ?? 1).toFixed(2)}×
+  1041→          </div>
+  1042→          {/* NW corner */}
+  1043→          <ResizeHandle corner="nw" onMouseDown={handleResizeMouseDown} />
+  1044→          {/* NE corner */}
+  1045→          <ResizeHandle corner="ne" onMouseDown={handleResizeMouseDown} />
+  1046→          {/* SE corner */}
+  1047→          <ResizeHandle corner="se" onMouseDown={handleResizeMouseDown} />
+  1048→          {/* SW corner */}
+  1049→          <ResizeHandle corner="sw" onMouseDown={handleResizeMouseDown} />
+  1050→        </>
+  1051→      )}
+  1052→    </div>
+  1053→  );
+  1054→}
+  1055→
+  1056→/**
+  1057→ * ResizeHandle — a small square handle at one of the 4 corners of an
+  1058→ * editable image. Dragging it resizes the image via onSizeChange.
+  1059→ *
+  1060→ * The handle is a 12×12 white square with a 2px pink border, positioned
+  1061→ * absolutely at the corner. The cursor changes based on the corner
+  1062→ * (nwse or nesw resize cursor).
+  1063→ *
+  1064→ * Visible only in edit mode (the parent conditionally renders it).
+  1065→ */
+  1066→function ResizeHandle({
+  1067→  corner,
+  1068→  onMouseDown,
+  1069→}: {
+  1070→  corner: "nw" | "ne" | "se" | "sw";
+  1071→  onMouseDown: (e: React.MouseEvent, corner: "nw" | "ne" | "se" | "sw") => void;
+  1072→}) {
+  1073→  const positionClass =
+  1074→    corner === "nw" ? "top-0 left-0" :
+  1075→    corner === "ne" ? "top-0 right-0" :
+  1076→    corner === "se" ? "bottom-0 right-0" :
+  1077→    "bottom-0 left-0";
+  1078→  const cursorClass =
+  1079→    corner === "nw" || corner === "se" ? "cursor-nwse-resize" : "cursor-nesw-resize";
+  1080→  return (
+  1081→    <div
+  1082→      onMouseDown={(e) => onMouseDown(e, corner)}
+  1083→      className={`absolute ${positionClass} ${cursorClass} z-30 w-3 h-3 bg-white border-2 border-[#FF005A] rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition`}
+  1084→      style={{ pointerEvents: "auto" }}
+  1085→      aria-label={`Resize ${corner} corner`}
+  1086→    />
+  1087→  );
+  1088→}
+  1089→
+  1090→function slotKey(slot: ImageSlot): string {
+  1091→  if (slot.kind === "hero") return "hero";
+  1092→  if (slot.kind === "speaker") return `speaker-${slot.index}`;
+  1093→  return `sponsor-${slot.group}-${slot.index}`;
+  1094→}
+  1095→
+  1096→/**
+  1097→ * SpeakerCard — one entry in the vertical speakers list.
+  1098→ * Circular photo + name + title/company + optional role badge + optional bio.
+  1099→ */
+  1100→function SpeakerCard({
+  1101→  speaker,
+  1102→  accentColor,
+  1103→  editable,
+  1104→  slot,
+  1105→  previewScale,
+  1106→  onPickImage,
+  1107→  onPlacementChange,
+  1108→  onSizeChange,
+  1109→}: {
+  1110→  speaker: Speaker;
+  1111→  accentColor: string;
+  1112→  editable?: boolean;
+  1113→  slot: ImageSlot;
+  1114→  previewScale: number;
+  1115→  onPickImage?: (slot: ImageSlot) => void;
+  1116→  onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  1117→  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  1118→}) {
+  1119→  // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
+  1120→  const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
+  1121→  const photoPx = Math.round(56 * photoSize);
+  1122→  return (
+  1123→    <div className="flex items-start gap-3 rounded-lg bg-white/95 backdrop-blur-sm border border-black/10 p-2.5 shadow-sm">
+  1124→      {/* Circular photo */}
+  1125→      <div
+  1126→        className="relative shrink-0 rounded-full overflow-hidden border-2"
+  1127→        style={{
+  1128→          width: `${photoPx}px`,
+  1129→          height: `${photoPx}px`,
+  1130→          borderColor: accentColor,
+  1131→        }}
+  1132→      >
+  1133→        <EditableImage
+  1134→          slot={slot}
+  1135→          src={speaker.photoUrl}
+  1136→          alt={speaker.fullName}
+  1137→          placement={speaker.photoPlacement}
+  1138→          editable={editable}
+  1139→          previewScale={previewScale}
+  1140→          onPickImage={onPickImage}
+  1141→          onPlacementChange={onPlacementChange}
+  1142→          onSizeChange={onSizeChange}
+  1143→          sizeMultiplier={speaker.photoSize ?? 1}
+  1144→          sizeLabel="photo"
+  1145→          containerClass="absolute inset-0"
+  1146→          objectFit="cover"
+  1147→        />
+  1148→      </div>
+  1149→      {/* Text block */}
+  1150→      <div className="flex-1 min-w-0">
+  1151→        <div className="flex items-center gap-2 flex-wrap">
+  1152→          {speaker.sessionTime && (
+  1153→            <span
+  1154→              className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold tracking-wider"
+  1155→              style={{
+  1156→                fontSize: "9px",
+  1157→                letterSpacing: "0.08em",
+  1158→                background: "#004F98",
+  1159→              }}
+  1160→            >
+  1161→              {speaker.sessionTime}
+  1162→            </span>
+  1163→          )}
+  1164→          <span
+  1165→            className="font-bold text-black leading-tight"
+  1166→            style={{ fontSize: "16px" }}
+  1167→          >
+  1168→            {speaker.fullName}
+  1169→          </span>
+  1170→          {speaker.role === "Moderator" && (
+  1171→            <span
+  1172→              className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold uppercase tracking-wider"
+  1173→              style={{
+  1174→                fontSize: "9px",
+  1175→                letterSpacing: "0.1em",
+  1176→                background: accentColor,
+  1177→              }}
+  1178→            >
+  1179→              {speaker.role}
+  1180→            </span>
+  1181→          )}
+  1182→          {speaker.role === "Panelist" && (
+  1183→            <span
+  1184→              className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold uppercase tracking-wider"
+  1185→              style={{
+  1186→                fontSize: "9px",
+  1187→                letterSpacing: "0.1em",
+  1188→                background: "#004F98",
+  1189→              }}
+  1190→            >
+  1191→              {speaker.role}
+  1192→            </span>
+  1193→          )}
+  1194→        </div>
+  1195→        <p
+  1196→          className="text-black/70 leading-snug mt-0.5"
+  1197→          style={{ fontSize: "12px" }}
+  1198→        >
+  1199→          {speaker.title}
+  1200→          {speaker.company && (
+  1201→            <>
+  1202→              <span className="mx-1 text-black/30">·</span>
+  1203→              <span className="font-semibold">{speaker.company}</span>
+  1204→            </>
+  1205→          )}
+  1206→        </p>
+  1207→        {speaker.bio && (
+  1208→          <p
+  1209→            className="text-black/50 leading-snug mt-1"
+  1210→            style={{ fontSize: "11px" }}
+  1211→          >
+  1212→            {speaker.bio}
+  1213→          </p>
+  1214→        )}
+  1215→      </div>
+  1216→    </div>
+  1217→  );
+  1218→}
+  1219→
+  1220→/**
+  1221→ * SponsorLogo — one logo in the "In collaboration with" / "Sponsored by" row.
+  1222→ * Logos use object-contain (no crop), so they don't take a placement.
+  1223→ * logoSize: 1 = 32px height (default), 2 = 64px, 0.5 = 16px.
+  1224→ */
+  1225→function SponsorLogo({
+  1226→  sponsor,
+  1227→  editable,
+  1228→  slot,
+  1229→  onPickImage,
+  1230→  onSizeChange,
+  1231→  previewScale = 1,
+  1232→}: {
+  1233→  sponsor: { name: string; logoUrl: string; logoSize?: number };
+  1234→  editable?: boolean;
+  1235→  slot: ImageSlot;
+  1236→  onPickImage?: (slot: ImageSlot) => void;
+  1237→  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  1238→  previewScale?: number;
+  1239→}) {
+  1240→  const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
+  1241→  const heightPx = Math.round(32 * sizeMult);
+  1242→  const minWidthPx = Math.round(80 * sizeMult);
+  1243→
+  1244→  // Resize drag state — same pattern as EditableImage but inline since
+  1245→  // SponsorLogo doesn't use EditableImage (logos use object-contain, no
+  1246→  // placement control).
+  1247→  const resizeRef = useRef<{
+  1248→    startX: number;
+  1249→    startY: number;
+  1250→    startSize: number;
+  1251→    corner: "nw" | "ne" | "se" | "sw";
+  1252→  } | null>(null);
+  1253→
+  1254→  function handleResizeMouseDown(
+  1255→    e: React.MouseEvent,
+  1256→    corner: "nw" | "ne" | "se" | "sw",
+  1257→  ) {
+  1258→    if (!editable || !onSizeChange) return;
+  1259→    if (e.button !== 0) return;
+  1260→    e.preventDefault();
+  1261→    e.stopPropagation();
+  1262→    const startSize = sponsor.logoSize ?? 1;
+  1263→    resizeRef.current = { startX: e.clientX, startY: e.clientY, startSize, corner };
+  1264→    const onMove = (ev: MouseEvent) => {
+  1265→      const r = resizeRef.current;
+  1266→      if (!r) return;
+  1267→      const dx = ev.clientX - r.startX;
+  1268→      const dy = ev.clientY - r.startY;
+  1269→      let signedDiag: number;
+  1270→      switch (r.corner) {
+  1271→        case "se": signedDiag = dx + dy; break;
+  1272→        case "nw": signedDiag = -(dx + dy); break;
+  1273→        case "ne": signedDiag = dx - dy; break;     // up-right grows (dx>0 grows, dy<0 grows)
+  1274→        case "sw": signedDiag = -dx + dy; break;    // down-left grows (dx<0 grows, dy>0 grows)
+  1275→      }
+  1276→      const sensitivity = 100 * previewScale;
+  1277→      const delta = signedDiag / sensitivity;
+  1278→      const next = Math.max(0.01, r.startSize + delta);
+  1279→      onSizeChange(slot, next);
+  1280→    };
+  1281→    const onUp = () => {
+  1282→      resizeRef.current = null;
+  1283→      window.removeEventListener("mousemove", onMove);
+  1284→      window.removeEventListener("mouseup", onUp);
+  1285→    };
+  1286→    window.addEventListener("mousemove", onMove);
+  1287→    window.addEventListener("mouseup", onUp);
+  1288→  }
+  1289→
+  1290→  return (
+  1291→    <div
+  1292→      className={`relative flex items-center justify-center bg-white rounded px-2 py-1 border group ${
+  1293→        editable ? "border-[#0066FF]/70" : "border-black/10"
+  1294→      }`}
+  1295→      style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+  1296→    >
+  1297→      <div className="relative w-full h-full">
+  1298→        <Image
+  1299→          src={sponsor.logoUrl}
+  1300→          alt={sponsor.name}
+  1301→          fill
+  1302→          unoptimized
+  1303→          className="object-contain"
+  1304→          sizes="80px"
+  1305→          draggable={false}
+  1306→        />
+  1307→      </div>
+  1308→      {editable && onPickImage && (
+  1309→        <button
+  1310→          type="button"
+  1311→          onClick={(e) => {
+  1312→            e.stopPropagation();
+  1313→            onPickImage(slot);
+  1314→          }}
+  1315→          className="absolute -top-1.5 -right-1.5 z-10 rounded-full bg-[#0066FF] text-white px-1.5 py-0.5 text-[9px] font-bold uppercase shadow hover:bg-[#0052CC]"
+  1316→        >
+  1317→          ↻
+  1318→        </button>
+  1319→      )}
+  1320→      {/* Resize corner handles (only when size-control is enabled) */}
+  1321→      {editable && onSizeChange && (
+  1322→        <>
+  1323→          <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 rounded bg-[#FF005A] px-1.5 py-0.5 text-[8px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+  1324→            logo: {sizeMult.toFixed(2)}×
+  1325→          </div>
+  1326→          <div
+  1327→            onMouseDown={(e) => handleResizeMouseDown(e, "nw")}
+  1328→            className="absolute top-0 left-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+  1329→            style={{ pointerEvents: "auto" }}
+  1330→          />
+  1331→          <div
+  1332→            onMouseDown={(e) => handleResizeMouseDown(e, "ne")}
+  1333→            className="absolute top-0 right-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+  1334→            style={{ pointerEvents: "auto" }}
+  1335→          />
+  1336→          <div
+  1337→            onMouseDown={(e) => handleResizeMouseDown(e, "se")}
+  1338→            className="absolute bottom-0 right-0 cursor-nwse-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+  1339→            style={{ pointerEvents: "auto" }}
+  1340→          />
+  1341→          <div
+  1342→            onMouseDown={(e) => handleResizeMouseDown(e, "sw")}
+  1343→            className="absolute bottom-0 left-0 cursor-nesw-resize z-30 w-2.5 h-2.5 bg-white border-2 border-[#FF005A] rounded-sm shadow opacity-0 group-hover:opacity-100 transition"
+  1344→            style={{ pointerEvents: "auto" }}
+  1345→          />
+  1346→        </>
+  1347→      )}
+  1348→    </div>
+  1349→  );
+  1350→}
+  1351→
+  1352→/**
+  1353→ * QrCode — generates a QR code from a URL using the `qrcode` library.
+  1354→ * Renders to a <canvas> so it's high-DPI ready.
+  1355→ */
+  1356→import QRCode from "qrcode";
+  1357→// `useState` and `useEffect` are imported at the top of this file (line 3)
+  1358→// — no need to re-import here.
+  1359→
+  1360→function QrCode({ url, size }: { url: string; size: number }) {
+  1361→  const [dataUrl, setDataUrl] = useState<string>("");
+  1362→
+  1363→  useEffect(() => {
+  1364→    let cancelled = false;
+  1365→    QRCode.toDataURL(url, {
+  1366→      width: size,
+  1367→      margin: 0,
+  1368→      color: { dark: "#000000", light: "#FFFFFF" },
+  1369→      errorCorrectionLevel: "M",
+  1370→    })
+  1371→      .then((d) => {
+  1372→        if (!cancelled) setDataUrl(d);
+  1373→      })
+  1374→      .catch((err) => {
+  1375→        console.error("QR generation failed:", err);
+  1376→      });
+  1377→    return () => {
+  1378→      cancelled = true;
+  1379→    };
+  1380→  }, [url, size]);
+  1381→
+  1382→  if (!dataUrl) {
+  1383→    return (
+  1384→      <div
+  1385→        className="bg-black/5 animate-pulse"
+  1386→        style={{ width: size, height: size }}
+  1387→      />
+  1388→    );
+  1389→  }
+  1390→  // eslint-disable-next-line @next/next/no-img-element
+  1391→  return (
+  1392→    <img
+  1393→      src={dataUrl}
+  1394→      alt="QR code"
+  1395→      width={size}
+  1396→      height={size}
+  1397→      className="block"
+  1398→    />
+  1399→  );
+  1400→}
+  1401→
+  1402→/** Re-exported for the editor to use in placement sliders. */
+  1403→export function PlacementControls({
+  1404→  placement,
+  1405→  onChange,
+  1406→  onReset,
+  1407→}: {
+  1408→  placement?: ImagePlacement;
+  1409→  onChange: (p: ImagePlacement) => void;
+  1410→  onReset: () => void;
+  1411→}): ReactNode {
+  1412→  const { focusX, focusY, zoom } = resolvePlacement(placement);
+  1413→  return (
+  1414→    <div className="flex items-center gap-2 text-xs">
+  1415→      <label className="flex items-center gap-1 text-black/70">
+  1416→        <span className="font-mono w-7">X</span>
+  1417→        <input
+  1418→          type="range"
+  1419→          min={0}
+  1420→          max={100}
+  1421→          step={1}
+  1422→          value={focusX}
+  1423→          onChange={(e) => onChange({ focusX: Number(e.target.value), focusY, zoom })}
+  1424→          className="w-20"
+  1425→        />
+  1426→        <span className="font-mono text-[0.65rem] w-7 text-right">{focusX}%</span>
+  1427→      </label>
+  1428→      <label className="flex items-center gap-1 text-black/70">
+  1429→        <span className="font-mono w-7">Y</span>
+  1430→        <input
+  1431→          type="range"
+  1432→          min={0}
+  1433→          max={100}
+  1434→          step={1}
+  1435→          value={focusY}
+  1436→          onChange={(e) => onChange({ focusX, focusY: Number(e.target.value), zoom })}
+  1437→          className="w-20"
+  1438→        />
+  1439→        <span className="font-mono text-[0.65rem] w-7 text-right">{focusY}%</span>
+  1440→      </label>
+  1441→      <label className="flex items-center gap-1 text-black/70">
+  1442→        <span className="font-mono w-7">Z</span>
+  1443→        <input
+  1444→          type="range"
+  1445→          min={1}
+  1446→          max={4}
+  1447→          step={0.1}
+  1448→          value={zoom}
+  1449→          onChange={(e) => onChange({ focusX, focusY, zoom: Number(e.target.value) })}
+  1450→          className="w-20"
+  1451→        />
+  1452→        <span className="font-mono text-[0.65rem] w-7 text-right">{zoom.toFixed(1)}×</span>
+  1453→      </label>
+  1454→      <button
+  1455→        type="button"
+  1456→        onClick={onReset}
+  1457→        className="rounded border border-black/15 px-1.5 py-0.5 text-[0.65rem] font-semibold text-black/60 hover:bg-black/5"
+  1458→      >
+  1459→        Reset
+  1460→      </button>
+  1461→    </div>
+  1462→  );
+  1463→}
+  1464→

@@ -1,0 +1,1001 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useCallback } from "react";
+     4→     4→import { Plus, Trash2 } from "lucide-react";
+     5→     5→import type { SpeakerIntroData } from "../speaker-intro/types";
+     6→     6→import { GradientColorPicker } from "./gradient-color-picker";
+     7→     7→
+     8→     8→/**
+     9→     9→ * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
+    10→    10→ *
+    11→    11→ * Renders every editable field as a labeled input (text / number / textarea)
+    12→    12→ * grouped by section. The user can toggle between this form view and the
+    13→    13→ * raw JSON editor — both stay in sync via the same `data` object.
+    14→    14→ *
+    15→    15→ * Why a form view?
+    16→    16→ *   - Non-technical users find a form easier to scan/edit than raw JSON.
+    17→    17→ *   - Reduces the risk of typos that break the JSON parser.
+    18→    18→ *   - Lets us group related fields visually (event / speakers / hero / etc).
+    19→    19→ *
+    20→    20→ * The form is fully controlled — every change calls `onChange(next)` with
+    21→    21→ * a new SpeakerIntroData object. The parent owns the source of truth.
+    22→    22→ */
+    23→    23→type Props = {
+    24→    24→  data: SpeakerIntroData;
+    25→    25→  onChange: (next: SpeakerIntroData) => void;
+    26→    26→};
+    27→    27→
+    28→    28→export function SpeakerIntroFormView({ data, onChange }: Props) {
+    29→    29→  const update = useCallback(
+    30→    30→    (recipe: (draft: SpeakerIntroData) => void) => {
+    31→    31→      const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    32→    32→      recipe(next);
+    33→    33→      onChange(next);
+    34→    34→    },
+    35→    35→    [data, onChange],
+    36→    36→  );
+    37→    37→
+    38→    38→  // sort speakers by order for display
+    39→    39→  const speakersSorted = [...data.speakers].sort((a, b) => a.order - b.order);
+    40→    40→
+    41→    41→  return (
+    42→    42→    <div className="space-y-5 p-4 bg-white text-black max-h-[640px] overflow-y-auto text-sm">
+    43→    43→      {/* ===== EVENT ===== */}
+    44→    44→      <Section title="Event">
+    45→    45→        <Field label="Event name">
+    46→    46→          <input
+    47→    47→            type="text"
+    48→    48→            value={data.event.name}
+    49→    49→            onChange={(e) => update((d) => { d.event.name = e.target.value; })}
+    50→    50→            className="form-input"
+    51→    51→          />
+    52→    52→        </Field>
+    53→    53→        <div className="grid grid-cols-2 gap-3">
+    54→    54→          <Field label="Date">
+    55→    55→            <input
+    56→    56→              type="text"
+    57→    57→              value={data.event.date}
+    58→    58→              onChange={(e) => update((d) => { d.event.date = e.target.value; })}
+    59→    59→              className="form-input"
+    60→    60→              placeholder="June 18th 2026"
+    61→    61→            />
+    62→    62→          </Field>
+    63→    63→          <Field label="Time">
+    64→    64→            <input
+    65→    65→              type="text"
+    66→    66→              value={data.event.time}
+    67→    67→              onChange={(e) => update((d) => { d.event.time = e.target.value; })}
+    68→    68→              className="form-input"
+    69→    69→              placeholder="18:00"
+    70→    70→            />
+    71→    71→          </Field>
+    72→    72→        </div>
+    73→    73→        <Field label="Venue">
+    74→    74→          <input
+    75→    75→            type="text"
+    76→    76→            value={data.event.venue}
+    77→    77→            onChange={(e) => update((d) => { d.event.venue = e.target.value; })}
+    78→    78→            className="form-input"
+    79→    79→          />
+    80→    80→        </Field>
+    81→    81→        <Field label="Topic">
+    82→    82→          <input
+    83→    83→            type="text"
+    84→    84→            value={data.event.topic}
+    85→    85→            onChange={(e) => update((d) => { d.event.topic = e.target.value; })}
+    86→    86→            className="form-input"
+    87→    87→          />
+    88→    88→        </Field>
+    89→    89→        <div className="grid grid-cols-2 gap-3">
+    90→    90→          <Field label="Event name font scale (×)">
+    91→    91→            <input
+    92→    92→              type="number"
+    93→    93→              step="0.1"
+    94→    94→              min="0.3"
+    95→    95→              max="3"
+    96→    96→              value={data.event.nameFontScale ?? 1}
+    97→    97→              onChange={(e) =>
+    98→    98→                update((d) => {
+    99→    99→                  d.event.nameFontScale = parseFloat(e.target.value) || 1;
+   100→   100→                })
+   101→   101→              }
+   102→   102→              className="form-input"
+   103→   103→            />
+   104→   104→            <span className="text-[0.6rem] text-black/40 mt-0.5">
+   105→   105→              Base: 44px · current: {Math.round(44 * (data.event.nameFontScale ?? 1))}px
+   106→   106→            </span>
+   107→   107→          </Field>
+   108→   108→          <Field label="Topic font scale (×)">
+   109→   109→            <input
+   110→   110→              type="number"
+   111→   111→              step="0.1"
+   112→   112→              min="0.3"
+   113→   113→              max="3"
+   114→   114→              value={data.event.topicFontScale ?? 1}
+   115→   115→              onChange={(e) =>
+   116→   116→                update((d) => {
+   117→   117→                  d.event.topicFontScale = parseFloat(e.target.value) || 1;
+   118→   118→                })
+   119→   119→              }
+   120→   120→              className="form-input"
+   121→   121→            />
+   122→   122→            <span className="text-[0.6rem] text-black/40 mt-0.5">
+   123→   123→              Base: 24px · current: {Math.round(24 * (data.event.topicFontScale ?? 1))}px
+   124→   124→            </span>
+   125→   125→          </Field>
+   126→   126→        </div>
+   127→   127→        <Field label="QR code URL">
+   128→   128→          <input
+   129→   129→            type="url"
+   130→   130→            value={data.qrCodeUrl}
+   131→   131→            onChange={(e) => update((d) => { d.qrCodeUrl = e.target.value; })}
+   132→   132→            className="form-input"
+   133→   133→          />
+   134→   134→        </Field>
+   135→   135→        <div className="grid grid-cols-2 gap-3">
+   136→   136→          <Field label="Brand color 1">
+   137→   137→            <ColorInput
+   138→   138→              value={data.event.brandColors[0]}
+   139→   139→              onChange={(v) => update((d) => { d.event.brandColors[0] = v; })}
+   140→   140→            />
+   141→   141→          </Field>
+   142→   142→          <Field label="Brand color 2">
+   143→   143→            <ColorInput
+   144→   144→              value={data.event.brandColors[1]}
+   145→   145→              onChange={(v) => update((d) => { d.event.brandColors[1] = v; })}
+   146→   146→            />
+   147→   147→          </Field>
+   148→   148→        </div>
+   149→   149→        <Field label="Footer credit">
+   150→   150→          <input
+   151→   151→            type="text"
+   152→   152→            value={data.footerCredit ?? ""}
+   153→   153→            onChange={(e) => update((d) => { d.footerCredit = e.target.value || undefined; })}
+   154→   154→            className="form-input"
+   155→   155→          />
+   156→   156→        </Field>
+   157→   157→      </Section>
+   158→   158→
+   159→   159→      {/* ===== SPEAKERS ===== */}
+   160→   160→      <Section title={`Speakers (${speakersSorted.length})`}>
+   161→   161→        {/* Speaker grid layout controls */}
+   162→   162→        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 mb-3">
+   163→   163→          <p className="text-xs font-semibold text-black/70 mb-2 uppercase tracking-wider">
+   164→   164→            Speaker grid layout
+   165→   165→          </p>
+   166→   166→          <div className="grid grid-cols-2 gap-3">
+   167→   167→            <Field label="Columns">
+   168→   168→              <select
+   169→   169→                value={String(data.speakersLayout?.columns ?? 1)}
+   170→   170→                onChange={(e) =>
+   171→   171→                  update((d) => {
+   172→   172→                    if (!d.speakersLayout) d.speakersLayout = {};
+   173→   173→                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
+   174→   174→                  })
+   175→   175→                }
+   176→   176→                className="form-input"
+   177→   177→              >
+   178→   178→                <option value="1">1 column</option>
+   179→   179→                <option value="2">2 columns</option>
+   180→   180→                <option value="3">3 columns</option>
+   181→   181→              </select>
+   182→   182→            </Field>
+   183→   183→            <Field label="Flow direction">
+   184→   184→              <select
+   185→   185→                value={data.speakersLayout?.flowDirection ?? "row"}
+   186→   186→                onChange={(e) =>
+   187→   187→                  update((d) => {
+   188→   188→                    if (!d.speakersLayout) d.speakersLayout = {};
+   189→   189→                    d.speakersLayout.flowDirection = e.target.value as "row" | "col";
+   190→   190→                  })
+   191→   191→                }
+   192→   192→                className="form-input"
+   193→   193→              >
+   194→   194→                <option value="row">Row-by-row (left→right, then wrap)</option>
+   195→   195→                <option value="col">Col-by-col (top→bottom, then next col)</option>
+   196→   196→              </select>
+   197→   197→            </Field>
+   198→   198→          </div>
+   199→   199→          <div className="grid grid-cols-2 gap-3 mt-2">
+   200→   200→            <Field label="Last row alignment">
+   201→   201→              <select
+   202→   202→                value={data.speakersLayout?.lastRowAlign ?? "spread"}
+   203→   203→                onChange={(e) =>
+   204→   204→                  update((d) => {
+   205→   205→                    if (!d.speakersLayout) d.speakersLayout = {};
+   206→   206→                    d.speakersLayout.lastRowAlign = e.target.value as "left" | "center" | "spread";
+   207→   207→                  })
+   208→   208→                }
+   209→   209→                className="form-input"
+   210→   210→              >
+   211→   211→                <option value="spread">Spread evenly</option>
+   212→   212→                <option value="center">Center</option>
+   213→   213→                <option value="left">Left-align</option>
+   214→   214→              </select>
+   215→   215→            </Field>
+   216→   216→            <Field label="Rows per column (comma-separated)">
+   217→   217→              <input
+   218→   218→                type="text"
+   219→   219→                value={(data.speakersLayout?.rowsPerColumn ?? []).join(",")}
+   220→   220→                placeholder="auto (e.g. 2,1,2)"
+   221→   221→                onChange={(e) =>
+   222→   222→                  update((d) => {
+   223→   223→                    if (!d.speakersLayout) d.speakersLayout = {};
+   224→   224→                    const txt = e.target.value.trim();
+   225→   225→                    if (!txt) {
+   226→   226→                      d.speakersLayout.rowsPerColumn = [];
+   227→   227→                    } else {
+   228→   228→                      d.speakersLayout.rowsPerColumn = txt
+   229→   229→                        .split(",")
+   230→   230→                        .map((s) => parseInt(s.trim(), 10))
+   231→   231→                        .filter((n) => !isNaN(n) && n > 0);
+   232→   232→                    }
+   233→   233→                  })
+   234→   234→                }
+   235→   235→                className="form-input"
+   236→   236→              />
+   237→   237→            </Field>
+   238→   238→          </div>
+   239→   239→          <p className="text-[0.65rem] text-black/50 mt-2">
+   240→   240→            {(() => {
+   241→   241→              const cols = data.speakersLayout?.columns ?? 1;
+   242→   242→              const n = speakersSorted.length;
+   243→   243→              if (n === 0) return "No speakers yet.";
+   244→   244→              const rows = Math.ceil(n / cols);
+   245→   245→              return `${n} speaker${n === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"} · ${rows} row${rows === 1 ? "" : "s"} (ordered by # field)`;
+   246→   246→            })()}
+   247→   247→          </p>
+   248→   248→        </div>
+   249→   249→        {speakersSorted.map((sp, idx) => (
+   250→   250→          <SubCard
+   251→   251→            key={`spk-${idx}`}
+   252→   252→            title={`#${sp.order} · ${sp.fullName || "Untitled"}`}
+   253→   253→            onDelete={() =>
+   254→   254→              update((d) => {
+   255→   255→                d.speakers = d.speakers.filter((s) => s.order !== sp.order);
+   256→   256→              })
+   257→   257→            }
+   258→   258→          >
+   259→   259→            <div className="grid grid-cols-2 gap-3">
+   260→   260→              <Field label="Order">
+   261→   261→                <input
+   262→   262→                  type="number"
+   263→   263→                  min={1}
+   264→   264→                  value={sp.order}
+   265→   265→                  onChange={(e) =>
+   266→   266→                    update((d) => {
+   267→   267→                      const target = d.speakers.find((s) => s.order === sp.order);
+   268→   268→                      if (target) target.order = parseInt(e.target.value, 10) || 1;
+   269→   269→                    })
+   270→   270→                  }
+   271→   271→                  className="form-input"
+   272→   272→                />
+   273→   273→              </Field>
+   274→   274→              <Field label="Role">
+   275→   275→                <select
+   276→   276→                  value={sp.role}
+   277→   277→                  onChange={(e) =>
+   278→   278→                    update((d) => {
+   279→   279→                      const target = d.speakers.find((s) => s.order === sp.order);
+   280→   280→                      if (target) target.role = e.target.value as SpeakerIntroData["speakers"][number]["role"];
+   281→   281→                    })
+   282→   282→                  }
+   283→   283→                  className="form-input"
+   284→   284→                >
+   285→   285→                  <option value="Speaker">Speaker</option>
+   286→   286→                  <option value="Moderator">Moderator</option>
+   287→   287→                  <option value="Panelist">Panelist</option>
+   288→   288→                  <option value="Host">Host</option>
+   289→   289→                </select>
+   290→   290→              </Field>
+   291→   291→            </div>
+   292→   292→            <Field label="Full name">
+   293→   293→              <input
+   294→   294→                type="text"
+   295→   295→                value={sp.fullName}
+   296→   296→                onChange={(e) =>
+   297→   297→                  update((d) => {
+   298→   298→                    const target = d.speakers.find((s) => s.order === sp.order);
+   299→   299→                    if (target) target.fullName = e.target.value;
+   300→   300→                  })
+   301→   301→                }
+   302→   302→                className="form-input"
+   303→   303→              />
+   304→   304→            </Field>
+   305→   305→            <div className="grid grid-cols-2 gap-3">
+   306→   306→              <Field label="Title">
+   307→   307→                <input
+   308→   308→                  type="text"
+   309→   309→                  value={sp.title}
+   310→   310→                  onChange={(e) =>
+   311→   311→                    update((d) => {
+   312→   312→                      const target = d.speakers.find((s) => s.order === sp.order);
+   313→   313→                      if (target) target.title = e.target.value;
+   314→   314→                    })
+   315→   315→                  }
+   316→   316→                  className="form-input"
+   317→   317→                />
+   318→   318→              </Field>
+   319→   319→              <Field label="Company">
+   320→   320→                <input
+   321→   321→                  type="text"
+   322→   322→                  value={sp.company}
+   323→   323→                  onChange={(e) =>
+   324→   324→                    update((d) => {
+   325→   325→                      const target = d.speakers.find((s) => s.order === sp.order);
+   326→   326→                      if (target) target.company = e.target.value;
+   327→   327→                    })
+   328→   328→                  }
+   329→   329→                  className="form-input"
+   330→   330→                />
+   331→   331→              </Field>
+   332→   332→            </div>
+   333→   333→            <Field label="Bio">
+   334→   334→              <textarea
+   335→   335→                value={sp.bio ?? ""}
+   336→   336→                onChange={(e) =>
+   337→   337→                  update((d) => {
+   338→   338→                    const target = d.speakers.find((s) => s.order === sp.order);
+   339→   339→                    if (target) target.bio = e.target.value || undefined;
+   340→   340→                  })
+   341→   341→                }
+   342→   342→                className="form-input min-h-[60px] resize-y"
+   343→   343→                rows={2}
+   344→   344→              />
+   345→   345→            </Field>
+   346→   346→            <div className="grid grid-cols-2 gap-3">
+   347→   347→              <Field label="Session title">
+   348→   348→                <input
+   349→   349→                  type="text"
+   350→   350→                  value={sp.sessionTitle ?? ""}
+   351→   351→                  onChange={(e) =>
+   352→   352→                    update((d) => {
+   353→   353→                      const target = d.speakers.find((s) => s.order === sp.order);
+   354→   354→                      if (target) target.sessionTitle = e.target.value || undefined;
+   355→   355→                    })
+   356→   356→                  }
+   357→   357→                  className="form-input"
+   358→   358→                />
+   359→   359→              </Field>
+   360→   360→              <Field label="Session time (HH:MM)">
+   361→   361→                <input
+   362→   362→                  type="text"
+   363→   363→                  value={sp.sessionTime ?? ""}
+   364→   364→                  onChange={(e) =>
+   365→   365→                    update((d) => {
+   366→   366→                      const target = d.speakers.find((s) => s.order === sp.order);
+   367→   367→                      if (target) target.sessionTime = e.target.value || undefined;
+   368→   368→                    })
+   369→   369→                  }
+   370→   370→                  className="form-input"
+   371→   371→                  placeholder="18:30"
+   372→   372→                />
+   373→   373→              </Field>
+   374→   374→            </div>
+   375→   375→            <Field label="Photo URL">
+   376→   376→              <input
+   377→   377→                type="url"
+   378→   378→                value={sp.photoUrl}
+   379→   379→                onChange={(e) =>
+   380→   380→                  update((d) => {
+   381→   381→                    const target = d.speakers.find((s) => s.order === sp.order);
+   382→   382→                    if (target) target.photoUrl = e.target.value;
+   383→   383→                  })
+   384→   384→                }
+   385→   385→                className="form-input"
+   386→   386→              />
+   387→   387→            </Field>
+   388→   388→            <div className="grid grid-cols-2 gap-3">
+   389→   389→              <Field label="Photo size (×)">
+   390→   390→                <input
+   391→   391→                  type="number"
+   392→   392→                  step="0.1"
+   393→   393→                  min="0.1"
+   394→   394→                  value={sp.photoSize ?? 1}
+   395→   395→                  onChange={(e) =>
+   396→   396→                    update((d) => {
+   397→   397→                      const target = d.speakers.find((s) => s.order === sp.order);
+   398→   398→                      if (target) target.photoSize = parseFloat(e.target.value) || 1;
+   399→   399→                    })
+   400→   400→                  }
+   401→   401→                  className="form-input"
+   402→   402→                />
+   403→   403→              </Field>
+   404→   404→              <Field label="Visible">
+   405→   405→                <select
+   406→   406→                  value={sp.visible === false ? "false" : "true"}
+   407→   407→                  onChange={(e) =>
+   408→   408→                    update((d) => {
+   409→   409→                      const target = d.speakers.find((s) => s.order === sp.order);
+   410→   410→                      if (target) target.visible = e.target.value === "true";
+   411→   411→                    })
+   412→   412→                  }
+   413→   413→                  className="form-input"
+   414→   414→                >
+   415→   415→                  <option value="true">Yes</option>
+   416→   416→                  <option value="false">No (hidden)</option>
+   417→   417→                </select>
+   418→   418→              </Field>
+   419→   419→            </div>
+   420→   420→          </SubCard>
+   421→   421→        ))}
+   422→   422→        <AddButton
+   423→   423→          label="Add speaker"
+   424→   424→          onClick={() =>
+   425→   425→            update((d) => {
+   426→   426→              const nextOrder = Math.max(0, ...d.speakers.map((s) => s.order)) + 1;
+   427→   427→              d.speakers.push({
+   428→   428→                order: nextOrder,
+   429→   429→                role: "Speaker",
+   430→   430→                fullName: "New Speaker",
+   431→   431→                title: "",
+   432→   432→                company: "",
+   433→   433→                photoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   434→   434→              });
+   435→   435→            })
+   436→   436→          }
+   437→   437→        />
+   438→   438→      </Section>
+   439→   439→
+   440→   440→      {/* ===== HERO ===== */}
+   441→   441→      <Section title="Hero image & overlay">
+   442→   442→        <Field label="Hero image URL">
+   443→   443→          <input
+   444→   444→            type="url"
+   445→   445→            value={data.heroOverlay.imageUrl}
+   446→   446→            onChange={(e) => update((d) => { d.heroOverlay.imageUrl = e.target.value; })}
+   447→   447→            className="form-input"
+   448→   448→          />
+   449→   449→        </Field>
+   450→   450→        <Field label="Gradient colors (comma-separated)">
+   451→   451→          <GradientColorPicker
+   452→   452→            colors={data.heroOverlay.gradientColors}
+   453→   453→            onChange={(next) =>
+   454→   454→              update((d) => {
+   455→   455→                d.heroOverlay.gradientColors = next;
+   456→   456→              })
+   457→   457→            }
+   458→   458→          />
+   459→   459→        </Field>
+   460→   460→        <div className="grid grid-cols-2 gap-3">
+   461→   461→          <Field label="Gradient opacity">
+   462→   462→            <input
+   463→   463→              type="number"
+   464→   464→              step="0.05"
+   465→   465→              min="0"
+   466→   466→              max="1"
+   467→   467→              value={data.heroOverlay.gradientOpacity}
+   468→   468→              onChange={(e) =>
+   469→   469→                update((d) => {
+   470→   470→                  d.heroOverlay.gradientOpacity = parseFloat(e.target.value) || 0;
+   471→   471→                })
+   472→   472→              }
+   473→   473→              className="form-input"
+   474→   474→            />
+   475→   475→          </Field>
+   476→   476→          <Field label="Image scale X (×) — only limit is canvas border">
+   477→   477→            <input
+   478→   478→              type="number"
+   479→   479→              step="0.05"
+   480→   480→              min="0.01"
+   481→   481→              value={data.heroOverlay.imageScale ?? 1}
+   482→   482→              onChange={(e) =>
+   483→   483→                update((d) => {
+   484→   484→                  d.heroOverlay.imageScale = parseFloat(e.target.value) || 1;
+   485→   485→                })
+   486→   486→              }
+   487→   487→              className="form-input"
+   488→   488→            />
+   489→   489→          </Field>
+   490→   490→          <Field label="Image scale Y (×) — only limit is canvas border">
+   491→   491→            <input
+   492→   492→              type="number"
+   493→   493→              step="0.05"
+   494→   494→              min="0.01"
+   495→   495→              value={data.heroOverlay.imageScaleY ?? 1}
+   496→   496→              onChange={(e) =>
+   497→   497→                update((d) => {
+   498→   498→                  d.heroOverlay.imageScaleY = parseFloat(e.target.value) || 1;
+   499→   499→                })
+   500→   500→              }
+   501→   501→              className="form-input"
+   502→   502→            />
+   503→   503→          </Field>
+   504→   504→        </div>
+   505→   505→        <Field label="Show triangle overlay?">
+   506→   506→          <select
+   507→   507→            value={data.heroOverlay.showTriangleOverlay === false ? "false" : "true"}
+   508→   508→            onChange={(e) =>
+   509→   509→              update((d) => {
+   510→   510→                d.heroOverlay.showTriangleOverlay = e.target.value === "true";
+   511→   511→              })
+   512→   512→            }
+   513→   513→            className="form-input"
+   514→   514→          >
+   515→   515→            <option value="true">Yes (default)</option>
+   516→   516→            <option value="false">No (hidden — auto-disabled when hero image changes)</option>
+   517→   517→          </select>
+   518→   518→        </Field>
+   519→   519→
+   520→   520→        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+   521→   521→            Per user spec 2026-06-28: "Move all 'Capabilities' controls
+   522→   522→            (toggles, inputs, visibility settings) from the canvas slider
+   523→   523→            to the Left Sidebar for all mockup pages."
+   524→   524→            Default z-order: heroZ=2 (front), triangleZ=1 (behind hero).
+   525→   525→            Front/Back buttons override dynamically. */}
+   526→   526→        <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+   527→   527→          <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+   528→   528→            Layer z-index (Front = on top)
+   529→   529→          </div>
+   530→   530→          <div className="grid grid-cols-2 gap-2">
+   531→   531→            <div>
+   532→   532→              <div className="text-[0.6rem] text-black/60 mb-1">Hero (z={data.heroZ ?? 2})</div>
+   533→   533→              <div className="flex items-center gap-1">
+   534→   534→                <button
+   535→   535→                  type="button"
+   536→   536→                  onClick={() =>
+   537→   537→                    update((d) => {
+   538→   538→                      const tz = d.triangleZ ?? 1;
+   539→   539→                      d.heroZ = tz + 1;
+   540→   540→                    })
+   541→   541→                  }
+   542→   542→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   543→   543→                  title="Bring hero to front (above triangle)"
+   544→   544→                >
+   545→   545→                  Front
+   546→   546→                </button>
+   547→   547→                <button
+   548→   548→                  type="button"
+   549→   549→                  onClick={() =>
+   550→   550→                    update((d) => {
+   551→   551→                      const tz = d.triangleZ ?? 1;
+   552→   552→                      d.heroZ = tz - 1;
+   553→   553→                    })
+   554→   554→                  }
+   555→   555→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   556→   556→                  title="Send hero to back (below triangle)"
+   557→   557→                >
+   558→   558→                  Back
+   559→   559→                </button>
+   560→   560→              </div>
+   561→   561→            </div>
+   562→   562→            <div>
+   563→   563→              <div className="text-[0.6rem] text-black/60 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
+   564→   564→              <div className="flex items-center gap-1">
+   565→   565→                <button
+   566→   566→                  type="button"
+   567→   567→                  onClick={() =>
+   568→   568→                    update((d) => {
+   569→   569→                      const hz = d.heroZ ?? 2;
+   570→   570→                      d.triangleZ = hz + 1;
+   571→   571→                    })
+   572→   572→                  }
+   573→   573→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   574→   574→                  title="Bring triangle to front (above hero)"
+   575→   575→                >
+   576→   576→                  Front
+   577→   577→                </button>
+   578→   578→                <button
+   579→   579→                  type="button"
+   580→   580→                  onClick={() =>
+   581→   581→                    update((d) => {
+   582→   582→                      const hz = d.heroZ ?? 2;
+   583→   583→                      d.triangleZ = hz - 1;
+   584→   584→                    })
+   585→   585→                  }
+   586→   586→                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   587→   587→                  title="Send triangle to back (below hero)"
+   588→   588→                >
+   589→   589→                  Back
+   590→   590→                </button>
+   591→   591→              </div>
+   592→   592→            </div>
+   593→   593→          </div>
+   594→   594→          <p className="text-[0.55rem] text-black/40 leading-tight">
+   595→   595→            Default: hero on top, triangle behind. Click Front/Back to override.
+   596→   596→          </p>
+   597→   597→        </div>
+   598→   598→      </Section>
+   599→   599→
+   600→   600→      {/* ===== LOCATION PINS ===== */}
+   601→   601→      <Section title={`Location pins (${data.locationPins.length})`}>
+   602→   602→        {data.locationPins.map((pin, idx) => (
+   603→   603→          <SubCard
+   604→   604→            key={`pin-${idx}`}
+   605→   605→            title={pin.label || `Pin #${idx + 1}`}
+   606→   606→            onDelete={() =>
+   607→   607→              update((d) => {
+   608→   608→                d.locationPins.splice(idx, 1);
+   609→   609→              })
+   610→   610→            }
+   611→   611→          >
+   612→   612→            <div className="grid grid-cols-3 gap-3">
+   613→   613→              <Field label="Label">
+   614→   614→                <input
+   615→   615→                  type="text"
+   616→   616→                  value={pin.label}
+   617→   617→                  onChange={(e) =>
+   618→   618→                    update((d) => {
+   619→   619→                      d.locationPins[idx].label = e.target.value;
+   620→   620→                    })
+   621→   621→                  }
+   622→   622→                  className="form-input"
+   623→   623→                />
+   624→   624→              </Field>
+   625→   625→              <Field label="X (%)">
+   626→   626→                <input
+   627→   627→                  type="number"
+   628→   628→                  min="0"
+   629→   629→                  max="100"
+   630→   630→                  value={pin.x}
+   631→   631→                  onChange={(e) =>
+   632→   632→                    update((d) => {
+   633→   633→                      d.locationPins[idx].x = parseFloat(e.target.value) || 0;
+   634→   634→                    })
+   635→   635→                  }
+   636→   636→                  className="form-input"
+   637→   637→                />
+   638→   638→              </Field>
+   639→   639→              <Field label="Y (%)">
+   640→   640→                <input
+   641→   641→                  type="number"
+   642→   642→                  min="0"
+   643→   643→                  max="100"
+   644→   644→                  value={pin.y}
+   645→   645→                  onChange={(e) =>
+   646→   646→                    update((d) => {
+   647→   647→                      d.locationPins[idx].y = parseFloat(e.target.value) || 0;
+   648→   648→                    })
+   649→   649→                  }
+   650→   650→                  className="form-input"
+   651→   651→                />
+   652→   652→              </Field>
+   653→   653→            </div>
+   654→   654→            {/* Per-pin z-index controls — same pattern as Hero/Triangle
+   655→   655→                z-index in the Hero overlay section above.
+   656→   656→                Per user spec 2026-06-30: "On the mockups/speaker-intro add
+   657→   657→                to the Location pins (4) the same front or back capabilities
+   658→   658→                as the images". Default z=50 (in front of hero image +
+   659→   659→                triangle, at text-section level). Front/Back buttons cycle
+   660→   660→                above/below the hero image (which sits at heroZ, default 2). */}
+   661→   661→            <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1">
+   662→   662→              <div className="flex items-center justify-between">
+   663→   663→                <span className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
+   664→   664→                  Layer z-index
+   665→   665→                </span>
+   666→   666→                <span className="text-[0.55rem] font-mono text-black/50">
+   667→   667→                  z={pin.z ?? 50}
+   668→   668→                </span>
+   669→   669→              </div>
+   670→   670→              <div className="grid grid-cols-2 gap-1">
+   671→   671→                <button
+   672→   672→                  type="button"
+   673→   673→                  onClick={() =>
+   674→   674→                    update((d) => {
+   675→   675→                      // Bring to front: above all other pins + hero.
+   676→   676→                      const peers = d.locationPins.map((p) => p.z ?? 50);
+   677→   677→                      const heroZ = d.heroZ ?? 2;
+   678→   678→                      const maxPeer = Math.max(...peers, heroZ);
+   679→   679→                      d.locationPins[idx].z = maxPeer + 1;
+   680→   680→                    })
+   681→   681→                  }
+   682→   682→                  className="rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   683→   683→                  title="Bring this pin to front (above hero + other pins)"
+   684→   684→                >
+   685→   685→                  Front
+   686→   686→                </button>
+   687→   687→                <button
+   688→   688→                  type="button"
+   689→   689→                  onClick={() =>
+   690→   690→                    update((d) => {
+   691→   691→                      // Send to back: below hero image (so the pin appears
+   692→   692→                      // hidden behind the hero photo). Useful for layering
+   693→   693→                      // effects where pins peek out from behind the image.
+   694→   694→                      const peers = d.locationPins.map((p) => p.z ?? 50);
+   695→   695→                      const heroZ = d.heroZ ?? 2;
+   696→   696→                      const minPeer = Math.min(...peers, heroZ);
+   697→   697→                      d.locationPins[idx].z = minPeer - 1;
+   698→   698→                    })
+   699→   699→                  }
+   700→   700→                  className="rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+   701→   701→                  title="Send this pin to back (behind hero image)"
+   702→   702→                >
+   703→   703→                  Back
+   704→   704→                </button>
+   705→   705→              </div>
+   706→   706→              <p className="text-[0.55rem] text-black/40 leading-tight">
+   707→   707→                Default z=50 (in front of hero). Click Back to hide behind the hero image.
+   708→   708→              </p>
+   709→   709→            </div>
+   710→   710→          </SubCard>
+   711→   711→        ))}
+   712→   712→        <AddButton
+   713→   713→          label="Add pin"
+   714→   714→          onClick={() =>
+   715→   715→            update((d) => {
+   716→   716→              d.locationPins.push({ label: "New", x: 50, y: 50, z: 50 });
+   717→   717→            })
+   718→   718→          }
+   719→   719→        />
+   720→   720→      </Section>
+   721→   721→
+   722→   722→      {/* ===== SPONSORS / COLLABORATORS ===== */}
+   723→   723→      <Section title={`Collaborators (${data.collaborators.length})`}>
+   724→   724→        {data.collaborators.map((s, idx) => (
+   725→   725→          <SubCard
+   726→   726→            key={`coll-${idx}`}
+   727→   727→            title={s.name || `#${idx + 1}`}
+   728→   728→            onDelete={() =>
+   729→   729→              update((d) => {
+   730→   730→                d.collaborators.splice(idx, 1);
+   731→   731→              })
+   732→   732→            }
+   733→   733→          >
+   734→   734→            <Field label="Name">
+   735→   735→              <input
+   736→   736→                type="text"
+   737→   737→                value={s.name}
+   738→   738→                onChange={(e) =>
+   739→   739→                  update((d) => {
+   740→   740→                    d.collaborators[idx].name = e.target.value;
+   741→   741→                  })
+   742→   742→                }
+   743→   743→                className="form-input"
+   744→   744→              />
+   745→   745→            </Field>
+   746→   746→            <Field label="Logo URL">
+   747→   747→              <input
+   748→   748→                type="url"
+   749→   749→                value={s.logoUrl}
+   750→   750→                onChange={(e) =>
+   751→   751→                  update((d) => {
+   752→   752→                    d.collaborators[idx].logoUrl = e.target.value;
+   753→   753→                  })
+   754→   754→                }
+   755→   755→                className="form-input"
+   756→   756→              />
+   757→   757→            </Field>
+   758→   758→            <div className="grid grid-cols-2 gap-3">
+   759→   759→              <Field label="Logo size (×)">
+   760→   760→                <input
+   761→   761→                  type="number"
+   762→   762→                  step="0.1"
+   763→   763→                  min="0.1"
+   764→   764→                  value={s.logoSize ?? 1}
+   765→   765→                  onChange={(e) =>
+   766→   766→                    update((d) => {
+   767→   767→                      d.collaborators[idx].logoSize = parseFloat(e.target.value) || 1;
+   768→   768→                    })
+   769→   769→                  }
+   770→   770→                  className="form-input"
+   771→   771→                />
+   772→   772→              </Field>
+   773→   773→              <Field label="Theme">
+   774→   774→                <select
+   775→   775→                  value={s.theme ?? "light"}
+   776→   776→                  onChange={(e) =>
+   777→   777→                    update((d) => {
+   778→   778→                      d.collaborators[idx].theme = e.target.value as "light" | "dark";
+   779→   779→                    })
+   780→   780→                  }
+   781→   781→                  className="form-input"
+   782→   782→                >
+   783→   783→                  <option value="light">Light</option>
+   784→   784→                  <option value="dark">Dark</option>
+   785→   785→                </select>
+   786→   786→              </Field>
+   787→   787→            </div>
+   788→   788→          </SubCard>
+   789→   789→        ))}
+   790→   790→        <AddButton
+   791→   791→          label="Add collaborator"
+   792→   792→          onClick={() =>
+   793→   793→            update((d) => {
+   794→   794→              d.collaborators.push({
+   795→   795→                name: "New",
+   796→   796→                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   797→   797→                theme: "light",
+   798→   798→              });
+   799→   799→            })
+   800→   800→          }
+   801→   801→        />
+   802→   802→      </Section>
+   803→   803→
+   804→   804→      <Section title={`Sponsors (${data.sponsors.length})`}>
+   805→   805→        {data.sponsors.map((s, idx) => (
+   806→   806→          <SubCard
+   807→   807→            key={`spo-${idx}`}
+   808→   808→            title={s.name || `#${idx + 1}`}
+   809→   809→            onDelete={() =>
+   810→   810→              update((d) => {
+   811→   811→                d.sponsors.splice(idx, 1);
+   812→   812→              })
+   813→   813→            }
+   814→   814→          >
+   815→   815→            <Field label="Name">
+   816→   816→              <input
+   817→   817→                type="text"
+   818→   818→                value={s.name}
+   819→   819→                onChange={(e) =>
+   820→   820→                  update((d) => {
+   821→   821→                    d.sponsors[idx].name = e.target.value;
+   822→   822→                  })
+   823→   823→                }
+   824→   824→                className="form-input"
+   825→   825→              />
+   826→   826→            </Field>
+   827→   827→            <Field label="Logo URL">
+   828→   828→              <input
+   829→   829→                type="url"
+   830→   830→                value={s.logoUrl}
+   831→   831→                onChange={(e) =>
+   832→   832→                  update((d) => {
+   833→   833→                    d.sponsors[idx].logoUrl = e.target.value;
+   834→   834→                  })
+   835→   835→                }
+   836→   836→                className="form-input"
+   837→   837→              />
+   838→   838→            </Field>
+   839→   839→            <div className="grid grid-cols-2 gap-3">
+   840→   840→              <Field label="Logo size (×)">
+   841→   841→                <input
+   842→   842→                  type="number"
+   843→   843→                  step="0.1"
+   844→   844→                  min="0.1"
+   845→   845→                  value={s.logoSize ?? 1}
+   846→   846→                  onChange={(e) =>
+   847→   847→                    update((d) => {
+   848→   848→                      d.sponsors[idx].logoSize = parseFloat(e.target.value) || 1;
+   849→   849→                    })
+   850→   850→                  }
+   851→   851→                  className="form-input"
+   852→   852→                />
+   853→   853→              </Field>
+   854→   854→              <Field label="Theme">
+   855→   855→                <select
+   856→   856→                  value={s.theme ?? "light"}
+   857→   857→                  onChange={(e) =>
+   858→   858→                    update((d) => {
+   859→   859→                      d.sponsors[idx].theme = e.target.value as "light" | "dark";
+   860→   860→                    })
+   861→   861→                  }
+   862→   862→                  className="form-input"
+   863→   863→                >
+   864→   864→                  <option value="light">Light</option>
+   865→   865→                  <option value="dark">Dark</option>
+   866→   866→                </select>
+   867→   867→              </Field>
+   868→   868→            </div>
+   869→   869→          </SubCard>
+   870→   870→        ))}
+   871→   871→        <AddButton
+   872→   872→          label="Add sponsor"
+   873→   873→          onClick={() =>
+   874→   874→            update((d) => {
+   875→   875→              d.sponsors.push({
+   876→   876→                name: "New",
+   877→   877→                logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
+   878→   878→                theme: "light",
+   879→   879→              });
+   880→   880→            })
+   881→   881→          }
+   882→   882→        />
+   883→   883→      </Section>
+   884→   884→
+   885→   885→      {/* ===== BRANDING ===== */}
+   886→   886→      <Section title="Branding (bottom-right)">
+   887→   887→        <Field label="Image URL">
+   888→   888→          <input
+   889→   889→            type="url"
+   890→   890→            value={data.branding?.imageUrl ?? ""}
+   891→   891→            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+   892→   892→            onChange={(e) =>
+   893→   893→              update((d) => {
+   894→   894→                d.branding = { ...(d.branding ?? {}), imageUrl: e.target.value || undefined };
+   895→   895→              })
+   896→   896→            }
+   897→   897→            className="form-input"
+   898→   898→          />
+   899→   899→        </Field>
+   900→   900→        <Field label="Height (px)">
+   901→   901→          <input
+   902→   902→            type="number"
+   903→   903→            min="16"
+   904→   904→            max="200"
+   905→   905→            value={data.branding?.height ?? 48}
+   906→   906→            onChange={(e) =>
+   907→   907→              update((d) => {
+   908→   908→                d.branding = { ...(d.branding ?? {}), height: parseInt(e.target.value, 10) || 48 };
+   909→   909→              })
+   910→   910→            }
+   911→   911→            className="form-input"
+   912→   912→          />
+   913→   913→        </Field>
+   914→   914→      </Section>
+   915→   915→    </div>
+   916→   916→  );
+   917→   917→}
+   918→   918→
+   919→   919→// ---- Helper sub-components ----
+   920→   920→
+   921→   921→function Section({ title, children }: { title: string; children: React.ReactNode }) {
+   922→   922→  return (
+   923→   923→    <section>
+   924→   924→      <h3 className="text-xs font-bold text-black uppercase tracking-wider mb-2 pb-1 border-b border-black/10">
+   925→   925→        {title}
+   926→   926→      </h3>
+   927→   927→      <div className="space-y-3">{children}</div>
+   928→   928→    </section>
+   929→   929→  );
+   930→   930→}
+   931→   931→
+   932→   932→function Field({ label, children }: { label: string; children: React.ReactNode }) {
+   933→   933→  return (
+   934→   934→    <label className="block">
+   935→   935→      <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
+   936→   936→      {children}
+   937→   937→    </label>
+   938→   938→  );
+   939→   939→}
+   940→   940→
+   941→   941→function SubCard({
+   942→   942→  title,
+   943→   943→  children,
+   944→   944→  onDelete,
+   945→   945→}: {
+   946→   946→  title: string;
+   947→   947→  children: React.ReactNode;
+   948→   948→  onDelete?: () => void;
+   949→   949→}) {
+   950→   950→  return (
+   951→   951→    <div className="rounded-md border border-black/15 bg-white p-3">
+   952→   952→      <div className="flex items-center justify-between mb-2">
+   953→   953→        <span className="text-xs font-bold text-black">{title}</span>
+   954→   954→        {onDelete && (
+   955→   955→          <button
+   956→   956→            type="button"
+   957→   957→            onClick={onDelete}
+   958→   958→            className="text-red-500 hover:bg-red-50 p-1 rounded"
+   959→   959→            title="Delete"
+   960→   960→          >
+   961→   961→            <Trash2 className="h-3.5 w-3.5" />
+   962→   962→          </button>
+   963→   963→        )}
+   964→   964→      </div>
+   965→   965→      <div className="space-y-2">{children}</div>
+   966→   966→    </div>
+   967→   967→  );
+   968→   968→}
+   969→   969→
+   970→   970→function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+   971→   971→  return (
+   972→   972→    <button
+   973→   973→      type="button"
+   974→   974→      onClick={onClick}
+   975→   975→      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/60 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
+   976→   976→    >
+   977→   977→      <Plus className="h-3.5 w-3.5" />
+   978→   978→      {label}
+   979→   979→    </button>
+   980→   980→  );
+   981→   981→}
+   982→   982→
+   983→   983→function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+   984→   984→  return (
+   985→   985→    <div className="flex items-center gap-2">
+   986→   986→      <input
+   987→   987→        type="color"
+   988→   988→        value={value}
+   989→   989→        onChange={(e) => onChange(e.target.value)}
+   990→   990→        className="h-7 w-9 rounded border border-black/15 cursor-pointer"
+   991→   991→      />
+   992→   992→      <input
+   993→   993→        type="text"
+   994→   994→        value={value}
+   995→   995→        onChange={(e) => onChange(e.target.value)}
+   996→   996→        className="form-input flex-1"
+   997→   997→      />
+   998→   998→    </div>
+   999→   999→  );
+  1000→  1000→}
+  1001→  1001→
