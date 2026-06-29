@@ -3296,7 +3296,10 @@ function MergeMembersDialog({
               password) keep the primary&apos;s value when set, otherwise the
               first non-null value from the secondaries. Email always stays the
               primary&apos;s. Speaker links, photos, presentations, and direct
-              messages are all reassigned to the primary.
+              messages are all reassigned to the primary. Each merged
+              account&apos;s email (and any secondary emails on it) is attached
+              to the primary as a secondary email, so the user can still sign
+              in with any of their old addresses.
             </div>
           </div>
         )}

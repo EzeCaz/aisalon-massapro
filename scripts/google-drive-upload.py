@@ -18,6 +18,7 @@ Once the token is saved, download-v47-from-drive.py can use it.
 """
 from __future__ import annotations
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -30,8 +31,15 @@ PROJECT = Path("/home/z/my-project")
 SCRIPTS = PROJECT / "scripts"
 TOKEN_PATH = SCRIPTS / ".gdrive-token.json"
 
-CLIENT_ID = "GOOGLE_CLIENT_ID_REDACTED"
-CLIENT_SECRET = "GOOGLE_OAUTH_SECRET_REDACTED"
+CLIENT_ID = os.environ.get("GDRIVE_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("GDRIVE_CLIENT_SECRET", "")
+if not CLIENT_ID or not CLIENT_SECRET:
+    print("[ERR] GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET env vars are required.",
+          file=sys.stderr)
+    print("[ERR] Put them in /home/z/my-project/.env (gitignored) and run:",
+          file=sys.stderr)
+    print("[ERR]   set -a && . .env && set +a", file=sys.stderr)
+    sys.exit(1)
 
 # localhost:8000 is registered as an authorized redirect URI in Google Cloud Console
 REDIRECT_URI = "http://localhost:8000"

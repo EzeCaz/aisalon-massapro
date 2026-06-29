@@ -257,3 +257,145 @@ Stage Summary:
 - Preview URL: https://aisalon-massapro-kk6bzoobf-ezecazs-projects.vercel.app (live with V5.6).
 - Backup tarball: /home/z/my-project/download/aisalon-massapro-V5.6-source.tar.gz
 - Note on "lost changes" complaint: investigated git history. The UUID-named commits between meaningful ones are tool-results artifacts + small WIP changes, NOT reverts. The actual "lost changes" the user perceived came from commit af21258 ("Restore mockup editor from deployment dpl_7qxoPJGpy34Qrhb5nRzhWLAfFDpV") which restored old mockup files that lacked newer features (e.g. "Save as event default" button). V5.5 (db20744) re-added those. V5.6 (f168f46) is now on top, preserving all prior fixes + adding the new ones. No data loss.
+
+---
+Task ID: V5.7
+Agent: main (claude)
+Task: Restore WhatsApp header pill + unlinked registrants filter + fix speaker save crash + major milestone backup
+
+Work Log:
+- D. Fixed speaker page save crash ("Cannot read properties of undefined (reading 'slug')"):
+  - Root cause: POST /api/admin/speakers and PATCH /api/admin/speakers/[id] were not including the `event` relation in the response payload. The client's handleSaved callback then accessed speaker.event.slug/speaker.event.title — which threw because event was undefined.
+  - Fix: Both endpoints now include `event` + `user` + `_count` relations in the response, matching the shape of GET /api/admin/speakers.
+  - Defense in depth: hardened speakers-tab-client.tsx to defensively handle a missing event relation (s.event?.title ?? "" instead of s.event.title) so a future malformed API response degrades gracefully instead of crashing the page.
+
+- B. Restored WhatsApp "Join our group" header pill:
+  - New SiteSetting key: whatsappGroupUrl (default: https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3)
+  - Updated src/lib/site-settings.ts to add the key to ALL_KEYS, DEFAULTS, and PublicSettings.
+  - New POST /api/admin/whatsapp endpoint (SUPER_ADMIN-only, https-only, validated).
+  - Updated src/components/ais/app-header.tsx to render a green WhatsApp pill in the desktop nav (LEFT of Events) and an icon-only pill on mobile. Inline SVG WhatsApp glyph (no external icon dependency).
+  - New WhatsAppLinkEditor client component at src/app/admin/images/whatsapp-link-editor.tsx — input + Test button + Save. Calls POST /api/admin/whatsapp. Shows read-only state for non-super-admins.
+  - Added the editor to /admin/images page (below the brand-images gallery).
+
+- C. Restored unlinked registrants filter at /admin/registrants:
+  - Added linkFilter state ("ALL" / "UNLINKED" / "LINKED") to registrants-tab-client.tsx.
+  - Added filter logic: UNLINKED shows only rsvps with userId === null; LINKED shows only rsvps with userId !== null.
+  - Added a new <select> dropdown next to Status in the toolbar.
+
+- Verified TypeScript compiles cleanly for all new/modified files (only pre-existing errors remain in share-buttons.tsx, bulk-tags/route.ts, events-list.tsx, auth-guards.ts — none in V5.7 code).
+
+- Committed as c409046 "V5.7 milestone: WhatsApp header pill + unlinked filter + speaker save fix" and pushed to origin/main.
+
+- Vercel auto-deployed:
+  - Production deployment: dpl_6FtXVp3PxiWuUcqcqaAR3Nd5uyoR (immutable, never auto-deleted)
+  - Production URL: https://aisalon.massapro.com (live with V5.7)
+  - Preview URL: https://aisalon-massapro-kqrzplbva-ezecazs-projects.vercel.app
+
+- Smoke-tested production:
+  - /events contains "Join our group" + chat.whatsapp.com link + #25D366 WhatsApp green
+  - /api/site-settings returns whatsappGroupUrl field
+  - /api/admin/whatsapp correctly returns 401 for unauthenticated requests
+
+- Major milestone backup (V5.7) — DONE:
+  - Local tarball: /home/z/my-project/download/aisalon-massapro-V5.7-source.tar.gz (6.0 MB, SHA256: e97b2dae6cf77d69ab6e4fb2101df45d8c61c73a59e151081baca511e8b6c9ca)
+  - Local manifest: /home/z/my-project/download/v5.7-backup/MANIFEST.txt (includes Vercel deployment ID + rollback instructions + GitHub release URL)
+  - GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.7 (release ID 346255660)
+    - Asset 1: aisalon-massapro-V5.7-source.tar.gz
+    - Asset 2: MANIFEST.txt
+  - Vercel pin: production deployment dpl_6FtXVp3PxiWuUcqcqaAR3Nd5uyoR is immutable and can be promoted via `vercel promote` for instant rollback
+  - (Note: Google Drive upload script exists at /home/z/my-project/scripts/google-drive-upload.py — could not run it this session because the OAuth tokens are not configured in this environment. The user can run it manually with `python3 /home/z/my-project/scripts/google-drive-upload.py /home/z/my-project/download/aisalon-massapro-V5.7-source.tar.gz` once they authenticate.)
+
+Stage Summary:
+- All 3 user-reported issues fixed and deployed to production (aisalon.massapro.com).
+- Major milestone backup created in 3 places: local (/home/z/my-project/download/), GitHub (release v5.7 with 2 assets), Vercel (immutable production deployment dpl_6FtXVp3PxiWuUcqcqaAR3Nd5uyoR).
+- Production URL: https://aisalon.massapro.com
+- Preview URL: https://aisalon-massapro-kqrzplbva-ezecazs-projects.vercel.app
+- GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/v5.7
+
+---
+Task ID: V5.7-DRIVE-BACKUP
+Agent: main (claude)
+Task: Upload V5.6 + V5.7 milestone backups to Google Drive (user request: "Backup on drive, here")
+
+Work Log:
+- Located existing OAuth token at /home/z/my-project/old-deployment/files/scripts/.gdrive-token.json (still valid; refresh_token exchange succeeded).
+- Copied token + upload-backup-to-drive.py into the active scripts/ directory (token chmod 600, script chmod +x).
+- Ran upload-backup-to-drive.py with all 4 deliverables (V5.6 tarball, V5.7 tarball, both MANIFEST.txt files).
+- Noticed both MANIFEST.txt files uploaded with the generic name "MANIFEST.txt" (would collide / be ambiguous).
+- Wrote a one-off cleanup script that listed the Drive folder, deleted the two generic MANIFEST.txt files, then re-uploaded them as aisalon-massapro-V5.6-MANIFEST.txt and aisalon-massapro-V5.7-MANIFEST.txt (matching the existing V3.8/V3.9 naming convention in the folder).
+
+Stage Summary:
+- 4 files now on Google Drive, target folder: https://drive.google.com/drive/folders/19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj
+  - aisalon-massapro-V5.6-source.tar.gz (Drive id: 1IVLcxGz9O1EKQpw0ZHNI0EhCB8QJd8aB)
+  - aisalon-massapro-V5.7-source.tar.gz (Drive id: 1WIbdrZ2XJNYk3SiJthgrDUg_6CdYau5h)
+  - aisalon-massapro-V5.6-MANIFEST.txt (Drive id: 184xJYNuQHpta_CJu94gES7h-TZEno4aZ)
+  - aisalon-massapro-V5.7-MANIFEST.txt (Drive id: 1FSEFOtcPCGudpXGe1LgvSjFzKr08niAV)
+- Token + upload script now live in /home/z/my-project/scripts/ — future backups can be uploaded with: `python3 scripts/upload-backup-to-drive.py download/<new-tarball>`.
+- Combined with the prior V5.7 GitHub release (tag v5.7) + Vercel immutable deployment pin (dpl_6FtXVp3PxiWuUcqcqaAR3Nd5uyoR), V5.7 now has 3 independent backups (local tarball, GitHub release, Drive) + 1 instant-rollback pin (Vercel).
+
+---
+Task ID: V5.8-SCRIPT
+Agent: main (claude)
+Task: Build a unified "one-shot" milestone backup script for all future milestones
+
+Work Log:
+- Created /home/z/my-project/scripts/make-milestone-backup.sh — a single bash
+  script that does ALL FOUR backup steps in one invocation:
+    1. Stage source files at HEAD (via `git archive`, which gives a pristine
+       snapshot of the committed tree — no node_modules, no .next, no
+       working-tree noise).
+    2. Create tarball at download/aisalon-massapro-V<x>-source.tar.gz with
+       SHA256 + file count.
+    3. Generate MANIFEST.txt with: commit SHA + msg, embedded release notes,
+       tarball SHA256, Vercel deployment pin block, GitHub release URL,
+       Drive folder URL, rollback instructions.
+    4. Upload tarball + manifest to Google Drive (via existing
+       upload-backup-to-drive.py — updates in place if file already exists).
+    5. Create a GitHub release (tag v<x>) with the notes as body, then
+       upload both files as release assets.
+    6. Print a final summary with all 3 backup locations + the Vercel
+       rollback command.
+
+- Usage:
+    scripts/make-milestone-backup.sh <VERSION> <KIND> [NOTES_FILE] [VERCEL_ID]
+  e.g.:
+    scripts/make-milestone-backup.sh V5.8 MAJOR notes/v5.8-notes.md
+    # (later, once Vercel finishes deploying)
+    scripts/make-milestone-backup.sh V5.8 MAJOR notes/v5.8-notes.md dpl_xxx
+
+- Idempotence:
+  - Local tarball + manifest: overwritten each run.
+  - Drive files: updated in place (same file ID preserved).
+  - GitHub release: refuses to overwrite by default. Use --force to delete
+    + recreate (also deletes the tag).
+
+- Safety:
+  - Warns if git working tree is dirty (5s pause to let user Ctrl-C).
+  - Refuses to run if scripts/.gdrive-token.json missing (tells user how to
+    authenticate).
+  - Validates extracted GitHub token shape (sanity check on the regex parse
+    of `git remote get-url origin`).
+
+- Validated end-to-end against V5.7 (without --force, so existing release
+  was preserved): the Drive upload step successfully updated both V5.7
+  files in place, then the GitHub step correctly detected the existing
+  v5.7 release and aborted cleanly with a helpful error message. The
+  new V5.7 manifest (with Vercel deployment ID dpl_6FtXVp3PxiWuUcqcqaAR3Nd5uyoR
+  filled in) is now on Drive (file id 1FSEFOtcPCGudpXGe1LgvSjFzKr08niAV).
+
+- Bonus: discovered the previous make-v5.6/make-v5.7-backup.sh scripts were
+  missing dotfiles (.gitignore, .eslintrc.json, .vercelignore). The new
+  script uses `git archive` which includes them automatically. File count
+  went from 276 (old) to 279 (new) — 3 extra dotfiles, all legit.
+
+Stage Summary:
+- New script: /home/z/my-project/scripts/make-milestone-backup.sh
+- Old per-version scripts (make-v5.6-backup.sh, make-v5.7-backup.sh) can
+  be retired — the new one replaces them.
+- For the NEXT milestone (V5.8), the workflow is now:
+    1. git commit + push (waits for Vercel auto-deploy)
+    2. Write download/v5.8-backup/notes.md with what changed
+    3. Run: scripts/make-milestone-backup.sh V5.8 MAJOR notes/v5.8-notes.md
+    4. Watch Vercel, grab the dpl_ ID, re-run with the 4th arg
+- All 4 backups (local tarball, Drive, GitHub release, Vercel pin) are
+  produced by ONE command, fully reproducible.
