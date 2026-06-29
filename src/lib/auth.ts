@@ -79,13 +79,14 @@ export const authOptions: NextAuthOptions = {
         };
       },
     }),
-    // Login provider — email + name, no password. Currently the ONLY
-    // working sign-in option while we resolve Google OAuth
-    // (redirect_uri_mismatch) and email-password delivery (no SMTP
-    // configured yet). To restore the multi-tab login UI, see git
-    // history of src/app/login/login-form.tsx.
+    // Login provider — email + name, no password. Available in dev so
+    // you can sign in without going through Google OAuth or the email
+    // password flow. The login form calls signIn("dev", ...), so the
+    // provider id MUST be "dev" (was previously "login", which caused
+    // silent failures — the form would submit, get an error from
+    // NextAuth, and redirect back to /login).
     CredentialsProvider({
-      id: "login",
+      id: "dev",
       name: "Login",
       credentials: {
         email: { label: "Email", type: "email", placeholder: "you@example.com" },
