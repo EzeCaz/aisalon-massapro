@@ -1,0 +1,973 @@
+     1→"use client";
+     2→
+     3→import * as React from "react";
+     4→import Link from "next/link";
+     5→import { useRouter } from "next/navigation";
+     6→import { toast } from "sonner";
+     7→import {
+     8→  Calendar,
+     9→  Clock,
+    10→  MapPin,
+    11→  Users,
+    12→  Target,
+    13→  Gift,
+    14→  Check,
+    15→  Ticket,
+    16→  Loader2,
+    17→  ArrowRight,
+    18→  CheckCircle2,
+    19→  CalendarCheck,
+    20→  Share2,
+    21→  Copy,
+    22→  AlertCircle,
+    23→  Mic2,
+    24→} from "lucide-react";
+    25→import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+    26→
+    27→// ------------------------------------------------------------------
+    28→// Types — mirror the include shape of the server component.
+    29→// ------------------------------------------------------------------
+    30→
+    31→type Speaker = {
+    32→  id: string;
+    33→  name: string;
+    34→  role: string | null;
+    35→  company: string | null;
+    36→  bio: string | null;
+    37→  topic: string | null;
+    38→  photoUrl: string | null;
+    39→};
+    40→
+    41→type AgendaItem = {
+    42→  id: string;
+    43→  startsAt: string;
+    44→  endsAt: string | null;
+    45→  title: string;
+    46→  description: string | null;
+    47→  type: string;
+    48→  speaker: { id: string; name: string; role: string | null; company: string | null; photoUrl: string | null } | null;
+    49→  panelists?: { id: string; name: string; role: string | null; company: string | null; photoUrl: string | null }[];
+    50→};
+    51→
+    52→type Rsvp = {
+    53→  id: string;
+    54→  status: string;
+    55→  source: string;
+    56→  checkInCode: string | null;
+    57→  checkedInAt: string | null;
+    58→  createdAt: string;
+    59→} | null;
+    60→
+    61→type Event = {
+    62→  id: string;
+    63→  slug: string;
+    64→  title: string;
+    65→  subtitle: string | null;
+    66→  chapter: string;
+    67→  venue: string | null;
+    68→  address: string | null;
+    69→  city: string | null;
+    70→  country: string | null;
+    71→  mapUrl: string | null;
+    72→  startsAt: string;
+    73→  endsAt: string;
+    74→  description: string | null;
+    75→  takeaways: string | null;
+    76→  intendedFor: string | null;
+    77→  rsvpUrl: string | null;
+    78→  mainImage: { id: string; fileUrl: string; caption: string | null } | null;
+    79→  speakers: Speaker[];
+    80→  agenda: AgendaItem[];
+    81→  _count: { speakers: number; agenda: number; rsvps: number };
+    82→  rsvp: Rsvp;
+    83→};
+    84→
+    85→type Me = { id: string; email: string; name: string | null } | null;
+    86→
+    87→type Props = { event: Event; me: Me };
+    88→
+    89→// ------------------------------------------------------------------
+    90→// Helpers
+    91→// ------------------------------------------------------------------
+    92→
+    93→function fmtDate(d: Date): string {
+    94→  return new Intl.DateTimeFormat("en-US", {
+    95→    timeZone: "Asia/Jerusalem",
+    96→    weekday: "long",
+    97→    month: "long",
+    98→    day: "numeric",
+    99→    year: "numeric",
+   100→  }).format(d);
+   101→}
+   102→function fmtTime(d: Date): string {
+   103→  return new Intl.DateTimeFormat("en-GB", {
+   104→    timeZone: "Asia/Jerusalem",
+   105→    hour: "2-digit",
+   106→    minute: "2-digit",
+   107→    hour12: false,
+   108→  }).format(d);
+   109→}
+   110→function fmtMonth(d: Date): string {
+   111→  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", month: "short" })
+   112→    .format(d)
+   113→    .toUpperCase();
+   114→}
+   115→function fmtDay(d: Date): string {
+   116→  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", day: "2-digit" }).format(d);
+   117→}
+   118→function fmtYear(d: Date): string {
+   119→  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", year: "numeric" }).format(d);
+   120→}
+   121→
+   122→/**
+   123→ * Check whether the current time falls inside the event-day window.
+   124→ * MUST match the server-side check in /api/events/[slug]/check-in/route.ts.
+   125→ *
+   126→ * Window: [startsAt - 1h, endsAt + 6h]
+   127→ *   - opens 1 hour before the event starts (per user spec)
+   128→ *   - closes 6 hours after the event ends (for late arrivals)
+   129→ */
+   130→function isWithinCheckInWindow(startsAt: string, endsAt: string, now: Date = new Date()): boolean {
+   131→  const open = new Date(startsAt).getTime() - 1 * 60 * 60 * 1000;
+   132→  const close = new Date(endsAt).getTime() + 6 * 60 * 60 * 1000;
+   133→  return now.getTime() >= open && now.getTime() <= close;
+   134→}
+   135→
+   136→function isPastEvent(endsAt: string, now: Date = new Date()): boolean {
+   137→  return new Date(endsAt).getTime() < now.getTime();
+   138→}
+   139→
+   140→// ------------------------------------------------------------------
+   141→// Main component
+   142→// ------------------------------------------------------------------
+   143→
+   144→export function PublicEventPage({ event, me }: Props) {
+   145→  const router = useRouter();
+   146→  const start = new Date(event.startsAt);
+   147→  const end = new Date(event.endsAt);
+   148→
+   149→  const [rsvp, setRsvp] = React.useState<Rsvp>(event.rsvp);
+   150→  const [registering, setRegistering] = React.useState(false);
+   151→  const [checkingIn, setCheckingIn] = React.useState(false);
+   152→  const [copied, setCopied] = React.useState(false);
+   153→  const [now, setNow] = React.useState(() => new Date());
+   154→
+   155→  React.useEffect(() => {
+   156→    const id = setInterval(() => setNow(new Date()), 60_000);
+   157→    return () => clearInterval(id);
+   158→  }, []);
+   159→
+   160→  React.useEffect(() => {
+   161→    let cancelled = false;
+   162→    (async () => {
+   163→      try {
+   164→        const res = await fetch(`/api/events/${event.slug}/rsvp`, { cache: "no-store" });
+   165→        if (!res.ok) return;
+   166→        const data = await res.json();
+   167→        if (!cancelled && data?.rsvp) setRsvp(data.rsvp);
+   168→      } catch {
+   169→        /* swallow */
+   170→      }
+   171→    })();
+   172→    return () => {
+   173→      cancelled = true;
+   174→    };
+   175→  }, [event.slug]);
+   176→
+   177→  const windowOpen = isWithinCheckInWindow(event.startsAt, event.endsAt, now);
+   178→  const isPast = isPastEvent(event.endsAt, now);
+   179→  const hasCheckedIn = !!rsvp?.checkInCode;
+   180→  const hasRsvped = !!rsvp && rsvp.status === "GOING";
+   181→
+   182→  async function handleRegisterClick() {
+   183→    if (!me) {
+   184→      router.push(`/login?callbackUrl=${encodeURIComponent(`/e/${event.slug}`)}`);
+   185→      return;
+   186→    }
+   187→    setRegistering(true);
+   188→    try {
+   189→      const res = await fetch(`/api/events/${event.slug}/rsvp`, { method: "POST" });
+   190→      const data = await res.json().catch(() => ({}));
+   191→      if (!res.ok) {
+   192→        toast.error(data?.error || `Could not register (HTTP ${res.status}).`);
+   193→        return;
+   194→      }
+   195→      setRsvp(data.rsvp);
+   196→      toast.success("You're registered! See you at the event.");
+   197→    } catch {
+   198→      toast.error("Network error — please try again.");
+   199→    } finally {
+   200→      setRegistering(false);
+   201→    }
+   202→  }
+   203→
+   204→  async function handleCheckInClick() {
+   205→    if (!me) {
+   206→      router.push(`/login?callbackUrl=${encodeURIComponent(`/e/${event.slug}`)}`);
+   207→      return;
+   208→    }
+   209→    setCheckingIn(true);
+   210→    try {
+   211→      const res = await fetch(`/api/events/${event.slug}/check-in`, { method: "POST" });
+   212→      const data = await res.json().catch(() => ({}));
+   213→      if (!res.ok) {
+   214→        toast.error(data?.error || `Could not check in (HTTP ${res.status}).`);
+   215→        return;
+   216→      }
+   217→      setRsvp((prev) => ({
+   218→        id: data.rsvp.id,
+   219→        status: prev?.status || "GOING",
+   220→        source: prev?.source || "EVENT_PAGE",
+   221→        checkInCode: data.rsvp.checkInCode,
+   222→        checkedInAt: data.rsvp.checkedInAt,
+   223→        createdAt: prev?.createdAt || new Date().toISOString(),
+   224→      }));
+   225→      toast.success("Checked in! Show your code at the door.");
+   226→    } catch {
+   227→      toast.error("Network error — please try again.");
+   228→    } finally {
+   229→      setCheckingIn(false);
+   230→    }
+   231→  }
+   232→
+   233→  async function handleCopyCode() {
+   234→    if (!rsvp?.checkInCode) return;
+   235→    try {
+   236→      await navigator.clipboard.writeText(rsvp.checkInCode);
+   237→      setCopied(true);
+   238→      setTimeout(() => setCopied(false), 2000);
+   239→    } catch {
+   240→      /* swallow */
+   241→    }
+   242→  }
+   243→
+   244→  async function handleShare() {
+   245→    const url = typeof window !== "undefined" ? window.location.href : `/e/${event.slug}`;
+   246→    try {
+   247→      if (navigator.share) {
+   248→        await navigator.share({ title: event.title, url });
+   249→      } else {
+   250→        await navigator.clipboard.writeText(url);
+   251→        toast.success("Link copied to clipboard.");
+   252→      }
+   253→    } catch {
+   254→      /* swallow */
+   255→    }
+   256→  }
+   257→
+   258→  return (
+   259→    <div className="min-h-screen flex flex-col bg-white">
+   260→      <PublicHeader me={me} />
+   261→
+   262→      <section className="border-b border-black/10 bg-white">
+   263→        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+   264→          {event.mainImage?.fileUrl && (
+   265→            <div className="mb-8 overflow-hidden rounded-xl border border-black/10 bg-black/5 shadow-sm">
+   266→              <div className="relative w-full aspect-[16/9] max-h-96">
+   267→                {/* eslint-disable-next-line @next/next/no-img-element */}
+   268→                <img
+   269→                  src={event.mainImage.fileUrl}
+   270→                  alt={event.mainImage.caption || event.title}
+   271→                  className="absolute inset-0 h-full w-full object-cover"
+   272→                />
+   273→                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+   274→              </div>
+   275→            </div>
+   276→          )}
+   277→
+   278→          <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-start">
+   279→            <div>
+   280→              <div className="flex flex-wrap items-center gap-2 text-xs mb-4">
+   281→                <span className="inline-flex items-center rounded-full bg-[#FF005A]/10 text-[#FF005A] px-2.5 py-0.5 font-bold uppercase tracking-wider">
+   282→                  {event.chapter}
+   283→                </span>
+   284→                <span className="text-black/40">{fmtDate(start)}</span>
+   285→                <span className="text-black/20">·</span>
+   286→                <span className="text-black/60 font-mono">
+   287→                  {fmtTime(start)} – {fmtTime(end)}
+   288→                </span>
+   289→                {event.country && <span className="text-black/40">· {event.country}</span>}
+   290→              </div>
+   291→
+   292→              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
+   293→                {event.title}
+   294→              </h1>
+   295→              {event.subtitle && <p className="mt-2 text-lg text-black/60">{event.subtitle}</p>}
+   296→
+   297→              {event.venue && (
+   298→                <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-black/70">
+   299→                  <div className="inline-flex items-center gap-1.5">
+   300→                    <span className="font-semibold">📍 Venue:</span>
+   301→                    {event.venue}
+   302→                    {event.address && <span className="text-black/50">· {event.address}</span>}
+   303→                  </div>
+   304→                  {event.mapUrl && (
+   305→                    <a
+   306→                      href={event.mapUrl}
+   307→                      target="_blank"
+   308→                      rel="noopener noreferrer"
+   309→                      className="text-[#004F98] font-semibold underline-offset-4 hover:underline"
+   310→                    >
+   311→                      Open in Maps →
+   312→                    </a>
+   313→                  )}
+   314→                </div>
+   315→              )}
+   316→
+   317→              <div className="mt-4 flex items-center gap-4 text-xs text-black/50">
+   318→                <span className="inline-flex items-center gap-1">
+   319→                  <Users className="h-3.5 w-3.5" />
+   320→                  {event._count.rsvps} registered
+   321→                </span>
+   322→                <span className="inline-flex items-center gap-1">
+   323→                  <Mic2 className="h-3.5 w-3.5" />
+   324→                  {event._count.speakers} speaker{event._count.speakers === 1 ? "" : "s"}
+   325→                </span>
+   326→                <button
+   327→                  type="button"
+   328→                  onClick={handleShare}
+   329→                  className="inline-flex items-center gap-1 text-black/60 hover:text-black"
+   330→                >
+   331→                  <Share2 className="h-3.5 w-3.5" /> Share
+   332→                </button>
+   333→              </div>
+   334→            </div>
+   335→
+   336→            <div className="hidden lg:flex flex-col items-center">
+   337→              <div className="w-28 text-center rounded-xl overflow-hidden border border-black/15 bg-white">
+   338→                <div className="ais-gradient h-2" />
+   339→                <div className="p-4">
+   340→                  <div className="text-[0.7rem] font-bold uppercase tracking-widest text-[#FF005A]">
+   341→                    {fmtMonth(start)}
+   342→                  </div>
+   343→                  <div className="text-5xl font-extrabold text-black leading-none my-1">{fmtDay(start)}</div>
+   344→                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-black/40">
+   345→                    {fmtYear(start)}
+   346→                  </div>
+   347→                </div>
+   348→              </div>
+   349→              <div className="mt-2 text-[0.65rem] font-mono text-black/40">
+   350→                {fmtTime(start)} – {fmtTime(end)}
+   351→              </div>
+   352→            </div>
+   353→          </div>
+   354→        </div>
+   355→      </section>
+   356→
+   357→      <main className="flex-1 mx-auto max-w-6xl w-full px-4 sm:px-6 lg:px-8 py-10">
+   358→        <div className="grid lg:grid-cols-[1fr_360px] gap-10">
+   359→          <div className="space-y-10 min-w-0">
+   360→            {event.description && (
+   361→              <Section title="About this event" accent="#FF005A">
+   362→                <p className="text-black/80 leading-relaxed whitespace-pre-line">{event.description}</p>
+   363→              </Section>
+   364→            )}
+   365→
+   366→            {event.takeaways && (
+   367→              <Section title="What you'll take home" accent="#007E72" icon={<Gift className="h-4 w-4" />}>
+   368→                <ul className="space-y-2">
+   369→                  {event.takeaways
+   370→                    .split("\n")
+   371→                    .map((l) => l.replace(/^[•\-*]\s*/, "").trim())
+   372→                    .filter(Boolean)
+   373→                    .map((t, i) => (
+   374→                      <li key={i} className="flex items-start gap-2 text-black/80">
+   375→                        <Check className="h-4 w-4 mt-0.5 text-[#007E72] flex-shrink-0" />
+   376→                        <span>{t}</span>
+   377→                      </li>
+   378→                    ))}
+   379→                </ul>
+   380→              </Section>
+   381→            )}
+   382→
+   383→            {event.intendedFor && (
+   384→              <Section title="Who this is for" accent="#004F98" icon={<Target className="h-4 w-4" />}>
+   385→                <p className="text-black/80 leading-relaxed whitespace-pre-line">{event.intendedFor}</p>
+   386→              </Section>
+   387→            )}
+   388→
+   389→            {event.speakers.length > 0 && (
+   390→              <Section title="Speakers" accent="#820A7D" icon={<Mic2 className="h-4 w-4" />}>
+   391→                <div className="grid sm:grid-cols-2 gap-4">
+   392→                  {event.speakers.map((s) => (
+   393→                    <SpeakerCard key={s.id} speaker={s} />
+   394→                  ))}
+   395→                </div>
+   396→              </Section>
+   397→            )}
+   398→
+   399→            {event.agenda.length > 0 && (
+   400→              <Section title="Agenda" accent="#004F98" icon={<Calendar className="h-4 w-4" />}>
+   401→                <ol className="relative border-l-2 border-black/10 ml-3 space-y-5">
+   402→                  {event.agenda.map((a) => {
+   403→                    const aStart = new Date(a.startsAt);
+   404→                    return (
+   405→                      <li key={a.id} className="pl-5 relative">
+   406→                        <span
+   407→                          className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 border-white ${typeColor(
+   408→                            a.type
+   409→                          )}`}
+   410→                        />
+   411→                        <div className="flex flex-wrap items-baseline gap-2">
+   412→                          <span className="text-xs font-mono text-black/50">{fmtTime(aStart)}</span>
+   413→                          {a.endsAt && (
+   414→                            <span className="text-xs font-mono text-black/40">
+   415→                              – {fmtTime(new Date(a.endsAt))}
+   416→                            </span>
+   417→                          )}
+   418→                          <span
+   419→                            className={`text-[0.55rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${typeBadgeClass(
+   420→                              a.type
+   421→                            )}`}
+   422→                          >
+   423→                            {typeLabel(a.type)}
+   424→                          </span>
+   425→                        </div>
+   426→                        <h4 className="font-semibold text-black mt-1">{a.title}</h4>
+   427→                        {a.speaker && (
+   428→                          <p
+   429→                            className={`text-xs mt-0.5 ${
+   430→                              a.type === "PANEL" ? "text-[#7C3AED]" : "text-black/60"
+   431→                            }`}
+   432→                          >
+   433→                            {a.type === "PANEL" && (
+   434→                              <span className="font-bold">Moderator: </span>
+   435→                            )}
+   436→                            {a.speaker.name}
+   437→                            {a.speaker.role ? ` · ${a.speaker.role}` : ""}
+   438→                            {a.speaker.company ? ` · ${a.speaker.company}` : ""}
+   439→                          </p>
+   440→                        )}
+   441→                        {a.type === "PANEL" &&
+   442→                          a.panelists &&
+   443→                          a.panelists.length > 0 && (
+   444→                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+   445→                              {a.panelists.map((p) => {
+   446→                                const initials = p.name
+   447→                                  .split(" ")
+   448→                                  .map((n) => n[0])
+   449→                                  .filter(Boolean)
+   450→                                  .slice(0, 2)
+   451→                                  .join("")
+   452→                                  .toUpperCase();
+   453→                                return (
+   454→                                  <span
+   455→                                    key={p.id}
+   456→                                    className="inline-flex items-center gap-1 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/5 px-2 py-0.5 text-[0.65rem] font-semibold text-[#7C3AED]"
+   457→                                  >
+   458→                                    {p.photoUrl ? (
+   459→                                      // eslint-disable-next-line @next/next/no-img-element
+   460→                                      <img
+   461→                                        src={p.photoUrl}
+   462→                                        alt={p.name}
+   463→                                        className="h-4 w-4 rounded-full object-cover flex-shrink-0"
+   464→                                      />
+   465→                                    ) : (
+   466→                                      <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-[#7C3AED]/20 text-[#7C3AED] text-[0.5rem] font-bold flex-shrink-0">
+   467→                                        {initials || "?"}
+   468→                                      </span>
+   469→                                    )}
+   470→                                    {p.name}
+   471→                                    {p.role && (
+   472→                                      <span className="text-[#7C3AED]/60 font-normal">
+   473→                                        · {p.role}
+   474→                                      </span>
+   475→                                    )}
+   476→                                  </span>
+   477→                                );
+   478→                              })}
+   479→                            </div>
+   480→                          )}
+   481→                        {a.description && (
+   482→                          <p className="text-sm text-black/70 mt-1 leading-relaxed">{a.description}</p>
+   483→                        )}
+   484→                      </li>
+   485→                    );
+   486→                  })}
+   487→                </ol>
+   488→              </Section>
+   489→            )}
+   490→          </div>
+   491→
+   492→          <aside className="lg:sticky lg:top-24 h-fit space-y-4">
+   493→            <CtaCard
+   494→              event={event}
+   495→              me={me}
+   496→              rsvp={rsvp}
+   497→              windowOpen={windowOpen}
+   498→              isPast={isPast}
+   499→              hasRsvped={hasRsvped}
+   500→              hasCheckedIn={hasCheckedIn}
+   501→              registering={registering}
+   502→              checkingIn={checkingIn}
+   503→              copied={copied}
+   504→              onRegister={handleRegisterClick}
+   505→              onCheckIn={handleCheckInClick}
+   506→              onCopyCode={handleCopyCode}
+   507→            />
+   508→
+   509→            <div className="rounded-xl border border-black/10 bg-white p-5">
+   510→              <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-4">Event details</h3>
+   511→              <dl className="space-y-3 text-sm">
+   512→                <div className="flex items-start gap-2">
+   513→                  <Calendar className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+   514→                  <div>
+   515→                    <dt className="text-black/40 text-xs">Date</dt>
+   516→                    <dd className="font-semibold text-black">{fmtDate(start)}</dd>
+   517→                  </div>
+   518→                </div>
+   519→                <div className="flex items-start gap-2">
+   520→                  <Clock className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+   521→                  <div>
+   522→                    <dt className="text-black/40 text-xs">Time</dt>
+   523→                    <dd className="font-semibold text-black font-mono">
+   524→                      {fmtTime(start)} – {fmtTime(end)}
+   525→                    </dd>
+   526→                  </div>
+   527→                </div>
+   528→                {event.venue && (
+   529→                  <div className="flex items-start gap-2">
+   530→                    <MapPin className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+   531→                    <div>
+   532→                      <dt className="text-black/40 text-xs">Venue</dt>
+   533→                      <dd className="font-semibold text-black">{event.venue}</dd>
+   534→                      {event.address && <dd className="text-black/60 text-xs">{event.address}</dd>}
+   535→                    </div>
+   536→                  </div>
+   537→                )}
+   538→              </dl>
+   539→              {event.mapUrl && (
+   540→                <a
+   541→                  href={event.mapUrl}
+   542→                  target="_blank"
+   543→                  rel="noopener noreferrer"
+   544→                  className="mt-4 block w-full rounded-md bg-black text-white text-sm font-semibold py-2.5 text-center hover:bg-black/90"
+   545→                >
+   546→                  View on Google Maps
+   547→                </a>
+   548→              )}
+   549→            </div>
+   550→
+   551→            <div className="rounded-xl border border-[#00E6FF]/30 bg-[#00E6FF]/5 p-5">
+   552→              <p className="text-xs text-black/70 leading-relaxed">
+   553→                <strong className="text-black">Members-only community.</strong> Photos, presentations, and
+   554→                recordings from this event are shared with registered AI Salon Tel Aviv members. Sign in to
+   555→                access the full event experience including the photo gallery, speaker chat, and community
+   556→                slideshow.
+   557→              </p>
+   558→            </div>
+   559→          </aside>
+   560→        </div>
+   561→      </main>
+   562→
+   563→      <PublicFooter />
+   564→    </div>
+   565→  );
+   566→}
+   567→
+   568→// ------------------------------------------------------------------
+   569→// Sub-components
+   570→// ------------------------------------------------------------------
+   571→
+   572→function PublicHeader({ me }: { me: Me }) {
+   573→  return (
+   574→    <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
+   575→      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+   576→        <div className="flex h-16 items-center justify-between">
+   577→          <Link href="/events" className="flex items-center gap-2">
+   578→            <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
+   579→            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/40 border-l border-black/15 pl-3">
+   580→              Tel Aviv Chapter
+   581→            </span>
+   582→          </Link>
+   583→          <div className="flex items-center gap-2">
+   584→            {me ? (
+   585→              <Link
+   586→                href="/events"
+   587→                className="px-3 py-1.5 text-sm font-semibold text-black/70 hover:text-black hover:bg-black/5 rounded-md transition-colors"
+   588→              >
+   589→                Open dashboard
+   590→              </Link>
+   591→            ) : (
+   592→              <>
+   593→                <Link
+   594→                  href="/login"
+   595→                  className="px-3 py-1.5 text-sm font-semibold text-black/70 hover:text-black hover:bg-black/5 rounded-md transition-colors"
+   596→                >
+   597→                  Sign in
+   598→                </Link>
+   599→                <Link
+   600→                  href="/login"
+   601→                  className="px-3 py-1.5 text-sm font-semibold bg-[#FF005A] text-white rounded-md hover:bg-[#FF005A]/90 transition-colors"
+   602→                >
+   603→                  Join the community
+   604→                </Link>
+   605→              </>
+   606→            )}
+   607→          </div>
+   608→        </div>
+   609→      </div>
+   610→    </header>
+   611→  );
+   612→}
+   613→
+   614→function PublicFooter() {
+   615→  return (
+   616→    <footer className="mt-auto border-t border-black/10 bg-white">
+   617→      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+   618→        <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+   619→        <span>
+   620→          Platform by{" "}
+   621→          <a
+   622→            href="https://massapro.com"
+   623→            className="text-black/60 underline-offset-4 hover:underline"
+   624→            target="_blank"
+   625→            rel="noopener noreferrer"
+   626→          >
+   627→            MassaPro
+   628→          </a>
+   629→        </span>
+   630→      </div>
+   631→    </footer>
+   632→  );
+   633→}
+   634→
+   635→function Section({
+   636→  title,
+   637→  accent,
+   638→  icon,
+   639→  children,
+   640→}: {
+   641→  title: string;
+   642→  accent: string;
+   643→  icon?: React.ReactNode;
+   644→  children: React.ReactNode;
+   645→}) {
+   646→  return (
+   647→    <section>
+   648→      <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest mb-4" style={{ color: accent }}>
+   649→        {icon}
+   650→        {title}
+   651→      </h2>
+   652→      <div className="text-sm leading-relaxed">{children}</div>
+   653→    </section>
+   654→  );
+   655→}
+   656→
+   657→function SpeakerCard({ speaker }: { speaker: Speaker }) {
+   658→  const initial = speaker.name.charAt(0).toUpperCase();
+   659→  return (
+   660→    <div className="rounded-lg border border-black/10 bg-white p-4 flex gap-3">
+   661→      <div className="flex-shrink-0 w-12 h-12 rounded-full overflow-hidden bg-black/5 border border-black/10">
+   662→        {speaker.photoUrl ? (
+   663→          // eslint-disable-next-line @next/next/no-img-element
+   664→          <img src={speaker.photoUrl} alt={speaker.name} className="w-full h-full object-cover" />
+   665→        ) : (
+   666→          <div className="w-full h-full flex items-center justify-center text-lg font-bold text-black/40">
+   667→            {initial}
+   668→          </div>
+   669→        )}
+   670→      </div>
+   671→      <div className="min-w-0">
+   672→        <div className="font-semibold text-black text-sm">{speaker.name}</div>
+   673→        {speaker.role && <div className="text-xs text-black/60">{speaker.role}</div>}
+   674→        {speaker.company && <div className="text-xs text-black/50">{speaker.company}</div>}
+   675→        {speaker.topic && (
+   676→          <div className="mt-1.5 text-xs text-[#820A7D] font-medium italic">"{speaker.topic}"</div>
+   677→        )}
+   678→        {speaker.bio && <p className="mt-1.5 text-xs text-black/70 line-clamp-3">{speaker.bio}</p>}
+   679→      </div>
+   680→    </div>
+   681→  );
+   682→}
+   683→
+   684→/**
+   685→ * The sticky call-to-action card on the right side of the page.
+   686→ *
+   687→ * Renders one of four states based on the user's session + RSVP + check-in:
+   688→ *
+   689→ *   1. NOT_LOGGED_IN → "Register to event" (routes to /login?callbackUrl=…)
+   690→ *   2. LOGGED_IN, NO_RSVP → "Register to event" (POST /api/events/[slug]/rsvp)
+   691→ *   3. LOGGED_IN + RSVP, NOT_CHECKED_IN → "You're registered" + check-in button
+   692→ *      (only shown if windowOpen is true; otherwise just "You're registered")
+   693→ *   4. LOGGED_IN + CHECKED_IN → Big green panel showing the unique code
+   694→ */
+   695→function CtaCard({
+   696→  event,
+   697→  me,
+   698→  rsvp,
+   699→  windowOpen,
+   700→  isPast,
+   701→  hasRsvped,
+   702→  hasCheckedIn,
+   703→  registering,
+   704→  checkingIn,
+   705→  copied,
+   706→  onRegister,
+   707→  onCheckIn,
+   708→  onCopyCode,
+   709→}: {
+   710→  event: Event;
+   711→  me: Me;
+   712→  rsvp: Rsvp;
+   713→  windowOpen: boolean;
+   714→  isPast: boolean;
+   715→  hasRsvped: boolean;
+   716→  hasCheckedIn: boolean;
+   717→  registering: boolean;
+   718→  checkingIn: boolean;
+   719→  copied: boolean;
+   720→  onRegister: () => void;
+   721→  onCheckIn: () => void;
+   722→  onCopyCode: () => void;
+   723→}) {
+   724→  // ---------- State 4: Already checked in → show entry code ----------
+   725→  if (hasCheckedIn && rsvp?.checkInCode) {
+   726→    return (
+   727→      <div className="rounded-xl border-2 border-[#007E72]/30 bg-gradient-to-br from-[#007E72]/5 to-[#00E6FF]/5 p-5 space-y-3">
+   728→        <div className="flex items-center gap-2 text-[#007E72]">
+   729→          <CheckCircle2 className="h-5 w-5" />
+   730→          <span className="font-bold text-sm uppercase tracking-wider">You're checked in</span>
+   731→        </div>
+   732→        <p className="text-xs text-black/60 leading-relaxed">
+   733→          Show this code at the door to enter the venue. Keep it on your screen — door staff will scan it.
+   734→        </p>
+   735→        <div className="rounded-lg bg-white border-2 border-[#007E72]/40 p-4 text-center">
+   736→          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+   737→            Your entry code
+   738→          </div>
+   739→          <div className="text-3xl font-extrabold font-mono tracking-[0.15em] text-[#007E72]">
+   740→            {rsvp.checkInCode}
+   741→          </div>
+   742→          {rsvp.checkedInAt && (
+   743→            <div className="mt-2 text-[0.6rem] text-black/40">
+   744→              Checked in at{" "}
+   745→              {new Intl.DateTimeFormat("en-GB", {
+   746→                timeZone: "Asia/Jerusalem",
+   747→                hour: "2-digit",
+   748→                minute: "2-digit",
+   749→                hour12: false,
+   750→                day: "2-digit",
+   751→                month: "short",
+   752→              }).format(new Date(rsvp.checkedInAt))}{" "}
+   753→              TLV
+   754→            </div>
+   755→          )}
+   756→        </div>
+   757→        <button
+   758→          type="button"
+   759→          onClick={onCopyCode}
+   760→          className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-black/15 bg-white px-3 py-2 text-xs font-semibold text-black hover:bg-black/[0.03]"
+   761→        >
+   762→          {copied ? (
+   763→            <>
+   764→              <Check className="h-3.5 w-3.5" /> Copied
+   765→            </>
+   766→          ) : (
+   767→            <>
+   768→              <Copy className="h-3.5 w-3.5" /> Copy code
+   769→            </>
+   770→          )}
+   771→        </button>
+   772→      </div>
+   773→    );
+   774→  }
+   775→
+   776→  // ---------- Past event → recap messaging ----------
+   777→  if (isPast) {
+   778→    return (
+   779→      <div className="rounded-xl border border-black/10 bg-black/[0.03] p-5 space-y-3">
+   780→        <div className="flex items-center gap-2 text-black/60">
+   781→          <AlertCircle className="h-5 w-5" />
+   782→          <span className="font-bold text-sm">This event has ended</span>
+   783→        </div>
+   784→        {me ? (
+   785→          <p className="text-xs text-black/60 leading-relaxed">
+   786→            Visit the members-only event page to view the photo gallery, presentations, and recap.
+   787→          </p>
+   788→        ) : (
+   789→          <p className="text-xs text-black/60 leading-relaxed">
+   790→            Sign in to access the photo gallery, presentations, and recap from this event.
+   791→          </p>
+   792→        )}
+   793→        {me && (
+   794→          <Link
+   795→            href={`/events/${event.slug}`}
+   796→            className="block w-full text-center rounded-md bg-black text-white text-sm font-semibold py-2.5 hover:bg-black/90"
+   797→          >
+   798→            View recap & photos
+   799→          </Link>
+   800→        )}
+   801→      </div>
+   802→    );
+   803→  }
+   804→
+   805→  // ---------- State 1/2: Not yet registered ----------
+   806→  if (!hasRsvped) {
+   807→    return (
+   808→      <div className="rounded-xl border-2 border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-white p-5 space-y-3">
+   809→        <div className="flex items-center gap-2 text-[#FF005A]">
+   810→          <Ticket className="h-5 w-5" />
+   811→          <span className="font-bold text-sm uppercase tracking-wider">Register to attend</span>
+   812→        </div>
+   813→        <p className="text-xs text-black/70 leading-relaxed">
+   814→          {me
+   815→            ? "Click below to confirm your spot. We'll see you at the venue!"
+   816→            : "Sign in or create a free account to reserve your spot at this event."}
+   817→        </p>
+   818→        <button
+   819→          type="button"
+   820→          onClick={onRegister}
+   821→          disabled={registering}
+   822→          className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-3 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 ais-lift"
+   823→        >
+   824→          {registering ? (
+   825→            <>
+   826→              <Loader2 className="h-4 w-4 animate-spin" /> Registering…
+   827→            </>
+   828→          ) : (
+   829→            <>
+   830→              Register to event <ArrowRight className="h-4 w-4" />
+   831→            </>
+   832→          )}
+   833→        </button>
+   834→        {!me && (
+   835→          <p className="text-[0.65rem] text-black/40 text-center">
+   836→            New here? You'll be able to create an account on the next screen.
+   837→          </p>
+   838→        )}
+   839→        {windowOpen && (
+   840→          <div className="pt-2 border-t border-black/10 space-y-2">
+   841→            <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
+   842→              Event day is here
+   843→            </p>
+   844→            <p className="text-xs text-black/60 leading-relaxed">
+   845→              Already registered? Click below to check in and get your entry code.
+   846→            </p>
+   847→            <button
+   848→              type="button"
+   849→              onClick={onCheckIn}
+   850→              disabled={checkingIn}
+   851→              className="w-full inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#007E72]/40 bg-white text-[#007E72] font-semibold px-4 py-2.5 text-sm hover:bg-[#007E72]/5 disabled:opacity-50"
+   852→            >
+   853→              {checkingIn ? (
+   854→                <>
+   855→                  <Loader2 className="h-4 w-4 animate-spin" /> Checking in…
+   856→                </>
+   857→              ) : (
+   858→                <>
+   859→                  <CalendarCheck className="h-4 w-4" /> I'm here — Check in
+   860→                </>
+   861→              )}
+   862→            </button>
+   863→          </div>
+   864→        )}
+   865→      </div>
+   866→    );
+   867→  }
+   868→
+   869→  // ---------- State 3: Registered, not yet checked in ----------
+   870→  return (
+   871→    <div className="rounded-xl border-2 border-[#00E6FF]/30 bg-gradient-to-br from-[#00E6FF]/5 to-white p-5 space-y-3">
+   872→      <div className="flex items-center gap-2 text-[#007E72]">
+   873→        <CheckCircle2 className="h-5 w-5" />
+   874→        <span className="font-bold text-sm uppercase tracking-wider">You're registered</span>
+   875→      </div>
+   876→      <p className="text-xs text-black/70 leading-relaxed">
+   877→        See you on <strong>{fmtDate(new Date(event.startsAt))}</strong> at{" "}
+   878→        <strong className="font-mono">{fmtTime(new Date(event.startsAt))}</strong>.
+   879→      </p>
+   880→
+   881→      {windowOpen ? (
+   882→        <div className="pt-2 border-t border-black/10 space-y-2">
+   883→          <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
+   884→            Event day is here
+   885→          </p>
+   886→          <p className="text-xs text-black/60 leading-relaxed">
+   887→            Click below to check in and get your unique entry code for the door.
+   888→          </p>
+   889→          <button
+   890→            type="button"
+   891→            onClick={onCheckIn}
+   892→            disabled={checkingIn}
+   893→            className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#007E72] text-white font-semibold px-4 py-3 text-sm hover:bg-[#007E72]/90 disabled:opacity-50 ais-lift"
+   894→          >
+   895→            {checkingIn ? (
+   896→              <>
+   897→                <Loader2 className="h-4 w-4 animate-spin" /> Checking in…
+   898→              </>
+   899→            ) : (
+   900→              <>
+   901→                <CalendarCheck className="h-4 w-4" /> I'm here — Check in
+   902→              </>
+   903→            )}
+   904→          </button>
+   905→        </div>
+   906→      ) : (
+   907→        <p className="text-[0.65rem] text-black/40 leading-relaxed pt-2 border-t border-black/10">
+   908→          The check-in button will appear here 1 hour before the event starts.
+   909→        </p>
+   910→      )}
+   911→    </div>
+   912→  );
+   913→}
+   914→
+   915→// ------------------------------------------------------------------
+   916→// Agenda type helpers
+   917→// ------------------------------------------------------------------
+   918→
+   919→function typeColor(type: string): string {
+   920→  switch (type) {
+   921→    case "TALK":
+   922→      return "bg-[#FF005A]";
+   923→    case "BREAK":
+   924→      return "bg-black/30";
+   925→    case "NETWORKING":
+   926→      return "bg-[#00E6FF]";
+   927→    case "FAST_PITCH":
+   928→      return "bg-[#820A7D]";
+   929→    case "WELCOME":
+   930→      return "bg-[#004F98]";
+   931→    case "PANEL":
+   932→      return "bg-[#7C3AED]";
+   933→    default:
+   934→      return "bg-black/40";
+   935→  }
+   936→}
+   937→function typeBadgeClass(type: string): string {
+   938→  switch (type) {
+   939→    case "TALK":
+   940→      return "bg-[#FF005A]/10 text-[#FF005A]";
+   941→    case "BREAK":
+   942→      return "bg-black/5 text-black/50";
+   943→    case "NETWORKING":
+   944→      return "bg-[#00E6FF]/10 text-[#007E72]";
+   945→    case "FAST_PITCH":
+   946→      return "bg-[#820A7D]/10 text-[#820A7D]";
+   947→    case "WELCOME":
+   948→      return "bg-[#004F98]/10 text-[#004F98]";
+   949→    case "PANEL":
+   950→      return "bg-[#7C3AED]/10 text-[#7C3AED]";
+   951→    default:
+   952→      return "bg-black/5 text-black/60";
+   953→  }
+   954→}
+   955→function typeLabel(type: string): string {
+   956→  switch (type) {
+   957→    case "TALK":
+   958→      return "Talk";
+   959→    case "BREAK":
+   960→      return "Break";
+   961→    case "NETWORKING":
+   962→      return "Networking";
+   963→    case "FAST_PITCH":
+   964→      return "Fast pitch";
+   965→    case "WELCOME":
+   966→      return "Welcome";
+   967→    case "PANEL":
+   968→      return "Panel";
+   969→    default:
+   970→      return type;
+   971→  }
+   972→}
+   973→
