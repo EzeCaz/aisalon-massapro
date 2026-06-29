@@ -15,6 +15,7 @@ import {
   FormInput,
   LayoutPanelTop,
   Save,
+  User,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type {
@@ -68,6 +69,15 @@ export function MeetTheSpeakerEditor({ events }: Props) {
   const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   const [loadingEvent, setLoadingEvent] = useState(false);
+  /**
+   * Last event fetched by handleEventPick. Kept in state so the speaker
+   * <select> can render its speakers list without re-fetching.
+   */
+  const [lastFetchedEvent, setLastFetchedEvent] =
+    useState<DbEventForMapping | null>(null);
+  /** Speaker selected in the secondary dropdown (auto-fills the mockup with
+   *  that specific speaker's data instead of the default first-by-order). */
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>("");
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -186,7 +196,13 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
   async function handleEventPick(slug: string) {
     setSelectedEventSlug(slug);
-    if (!slug) return;
+    // Reset the speaker picker whenever the event changes — the new event
+    // may not have the previously-picked speaker.
+    setSelectedSpeakerId("");
+    if (!slug) {
+      setLastFetchedEvent(null);
+      return;
+    }
     setLoadingEvent(true);
     setParseError(null);
     try {
@@ -195,6 +211,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
         throw new Error(`Failed to load event (HTTP ${res.status})`);
       }
       const json = (await res.json()) as { event: DbEventForMapping };
+      setLastFetchedEvent(json.event);
       const mapped = mapEventToMeetTheSpeakerData(json.event);
       applyData(mapped);
     } catch (err) {
@@ -202,6 +219,17 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     } finally {
       setLoadingEvent(false);
     }
+  }
+
+  /**
+   * Re-run the mapper with a specific speaker selected. Pulls from the
+   * cached `lastFetchedEvent` so no extra API call is needed.
+   */
+  function handleSpeakerPick(speakerId: string) {
+    setSelectedSpeakerId(speakerId);
+    if (!lastFetchedEvent || !speakerId) return;
+    const mapped = mapEventToMeetTheSpeakerData(lastFetchedEvent, speakerId);
+    applyData(mapped);
   }
 
   // --- image picker callbacks ----------------------------------------
@@ -487,6 +515,40 @@ export function MeetTheSpeakerEditor({ events }: Props) {
             <Loader2 className="h-4 w-4 animate-spin text-[#FF005A]" />
           )}
         </div>
+
+        {/* Speaker picker — appears once an event has been picked.
+            Re-runs the mapper with the selected speaker instead of the
+            default first-by-order. */}
+        <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+          <div className="flex items-center gap-2 text-sm font-bold text-black whitespace-nowrap">
+            <User className="h-4 w-4 text-[#FF005A]" />
+            Speaker:
+          </div>
+          <select
+            value={selectedSpeakerId}
+            onChange={(e) => handleSpeakerPick(e.target.value)}
+            disabled={!lastFetchedEvent || loadingEvent}
+            className="flex-1 max-w-md rounded-md border border-black/15 bg-white px-3 py-1.5 text-sm text-black disabled:opacity-50"
+          >
+            <option value="">
+              {!lastFetchedEvent
+                ? "— Pick an event first —"
+                : lastFetchedEvent.speakers.length === 0
+                  ? "No speakers on this event"
+                  : "— Default (first speaker) —"}
+            </option>
+            {[...(lastFetchedEvent?.speakers ?? [])]
+              .sort((a, b) => a.order - b.order)
+              .map((sp) => (
+                <option key={sp.id} value={sp.id}>
+                  {sp.name}
+                  {sp.role ? ` · ${sp.role}` : ""}
+                  {sp.company ? ` · ${sp.company}` : ""}
+                </option>
+              ))}
+          </select>
+        </div>
+
         {data.event.sourceEventSlug && (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#FF005A]/10 px-2 py-1 text-[0.65rem] font-semibold text-[#FF005A]">
             <Wand2 className="h-3 w-3" />

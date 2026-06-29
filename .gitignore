@@ -16,6 +16,15 @@ dist/
 .env.*
 !.env.example
 
+# Google Drive OAuth token (contains refresh_token — never commit)
+scripts/.gdrive-token.json
+
+# Local backup artifacts (large tarballs + manifests — keep local + Drive,
+# never push to git)
+download/aisalon-massapro-V*.tar.gz
+download/aisalon-massapro-V*-MANIFEST.txt
+download/v*-backup/
+
 # typescript
 tsconfig.tsbuildinfo
 *.tsbuildinfo

@@ -28,7 +28,17 @@ import { MEMBER_TAG_CATALOG } from "@/lib/tags";
  *   - name, image, photoUrl, linkedinUrl, company, companyUrl, portfolioUrl,
  *     passwordHash, mobile: prefer primary's non-null, else first non-null
  *     (these are single-value fields — can't truly combine)
- *   - email: ALWAYS primary's (it's the unique identifier)
+ *   - email: ALWAYS primary's (it's the immutable unique identifier)
+ *
+ * SECONDARY EMAILS (login preservation):
+ *
+ *   - Each secondary's PRIMARY email (User.email) is copied to a new
+ *     UserEmail row on primary (so the merged user can still sign in
+ *     with their old email address).
+ *   - Each secondary's existing UserEmail rows are reassigned to primary.
+ *   - Skips any email that already exists on primary (either as
+ *     User.email or as an existing UserEmail) to honor the @unique
+ *     constraint on UserEmail.email.
  *
  * RELATIONS REASSIGNED (cascade-safe):
  *
@@ -100,6 +110,7 @@ export async function POST(req: NextRequest) {
     include: {
       tags: true,
       speakers: { select: { id: true, eventId: true, name: true, topic: true } },
+      secondaryEmails: true,
     },
   });
 
@@ -319,6 +330,66 @@ export async function POST(req: NextRequest) {
           `[merge] tag create skipped for label "${t.label}":`,
           (err as Error).message
         );
+      }
+    }
+
+    // 8b. Preserve secondary emails — copy each secondary's primary email
+    //     AND their existing UserEmail rows to primary, so the merged user
+    //     can still sign in with any of their old addresses.
+    //
+    //     CRITICAL: without this step, deleting the secondary would
+    //     cascade-delete their UserEmail rows (schema has onDelete: Cascade
+    //     on UserEmail.user), AND their primary email would simply vanish.
+    //     Both would silently break sign-in for the merged user.
+    //
+    //     Strategy: build a set of emails already owned by primary
+    //     (User.email + all UserEmail.email), then for each secondary:
+    //       - if their User.email isn't in the set, create a UserEmail
+    //         row on primary with label "Merged from <name>"
+    //       - reassign their existing UserEmail rows to primary where
+    //         the email isn't already in the set; delete the conflicting
+    //         ones (the primary's copy wins)
+    const primaryEmailsOwned = new Set<string>([primary.email.toLowerCase()]);
+    for (const ue of primary.secondaryEmails ?? []) {
+      primaryEmailsOwned.add(ue.email.toLowerCase());
+    }
+
+    for (const sec of secondaries) {
+      // 8b-i. Secondary's primary email → new UserEmail on primary
+      const secEmail = sec.email.trim();
+      if (secEmail && !primaryEmailsOwned.has(secEmail.toLowerCase())) {
+        try {
+          await tx.userEmail.create({
+            data: {
+              userId: primaryId,
+              email: secEmail,
+              label: `Merged from ${sec.name || secEmail.split("@")[0]}`,
+            },
+          });
+          primaryEmailsOwned.add(secEmail.toLowerCase());
+        } catch (err) {
+          // Race / constraint violation — skip, don't fail the merge.
+          console.log(
+            `[merge] UserEmail create skipped for ${secEmail}:`,
+            (err as Error).message
+          );
+        }
+      }
+
+      // 8b-ii. Reassign secondary's existing UserEmail rows to primary
+      //        (delete any that conflict with emails primary already owns)
+      for (const ue of sec.secondaryEmails ?? []) {
+        if (primaryEmailsOwned.has(ue.email.toLowerCase())) {
+          // Conflict — primary already has this email. Delete the
+          // secondary's copy (primary's wins).
+          await tx.userEmail.delete({ where: { id: ue.id } });
+        } else {
+          await tx.userEmail.update({
+            where: { id: ue.id },
+            data: { userId: primaryId },
+          });
+          primaryEmailsOwned.add(ue.email.toLowerCase());
+        }
       }
     }
 
