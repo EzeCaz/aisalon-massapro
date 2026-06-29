@@ -1,0 +1,47 @@
+==================================================================
+AI Salon MassaPro — V5.6 Milestone Backup
+==================================================================
+Created: 2026-06-29 10:56:09 UTC
+Git commit: f168f466f83d49a86f52cc2484fe7c2e22374cd4
+Commit message: V5.6: fix mobile login dup slogan + public events list + tz-safe event form
+
+What's in this milestone:
+  1. Mobile login page no longer shows "Empowering AI Connections" twice.
+     Logo variant changed from horizontal-tagline to horizontal, single
+     subtitle now reads "Empowering AI Connections in Tel Aviv".
+
+  2. /events list is now PUBLIC. Anonymous visitors see a "Join AI Salon"
+     banner that routes to /login?callbackUrl=/events. Signed-in users
+     still get the onboarding gate.
+
+  3. /events/[slug] now redirects anonymous visitors to the public
+     /e/[slug] landing page (no more login wall on the event page).
+
+  4. /e/[slug] public CTA: button label now reads "Join AI Salon" for
+     anonymous visitors. Signed-in visitors still see "Register to event".
+
+  5. Timezone fix in event-editor.tsx + new-event-form.tsx:
+     The admin event form used browser-local time, which broke on UTC
+     servers/previews — saved event times were 3h ahead of what the
+     admin entered, which propagated to the mockups. Now uses explicit
+     Asia/Jerusalem conversion (mirrors admin-agenda-tab.tsx).
+
+  6. (From V5.5, still in place) Hero/overlay image resize on all
+     mockups + speaker columns + save-as-default + login banner fix.
+
+Files in backup: 274
+Tarball: aisalon-massapro-V5.6-source.tar.gz
+Tarball size: 6.0M
+Tarball SHA256: 029a8ffae057ac92e6a4545d47887ae22a4eae4254197e5f1eedb03e43d67402
+
+Contents:
+  src/                  — Next.js app source (admin, api, components, lib, hooks)
+  prisma/               — Database schema
+  public/               — Static images, brand assets, favicon
+  package.json, etc.    — Top-level configs
+
+Preview deployment:
+  https://aisalon-massapro-kk6bzoobf-ezecazs-projects.vercel.app
+
+Production deployment:
+  https://aisalon.massapro.com
