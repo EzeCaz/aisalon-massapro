@@ -233,3 +233,27 @@ This is a SEPARATE concern from the corner-handle bug. Only do this if the user 
 2. Verify the hero now shrinks PROPORTIONALLY when dragging any of the 4 corner handles inward.
 3. Verify the X/Y sliders in `HeroOverlayControl` still work INDEPENDENTLY (they call `handleHeroScaleXChange` / `handleHeroScaleYChange`, which are NOT changed by this fix — they remain independent).
 4. Optionally, if the user reports the wheel can't zoom out below 1×, change `resolvePlacement`'s zoom clamp from `[1, 4]` to `[0.1, 4]` in all four `types.ts` files.
+
+---
+Task ID: V5.6
+Agent: main (claude)
+Task: Fix mobile login duplicate slogan + make events public + timezone fix in admin event form
+
+Work Log:
+- Fixed mobile login duplicate slogan: changed AiSalonLogoServer variant from "horizontal-tagline" to "horizontal" (no built-in tagline), and changed subtitle from "Tel Aviv · Empowering AI Connections" to "Empowering AI Connections in Tel Aviv". Now only ONE slogan appears on mobile.
+- Made /events list PUBLIC for anonymous visitors (was: redirect to /login). Anonymous visitors now see a "Join AI Salon" banner at the top that routes to /login?callbackUrl=/events. Signed-in users still get onboarding gate.
+- Updated /events/[slug] to redirect anonymous visitors to /e/[slug] (the public landing page) instead of forcing /login.
+- Updated /e/[slug] public CTA button label: anonymous visitors now see "Join AI Salon" (was "Register to event"). Signed-in visitors still see "Register to event".
+- Timezone bug fix in src/components/admin/event-editor.tsx and src/app/admin/events/new/new-event-form.tsx: replaced browser-local `new Date(local).toISOString()` with explicit Asia/Jerusalem ↔ UTC conversion (mirrors the existing helpers in admin-agenda-tab.tsx). This was the root cause of the "mockups show times 3h ahead" bug — the admin form was using browser TZ, so when admin's browser was in UTC (e.g. on a Vercel preview deployment), saved times were 3h ahead of what they entered.
+- TypeScript: verified clean compile of src/ (only pre-existing errors in old-deployment/, examples/, scripts/seed.ts, skills/ — none in modified files).
+- Pushed to origin/main as commit f168f46 "V5.6: fix mobile login dup slogan + public events list + tz-safe event form".
+- Vercel auto-deployed to production (aisalon.massapro.com) and preview (aisalon-massapro-kk6bzoobf-ezecazs-projects.vercel.app).
+- Smoke-tested production: /events returns 200 (was redirect), /events/ai-salon-human redirects to /e/ai-salon-human (was /login), /login has only 1 "Empowering AI Connections" (was 2 on mobile).
+- Created V5.6 milestone backup at /home/z/my-project/download/aisalon-massapro-V5.6-source.tar.gz (6.0 MB, SHA256: 029a8ffae057ac92e6a4545d47887ae22a4eae4254197e5f1eedb03e43d67402) + manifest at /home/z/my-project/download/v5.6-backup/MANIFEST.txt.
+
+Stage Summary:
+- All 3 user-reported issues fixed and deployed to production.
+- Production URL: https://aisalon.massapro.com (live with V5.6).
+- Preview URL: https://aisalon-massapro-kk6bzoobf-ezecazs-projects.vercel.app (live with V5.6).
+- Backup tarball: /home/z/my-project/download/aisalon-massapro-V5.6-source.tar.gz
+- Note on "lost changes" complaint: investigated git history. The UUID-named commits between meaningful ones are tool-results artifacts + small WIP changes, NOT reverts. The actual "lost changes" the user perceived came from commit af21258 ("Restore mockup editor from deployment dpl_7qxoPJGpy34Qrhb5nRzhWLAfFDpV") which restored old mockup files that lacked newer features (e.g. "Save as event default" button). V5.5 (db20744) re-added those. V5.6 (f168f46) is now on top, preserving all prior fixes + adding the new ones. No data loss.
