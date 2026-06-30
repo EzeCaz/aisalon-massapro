@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { canAny, getCoHostedEventIds, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { SpeakerIntroEditor } from "./speaker-intro-editor";
@@ -25,7 +25,9 @@ export const dynamic = "force-dynamic";
  *   3. Edit the JSON directly for fine-grained control.
  *   4. Download a print-quality PNG (2400×1600 at 2× DPR).
  *
- * Permission gate: ADMIN + SUPER_ADMIN (same as /admin/mockups).
+ * Permission gate: ADMIN + SUPER_ADMIN (members.view) OR CO_HOST
+ * (eventdata.viewCoHosted). CO_HOSTs see only their co-hosted events
+ * in the dropdown.
  */
 
 export default async function SpeakerIntroMockupPage() {
@@ -47,13 +49,22 @@ export default async function SpeakerIntroMockupPage() {
     me = { ...me, role: ROLES.SUPER_ADMIN };
   }
 
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) {
+  if (
+    !canAny(me.role, ["members.view", "eventdata.viewCoHosted"]) &&
+    !isSuperAdminEmail(me.email)
+  ) {
     redirect("/events");
   }
 
+  // Determine event-scoping. For ADMIN+ this is null (all events).
+  // For CO_HOST, this is the list of event IDs they co-host.
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+
   // Fetch the events list for the auto-fill dropdown. Lightweight: just
   // the fields needed to identify an event in the picker. Newest first.
+  // Scope by event IDs for CO_HOST users.
   const eventsRaw = await db.event.findMany({
+    where: scopedEventIds === null ? undefined : { id: { in: scopedEventIds } },
     orderBy: { startsAt: "desc" },
     select: {
       id: true,
