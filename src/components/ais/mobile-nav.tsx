@@ -17,9 +17,11 @@ type Props = {
     role: string;
   } | null;
   isAdmin: boolean;
+  /** Admin landing URL tailored to the user's role. */
+  adminHref?: string;
 };
 
-export function MobileNav({ links, user, isAdmin }: Props) {
+export function MobileNav({ links, user, isAdmin, adminHref = "/admin" }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -54,7 +56,7 @@ export function MobileNav({ links, user, isAdmin }: Props) {
           </Link>
           {isAdmin && (
             <Link
-              href="/admin"
+              href={adminHref}
               onClick={() => setOpen(false)}
               className="px-3 py-2 rounded-md text-sm font-medium text-black/80 hover:bg-black/5 inline-flex items-center gap-2"
             >

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
-import { can, isEventCoHost, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
+import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { format } from "date-fns";
@@ -171,6 +171,8 @@ export default async function EventDetailPage({ params }: Params) {
   // Compute the management tier for the current user on this event:
   //   - Super Admins + Admins can manage ANY event.
   //   - CO_HOSTs can manage only events they are explicitly a co-host of.
+  //   - SPEAKERs can view (read-only) the Event Prep tab for events they
+  //     are speaking at — they cannot manage the event.
   //   - Members cannot manage.
   // This drives the "🛠 Manage Event" tab on the event page.
   const isSuperAdminUser = isSuperAdmin({ email: me.email, role: me.role });
@@ -180,6 +182,14 @@ export default async function EventDetailPage({ params }: Params) {
     isCoHostOfThisEvent = await isEventCoHost(me.id, event.id);
   }
   const canManageEvent = isAdminTier || isCoHostOfThisEvent;
+
+  // SPEAKER role: can view the Event Prep tab (read-only) for events
+  // they are speaking at. They cannot edit anything.
+  let isSpeakerOfThisEvent = false;
+  if (!canManageEvent && normalizeRole(me.role) === ROLES.SPEAKER) {
+    isSpeakerOfThisEvent = await isEventSpeaker(me.id, event.id);
+  }
+  const canViewEventPrep = canManageEvent || isSpeakerOfThisEvent;
 
   // Fetch co-hosts for this event (so the Manage Event tab can show them
   // without an extra round trip). Only visible to managers.
@@ -389,6 +399,8 @@ export default async function EventDetailPage({ params }: Params) {
           canManageEvent={canManageEvent}
           canManageCoHosts={isAdminTier}
           isSuperAdmin={isSuperAdminUser}
+          canViewEventPrep={canViewEventPrep}
+          isSpeaker={isSpeakerOfThisEvent}
           coHosts={coHostsList}
           eventStats={eventStats}
         />

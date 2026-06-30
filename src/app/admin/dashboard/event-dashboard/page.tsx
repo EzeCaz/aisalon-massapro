@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdmin } from "@/lib/permissions";
+import { canAny, getCoHostedEventIds, isSuperAdmin } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import Link from "next/link";
@@ -26,7 +26,10 @@ export const metadata = {
  * Uses the SAME bar/pie/table chart system as the member dashboard — the
  * admin can toggle each chart individually or switch all at once.
  *
- * Auth: requires members.view permission (ADMIN + SUPER_ADMIN).
+ * Auth: requires members.view permission (ADMIN + SUPER_ADMIN) OR
+ * eventdata.viewCoHosted (CO_HOST). CO_HOST users see only data for
+ * events they co-host — both the events dropdown and the RSVPs list
+ * are scoped server-side to their co-hosted events.
  */
 export default async function EventDashboardPage() {
   const session = await getServerSession(authOptions);
@@ -39,11 +42,19 @@ export default async function EventDashboardPage() {
     select: { id: true, email: true, role: true, name: true },
   });
   if (!me) redirect("/login");
-  if (!can(me.role, "members.view")) redirect("/events");
+  if (!canAny(me.role, ["members.view", "eventdata.viewCoHosted"])) {
+    redirect("/events");
+  }
 
-  // Fetch ALL events for the event-picker dropdown, with their RSVP
+  // Determine event-scoping. For ADMIN+ this is null (all events).
+  // For CO_HOST, this is the list of event IDs they co-host.
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+
+  // Fetch events for the event-picker dropdown, with their RSVP
   // counts so the admin can see how big each event is at a glance.
+  // Scope by event IDs for CO_HOST users.
   const events = await db.event.findMany({
+    where: scopedEventIds === null ? undefined : { id: { in: scopedEventIds } },
     orderBy: { startsAt: "desc" },
     select: {
       id: true,
@@ -57,10 +68,11 @@ export default async function EventDashboardPage() {
     },
   });
 
-  // Fetch ALL RSVPs across all events — the client will filter by event
+  // Fetch RSVPs (scoped for CO_HOST) — the client will filter by event
   // when an event is selected. Includes the linked user (with all the
   // profile fields the charts care about: company, interestedIn, etc.).
   const rsvps = await db.eventRsvp.findMany({
+    where: scopedEventIds === null ? undefined : { eventId: { in: scopedEventIds } },
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
     include: {
       event: {

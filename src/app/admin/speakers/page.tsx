@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { canAny, getCoHostedEventIds } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { SpeakersTabClient } from "./speakers-tab-client";
@@ -15,11 +15,21 @@ export default async function AdminSpeakersPage() {
 
   const me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
-  if (!can(me.role, "members.view")) redirect("/events");
+  // Gate: ADMIN+ (members.view) OR CO_HOST (eventdata.viewCoHosted).
+  // CO_HOST users see only speakers for events they co-host.
+  if (!canAny(me.role, ["members.view", "eventdata.viewCoHosted"])) {
+    redirect("/events");
+  }
 
-  // Load all speakers across all events, plus the events themselves so
-  // the client can render an event picker when adding a new speaker.
+  // Determine event-scoping. For ADMIN+ this is null (all events).
+  // For CO_HOST, this is the list of event IDs they co-host.
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+
+  // Load speakers across all events (or scoped events for CO_HOST),
+  // plus the events themselves so the client can render an event
+  // picker when adding a new speaker.
   const speakers = await db.speaker.findMany({
+    where: scopedEventIds === null ? undefined : { eventId: { in: scopedEventIds } },
     orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
     include: {
       event: {
@@ -44,6 +54,7 @@ export default async function AdminSpeakersPage() {
   });
 
   const events = await db.event.findMany({
+    where: scopedEventIds === null ? undefined : { id: { in: scopedEventIds } },
     orderBy: { startsAt: "desc" },
     select: {
       id: true,
@@ -55,15 +66,20 @@ export default async function AdminSpeakersPage() {
   });
 
   // All platform users — for the "link user to speaker" picker.
-  const users = await db.user.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-    },
-  });
+  // (Only loaded for ADMIN+ — CO_HOSTs get an empty list since they
+  // can't link users and shouldn't see the full member directory.)
+  const shouldLoadUsers = canAny(me.role, ["members.view"]);
+  const users = shouldLoadUsers
+    ? await db.user.findMany({
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      })
+    : [];
 
   const speakersJson = JSON.parse(JSON.stringify(speakers));
   const eventsJson = JSON.parse(JSON.stringify(events));

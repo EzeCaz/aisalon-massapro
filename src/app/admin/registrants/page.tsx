@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { canAny, getCoHostedEventIds } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { RegistrantsTabClient } from "./registrants-tab-client";
@@ -18,11 +18,21 @@ export default async function AdminRegistrantsPage() {
     select: { id: true, email: true, role: true, name: true },
   });
   if (!me) redirect("/login");
-  if (!can(me.role, "members.view")) redirect("/events");
+  // Gate: ADMIN+ (members.view) OR CO_HOST (eventdata.viewCoHosted).
+  // CO_HOST users see only RSVPs for events they co-host.
+  if (!canAny(me.role, ["members.view", "eventdata.viewCoHosted"])) {
+    redirect("/events");
+  }
+
+  // Determine event-scoping. For ADMIN+ this is null (all events).
+  // For CO_HOST, this is the list of event IDs they co-host.
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
 
   // Fetch RSVPs with check-in code + door-check-in state.
   // Only fetch user info for RSVPs that have a linked user.
+  // Scope by event IDs for CO_HOST users.
   const rsvps = await db.eventRsvp.findMany({
+    where: scopedEventIds === null ? undefined : { eventId: { in: scopedEventIds } },
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
     include: {
       event: {
@@ -32,8 +42,10 @@ export default async function AdminRegistrantsPage() {
     },
   });
 
-  // Fetch all events for the filter, with their RSVP count.
+  // Fetch events for the filter, with their RSVP count.
+  // Scope by event IDs for CO_HOST users.
   const events = await db.event.findMany({
+    where: scopedEventIds === null ? undefined : { id: { in: scopedEventIds } },
     orderBy: { startsAt: "desc" },
     select: {
       id: true,
@@ -44,16 +56,10 @@ export default async function AdminRegistrantsPage() {
     },
   });
 
-  // Fetch co-hosted event IDs for the current user — CO_HOSTs can
-  // generate check-in codes only for events they co-host.
-  const coHostedEventIds: string[] = [];
-  if (me.role === "CO_HOST") {
-    const coHostRows = await db.eventCoHost.findMany({
-      where: { userId: me.id },
-      select: { eventId: true },
-    });
-    coHostedEventIds.push(...coHostRows.map((r) => r.eventId));
-  }
+  // coHostedEventIds is now the same as scopedEventIds for CO_HOST users.
+  // Kept as a separate prop for backwards compat with the client component
+  // (which uses it to gate the "Generate code" button).
+  const coHostedEventIds: string[] = scopedEventIds ?? [];
 
   const rsvpsJson = JSON.parse(JSON.stringify(rsvps));
   const eventsJson = JSON.parse(JSON.stringify(events));

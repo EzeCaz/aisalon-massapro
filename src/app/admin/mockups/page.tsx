@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { canAny, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { MockupsClient } from "./mockups-client";
@@ -24,7 +24,10 @@ export const dynamic = "force-dynamic";
  *      admins can copy into Grok Imagine / Flux / Midjourney along with
  *      structured event JSON to generate new on-brand mockups.
  *
- * Permission gate: ADMIN + SUPER_ADMIN (same gate as /admin/knowledge-base).
+ * Permission gate: ADMIN + SUPER_ADMIN (members.view) OR CO_HOST
+ * (eventdata.viewCoHosted). CO_HOSTs see the same mockup reference
+ * library — useful for producing event visuals for events they
+ * co-host.
  */
 
 export default async function AdminMockupsPage() {
@@ -47,8 +50,12 @@ export default async function AdminMockupsPage() {
     me = { ...me, role: ROLES.SUPER_ADMIN };
   }
 
-  // Visible to ADMIN + SUPER_ADMIN (same gate as /admin members table)
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) {
+  // Visible to ADMIN + SUPER_ADMIN (members.view) OR CO_HOST
+  // (eventdata.viewCoHosted — they can use mockups for their events).
+  if (
+    !canAny(me.role, ["members.view", "eventdata.viewCoHosted"]) &&
+    !isSuperAdminEmail(me.email)
+  ) {
     redirect("/events");
   }
 
