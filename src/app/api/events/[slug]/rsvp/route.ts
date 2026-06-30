@@ -154,6 +154,116 @@ export async function POST(_req: NextRequest, { params }: Params) {
     }
   }
 
+  // ── Server-side tracking: record a TrackedLead + (optionally) a
+  // ReferralConversion. This is the source-of-truth for the admin
+  // Analytics dashboard. Client-side trackEvent("rsvp") fires GA4 /
+  // Meta Pixel — this server record is what the dashboard reads.
+  // Only recorded for NEW registrations to avoid double-counting.
+  if (!wasAlreadyRegistered) {
+    try {
+      const cookieHeader = _req.headers.get("cookie") || "";
+      const affMatch = cookieHeader
+        .split("; ")
+        .find((c) => c.startsWith("massapro_affiliate="));
+      let affId: string | null = null;
+      let utm: {
+        utmSource?: string;
+        utmMedium?: string;
+        utmCampaign?: string;
+        utmContent?: string;
+        utmTerm?: string;
+      } = {};
+      let ftUtm: typeof utm = {};
+      if (affMatch) {
+        try {
+          const parsed = JSON.parse(
+            decodeURIComponent(affMatch.split("=").slice(1).join("=")),
+          ) as {
+            affId?: string;
+            utm?: typeof utm;
+            ftUtm?: typeof utm;
+          };
+          affId = parsed.affId || null;
+          utm = parsed.utm || {};
+          ftUtm = parsed.ftUtm || {};
+        } catch {
+          /* swallow bad cookie */
+        }
+      }
+      const sessionId =
+        _req.headers.get("x-massapro-session") || "srv_no_session";
+
+      await db.trackedLead.create({
+        data: {
+          sessionId,
+          affId: affId || undefined,
+          userId: user!.id,
+          name: user!.name || user!.email,
+          email: user!.email,
+          phone: null,
+          company: null,
+          conversionType: "rsvp",
+          conversionRef: event.id,
+          initialStatus: "GOING",
+          utmSource: utm.utmSource || null,
+          utmMedium: utm.utmMedium || null,
+          utmCampaign: utm.utmCampaign || null,
+          utmContent: utm.utmContent || null,
+          utmTerm: utm.utmTerm || null,
+          ftUtmSource: ftUtm.utmSource || null,
+          ftUtmMedium: ftUtm.utmMedium || null,
+          ftUtmCampaign: ftUtm.utmCampaign || null,
+          ftUtmContent: ftUtm.utmContent || null,
+          ftUtmTerm: ftUtm.utmTerm || null,
+        },
+      });
+
+      // If the affId is a member referral code (SAL-...), record a
+      // ReferralConversion.
+      if (affId && affId.startsWith("SAL-")) {
+        const referrer = await db.user.findFirst({
+          where: { referralCode: affId },
+          select: { id: true },
+        });
+        if (referrer) {
+          try {
+            await db.referralConversion.create({
+              data: {
+                referringUserId: referrer.id,
+                referredEmail: user!.email,
+                referredUserId: user!.id,
+                conversionType: "rsvp",
+                conversionRef: event.id,
+                affId,
+                utmSnapshot: {
+                  utm,
+                  ftUtm,
+                  sessionId,
+                },
+                sessionId,
+              },
+            });
+          } catch (err: unknown) {
+            // P2002 = unique constraint violation (already attributed)
+            if (
+              err &&
+              typeof err === "object" &&
+              "code" in err &&
+              (err as { code: string }).code === "P2002"
+            ) {
+              // Ignore duplicate
+            } else {
+              throw err;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      // Tracking failures must NEVER block the RSVP.
+      console.error("[rsvp] Tracking failed:", err);
+    }
+  }
+
   return NextResponse.json({ rsvp });
 }
 

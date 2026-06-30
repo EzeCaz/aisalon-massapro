@@ -63,6 +63,19 @@ model User {
   // onboarding — they already have intake data from the spreadsheet.
   onboardedAt       DateTime?
   // ----------------------------------------------------------------
+  // Referral system — each user gets a unique opaque code on signup
+  // (or via migration backfill for pre-existing users). Format:
+  // "SAL-{base36(timestamp)}-{random6}". Persisted for life — archived
+  // members keep their codes so old referral links still work.
+  referralCode        String?              @unique
+  referralCodeSetAt   DateTime?
+  // ID of the user who referred this user (via referral link). Null if
+  // the user signed up organically. Self-relation.
+  referredById        String?
+  referrer            User?                @relation("UserReferrer", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers       User[]               @relation("UserReferrer")
+  referralConversions ReferralConversion[] @relation("ReferringMember")
+  // ----------------------------------------------------------------
   // Soft-delete (archive) — set when a Super Admin archives a member.
   // Archived members are excluded from the main members list and from
   // most queries, but their row is preserved for audit. Only Super
@@ -671,4 +684,135 @@ model EventPrepSuggestion {
   @@index([eventId, status])
   @@index([questionId])
   @@index([suggestedByUserId])
+}
+
+// ==================== UTM & Tracking (v5.17) ====================
+//
+// Implements the MassaPro UTM & Tracking spec — 5 parallel tracking
+// channels (Meta Pixel, GA4, MassaPro Affiliate, Backup Tracker, Lead
+// Submission API) with first-touch / last-touch UTM persistence.
+
+/// Page views — one row per page load (sent via sendBeacon on route change).
+model PageView {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  sessionId   String
+  affId       String?
+  userId      String?
+  pageUrl     String
+  pagePath    String
+  referrer    String?
+  userAgent   String?
+  ipAddress   String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  ftUtmSource   String?
+  ftUtmMedium   String?
+  ftUtmCampaign String?
+  ftUtmContent  String?
+  ftUtmTerm     String?
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([pagePath])
+  @@index([affId])
+}
+
+/// Button clicks / micro-interactions — sent via /api/track/click.
+model ClickEvent {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  sessionId   String
+  affId       String?
+  userId      String?
+  eventType   String
+  eventId     String?
+  pageUrl     String
+  pagePath    String
+  metadata    Json?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+
+  @@index([createdAt])
+  @@index([affId])
+  @@index([eventType, eventId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+/// Conversion events (signup, onboarding, RSVP, contact, check-in).
+model TrackedLead {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  sessionId      String
+  affId          String?
+  userId         String?
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  conversionType String
+  conversionRef  String?
+  initialStatus  String?
+  planType       String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmContent     String?
+  utmTerm        String?
+  ftUtmSource    String?
+  ftUtmMedium    String?
+  ftUtmCampaign  String?
+  ftUtmContent   String?
+  ftUtmTerm      String?
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([conversionType])
+  @@index([createdAt])
+  @@index([affId])
+  @@index([email])
+}
+
+/// Member shares — when a member uses the Share button.
+model MemberShare {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  userId      String
+  sharedPath  String
+  sharedUrl   String
+  affId       String?
+  channel     String?
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([affId])
+}
+
+/// Referral conversions — when a SAL- referral code drives a conversion.
+model ReferralConversion {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  referringUserId String
+  referringUser   User     @relation("ReferringMember", fields: [referringUserId], references: [id], onDelete: Cascade)
+  referredEmail   String?
+  referredUserId  String?
+  conversionType  String
+  conversionRef   String?
+  affId           String
+  utmSnapshot     Json?
+  sessionId       String?
+
+  @@unique([referringUserId, conversionType, conversionRef])
+  @@index([referringUserId, createdAt])
+  @@index([affId])
+  @@index([conversionType])
+  @@index([createdAt])
 }

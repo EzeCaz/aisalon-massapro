@@ -67,12 +67,21 @@ export async function POST(req: NextRequest) {
           data: { passwordHash, name: displayName },
         });
       } else {
+        // Generate a unique referral code for the new user.
+        // Format: SAL-{base36(timestamp)}-{random6} — opaque, shareable,
+        // and unique via the @unique constraint on User.referralCode.
+        const referralCode = `SAL-${Date.now().toString(36).toUpperCase()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)
+          .toUpperCase()}`;
         await db.user.create({
           data: {
             email,
             name,
             passwordHash,
             role: "MEMBER",
+            referralCode,
+            referralCodeSetAt: new Date(),
           },
         });
       }

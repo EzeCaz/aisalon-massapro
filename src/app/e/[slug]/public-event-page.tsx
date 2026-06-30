@@ -199,6 +199,21 @@ export function PublicEventPage({ event, me }: Props) {
       }
       setRsvp(data.rsvp);
       toast.success("You're registered! See you at the event.");
+      // Fire RSVP conversion event to all 4 tracking channels
+      // (GA4, Meta Pixel, GTM dataLayer, local backup tracker).
+      // The server-side TrackedLead row is created in the RSVP route —
+      // this client-side call handles the marketing/analytics pixels.
+      try {
+        const { trackEvent } = await import("@/lib/tracking/track-event");
+        trackEvent("rsvp", {
+          page_name: "Public Event",
+          event_slug: event.slug,
+          event_id: event.id,
+          method: "event_page",
+        });
+      } catch {
+        /* tracking must never break UX */
+      }
     } catch {
       toast.error("Network error — please try again.");
     } finally {
