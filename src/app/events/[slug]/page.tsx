@@ -361,6 +361,16 @@ export default async function EventDetailPage({ params }: Params) {
                       Open in Maps →
                     </a>
                   )}
+                  {event.wazeUrl && (
+                    <a
+                      href={event.wazeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#004F98] font-semibold underline-offset-4 hover:underline"
+                    >
+                      Open in Waze →
+                    </a>
+                  )}
                 </div>
               )}
             </div>

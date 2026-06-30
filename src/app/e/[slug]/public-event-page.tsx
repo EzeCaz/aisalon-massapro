@@ -69,6 +69,7 @@ type Event = {
   city: string | null;
   country: string | null;
   mapUrl: string | null;
+  wazeUrl: string | null;
   startsAt: string;
   endsAt: string;
   description: string | null;
@@ -311,6 +312,16 @@ export function PublicEventPage({ event, me }: Props) {
                       Open in Maps →
                     </a>
                   )}
+                  {event.wazeUrl && (
+                    <a
+                      href={event.wazeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#004F98] font-semibold underline-offset-4 hover:underline"
+                    >
+                      Open in Waze →
+                    </a>
+                  )}
                 </div>
               )}
 
@@ -543,7 +554,17 @@ export function PublicEventPage({ event, me }: Props) {
                   rel="noopener noreferrer"
                   className="mt-4 block w-full rounded-md bg-black text-white text-sm font-semibold py-2.5 text-center hover:bg-black/90"
                 >
-                  View on Google Maps
+                  Open in Maps
+                </a>
+              )}
+              {event.wazeUrl && (
+                <a
+                  href={event.wazeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 block w-full rounded-md bg-[#33CCFF] text-black text-sm font-semibold py-2.5 text-center hover:bg-[#33CCFF]/90"
+                >
+                  Open in Waze
                 </a>
               )}
             </div>

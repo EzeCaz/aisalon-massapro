@@ -72,6 +72,7 @@ type EventData = {
   city: string | null;
   country: string | null;
   mapUrl: string | null;
+  wazeUrl: string | null;
   startsAt: string;
   endsAt: string;
   description: string | null;
@@ -247,6 +248,7 @@ export function EventTabs({
               city: event.city,
               country: event.country,
               mapUrl: event.mapUrl,
+              wazeUrl: event.wazeUrl,
               startsAt: event.startsAt,
               endsAt: event.endsAt,
               description: event.description,

@@ -164,6 +164,7 @@ model Event {
   city          String?
   country       String?  // e.g. "ISR"
   mapUrl        String?
+  wazeUrl       String?  // optional Waze deep-link / search URL for the event venue
   startsAt      DateTime
   endsAt        DateTime
   description   String?  // long-form description / "About Event"

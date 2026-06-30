@@ -38,6 +38,7 @@ type ManageEventTabProps = {
     city: string | null;
     country: string | null;
     mapUrl: string | null;
+    wazeUrl: string | null;
     startsAt: string;
     endsAt: string;
     description: string | null;

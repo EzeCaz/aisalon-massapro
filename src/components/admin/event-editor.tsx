@@ -53,6 +53,7 @@ export type EventForEditor = {
   city: string | null;
   country: string | null;
   mapUrl: string | null;
+  wazeUrl: string | null;
   startsAt: string;
   endsAt: string;
   description: string | null;
@@ -215,6 +216,7 @@ export function EventEditor({
   const [city, setCity] = React.useState(event.city || "");
   const [country, setCountry] = React.useState(event.country || "");
   const [mapUrl, setMapUrl] = React.useState(event.mapUrl || "");
+  const [wazeUrl, setWazeUrl] = React.useState(event.wazeUrl || "");
   const [description, setDescription] = React.useState(event.description || "");
   const [takeaways, setTakeaways] = React.useState(event.takeaways || "");
   const [intendedFor, setIntendedFor] = React.useState(event.intendedFor || "");
@@ -245,6 +247,7 @@ export function EventEditor({
           city: city.trim() || null,
           country: country.trim() || null,
           mapUrl: mapUrl.trim() || null,
+          wazeUrl: wazeUrl.trim() || null,
           description: description.trim() || null,
           takeaways: takeaways.trim() || null,
           intendedFor: intendedFor.trim() || null,
@@ -386,6 +389,9 @@ export function EventEditor({
           </Field>
           <Field label="Map URL" full>
             <Input className={inputCls} value={mapUrl} onChange={(e) => setMapUrl(e.target.value)} placeholder="https://maps.google.com/…" />
+          </Field>
+          <Field label="Waze URL" full hint="Waze deep-link or search URL (e.g. https://waze.com/ul?q=…)">
+            <Input className={inputCls} value={wazeUrl} onChange={(e) => setWazeUrl(e.target.value)} placeholder="https://waze.com/ul?q=…" />
           </Field>
           <Field label="Description / about" full>
             <Textarea className={inputCls + " min-h-[120px]"} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Long-form description of the event" />
