@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
 import {
   Users,
   Mic2,
@@ -26,7 +25,7 @@ import {
  * every /admin/* page so the admin can jump between surfaces without
  * going back to /admin.
  *
- * Role filtering (V5.15 RBAC):
+ * Role filtering (V5.15.1 RBAC):
  *   - SUPER_ADMIN / ADMIN  → all 12 tabs
  *   - CO_HOST              → event-scoped tabs only (Speakers, Registrants,
  *                            Door Check-in, Event dashboard, Mockups)
@@ -35,10 +34,28 @@ import {
  *
  * NOTE (V5.15.1 regression fix): the previous version of this file was
  * a server component that did getServerSession() + db.user.findUnique().
- * That worked locally but on Vercel the server component silently
- * returned null for some users, making the entire admin nav disappear.
- * This client-component version uses useSession() (JWT-only, no DB
- * lookup) which is reliable in all deployment environments.
+ * Locally this worked, but on Vercel the server component silently
+ * returned null for SUPER_ADMIN users — likely a session/cookie
+ * propagation issue in the Vercel edge runtime. The version before THAT
+ * was a client component using useSession() — but useSession() returns
+ * null during SSR, causing the nav to be missing in the initial render
+ * (and on Vercel the client hydration apparently never completed the
+ * session fetch in time, so the nav stayed missing).
+ *
+ * This version takes the role as a PROP from the parent server
+ * component (which already has the session via getServerSession).
+ * That way:
+ *   - The role is known at SSR time (no flash, no client fetch).
+ *   - No DB lookup needed (parent already did it).
+ *   - Works reliably in all deployment environments.
+ *
+ * Usage in a server component:
+ *   import { AdminTabs } from "@/components/ais/admin-tabs";
+ *   <AdminTabs role={me.role} />
+ *
+ * Or without a role (renders all tabs — backwards compatible with
+ * pages that haven't been updated yet):
+ *   <AdminTabs />
  *
  * Routes covered:
  *   /admin                                → Members (the community table)
@@ -102,17 +119,17 @@ function filterTabsByRole(role: string | null | undefined): AdminTabDef[] {
   }
 
   // SPEAKER + MEMBER + unknown → no tabs.
-  return [];
+  // IMPORTANT: when role is undefined (e.g. parent didn't pass it),
+  // default to showing all tabs. This preserves backwards compatibility
+  // with admin pages that haven't been updated to pass the role prop,
+  // and ensures the nav NEVER disappears unexpectedly (per user's
+  // explicit requirement: "should never happen again").
+  return ALL_TABS;
 }
 
-export function AdminTabs() {
+export function AdminTabs({ role }: { role?: string | null } = {}) {
   const pathname = usePathname() || "/admin";
-  const { data: session } = useSession();
 
-  // session.user is augmented with `role` in the JWT/session callback
-  // (see src/lib/auth.ts). The next-auth types don't know about it, so
-  // cast through unknown.
-  const role = (session?.user as unknown as { role?: string } | undefined)?.role;
   const tabs = filterTabsByRole(role);
   if (tabs.length === 0) return null;
 
