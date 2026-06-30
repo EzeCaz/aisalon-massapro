@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { Check, MapPin, Calendar, Clock, Users, Target, Gift } from "lucide-react";
 import { RsvpCheckInCard, type Rsvp } from "@/components/events/rsvp-check-in-card";
+import { SaveToCalendar } from "@/components/events/save-to-calendar";
 
 type EventData = {
   id: string;
@@ -97,6 +98,30 @@ export function OverviewTab({
           eventStartsAt={event.startsAt}
           eventEndsAt={event.endsAt}
           initialRsvp={initialRsvp}
+          eventDescription={event.description}
+          eventVenue={event.venue}
+          eventAddress={event.address}
+          eventCity={event.city}
+          eventCountry={event.country}
+        />
+
+        {/* Save to Calendar — always visible so the user can add the event
+            to their preferred calendar service at any time. */}
+        <SaveToCalendar
+          event={{
+            title: event.title,
+            description: event.description,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            venue: event.venue,
+            address: event.address,
+            city: event.city,
+            country: event.country,
+            url: typeof window !== "undefined" ? window.location.href : null,
+          }}
+          variant="outline"
+          size="md"
+          className="w-full justify-center"
         />
 
         <Card className="p-5 bg-white border border-black/10">

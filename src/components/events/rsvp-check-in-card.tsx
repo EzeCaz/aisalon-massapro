@@ -14,6 +14,7 @@ import {
   Calendar,
   Clock,
 } from "lucide-react";
+import { SaveToCalendar } from "@/components/events/save-to-calendar";
 
 // ------------------------------------------------------------------
 // Types — mirror the EventRsvp shape returned by /api/events/[slug]/rsvp
@@ -34,6 +35,12 @@ type Props = {
   eventStartsAt: string;
   eventEndsAt: string;
   initialRsvp?: Rsvp;
+  /** Optional event details for the "Save to Calendar" CTA shown after registration. */
+  eventDescription?: string | null;
+  eventVenue?: string | null;
+  eventAddress?: string | null;
+  eventCity?: string | null;
+  eventCountry?: string | null;
 };
 
 // ------------------------------------------------------------------
@@ -106,6 +113,11 @@ export function RsvpCheckInCard({
   eventStartsAt,
   eventEndsAt,
   initialRsvp = null,
+  eventDescription = null,
+  eventVenue = null,
+  eventAddress = null,
+  eventCity = null,
+  eventCountry = null,
 }: Props) {
   // Server-passed initial state — avoids a flash of the wrong CTA.
   const [rsvp, setRsvp] = React.useState<Rsvp>(initialRsvp);
@@ -339,6 +351,25 @@ export function RsvpCheckInCard({
         See you on <strong>{fmtDate(new Date(eventStartsAt))}</strong> at{" "}
         <strong className="font-mono">{fmtTime(new Date(eventStartsAt))}</strong>.
       </p>
+
+      {/* Save to Calendar CTA — shown immediately after registration so
+          the user can add the event to their calendar right away. */}
+      <SaveToCalendar
+        event={{
+          title: eventTitle,
+          description: eventDescription,
+          startsAt: eventStartsAt,
+          endsAt: eventEndsAt,
+          venue: eventVenue,
+          address: eventAddress,
+          city: eventCity,
+          country: eventCountry,
+          url: typeof window !== "undefined" ? window.location.href : null,
+        }}
+        variant="outline"
+        size="sm"
+        className="w-full justify-center"
+      />
 
       {windowOpen ? (
         <div className="pt-2 border-t border-black/10 space-y-2">
