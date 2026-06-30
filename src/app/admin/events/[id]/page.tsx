@@ -59,6 +59,19 @@ export default async function EditEventPage({ params }: Params) {
         },
         orderBy: { createdAt: "asc" },
       },
+      speakers: {
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+        include: {
+          user: { select: { id: true, email: true, name: true } },
+          _count: {
+            select: {
+              images: true,
+              presentations: true,
+              messages: true,
+            },
+          },
+        },
+      },
       _count: {
         select: {
           images: true,
@@ -101,6 +114,29 @@ export default async function EditEventPage({ params }: Params) {
       ...c,
       createdAt: c.createdAt.toISOString(),
     })),
+    speakers: event.speakers.map((s) => ({
+      id: s.id,
+      eventId: s.eventId,
+      name: s.name,
+      role: s.role,
+      company: s.company,
+      bio: s.bio,
+      topic: s.topic,
+      photoUrl: s.photoUrl,
+      contactEmail: s.contactEmail,
+      userId: s.userId,
+      order: s.order,
+      createdAt: s.createdAt.toISOString(),
+      updatedAt: s.updatedAt.toISOString(),
+      user: s.user
+        ? { id: s.user.id, email: s.user.email, name: s.user.name }
+        : null,
+      _count: {
+        images: s._count.images,
+        presentations: s._count.presentations,
+        messages: s._count.messages,
+      },
+    })),
     _count: {
       images: event._count.images,
       speakers: event._count.speakers,
@@ -115,6 +151,11 @@ export default async function EditEventPage({ params }: Params) {
   // add/remove co-hosts or delete the event.
   const canManage = isAdmin;
   const canDelete = isSuperAdmin({ email: me.email, role: me.role });
+  // Speaker management: ADMIN+ can always manage speakers. CO_HOSTs can
+  // manage speakers ONLY for events they co-host (the existing
+  // requireEventSpeakersEdit guard enforces this server-side; here we
+  // just decide whether to render the Add/Remove buttons).
+  const canManageSpeakers = isAdmin || isCoHostOfThis;
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -125,6 +166,7 @@ export default async function EditEventPage({ params }: Params) {
           event={eventForEditor}
           canDelete={canDelete}
           canManageCoHosts={canManage}
+          canManageSpeakers={canManageSpeakers}
           showBackButton
           backHref="/admin/events"
         />

@@ -63,8 +63,20 @@ export async function POST(
 
   // Idempotency: if this user is already linked to a speaker on this
   // event, return the existing speaker rather than creating a duplicate.
+  // IMPORTANT: include the `event` relation — the admin-members-table
+  // client reads `data.speaker.event.title` to build its success toast
+  // ("Already a speaker on ${data.speaker.event.title}"). Without this
+  // include, the client crashes with
+  // "Cannot read properties of undefined (reading 'title')" — exactly the
+  // bug reported when adding Eyal Rond as a speaker on The Human AI event
+  // (he was already linked).
   const existing = await db.speaker.findFirst({
     where: { eventId: body.eventId, userId: id },
+    include: {
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
+      user: { select: { id: true, email: true, name: true } },
+      _count: { select: { images: true, presentations: true, messages: true } },
+    },
   });
   if (existing) {
     return NextResponse.json({ speaker: existing, created: false });
@@ -91,7 +103,9 @@ export async function POST(
       order: nextOrder,
     },
     include: {
-      event: { select: { id: true, title: true, slug: true } },
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
+      user: { select: { id: true, email: true, name: true } },
+      _count: { select: { images: true, presentations: true, messages: true } },
     },
   });
 

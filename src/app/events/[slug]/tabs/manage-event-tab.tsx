@@ -65,6 +65,11 @@ export function ManageEventTab({
   const eventForEditor: EventForEditor = {
     ...event,
     coHosts,
+    // The manage-event tab on the event page itself doesn't load the full
+    // speaker roster (speakers are managed from /admin/events/[id]).
+    // We pass an empty array + canManageSpeakers=false so the
+    // SpeakersManager hides itself on this surface.
+    speakers: [],
     _count: {
       images: stats.images,
       speakers: stats.speakers,
@@ -128,6 +133,7 @@ export function ManageEventTab({
         event={eventForEditor}
         canDelete={isSuperAdmin}
         canManageCoHosts={canManageCoHosts}
+        canManageSpeakers={false}
         showBackButton={showBackButton}
         backHref="/admin/events"
       />

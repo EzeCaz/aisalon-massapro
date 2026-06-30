@@ -449,10 +449,17 @@ export function AdminMembersTable({
         throw new Error(err.error || "Failed");
       }
       const data = await res.json();
+      // Defensive: the API is supposed to include `event` on the speaker
+      // payload, but older code paths or a future regression could omit
+      // it. Use optional chaining + a fallback so we never throw
+      // "Cannot read properties of undefined (reading 'title')" — that
+      // exact error was reported when adding Eyal Rond as a speaker on
+      // The Human AI event (the idempotency branch was missing the include).
+      const eventTitle = data?.speaker?.event?.title ?? "the event";
       toast.success(
         data.created
-          ? `Created speaker profile on ${data.speaker.event.title}`
-          : `Already a speaker on ${data.speaker.event.title}`,
+          ? `Created speaker profile on ${eventTitle}`
+          : `Already a speaker on ${eventTitle}`,
         { id: t }
       );
       window.location.reload();

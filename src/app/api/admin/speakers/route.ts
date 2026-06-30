@@ -42,7 +42,7 @@ export async function GET() {
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { eventId, name, role, company, bio, topic, photoUrl, contactEmail } = body as {
+  const { eventId, name, role, company, bio, topic, photoUrl, contactEmail, userId } = body as {
     eventId?: string;
     name?: string;
     role?: string;
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
     topic?: string;
     photoUrl?: string;
     contactEmail?: string;
+    userId?: string;
   };
 
   if (!eventId || !name || !name.trim()) {
@@ -80,10 +81,36 @@ export async function POST(req: NextRequest) {
 
   // Normalize the contact email — used to AUTO-LINK the speaker to a
   // platform User with the same email, so members can chat with the
-  // speaker in-platform via ConversationMessage (two-way).
-  const normalizedEmail = contactEmail?.trim().toLowerCase() || null;
+  // speaker in-platform via ConversationMessage (two-way). Declared with
+  // `let` because we may overwrite it below when an explicit userId is
+  // provided but no contactEmail was passed.
+  let normalizedEmail = contactEmail?.trim().toLowerCase() || null;
   let linkedUserId: string | null = null;
-  if (normalizedEmail) {
+
+  // If an explicit userId was passed (e.g. the admin picked a member from
+  // the autocomplete in the EventEditor), trust it — but verify the user
+  // exists. This is the primary path for the new "Add speaker" flow on
+  // /admin/events/[id] — the admin searches for a member, picks them, and
+  // we link the new Speaker row to that User directly without needing
+  // the contact email to round-trip through the auto-linker.
+  if (userId && userId.trim()) {
+    const u = await db.user.findUnique({
+      where: { id: userId.trim() },
+      select: { id: true, email: true },
+    });
+    if (u) {
+      linkedUserId = u.id;
+      // If no contactEmail was provided, inherit it from the linked user
+      // so the speaker row is consistent (the contact email is what
+      // members see in the "Contact speaker" UI).
+      if (!normalizedEmail) {
+        normalizedEmail = u.email;
+      }
+    }
+  }
+
+  // Fall back to email-based auto-link if no explicit userId was provided.
+  if (!linkedUserId && normalizedEmail) {
     const linkedUser = await db.user.findUnique({
       where: { email: normalizedEmail },
       select: { id: true },
