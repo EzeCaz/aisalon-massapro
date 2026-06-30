@@ -80,6 +80,10 @@ type Event = {
   speakers: Speaker[];
   agenda: AgendaItem[];
   _count: { speakers: number; agenda: number; rsvps: number };
+  // GOING-only count (status="GOING") — used by the black "X Going"
+  // pill in the meta line. Distinct from _count.rsvps which is the
+  // total of ALL RSVP statuses.
+  rsvpsGoing: number;
   rsvp: Rsvp;
 };
 
@@ -282,12 +286,22 @@ export function PublicEventPage({ event, me }: Props) {
                 <span className="inline-flex items-center rounded-full bg-[#FF005A]/10 text-[#FF005A] px-2.5 py-0.5 font-bold uppercase tracking-wider">
                   {event.chapter}
                 </span>
+                {event.city && (
+                  <span className="text-black/60 font-semibold">{event.city}</span>
+                )}
                 <span className="text-black/40">{fmtDate(start)}</span>
                 <span className="text-black/20">·</span>
                 <span className="text-black/60 font-mono">
                   {fmtTime(start)} – {fmtTime(end)}
                 </span>
                 {event.country && <span className="text-black/40">· {event.country}</span>}
+                {/* Going pill — black bg, white text. Matches the spec:
+                    "Tel Aviv Monday, July 13, 2026 · 18:00 – 21:30 · ISR · 14 Going"
+                    where "14 Going" is a black pill with white text. */}
+                <span className="inline-flex items-center gap-1 rounded-full bg-black text-white px-2.5 py-0.5 font-bold uppercase tracking-wider">
+                  <Users className="h-3 w-3" />
+                  {event.rsvpsGoing} Going
+                </span>
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
