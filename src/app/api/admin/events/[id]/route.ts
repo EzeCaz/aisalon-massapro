@@ -154,6 +154,7 @@ export async function PATCH(
     city,
     country,
     mapUrl,
+    wazeUrl,
     startsAt,
     endsAt,
     description,
@@ -174,6 +175,7 @@ export async function PATCH(
   if (city !== undefined) data.city = city || null;
   if (country !== undefined) data.country = country || null;
   if (mapUrl !== undefined) data.mapUrl = mapUrl || null;
+  if (wazeUrl !== undefined) data.wazeUrl = wazeUrl || null;
   if (description !== undefined) data.description = description || null;
   if (takeaways !== undefined) data.takeaways = takeaways || null;
   if (intendedFor !== undefined) data.intendedFor = intendedFor || null;
@@ -213,6 +215,7 @@ export async function PATCH(
       city: true,
       country: true,
       mapUrl: true,
+      wazeUrl: true,
       startsAt: true,
       endsAt: true,
       description: true,

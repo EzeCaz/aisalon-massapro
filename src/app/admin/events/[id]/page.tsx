@@ -90,6 +90,7 @@ export default async function EditEventPage({ params }: Params) {
     city: event.city,
     country: event.country,
     mapUrl: event.mapUrl,
+    wazeUrl: event.wazeUrl,
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt.toISOString(),
     description: event.description,

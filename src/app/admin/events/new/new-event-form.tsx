@@ -36,6 +36,7 @@ export function NewEventForm() {
   const [city, setCity] = React.useState("Tel Aviv");
   const [country, setCountry] = React.useState("ISR");
   const [mapUrl, setMapUrl] = React.useState("");
+  const [wazeUrl, setWazeUrl] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [takeaways, setTakeaways] = React.useState("");
   const [intendedFor, setIntendedFor] = React.useState("");
@@ -174,6 +175,7 @@ export function NewEventForm() {
       if (e.city) setCity(e.city);
       if (e.country) setCountry(e.country);
       if (e.mapUrl) setMapUrl(e.mapUrl);
+      if (e.wazeUrl) setWazeUrl(e.wazeUrl);
       if (e.description) setDescription(e.description);
       if (e.takeaways) setTakeaways(e.takeaways);
       if (e.intendedFor) setIntendedFor(e.intendedFor);
@@ -217,6 +219,7 @@ export function NewEventForm() {
           city: city.trim() || null,
           country: country.trim() || null,
           mapUrl: mapUrl.trim() || null,
+          wazeUrl: wazeUrl.trim() || null,
           startsAt: localInputToUtcIso(startsAt),
           endsAt: localInputToUtcIso(endsAt),
           description: description.trim() || null,
@@ -437,6 +440,15 @@ export function NewEventForm() {
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
         </Field>
+        <Field label="Waze URL" full hint="Waze deep-link or search URL">
+          <input
+            type="url"
+            value={wazeUrl}
+            onChange={(e) => setWazeUrl(e.target.value)}
+            placeholder="https://waze.com/ul?q=…"
+            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          />
+        </Field>
       </Section>
 
       <Section title="Content">
@@ -522,15 +534,18 @@ function Field({
   label,
   children,
   full,
+  hint,
 }: {
   label: string;
   children: React.ReactNode;
   full?: boolean;
+  hint?: string;
 }) {
   return (
     <label className={`block ${full ? "sm:col-span-2" : ""}`}>
       <span className="block text-xs font-semibold text-black/60 mb-1">{label}</span>
       {children}
+      {hint && <span className="block text-[0.65rem] text-black/40 mt-1">{hint}</span>}
     </label>
   );
 }
