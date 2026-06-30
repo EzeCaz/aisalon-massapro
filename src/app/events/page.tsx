@@ -53,6 +53,21 @@ export default async function EventsPage() {
     },
   });
 
+  // Fetch GOING RSVP counts per event in a single grouped query.
+  // We count only RSVPs with status="GOING" — this matches the
+  // "X Going" pill on the event cards + landing pages. Total RSVPs
+  // (including MAYBE / NOT_GOING) are NOT shown to keep the user
+  // signal clean ("Going" = committed attendees).
+  const eventIds = events.map((e) => e.id);
+  const goingCountsRows = await db.eventRsvp.groupBy({
+    by: ["eventId"],
+    where: { eventId: { in: eventIds }, status: "GOING" },
+    _count: { _all: true },
+  });
+  const goingCounts = new Map<string, number>(
+    goingCountsRows.map((r) => [r.eventId, r._count._all])
+  );
+
   // Fetch the signed-in user's RSVPs so we can show a "Your registered
   // events" section at the top with quick calendar-save buttons.
   let myRsvps: Array<{
@@ -162,7 +177,7 @@ export default async function EventsPage() {
           />
         )}
 
-        <EventsList events={events} />
+        <EventsList events={events} goingCounts={goingCounts} />
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">

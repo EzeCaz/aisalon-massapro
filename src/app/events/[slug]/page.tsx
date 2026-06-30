@@ -7,6 +7,7 @@ import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, normalizeRole, ROLES 
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { format } from "date-fns";
+import { Users } from "lucide-react";
 
 export const metadata = { title: "Event — AI Salon Tel Aviv" };
 
@@ -185,8 +186,15 @@ export default async function EventDetailPage({ params }: Params) {
 
   // SPEAKER role: can view the Event Prep tab (read-only) for events
   // they are speaking at. They cannot edit anything.
+  //
+  // NOTE: We intentionally do NOT require me.role === "SPEAKER" here.
+  // The authoritative check is the Speaker row link (Speaker.userId).
+  // This means a MEMBER who is added as a Speaker on an event also
+  // gets read-only Event Prep access — which is the correct product
+  // behavior (being invited to speak = being invited to prep).
+  // Admins / Co-hosts already get access via canManageEvent above.
   let isSpeakerOfThisEvent = false;
-  if (!canManageEvent && normalizeRole(me.role) === ROLES.SPEAKER) {
+  if (!canManageEvent) {
     isSpeakerOfThisEvent = await isEventSpeaker(me.id, event.id);
   }
   const canViewEventPrep = canManageEvent || isSpeakerOfThisEvent;
@@ -232,6 +240,13 @@ export default async function EventDetailPage({ params }: Params) {
   }
 
   // Fetch RSVP + check-in counts for managers (shown in the Manage Event tab)
+  // AND the GOING count shown in the public meta line (the black "14 Going"
+  // pill). We always need the GOING count for the meta line, so we lift
+  // the rsvpsGoing query out of the manager-only block.
+  const rsvpsGoingCount = await db.eventRsvp.count({
+    where: { eventId: event.id, status: "GOING" },
+  });
+
   let eventStats: {
     rsvps: number;
     rsvpsGoing: number;
@@ -241,15 +256,14 @@ export default async function EventDetailPage({ params }: Params) {
     agenda: number;
   } | null = null;
   if (canManageEvent) {
-    const [rsvps, rsvpsGoing, checkedIn, images, speakers, agenda] = await Promise.all([
+    const [rsvps, checkedIn, images, speakers, agenda] = await Promise.all([
       db.eventRsvp.count({ where: { eventId: event.id } }),
-      db.eventRsvp.count({ where: { eventId: event.id, status: "GOING" } }),
       db.eventRsvp.count({ where: { eventId: event.id, checkedInAt: { not: null } } }),
       db.eventImage.count({ where: { eventId: event.id } }),
       db.speaker.count({ where: { eventId: event.id } }),
       db.eventAgendaItem.count({ where: { eventId: event.id } }),
     ]);
-    eventStats = { rsvps, rsvpsGoing, checkedIn, images, speakers, agenda };
+    eventStats = { rsvps, rsvpsGoing: rsvpsGoingCount, checkedIn, images, speakers, agenda };
   }
 
   // Serialize dates for client
@@ -325,6 +339,9 @@ export default async function EventDetailPage({ params }: Params) {
                 <span className="inline-flex items-center rounded-full bg-[#FF005A]/10 text-[#FF005A] px-2.5 py-0.5 font-bold uppercase tracking-wider">
                   {event.chapter}
                 </span>
+                {event.city && (
+                  <span className="text-black/60 font-semibold">{event.city}</span>
+                )}
                 <span className="text-black/40">
                   {new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(event.startsAt)}
                 </span>
@@ -335,6 +352,13 @@ export default async function EventDetailPage({ params }: Params) {
                 {event.country && (
                   <span className="text-black/40">· {event.country}</span>
                 )}
+                {/* Going pill — black bg, white text. Matches the spec:
+                    "Tel Aviv Monday, July 13, 2026 · 18:00 – 21:30 · ISR · 14 Going"
+                    where the "14 Going" is a black pill with white text. */}
+                <span className="inline-flex items-center gap-1 rounded-full bg-black text-white px-2.5 py-0.5 font-bold uppercase tracking-wider">
+                  <Users className="h-3 w-3" />
+                  {rsvpsGoingCount} Going
+                </span>
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">

@@ -61,7 +61,15 @@ function dateInTLV(d: Date, fmt: "weekday" | "shortDate" | "longDate" | "monthDa
   return new Intl.DateTimeFormat("en-US", opts).format(d);
 }
 
-export function EventsList({ events }: { events: EventCard[] }) {
+export function EventsList({
+  events,
+  goingCounts,
+}: {
+  events: EventCard[];
+  // Map of eventId → number of RSVPs with status="GOING". Lookup is
+  // safe via `?? 0` for events with no RSVPs yet.
+  goingCounts?: Map<string, number>;
+}) {
   if (events.length === 0) {
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
@@ -82,7 +90,12 @@ export function EventsList({ events }: { events: EventCard[] }) {
         <Section title="Upcoming" count={upcoming.length}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {upcoming.map((e) => (
-              <EventCardItem key={e.id} e={e} isPast={false} />
+              <EventCardItem
+                key={e.id}
+                e={e}
+                isPast={false}
+                goingCount={goingCounts?.get(e.id) ?? 0}
+              />
             ))}
           </div>
         </Section>
@@ -91,7 +104,12 @@ export function EventsList({ events }: { events: EventCard[] }) {
         <Section title="Past events" count={past.length}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {past.map((e) => (
-              <EventCardItem key={e.id} e={e} isPast />
+              <EventCardItem
+                key={e.id}
+                e={e}
+                isPast
+                goingCount={goingCounts?.get(e.id) ?? 0}
+              />
             ))}
           </div>
         </Section>
@@ -120,7 +138,15 @@ function Section({
   );
 }
 
-function EventCardItem({ e, isPast }: { e: EventCard; isPast: boolean }) {
+function EventCardItem({
+  e,
+  isPast,
+  goingCount = 0,
+}: {
+  e: EventCard;
+  isPast: boolean;
+  goingCount?: number;
+}) {
   const start = new Date(e.startsAt);
   const end = new Date(e.endsAt);
   const hasMainImage = !!e.mainImage?.fileUrl;
@@ -233,10 +259,29 @@ function EventCardItem({ e, isPast }: { e: EventCard; isPast: boolean }) {
             </Badge>
           </div>
 
-          {/* CTA */}
-          <div className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-black group-hover:text-[#FF005A] transition-colors">
-            {isPast ? "View recap & photos" : "View event & RSVP"}
-            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          {/* CTA + Going count row.
+              The Going count is rendered as a black pill that visually
+              matches the size + format of the date block (top-left),
+              per the user's spec: "in its own box at the bottom right
+              and the format and size of the date". */}
+          <div className="mt-4 flex items-end justify-between gap-3">
+            <div className="inline-flex items-center gap-1 text-xs font-semibold text-black group-hover:text-[#FF005A] transition-colors">
+              {isPast ? "View recap & photos" : "View event & RSVP"}
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            {/* Going pill — black bg, white text. Same compact sizing
+                as the date block: tiny uppercase label + big number. */}
+            <div
+              className="flex-shrink-0 rounded-md border border-black/15 bg-black text-white py-1.5 px-2 text-center min-w-[3rem]"
+              title={`${goingCount} going to this event`}
+            >
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-[#FF005A] leading-none">
+                Going
+              </div>
+              <div className="text-2xl font-extrabold text-white leading-none mt-0.5">
+                {goingCount}
+              </div>
+            </div>
           </div>
         </div>
       </Card>

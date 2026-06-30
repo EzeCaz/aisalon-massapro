@@ -99,6 +99,15 @@ export default async function PublicEventPageRoute({ params }: Params) {
   });
   if (!event) notFound();
 
+  // Count RSVPs with status="GOING" — this is the number shown in the
+  // black "X Going" pill in the meta line (matching the spec example
+  // "Tel Aviv Monday, July 13, 2026 · 18:00 – 21:30 · ISR · 14 Going").
+  // The _count.rsvps above counts ALL RSVPs (incl. MAYBE / NOT_GOING);
+  // we keep that for the secondary "{n} registered" stat, but use the
+  // GOING count for the pill since it represents committed attendees.
+  const rsvpsGoing = await db.eventRsvp.count({
+    where: { eventId: event.id, status: "GOING" },
+  });
   // Read the session (optional). The page works for anonymous visitors,
   // but if the user is signed in we preload their RSVP + check-in status
   // so the client component can render the right CTA without a flash.
@@ -150,6 +159,10 @@ export default async function PublicEventPageRoute({ params }: Params) {
           createdAt: rsvp.createdAt.toISOString(),
         }
       : null,
+    // Add the GOING count alongside the existing _count.rsvps (total).
+    // The client component uses rsvpsGoing for the black "X Going" pill
+    // in the meta line.
+    rsvpsGoing,
   };
 
   return <PublicEventPage event={serialized} me={me} />;
