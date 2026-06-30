@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventsList } from "./events-list";
+import { MyRegisteredEvents } from "./my-registered-events";
 import Link from "next/link";
 
 export const metadata = { title: "Events — AI Salon Tel Aviv" };
@@ -51,6 +52,49 @@ export default async function EventsPage() {
       mainImage: { select: { id: true, fileUrl: true, caption: true } },
     },
   });
+
+  // Fetch the signed-in user's RSVPs so we can show a "Your registered
+  // events" section at the top with quick calendar-save buttons.
+  let myRsvps: Array<{
+    id: string;
+    status: string;
+    event: {
+      id: string;
+      slug: string;
+      title: string;
+      description: string | null;
+      venue: string | null;
+      address: string | null;
+      city: string | null;
+      country: string | null;
+      startsAt: Date;
+      endsAt: Date;
+    };
+  }> = [];
+  if (me) {
+    myRsvps = await db.eventRsvp.findMany({
+      where: { email: me.email, status: "GOING" },
+      orderBy: { event: { startsAt: "asc" } },
+      select: {
+        id: true,
+        status: true,
+        event: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            description: true,
+            venue: true,
+            address: true,
+            city: true,
+            country: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        },
+      },
+    });
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -100,6 +144,23 @@ export default async function EventsPage() {
             Click any event to view the agenda, speakers, and shared photo gallery.
           </p>
         </div>
+
+        {/* "Your registered events" — only for signed-in users with
+            upcoming RSVPs. Shows a compact list with Save-to-Calendar
+            buttons so users can quickly add events to their calendar. */}
+        {me && myRsvps.length > 0 && (
+          <MyRegisteredEvents
+            rsvps={myRsvps.map((r) => ({
+              id: r.id,
+              status: r.status,
+              event: {
+                ...r.event,
+                startsAt: r.event.startsAt.toISOString(),
+                endsAt: r.event.endsAt.toISOString(),
+              },
+            }))}
+          />
+        )}
 
         <EventsList events={events} />
       </main>

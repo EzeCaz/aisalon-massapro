@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { sendRsvpConfirmationEmail, emailConfigured } from "@/lib/email";
+import { generateIcs } from "@/lib/calendar";
 
 /**
  * RSVP API for the public event page (/e/[slug]).
@@ -36,7 +38,17 @@ async function getUser(req: NextRequest, slug: string) {
   if (!user) return { user: null, event: null, status: 401 as const };
   const event = await db.event.findUnique({
     where: { slug },
-    select: { id: true, title: true, startsAt: true, endsAt: true },
+    select: {
+      id: true,
+      title: true,
+      startsAt: true,
+      endsAt: true,
+      description: true,
+      venue: true,
+      address: true,
+      city: true,
+      country: true,
+    },
   });
   if (!event) return { user: null, event: null, status: 404 as const };
   return { user, event, status: 200 as const };
@@ -71,6 +83,11 @@ export async function POST(_req: NextRequest, { params }: Params) {
   // Upsert the RSVP. We key on the (eventId, email) unique constraint so
   // clicking "Register" multiple times is safe — the existing row is just
   // upgraded to status=GOING. The checkInCode (if any) is preserved.
+  const wasAlreadyRegistered = !!(await db.eventRsvp.findUnique({
+    where: { eventId_email: { eventId: event.id, email: user!.email } },
+    select: { id: true },
+  }));
+
   const rsvp = await db.eventRsvp.upsert({
     where: { eventId_email: { eventId: event.id, email: user!.email } },
     create: {
@@ -94,6 +111,48 @@ export async function POST(_req: NextRequest, { params }: Params) {
       createdAt: true,
     },
   });
+
+  // Send a confirmation email with .ics attachment IF:
+  //   - This is a NEW registration (not a re-registration of an existing GOING RSVP)
+  //   - SMTP is configured
+  // We don't email on every click — only the first time the user registers.
+  if (!wasAlreadyRegistered && emailConfigured()) {
+    try {
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
+      const eventUrl = `${siteUrl.replace(/\/$/, "")}/events/${slug}`;
+      const icsContent = generateIcs({
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt.toISOString(),
+        endsAt: event.endsAt.toISOString(),
+        venue: event.venue,
+        address: event.address,
+        city: event.city,
+        country: event.country,
+        url: eventUrl,
+      });
+      await sendRsvpConfirmationEmail({
+        to: user!.email,
+        name: user!.name,
+        eventTitle: event.title,
+        eventStartsAt: event.startsAt.toISOString(),
+        eventEndsAt: event.endsAt.toISOString(),
+        eventVenue: event.venue,
+        eventAddress: event.address,
+        eventCity: event.city,
+        eventCountry: event.country,
+        eventDescription: event.description,
+        eventUrl,
+        icsContent,
+      });
+    } catch (err) {
+      // Don't fail the RSVP if the email fails — the registration is
+      // still valid. Just log it.
+      console.error("[rsvp] Confirmation email failed:", err);
+    }
+  }
 
   return NextResponse.json({ rsvp });
 }
