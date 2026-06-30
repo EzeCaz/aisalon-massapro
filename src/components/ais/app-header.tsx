@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { canSeeAdminNav, normalizeRole, ROLES } from "@/lib/permissions";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -25,9 +25,21 @@ export async function AppHeader() {
         include: { tags: true },
       })
     : null;
-  // Show the "Admin" nav link to anyone who can view members
-  // (SUPER_ADMIN + ADMIN). CO_HOST + MEMBER don't see it.
-  const isAdmin = !!user && can(user.role, "members.view");
+  // Show the "Admin" nav link to ADMIN+ and CO_HOST (event-scoped admin
+  // pages). SPEAKER is excluded — they access Event Prep via the event
+  // page itself (the 🎯 Event prep tab on /events/[slug]).
+  const isAdmin = !!user && canSeeAdminNav(user.role);
+
+  // Pick the admin landing URL based on role so each user lands on a
+  // page they're allowed to access (instead of being redirected):
+  //   - ADMIN+       → /admin           (Members table)
+  //   - CO_HOST      → /admin/speakers  (event-scoped, allowed)
+  const adminHref = (() => {
+    if (!user) return "/admin";
+    const r = normalizeRole(user.role);
+    if (r === ROLES.CO_HOST) return "/admin/speakers";
+    return "/admin";
+  })();
 
   // Public site settings — includes the WhatsApp group URL. Safe to read
   // for anonymous visitors (the URL is shown publicly in the header).
@@ -37,7 +49,7 @@ export async function AppHeader() {
   const navLinks = [
     { href: "/events", label: "Events" },
     { href: "/resources/ai-human-flourishing", label: "AI & Human Flourishing" },
-    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+    ...(isAdmin ? [{ href: adminHref, label: "Admin" }] : []),
   ];
 
   return (
@@ -77,7 +89,7 @@ export async function AppHeader() {
               </Link>
             ))}
             {user && <InboxButtonServer />}
-            {user && <UserMenu user={user} isAdmin={isAdmin} />}
+            {user && <UserMenu user={user} isAdmin={isAdmin} adminHref={adminHref} />}
           </nav>
 
           {/* Mobile nav */}
@@ -96,7 +108,7 @@ export async function AppHeader() {
               </a>
             )}
             {user && <InboxButtonServer />}
-            <MobileNav links={navLinks} user={user} isAdmin={isAdmin} />
+            <MobileNav links={navLinks} user={user} isAdmin={isAdmin} adminHref={adminHref} />
           </div>
         </div>
       </div>

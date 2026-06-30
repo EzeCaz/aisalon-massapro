@@ -13,6 +13,12 @@
  *                    speakers for events they are explicitly co-hosting
  *                    (EventCoHost table). Cannot create new events,
  *                    cannot see member info, cannot send email campaigns.
+ *                    CAN view event-scoped data (registrants, speakers,
+ *                    check-in, event dashboard, mockups) for events
+ *                    they co-host — data is filtered server-side.
+ *   - "SPEAKER"      Per-event speaker. Can view the Event Prep page
+ *                    (read-only) for events they are speaking at.
+ *                    Cannot edit agenda, event details, or anything else.
  *   - "MEMBER"       Default community member. Can RSVP, message
  *                    speakers, view event pages.
  *
@@ -23,14 +29,21 @@
  * The `can()` helper handles SUPER_ADMIN → ADMIN → CO_HOST → MEMBER
  * inheritance automatically, so most callers just ask "can this user
  * do X?" without caring about the specific role string.
+ *
+ * NOTE: SPEAKER is intentionally OUTSIDE the inheritance chain — it has
+ * rank 0 (below MEMBER). It does NOT inherit MEMBER permissions; it only
+ * gets the explicit `eventprep.view` permission plus the standard
+ * `events.view` that everyone signed-in gets.
  */
 
-/** The four canonical role strings, in descending privilege order. */
+/** The five canonical role strings. SPEAKER is intentionally rank 0
+ * (outside the inheritance chain) — it does NOT inherit MEMBER. */
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
   ADMIN: "ADMIN",
   CO_HOST: "CO_HOST",
   MEMBER: "MEMBER",
+  SPEAKER: "SPEAKER",
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
@@ -92,6 +105,7 @@ export function normalizeRole(role: string | null | undefined): Role {
   if (upper === "ADMIN") return ROLES.ADMIN;
   if (upper === "CO_HOST") return ROLES.CO_HOST;
   if (upper === "MEMBER") return ROLES.MEMBER;
+  if (upper === "SPEAKER") return ROLES.SPEAKER;
   // Legacy / unknown values default to MEMBER
   return ROLES.MEMBER;
 }
@@ -102,12 +116,14 @@ export function normalizeRole(role: string | null | undefined): Role {
  *   ADMIN       = 3
  *   CO_HOST     = 2
  *   MEMBER      = 1
+ *   SPEAKER     = 0  (outside inheritance — gets only explicit perms)
  */
 const RANK: Record<Role, number> = {
   SUPER_ADMIN: 4,
   ADMIN: 3,
   CO_HOST: 2,
   MEMBER: 1,
+  SPEAKER: 0,
 };
 
 /** Does role A have AT LEAST the privileges of role B? */
@@ -165,6 +181,19 @@ const CAN_MAP: Record<string, Role> = {
 
   // Tags
   "tags.manage": ROLES.ADMIN,
+
+  // ── Event-scoped data views (for CO_HOST) ──────────────────────────
+  // CO_HOSTs can view event-scoped admin pages (registrants, speakers,
+  // check-in, event-dashboard, mockups) — but only for events they
+  // co-host. The data filtering happens server-side in each page via
+  // getCoHostedEventIds().
+  "eventdata.viewCoHosted": ROLES.CO_HOST,
+
+  // ── Event Prep (for SPEAKER) ──────────────────────────────────────
+  // Speakers can view the Event Prep page (read-only) for events they
+  // are speaking at. They cannot edit anything — agenda, event details,
+  // speakers, etc. are all read-only.
+  "eventprep.view": ROLES.SPEAKER,
 };
 
 /**
@@ -193,6 +222,12 @@ export function can(
   if (r === ROLES.SUPER_ADMIN) return true;
   const required = CAN_MAP[permission];
   if (!required) return false;
+  // SPEAKER has rank 0 — they ONLY pass checks where the required role
+  // is also SPEAKER (e.g. "eventprep.view"). They do NOT inherit MEMBER
+  // permissions despite being a signed-in user.
+  if (r === ROLES.SPEAKER) {
+    return required === ROLES.SPEAKER;
+  }
   return RANK[r] >= RANK[required];
 }
 
@@ -213,6 +248,69 @@ export async function isEventCoHost(userId: string, eventId: string): Promise<bo
     select: { id: true },
   });
   return row !== null;
+}
+
+/**
+ * Returns the set of event IDs a CO_HOST user is allowed to see, OR null
+ * if the user has global access (SUPER_ADMIN or ADMIN).
+ *
+ * Returns:
+ *   - null  → user has global access (admin+) — DO NOT filter
+ *   - []    → user has no event access (e.g. MEMBER/SPEAKER) — return empty
+ *   - [id1, id2, ...] → user is CO_HOST of these specific events
+ *
+ * Usage in admin pages:
+ *   const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+ *   const where = scopedEventIds === null
+ *     ? {}  // admin+: all events
+ *     : { eventId: { in: scopedEventIds } };  // CO_HOST: only their events
+ */
+export async function getCoHostedEventIds(
+  userId: string,
+  role: string | null | undefined
+): Promise<string[] | null> {
+  // Admins + Super Admins see all events — return null to signal "no filter"
+  if (can(role, "events.edit")) return null;
+  // CO_HOST users see only their co-hosted events
+  if (normalizeRole(role) === ROLES.CO_HOST) {
+    const { db } = await import("@/lib/db");
+    const rows = await db.eventCoHost.findMany({
+      where: { userId },
+      select: { eventId: true },
+    });
+    return rows.map((r) => r.eventId);
+  }
+  // Everyone else (MEMBER, SPEAKER, unknown): no events
+  return [];
+}
+
+/**
+ * Check whether a user is a Speaker (linked via Speaker.userId) of a
+ * given event. Used to gate the Event Prep page for SPEAKER role.
+ */
+export async function isEventSpeaker(userId: string, eventId: string): Promise<boolean> {
+  const { db } = await import("@/lib/db");
+  const row = await db.speaker.findFirst({
+    where: { userId, eventId },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+/**
+ * Returns the event IDs where this user is a Speaker (linked via
+ * Speaker.userId). Used by the Event Prep page to list the SPEAKER's
+ * events. Returns [] for users who aren't speakers anywhere.
+ */
+export async function getSpeakerEventIds(userId: string): Promise<string[]> {
+  const { db } = await import("@/lib/db");
+  const rows = await db.speaker.findMany({
+    where: { userId },
+    select: { eventId: true },
+  });
+  // Dedupe — a user could theoretically be linked to multiple Speaker
+  // rows for the same event (shouldn't happen, but be defensive).
+  return Array.from(new Set(rows.map((r) => r.eventId)));
 }
 
 /**
@@ -238,6 +336,8 @@ export function roleLabel(role: string | null | undefined): string {
       return "Admin";
     case ROLES.CO_HOST:
       return "Co-host";
+    case ROLES.SPEAKER:
+      return "Speaker";
     case ROLES.MEMBER:
       return "Member";
   }
@@ -255,6 +355,8 @@ export function roleBadgeClass(role: string | null | undefined): string {
       return "bg-[#FF005A] text-white";
     case ROLES.CO_HOST:
       return "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40";
+    case ROLES.SPEAKER:
+      return "bg-[#FFB300]/20 text-[#8a5a00] border border-[#FFB300]/40";
     case ROLES.MEMBER:
       return "bg-black/5 text-black/60 border border-black/10";
   }
@@ -265,10 +367,34 @@ export function roleBadgeClass(role: string | null | undefined): string {
  * Super Admin itself is NOT in this list — it can only be granted by
  * editing SUPER_ADMIN_EMAILS in code.
  */
-export const ASSIGNABLE_ROLES: Role[] = [ROLES.ADMIN, ROLES.CO_HOST, ROLES.MEMBER];
+export const ASSIGNABLE_ROLES: Role[] = [
+  ROLES.ADMIN,
+  ROLES.CO_HOST,
+  ROLES.SPEAKER,
+  ROLES.MEMBER,
+];
 
 /**
  * Roles that an Admin can assign to a user (more restrictive).
  * Admins cannot grant Admin to others (only Super Admin can).
  */
-export const ADMIN_ASSIGNABLE_ROLES: Role[] = [ROLES.CO_HOST, ROLES.MEMBER];
+export const ADMIN_ASSIGNABLE_ROLES: Role[] = [
+  ROLES.CO_HOST,
+  ROLES.SPEAKER,
+  ROLES.MEMBER,
+];
+
+/**
+ * Returns true if the user role should see the "Admin" link in the
+ * site header. This includes ADMIN+ and CO_HOST (event-scoped admin
+ * pages). SPEAKER is excluded — they access Event Prep via the event
+ * page itself (the 🎯 Event prep tab on /events/[slug]), not via /admin.
+ */
+export function canSeeAdminNav(role: string | null | undefined): boolean {
+  const r = normalizeRole(role);
+  return (
+    r === ROLES.SUPER_ADMIN ||
+    r === ROLES.ADMIN ||
+    r === ROLES.CO_HOST
+  );
+}

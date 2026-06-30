@@ -1,0 +1,98 @@
+================================================================
+AI SALON MASSAPRO — PREP-TAB BASELINE BACKUP
+================================================================
+
+Backup created : 2026-06-30
+Backup kind    : MAJOR (baseline before v5.15 feature work)
+Git commit     : 8bf5f53 (branch: v5.15-prep-tab)
+Parent commit  : eadfe2d (V5.14: Event prep tab — interactive speaker questions)
+Vercel dep ID  : dpl_2a7182Fa1HbiJmm9H7foSkYScx9L  (immutable, can be re-promoted)
+Tarball SHA256 : e20fc5651c6a5c6d364a427632232e16546eb47e2f5dcb1221896a52f81fd8df
+File count     : 594
+
+----------------------------------------------------------------
+WHAT'S IN THIS BASELINE
+----------------------------------------------------------------
+
+Source code = production commit eadfe2d (V5.14: Event prep tab) +
+one tiny patch: added `prisma db push --accept-data-loss` to the
+build script so future Vercel deploys auto-apply schema changes.
+
+V5.14 features already present:
+  - Event Prep tab on /events/[slug] (visible to Super Admin, Admin,
+    Co-host of the event)
+  - EventPrepQuestion + EventPrepSuggestion Prisma models
+  - 40 seeded questions for ai-salon-human event:
+      10 GENERIC + 5 SPEAKER × 6 speakers (Dan Ariely, Yehoshua Cohen,
+      Eyal Rond, Noam Inbar, Dennis Nerush, Ido Vapner)
+  - Suggest flow: Admin/Co-host propose → Super Admin accept/reject
+
+Database state:
+  - All V5.14 tables exist (EventPrepQuestion, EventPrepSuggestion)
+  - NOTE: The v5.14-rbac-utm-preview branch's prisma db push also
+    added these unused-but-harmless columns/tables:
+      User.referralCode, User.referredById (nullable)
+      PageView, ClickEvent, TrackedLead, MemberShare, ReferralConversion
+    They are empty and unused by v5.15 code.
+
+----------------------------------------------------------------
+WHAT'S NOT IN THIS BASELINE (to be added in v5.15)
+----------------------------------------------------------------
+
+1. SPEAKER user role
+   - Has access to Event Prep tab ONLY
+   - No access to manage agenda or event
+
+2. CO_HOST event-scoped data filtering across 5 admin pages:
+   A. /admin/registrants    — only RSVPs for events they co-host
+   B. /admin/speakers       — only speakers for events they co-host
+   C. /admin/check-in       — only lookups for events they co-host
+   D. /admin/dashboard/event-dashboard — only their co-hosted events
+   E. /admin/mockups        — gate via eventdata.viewCoHosted perm
+   (Super Admin still sees all.)
+
+3. Waze URL field
+   - New optional `wazeUrl` field on Event model
+   - Field in event editor (below Map URL)
+   - "Open Waze" button next to "Open in Maps" on event tab
+
+4. Save to Calendar
+   - iCal (.ics download), Google, Outlook, Yahoo
+   - On event page (next to Register)
+   - After registration success state
+   - In registration confirmation email (.ics attachment)
+   - In user dashboard "My Events" list
+
+----------------------------------------------------------------
+ROLLBACK INSTRUCTIONS
+----------------------------------------------------------------
+
+Option A — Vercel only (instant):
+  vercel promote dpl_2a7182Fa1HbiJmm9H7foSkYScx9L \
+    --scope=ezecazs-projects/aisalon-massapro
+
+Option B — Git + Vercel:
+  git fetch origin
+  git checkout main
+  git reset --hard eadfe2d
+  git push origin main --force-with-lease
+  # Wait for Vercel auto-deploy, then promote the new deployment
+
+Option C — Restore from this tarball:
+  tar -xzf aisalon-massapro-PREP-TAB-source.tar.gz
+  cd aisalon-massapro-PREP-TAB
+  bun install
+  bun run build   # regenerates Prisma client + pushes schema
+  vercel deploy --prod
+
+----------------------------------------------------------------
+BACKUP LOCATIONS
+----------------------------------------------------------------
+
+  Local tarball : /home/z/my-project/download/aisalon-massapro-PREP-TAB-source.tar.gz
+  Local manifest: /home/z/my-project/download/prep-tab-backup/MANIFEST.txt
+  GitHub release: https://github.com/EzeCaz/aisalon-massapro/releases/tag/prep-tab
+  Vercel pin    : dpl_2a7182Fa1HbiJmm9H7foSkYScx9L (immutable, never auto-deleted)
+  Google Drive  : SKIPPED (OAuth token not configured in this env)
+
+================================================================

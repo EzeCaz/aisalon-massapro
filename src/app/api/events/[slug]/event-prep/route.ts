@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isEventCoHost, isSuperAdmin, ROLES, normalizeRole } from "@/lib/permissions";
+import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, ROLES, normalizeRole } from "@/lib/permissions";
 
 /**
  * /api/events/[slug]/event-prep
@@ -32,6 +32,11 @@ async function authorize(meId: string, meRole: string, meEmail: string | null, e
   if (normalizeRole(meRole) === ROLES.CO_HOST) {
     return await isEventCoHost(meId, eventId);
   }
+  // Speaker of this event → allowed (read-only — enforced by the
+  // PUT/POST/PATCH handlers which block SPEAKER role).
+  if (normalizeRole(meRole) === ROLES.SPEAKER) {
+    return await isEventSpeaker(meId, eventId);
+  }
   return false;
 }
 
@@ -59,7 +64,7 @@ export async function GET(
 
   const authorized = await authorize(me.id, me.role, me.email, event.id);
   if (!authorized) {
-    return NextResponse.json({ error: "Forbidden — Super Admin, Admin, or Co-host of this event only" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden — Super Admin, Admin, Co-host, or Speaker of this event only" }, { status: 403 });
   }
 
   const [questions, suggestions] = await Promise.all([
@@ -221,7 +226,10 @@ export async function POST(
   if (!authorized) {
     return NextResponse.json({ error: "Forbidden — Super Admin, Admin, or Co-host of this event only" }, { status: 403 });
   }
-
+  // SPEAKER role is read-only — they can GET but not POST suggestions.
+  if (normalizeRole(me.role) === ROLES.SPEAKER) {
+    return NextResponse.json({ error: "Speakers have read-only access to Event Prep" }, { status: 403 });
+  }
   const body = await req.json();
   const { questionId, proposedText, proposedScope, proposedSpeakerId, proposedTag } = body as {
     questionId?: string | null;

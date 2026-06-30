@@ -25,9 +25,12 @@ type Props = {
     tags: { id: string; label: string; color: string | null }[];
   };
   isAdmin: boolean;
+  /** Admin landing URL tailored to the user's role
+   * (e.g. SPEAKER → /admin/event-prep, CO_HOST → /admin/speakers). */
+  adminHref?: string;
 };
 
-export function UserMenu({ user, isAdmin }: Props) {
+export function UserMenu({ user, isAdmin, adminHref = "/admin" }: Props) {
   const initials = (user.name || user.email)
     .split(/\s+|@/)
     .filter(Boolean)
@@ -80,7 +83,7 @@ export function UserMenu({ user, isAdmin }: Props) {
         )}
         {isAdmin && (
           <DropdownMenuItem asChild>
-            <Link href="/admin">
+            <Link href={adminHref}>
               <Shield className="mr-2 h-4 w-4" /> Admin Panel
             </Link>
           </DropdownMenuItem>

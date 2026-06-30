@@ -93,7 +93,7 @@ type EventData = {
   speakers: { id: string; name: string; role: string | null; company: string | null; photoUrl: string | null }[];
 };
 
-export function EventPrepTab({ event, me }: { event: EventData; me: Me }) {
+export function EventPrepTab({ event, me, isSpeaker = false }: { event: EventData; me: Me; isSpeaker?: boolean }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -268,7 +268,11 @@ export function EventPrepTab({ event, me }: { event: EventData; me: Me }) {
     );
   }
 
-  const roleLabel = isSuperAdmin ? "Super Admin — can edit directly" : me.role + " — can suggest";
+  const roleLabel = isSpeaker
+    ? "Speaker — read-only view"
+    : isSuperAdmin
+      ? "Super Admin — can edit directly"
+      : me.role + " — can suggest";
   const pendingCount = pendingSuggestions.length;
   const pendingLabel = pendingCount + " pending suggestion" + (pendingCount === 1 ? "" : "s");
 
@@ -322,6 +326,7 @@ export function EventPrepTab({ event, me }: { event: EventData; me: Me }) {
               speaker={speaker}
               questions={qs}
               isSuperAdmin={isSuperAdmin}
+              isSpeaker={isSpeaker}
               onEdit={(q) => setEditing(q)}
               onDelete={handleSuperAdminDelete}
               onSuggest={(q) => setSuggestFor(q)}
@@ -340,7 +345,7 @@ export function EventPrepTab({ event, me }: { event: EventData; me: Me }) {
               <h3 className="text-xs font-bold uppercase tracking-widest text-black/70">
                 Generic questions ({genericQs.length})
               </h3>
-              {isSuperAdmin ? (
+              {isSpeaker ? null : isSuperAdmin ? (
                 <Button size="sm" variant="outline" onClick={() => setSuggestFor("new-generic")}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add
                 </Button>
@@ -357,6 +362,7 @@ export function EventPrepTab({ event, me }: { event: EventData; me: Me }) {
                   index={i + 1}
                   question={q}
                   isSuperAdmin={isSuperAdmin}
+                  isSpeaker={isSpeaker}
                   onEdit={() => setEditing(q)}
                   onDelete={() => handleSuperAdminDelete(q.id)}
                   onSuggest={() => setSuggestFor(q)}
@@ -441,6 +447,7 @@ function SpeakerBox({
   speaker,
   questions,
   isSuperAdmin,
+  isSpeaker = false,
   onEdit,
   onDelete,
   onSuggest,
@@ -449,6 +456,7 @@ function SpeakerBox({
   speaker: Speaker;
   questions: Question[];
   isSuperAdmin: boolean;
+  isSpeaker?: boolean;
   onEdit: (q: Question) => void;
   onDelete: (qId: string) => void;
   onSuggest: (q: Question) => void;
@@ -477,9 +485,11 @@ function SpeakerBox({
           <p className="text-xs text-black/60 truncate">{roleCompany}</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="outline" onClick={onAddNew}>
-            {isSuperAdmin ? <><Plus className="h-3.5 w-3.5 mr-1" /> Add</> : <><MessageSquare className="h-3.5 w-3.5 mr-1" /> Suggest</>}
-          </Button>
+          {!isSpeaker && (
+            <Button size="sm" variant="outline" onClick={onAddNew}>
+              {isSuperAdmin ? <><Plus className="h-3.5 w-3.5 mr-1" /> Add</> : <><MessageSquare className="h-3.5 w-3.5 mr-1" /> Suggest</>}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -495,7 +505,11 @@ function SpeakerBox({
         <div className="space-y-2">
           {questions.length === 0 && (
             <p className="text-xs text-black/40 italic py-2 text-center">
-              No personalized questions yet. {isSuperAdmin ? "Click Add to create one." : "Click Suggest to propose one."}
+              {isSpeaker
+                ? "No personalized questions yet."
+                : isSuperAdmin
+                  ? "No personalized questions yet. Click Add to create one."
+                  : "No personalized questions yet. Click Suggest to propose one."}
             </p>
           )}
           {questions.map((q, i) => (
@@ -504,6 +518,7 @@ function SpeakerBox({
               index={i + 1}
               question={q}
               isSuperAdmin={isSuperAdmin}
+              isSpeaker={isSpeaker}
               onEdit={() => onEdit(q)}
               onDelete={() => onDelete(q.id)}
               onSuggest={() => onSuggest(q)}
@@ -519,6 +534,7 @@ function QuestionCard({
   index,
   question,
   isSuperAdmin,
+  isSpeaker = false,
   onEdit,
   onDelete,
   onSuggest,
@@ -526,6 +542,7 @@ function QuestionCard({
   index: number;
   question: Question;
   isSuperAdmin: boolean;
+  isSpeaker?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onSuggest: () => void;
@@ -564,7 +581,7 @@ function QuestionCard({
           )}
         </div>
         <div className="flex flex-col gap-1">
-          {isSuperAdmin ? (
+          {isSpeaker ? null : isSuperAdmin ? (
             <>
               <Button size="sm" variant="ghost" onClick={onEdit} className="h-7 px-2" title="Edit">
                 <Pencil className="h-3.5 w-3.5" />

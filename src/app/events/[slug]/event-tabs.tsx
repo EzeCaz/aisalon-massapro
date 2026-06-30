@@ -101,6 +101,8 @@ export function EventTabs({
   canManageEvent = false,
   canManageCoHosts = false,
   isSuperAdmin = false,
+  canViewEventPrep = false,
+  isSpeaker = false,
   coHosts = [],
   eventStats = null,
 }: {
@@ -113,6 +115,10 @@ export function EventTabs({
   /** Whether the current viewer can add/remove co-hosts (Admin+ only, NOT Co-host). */
   canManageCoHosts?: boolean;
   isSuperAdmin?: boolean;
+  /** Whether the current viewer can see the 🎯 Event prep tab (managers + SPEAKERs of this event). */
+  canViewEventPrep?: boolean;
+  /** Whether the current viewer is a SPEAKER on this event (read-only Event Prep access). */
+  isSpeaker?: boolean;
   coHosts?: CoHost[];
   eventStats?: EventStats | null;
 }) {
@@ -151,7 +157,7 @@ export function EventTabs({
         <TabsTrigger value="presentations" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Presentations
         </TabsTrigger>
-        {canManageEvent && (
+        {canViewEventPrep && (
           <TabsTrigger
             value="event-prep"
             className="data-[state=active]:bg-[#00E6FF]/20 data-[state=active]:text-[#007E72]"
@@ -192,7 +198,7 @@ export function EventTabs({
       <TabsContent value="presentations" className="mt-6">
         <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
-      {canManageEvent && (
+      {canViewEventPrep && (
         <TabsContent value="event-prep" className="mt-6">
           <EventPrepTab
             event={{
@@ -214,6 +220,7 @@ export function EventTabs({
               role: me.role,
               isSuperAdmin,
             }}
+            isSpeaker={isSpeaker}
           />
         </TabsContent>
       )}
