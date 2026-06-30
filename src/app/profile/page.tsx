@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { ProfileEditor } from "./profile-editor";
+import { ReferralShareCard } from "@/components/ais/referral-share-card";
 
 export const metadata = { title: "My Profile" };
 
@@ -58,6 +59,16 @@ export default async function ProfilePage() {
         </div>
 
         <ProfileEditor initial={initial} />
+
+        {/* Referral program — show the member their unique share link
+            + their stats (visits, signups, RSVPs they've driven).
+            Only shown if the member has a utmUid (all post-V5.18 users
+            do; pre-existing users were backfilled by the script). */}
+        {me.utmUid && (
+          <div className="mt-8">
+            <ReferralShareCard utmUid={me.utmUid} variant="full" />
+          </div>
+        )}
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">

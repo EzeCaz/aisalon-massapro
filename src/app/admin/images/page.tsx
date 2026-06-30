@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
 import { WhatsAppLinkEditor } from "./whatsapp-link-editor";
+import { AnalyticsSettingsEditor } from "./analytics-settings-editor";
 import { getPublicSettings } from "@/lib/site-settings";
 
 export const metadata = { title: "Brand Images — AI Salon Tel Aviv" };
@@ -104,6 +105,16 @@ export default async function AdminImagesPage() {
         <div className="mt-8">
           <WhatsAppLinkEditor
             currentUrl={settings.whatsappGroupUrl}
+            canEdit={isSuper}
+          />
+        </div>
+
+        {/* Analytics IDs editor — GA4 + Meta Pixel. Scripts only load
+            after visitor consent (cookie banner). SUPER_ADMIN-only writes. */}
+        <div className="mt-6">
+          <AnalyticsSettingsEditor
+            currentGa4Id={settings.ga4MeasurementId}
+            currentMetaPixelId={settings.metaPixelId}
             canEdit={isSuper}
           />
         </div>

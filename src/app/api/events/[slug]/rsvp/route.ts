@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendRsvpConfirmationEmail, emailConfigured } from "@/lib/email";
 import { generateIcs } from "@/lib/calendar";
+import { getReferrerUserId, UTM_COOKIE_NAME } from "@/lib/utm";
 
 /**
  * RSVP API for the public event page (/e/[slug]).
@@ -88,6 +89,16 @@ export async function POST(_req: NextRequest, { params }: Params) {
     select: { id: true },
   }));
 
+  // UTM referral attribution — if the visitor arrived via a member's
+  // share link (cookie `ais_utm_uid` set), attribute this RSVP to that
+  // referrer. Only set on NEW RSVPs (existing RSVPs keep their original
+  // referrer). Falls back to null if no cookie or invalid utmUid.
+  let referredByUserId: string | null = null;
+  if (!wasAlreadyRegistered) {
+    const utmCookie = _req.cookies.get(UTM_COOKIE_NAME)?.value;
+    referredByUserId = await getReferrerUserId(utmCookie);
+  }
+
   const rsvp = await db.eventRsvp.upsert({
     where: { eventId_email: { eventId: event.id, email: user!.email } },
     create: {
@@ -97,6 +108,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       name: user!.name,
       status: "GOING",
       source: "EVENT_PAGE",
+      referredByUserId,
     },
     update: {
       userId: user!.id,

@@ -112,7 +112,7 @@ export default async function PublicEventPageRoute({ params }: Params) {
   // but if the user is signed in we preload their RSVP + check-in status
   // so the client component can render the right CTA without a flash.
   const session = await getServerSession(authOptions);
-  let me: { id: string; email: string; name: string | null } | null = null;
+  let me: { id: string; email: string; name: string | null; utmUid: string | null } | null = null;
   let rsvp: {
     id: string;
     status: string;
@@ -125,7 +125,7 @@ export default async function PublicEventPageRoute({ params }: Params) {
   if (session?.user?.email) {
     me = await db.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, utmUid: true },
     });
     if (me) {
       rsvp = await db.eventRsvp.findUnique({

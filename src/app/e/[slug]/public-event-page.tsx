@@ -87,7 +87,7 @@ type Event = {
   rsvp: Rsvp;
 };
 
-type Me = { id: string; email: string; name: string | null } | null;
+type Me = { id: string; email: string; name: string | null; utmUid: string | null } | null;
 
 type Props = { event: Event; me: Me };
 
@@ -247,13 +247,29 @@ export function PublicEventPage({ event, me }: Props) {
   }
 
   async function handleShare() {
-    const url = typeof window !== "undefined" ? window.location.href : `/e/${event.slug}`;
+    // Build a share URL with the member's utm_uid appended so visits
+    // + signups + RSVPs are attributed back to them on /admin/analytics.
+    // Anonymous visitors get a plain URL (no utm_uid) — they can still
+    // share, they just don't get credit.
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const path = `/e/${event.slug}`;
+    let url: string;
+    if (me?.utmUid) {
+      const u = new URL(path, baseUrl || "https://aisalon.massapro.com");
+      u.searchParams.set("utm_source", "member");
+      u.searchParams.set("utm_medium", "referral");
+      u.searchParams.set("utm_campaign", "aisalon");
+      u.searchParams.set("utm_uid", me.utmUid);
+      url = u.toString();
+    } else {
+      url = typeof window !== "undefined" ? window.location.href : path;
+    }
     try {
       if (navigator.share) {
         await navigator.share({ title: event.title, url });
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success("Link copied to clipboard.");
+        toast.success(me?.utmUid ? "Your referral link copied — you'll get credit for signups!" : "Link copied to clipboard.");
       }
     } catch {
       /* swallow */

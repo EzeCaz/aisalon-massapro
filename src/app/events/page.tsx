@@ -6,6 +6,7 @@ import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventsList } from "./events-list";
 import { MyRegisteredEvents } from "./my-registered-events";
+import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import Link from "next/link";
 
 export const metadata = { title: "Events — AI Salon Tel Aviv" };
@@ -29,17 +30,25 @@ export const metadata = { title: "Events — AI Salon Tel Aviv" };
  */
 export default async function EventsPage() {
   const session = await getServerSession(authOptions);
-  let me: { id: string; email: string; name: string | null } | null = null;
+  let me: { id: string; email: string; name: string | null; utmUid: string | null } | null = null;
   if (session?.user?.email) {
-    me = await db.user.findUnique({
+    const meRow = await db.user.findUnique({
       where: { email: session.user.email },
       include: { tags: true },
     });
+    if (meRow) {
+      me = {
+        id: meRow.id,
+        email: meRow.email,
+        name: meRow.name,
+        utmUid: meRow.utmUid,
+      };
+    }
     // Signed-in users must complete onboarding before browsing the
     // members-only directory features (the events list itself is
     // still public, but we keep the gate here for consistency with
     // other member pages).
-    if (me && needsOnboarding(me)) redirect("/onboarding");
+    if (meRow && needsOnboarding(meRow)) redirect("/onboarding");
   }
 
   const events = await db.event.findMany({
@@ -159,6 +168,16 @@ export default async function EventsPage() {
             Click any event to view the agenda, speakers, and shared photo gallery.
           </p>
         </div>
+
+        {/* Referral share link — compact single-row variant for signed-in
+            members. Shows their unique share link with a Copy + Share
+            button. Hidden for anonymous visitors (they get the Join AI
+            Salon banner above instead). */}
+        {me?.utmUid && (
+          <div className="mb-8">
+            <ReferralShareCard utmUid={me.utmUid} variant="compact" />
+          </div>
+        )}
 
         {/* "Your registered events" — only for signed-in users with
             upcoming RSVPs. Shows a compact list with Save-to-Calendar

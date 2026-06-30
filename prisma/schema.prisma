@@ -63,6 +63,15 @@ model User {
   // onboarding — they already have intake data from the spreadsheet.
   onboardedAt       DateTime?
   // ----------------------------------------------------------------
+  // UTM tracking — a unique 12-char hex string generated server-side
+  // on user creation. Used as the `utm_uid` query param on every
+  // share link the user generates from /profile or /events so the
+  // platform can attribute visits + signups + RSVPs back to the
+  // referring member. Stable for the lifetime of the user (never
+  // regenerated). Unique at the DB level. Backfilled for all
+  // pre-existing users by scripts/backfill-utm-uid.ts.
+  utmUid            String?  @unique
+  // ----------------------------------------------------------------
   // Soft-delete (archive) — set when a Super Admin archives a member.
   // Archived members are excluded from the main members list and from
   // most queries, but their row is preserved for audit. Only Super
@@ -100,6 +109,17 @@ model User {
   // ----------------------------------------------------------------
   // Event prep — suggestions this user has submitted (audit trail).
   prepSuggestions   EventPrepSuggestion[] @relation("EventPrepSuggester")
+  // ----------------------------------------------------------------
+  // UTM referrals — visits attributed to this user's share link, and
+  // signups/RSVPs that resulted from those visits. Used by the
+  // /admin/analytics dashboard to show referral stats per member.
+  referralVisits        ReferralVisit[]       @relation("ReferralVisitsReferrer")
+  referredSignups       ReferralAttribution[] @relation("ReferredSignupReferrer")
+  // The signup attribution row where THIS user was the new signup
+  // (i.e. they signed up via someone else's share link). At most one
+  // row per user (enforced by ReferralAttribution.referredUserId @unique).
+  signupAttributedTo    ReferralAttribution?  @relation("ReferredSignupReferredUser")
+  referredRsvps         EventRsvp[]           @relation("ReferredRsvpReferrer")
   // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -539,6 +559,15 @@ model EventRsvp {
   doorCheckedAt    DateTime?
   doorCheckedBy    String?
   // ----------------------------------------------------------------
+  // UTM referral — set when a visitor lands on the event page with
+  // ?utm_uid=<hex> and RSVPs. The userId of the referring member
+  // (looked up from utm_uid). Lets the analytics dashboard show
+  // "RSVPs by referrer" without joining through ReferralAttribution.
+  // Null = the RSVP was not attributed to any referrer (direct visit
+  // or no utm_uid cookie present at RSVP time).
+  referredByUserId String?
+  referredBy       User?  @relation("ReferredRsvpReferrer", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  // ----------------------------------------------------------------
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -546,6 +575,7 @@ model EventRsvp {
   @@index([eventId])
   @@index([userId])
   @@index([email])
+  @@index([referredByUserId])
 }
 
 /// Co-host of an event (admin-designated collaborators, in addition to the
@@ -671,4 +701,79 @@ model EventPrepSuggestion {
   @@index([eventId, status])
   @@index([questionId])
   @@index([suggestedByUserId])
+}
+
+// ===========================================================================
+// UTM REFERRAL TRACKING
+// ===========================================================================
+
+/// A single inbound visit attributed to a member's share link.
+///
+/// Created by middleware when a visitor lands with ?utm_uid=<hex> in the URL
+/// (the cookie `ais_utm_uid` is also set so subsequent visits within 30 days
+/// attribute to the same referrer even without the query param).
+///
+/// One row PER VISIT (i.e. per landing with utm_uid present). The
+/// dashboard aggregates by referrerUserId + day.
+model ReferralVisit {
+  id              String   @id @default(cuid())
+  /// The userId of the member whose share link was clicked.
+  referrerUserId  String
+  referrer        User     @relation("ReferralVisitsReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  /// The hex utm_uid from the URL (matches User.utmUid). Denormalized so
+  /// the dashboard can group by utm_uid without joining back to User.
+  utmUid          String
+  /// Raw UTM params captured from the URL (utm_source, utm_medium,
+  /// utm_campaign, utm_content, utm_term). Null when not provided.
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmContent      String?
+  utmTerm         String?
+  /// The path the visitor landed on (e.g. "/e/ai-salon-human").
+  landingPath     String
+  /// Anonymous visitor fingerprint — IP hash + user-agent hash. Used to
+  /// dedupe repeat visits within the same session (we don't want to count
+  /// the same visitor clicking their own link 50 times as 50 visits).
+  visitorHash     String?
+  /// True if the visitor was previously unseen (new visitor). False if
+  /// we've seen this visitorHash before for this referrerUserId.
+  isNewVisitor    Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([referrerUserId])
+  @@index([utmUid])
+  @@index([createdAt])
+  @@index([visitorHash])
+}
+
+/// A successful conversion: a visitor who arrived via a member's share
+/// link and then signed up (created an account) on the platform.
+///
+/// One row PER REFERRED SIGNUP. The `referredUserId` is the new user
+/// who signed up; `referrerUserId` is the member whose link they clicked.
+/// `ReferralVisit.id` is the visit that introduced them (the latest
+/// visit from that referrer within the 30-day attribution window).
+model ReferralAttribution {
+  id               String   @id @default(cuid())
+  /// The new user who signed up.
+  referredUserId   String   @unique
+  referredUser     User     @relation("ReferredSignupReferredUser", fields: [referredUserId], references: [id], onDelete: Cascade)
+  /// The member whose share link drove the signup.
+  referrerUserId   String
+  referrer         User     @relation("ReferredSignupReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  /// The hex utm_uid that was on the share link.
+  utmUid           String
+  /// The visit that introduced the user (one of ReferralVisit rows
+  /// attributed to this referrer). Null when the visitor came back via
+  /// the cookie without an explicit utm_uid on the final signup URL.
+  referralVisitId  String?
+  /// When the signup completed (denormalized from User.createdAt for
+  /// faster dashboard queries without a join).
+  convertedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([referrerUserId])
+  @@index([utmUid])
+  @@index([convertedAt])
 }

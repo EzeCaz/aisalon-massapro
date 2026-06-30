@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { getPublicSettings } from "@/lib/site-settings";
+import { CookieConsentBanner } from "@/components/ais/cookie-consent-banner";
+import { AnalyticsScripts } from "@/components/ais/analytics-scripts";
 
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta",
@@ -96,17 +98,33 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Pull GA4 + Meta Pixel IDs from SiteSetting so the admin can enable
+  // them at /admin/images without a redeploy.
+  const settings = await getPublicSettings();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${plusJakarta.variable} ${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          {/* Cookie consent banner — shows on first visit, stores choice
+              in localStorage for 6 months. */}
+          <CookieConsentBanner />
+          {/* GA4 + Meta Pixel scripts — only loaded AFTER the user clicks
+              "Accept All" on the consent banner. Both IDs come from
+              SiteSetting (admin-editable at /admin/images). */}
+          <AnalyticsScripts
+            ga4MeasurementId={settings.ga4MeasurementId}
+            metaPixelId={settings.metaPixelId}
+          />
+        </Providers>
         <Toaster />
         <SonnerToaster position="top-right" />
       </body>

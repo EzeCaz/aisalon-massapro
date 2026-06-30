@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { isSuperAdminEmail, ROLES, type Role } from "@/lib/permissions";
+import { generateUtmUid } from "@/lib/utm";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "eze@massapro.com").toLowerCase();
 
@@ -133,14 +134,47 @@ export const authOptions: NextAuthOptions = {
         if (!existing) {
           // Brand-new user → use the initial role resolver
           const role = resolveInitialRole(user.email);
-          await db.user.create({
-            data: {
-              email: lowerEmail,
-              name: user.name || null,
-              image: user.image || null,
-              role,
-            },
-          });
+          // Generate a unique utmUid (12-char hex) for referral tracking.
+          // Retry on collision (P2002) — astronomically unlikely with 16^12
+          // possibilities, but defensive.
+          let utmUid: string | undefined;
+          for (let i = 0; i < 5; i++) {
+            try {
+              utmUid = generateUtmUid();
+              await db.user.create({
+                data: {
+                  email: lowerEmail,
+                  name: user.name || null,
+                  image: user.image || null,
+                  role,
+                  utmUid,
+                },
+              });
+              break;
+            } catch (err: unknown) {
+              const code = (err as { code?: string })?.code;
+              if (code === "P2002" && i < 4) {
+                // Unique constraint on utmUid — regenerate + retry
+                utmUid = undefined;
+                continue;
+              }
+              throw err;
+            }
+          }
+          if (!utmUid) {
+            // All 5 attempts collided (essentially impossible). Fall back to
+            // creating the user WITHOUT a utmUid — the backfill script can
+            // fill it in later. This way the signup never fails just because
+            // UTM_UID generation had bad luck.
+            await db.user.create({
+              data: {
+                email: lowerEmail,
+                name: user.name || null,
+                image: user.image || null,
+                role,
+              },
+            });
+          }
         } else {
           // Existing user — only sync the role if they're a Super Admin
           // (so the SUPER_ADMIN status always matches the hard-coded

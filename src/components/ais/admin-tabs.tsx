@@ -15,6 +15,7 @@ import {
   Images,
   BookOpen,
   LayoutTemplate,
+  TrendingUp,
 } from "lucide-react";
 
 /**
@@ -86,6 +87,7 @@ const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/events/new", label: "New event", icon: CalendarPlus, match: "/admin/events/new" },
   { href: "/admin/check-in", label: "Door Check-in", icon: QrCode, match: "/admin/check-in" },
   { href: "/admin/dashboard", label: "Dashboard", icon: BarChart3, match: "/admin/dashboard" },
+  { href: "/admin/analytics", label: "Referral Analytics", icon: TrendingUp, match: "/admin/analytics" },
   { href: "/admin/dashboard/event-dashboard", label: "Event dashboard", icon: CalendarRange, match: "/admin/dashboard/event-dashboard" },
   { href: "/admin/email", label: "Email", icon: Mail, match: "/admin/email" },
   { href: "/admin/images", label: "Images", icon: Images, match: "/admin/images" },

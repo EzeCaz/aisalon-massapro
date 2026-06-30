@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { sendPasswordEmail, emailConfigured } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { generateUtmUid, attributeSignup, UTM_COOKIE_NAME } from "@/lib/utm";
 
 /**
  * POST /api/auth/signup
@@ -57,25 +58,86 @@ export async function POST(req: NextRequest) {
 
     try {
       const existing = await db.user.findUnique({ where: { email } });
-      if (existing) {
-        userExisted = true;
-        userHasPassword = !!existing.passwordHash;
-        displayName = existing.name || name;
-        // Either reset an existing password or attach one to a Google-only user.
-        await db.user.update({
-          where: { id: existing.id },
-          data: { passwordHash, name: displayName },
-        });
-      } else {
-        await db.user.create({
-          data: {
-            email,
-            name,
-            passwordHash,
-            role: "MEMBER",
-          },
-        });
+      // Generate a utmUid for the new user (or for the existing user if
+      // they don't have one yet — covers the case where a Google-only user
+      // signed in before the utmUid column existed).
+      let utmUid: string | undefined;
+      for (let i = 0; i < 5; i++) {
+        try {
+          utmUid = generateUtmUid();
+          if (existing) {
+            if (existing.utmUid) {
+              utmUid = existing.utmUid;
+              break;
+            }
+            await db.user.update({
+              where: { id: existing.id },
+              data: { passwordHash, name: displayName, utmUid },
+            });
+          } else {
+            await db.user.create({
+              data: {
+                email,
+                name,
+                passwordHash,
+                role: "MEMBER",
+                utmUid,
+              },
+            });
+          }
+          break;
+        } catch (err: unknown) {
+          const code = (err as { code?: string })?.code;
+          if (code === "P2002" && i < 4) {
+            // Unique constraint on utmUid — regenerate + retry. (Note: we
+            // don't try to disambiguate from email collisions here; those
+            // would mean a race condition where another signup created the
+            // same email between our findUnique and our create. That's a
+            // separate error path and will surface below.)
+            utmUid = undefined;
+            continue;
+          }
+          throw err;
+        }
       }
+      if (!utmUid) {
+        // All retries failed (essentially impossible). Fall back to creating
+        // the user without a utmUid — backfill script will fill it in later.
+        if (existing) {
+          await db.user.update({
+            where: { id: existing.id },
+            data: { passwordHash, name: displayName },
+          });
+        } else {
+          await db.user.create({
+            data: { email, name, passwordHash, role: "MEMBER" },
+          });
+        }
+      }
+
+      // UTM attribution — if the visitor arrived via a member's share link,
+      // attribute this signup to that referrer.
+      const utmCookie = req.cookies.get(UTM_COOKIE_NAME)?.value;
+      if (utmCookie && existing?.id !== undefined) {
+        // Existing user — they may already have an attribution, skip.
+      } else if (utmCookie) {
+        // New user — find their id and attribute the signup to the referrer.
+        const newUser = await db.user.findUnique({
+          where: { email },
+          select: { id: true },
+        });
+        if (newUser) {
+          await attributeSignup({
+            newUserId: newUser.id,
+            utmUid: utmCookie,
+          }).catch((err) => {
+            // Attribution failure must never block signup
+            console.warn("[signup] UTM attribution failed:", err);
+          });
+        }
+      }
+      userExisted = !!existing;
+      userHasPassword = !!existing?.passwordHash;
     } catch (dbErr) {
       console.error("[signup] DB error:", dbErr);
       // The most common cause in production is a misconfigured DATABASE_URL
