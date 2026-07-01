@@ -251,8 +251,15 @@ export function PublicEventPage({ event, me }: Props) {
     // + signups + RSVPs are attributed back to them on /admin/analytics.
     // Anonymous visitors get a plain URL (no utm_uid) — they can still
     // share, they just don't get credit.
+    //
+    // We share /events/[slug] (the authenticated member view) rather than
+    // /e/[slug] because /events/[slug] auto-redirects anonymous visitors
+    // to /e/[slug] (the public landing page) — so logged-out recipients
+    // still get the public experience, while logged-in ones go straight
+    // to the full member event page. This matches the URLs shown in the
+    // ReferralShareCard on /events/[slug].
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const path = `/e/${event.slug}`;
+    const path = `/events/${event.slug}`;
     let url: string;
     if (me?.utmUid) {
       const u = new URL(path, baseUrl || "https://aisalon.massapro.com");
@@ -269,7 +276,7 @@ export function PublicEventPage({ event, me }: Props) {
         await navigator.share({ title: event.title, url });
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success(me?.utmUid ? "Your referral link copied — you'll get credit for signups!" : "Link copied to clipboard.");
+        toast.success(me?.utmUid ? "Referral link copied — you'll get credit for signups!" : "Link copied to clipboard.");
       }
     } catch {
       /* swallow */

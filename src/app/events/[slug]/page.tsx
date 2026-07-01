@@ -6,6 +6,7 @@ import { needsOnboarding } from "@/lib/onboarding";
 import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
+import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { format } from "date-fns";
 import { Users } from "lucide-react";
 
@@ -483,6 +484,16 @@ export default async function EventDetailPage({ params }: Params) {
 
       {/* Tabs */}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        {/* Referral share link — compact variant. Lets members share THIS
+            event page (the URL is auto-built from the current pathname, so
+            it includes the /events/[slug] path + the member's utm_uid).
+            Hidden for users without a utmUid (legacy accounts). */}
+        {me.utmUid && (
+          <div className="mb-6">
+            <ReferralShareCard utmUid={me.utmUid} variant="compact" />
+          </div>
+        )}
+
         <EventTabs
           event={serialized}
           me={me}
