@@ -129,6 +129,10 @@ export function SpeakerIntroEditor({ events }: Props) {
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
       if (sp) sp.photoUrl = url;
+    } else if (slot.kind === "branding-asset") {
+      // Bottom-LEFT branding asset (per user spec 2026-07-02). Replaceable
+      // via the canvas Replace button or the form view URL input.
+      next.brandingAsset = { ...(next.brandingAsset ?? {}), imageUrl: url };
     } else {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
@@ -159,6 +163,9 @@ export function SpeakerIntroEditor({ events }: Props) {
     if (slot.kind === "speaker") {
       const sp = [...data.speakers].sort((a, b) => a.order - b.order)[slot.index];
       return sp?.photoUrl;
+    }
+    if (slot.kind === "branding-asset") {
+      return data.brandingAsset?.imageUrl;
     }
     const arr = slot.group === "collaborators" ? data.collaborators : data.sponsors;
     return arr[slot.index]?.logoUrl;
@@ -282,6 +289,14 @@ export function SpeakerIntroEditor({ events }: Props) {
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
       if (sp) sp.photoSize = newMultiplier;
+    } else if (slot.kind === "branding-asset") {
+      // Branding asset's size is stored as height-in-px (default 48).
+      // The canvas renders the sizeMultiplier as (height/48), so on resize
+      // we multiply 48 by the new multiplier to get the new height.
+      next.brandingAsset = {
+        ...(next.brandingAsset ?? {}),
+        height: Math.max(8, Math.round(48 * newMultiplier)),
+      };
     } else {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
@@ -406,6 +421,21 @@ export function SpeakerIntroEditor({ events }: Props) {
   function handleTriangleZChange(z: number) {
     const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
     next.triangleZ = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a branding-asset position change — fires when the user drags
+   *  the "⠿ Move branding" handle on the canvas. Updates
+   *  `data.brandingAsset.pos` (free-form {x, y} as % of canvas). */
+  function handleBrandingAssetPosChange(pos: { x: number; y: number }) {
+    const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    next.brandingAsset = { ...(next.brandingAsset ?? {}), pos };
     setData(next);
     if (rafRef.current === null) {
       rafRef.current = requestAnimationFrame(() => {
@@ -871,6 +901,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 onHeroScaleXChange={handleHeroScaleXChange}
                 onHeroScaleYChange={handleHeroScaleYChange}
                 onSectionZChange={handleSectionZChange}
+                onBrandingAssetPosChange={handleBrandingAssetPosChange}
               />
             </div>
           </div>

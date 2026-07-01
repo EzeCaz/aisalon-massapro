@@ -97,4 +97,14 @@ export const SAMPLE_DATA: SpeakerIntroData = {
   ],
   qrCodeUrl: "https://aisalon.massapro.com/events",
   footerCredit: "Platform by MassaPro",
+  /**
+   * Branding asset at the bottom-LEFT corner of the canvas. Defaults to
+   * the AI Salon brand image hosted on Vercel Blob (per user spec
+   * 2026-07-02). Replaceable + draggable — see speaker-intro-canvas.tsx.
+   */
+  brandingAsset: {
+    imageUrl:
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    height: 48,
+  },
 };

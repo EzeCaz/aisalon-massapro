@@ -45,6 +45,24 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             onChange={(v) => update((d) => { d.header.color = v; })}
           />
         </Field>
+        <TextStyleRow
+          label="Header — font size + color + align"
+          fontSize={data.textStyles?.header?.fontSize}
+          fontColor={data.textStyles?.header?.color}
+          align={data.textStyles?.header?.align}
+          defaultFontSize={32}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.header = {
+                ...(d.textStyles.header ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
       </Section>
 
       {/* ===== SPEAKER — SECTION 1: IDENTITY =====
@@ -62,17 +80,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           />
         </Field>
         <TextStyleRow
-          label="Full name — font size + color"
+          label="Full name — font size + color + align"
           fontSize={data.textStyles?.fullName?.fontSize}
           fontColor={data.textStyles?.fullName?.color}
+          align={data.textStyles?.fullName?.align}
           defaultFontSize={56}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.fullName = {
                 ...(d.textStyles.fullName ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -96,33 +116,37 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           </Field>
         </div>
         <TextStyleRow
-          label="Title — font size + color"
+          label="Title — font size + color + align"
           fontSize={data.textStyles?.title?.fontSize}
           fontColor={data.textStyles?.title?.color}
+          align={data.textStyles?.title?.align}
           defaultFontSize={18}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.title = {
                 ...(d.textStyles.title ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
         />
         <TextStyleRow
-          label="Company — font size + color"
+          label="Company — font size + color + align"
           fontSize={data.textStyles?.company?.fontSize}
           fontColor={data.textStyles?.company?.color}
+          align={data.textStyles?.company?.align}
           defaultFontSize={16}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.company = {
                 ...(d.textStyles.company ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -144,17 +168,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           </select>
         </Field>
         <TextStyleRow
-          label="Role — font size + color"
+          label="Role — font size + color + align"
           fontSize={data.textStyles?.role?.fontSize}
           fontColor={data.textStyles?.role?.color}
+          align={data.textStyles?.role?.align}
           defaultFontSize={11}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.role = {
                 ...(d.textStyles.role ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -172,17 +198,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           />
         </Field>
         <TextStyleRow
-          label="Topic — font size + color"
+          label="Topic — font size + color + align"
           fontSize={data.textStyles?.topic?.fontSize}
           fontColor={data.textStyles?.topic?.color}
+          align={data.textStyles?.topic?.align}
           defaultFontSize={20}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.topic = {
                 ...(d.textStyles.topic ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -196,17 +224,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           />
         </Field>
         <TextStyleRow
-          label="Topic description — font size + color"
+          label="Topic description — font size + color + align"
           fontSize={data.textStyles?.topicDescription?.fontSize}
           fontColor={data.textStyles?.topicDescription?.color}
+          align={data.textStyles?.topicDescription?.align}
           defaultFontSize={15}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.topicDescription = {
                 ...(d.textStyles.topicDescription ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -220,17 +250,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           />
         </Field>
         <TextStyleRow
-          label="Bio — font size + color"
+          label="Bio — font size + color + align"
           fontSize={data.textStyles?.bio?.fontSize}
           fontColor={data.textStyles?.bio?.color}
+          align={data.textStyles?.bio?.align}
           defaultFontSize={13}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.bio = {
                 ...(d.textStyles.bio ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -244,17 +276,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           />
         </Field>
         <TextStyleRow
-          label="Expertise — font size + color"
+          label="Expertise — font size + color + align"
           fontSize={data.textStyles?.expertise?.fontSize}
           fontColor={data.textStyles?.expertise?.color}
+          align={data.textStyles?.expertise?.align}
           defaultFontSize={12}
-          onChange={(fontSize, fontColor) =>
+          onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
               d.textStyles.expertise = {
                 ...(d.textStyles.expertise ?? {}),
                 ...(fontSize !== undefined ? { fontSize } : {}),
                 ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
               };
             })
           }
@@ -422,6 +456,52 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Position X (%) — free drag on canvas">
+            <input
+              type="number"
+              step="0.5"
+              placeholder="auto (bottom-right)"
+              value={data.graphic.pos?.x ?? ""}
+              onChange={(e) =>
+                update((d) => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n)) {
+                    d.graphic.pos = { ...(d.graphic.pos ?? { x: 80, y: 68 }), x: n };
+                  } else {
+                    d.graphic.pos = undefined;
+                  }
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Position Y (%) — free drag on canvas">
+            <input
+              type="number"
+              step="0.5"
+              placeholder="auto (bottom-right)"
+              value={data.graphic.pos?.y ?? ""}
+              onChange={(e) =>
+                update((d) => {
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n)) {
+                    d.graphic.pos = { ...(d.graphic.pos ?? { x: 80, y: 68 }), y: n };
+                  } else {
+                    d.graphic.pos = undefined;
+                  }
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+        </div>
+        <p className="text-[0.55rem] text-black/40 leading-tight">
+          Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
+          &ldquo;⠿ Move graphic&rdquo; handle to reposition the meerkat anywhere
+          on the canvas. Clear the X/Y inputs to restore the default
+          bottom-right anchor.
+        </p>
       </Section>
 
       {/* ===== HERO OVERLAY ===== */}
@@ -487,10 +567,10 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                 onClick={() =>
                   update((d) => {
                     d.localStreetPins = [
-                      { x: 18, y: 22, label: "Local Street 1" },
-                      { x: 82, y: 18, label: "Local Street 2" },
-                      { x: 85, y: 78, label: "Local Street 3" },
-                      { x: 15, y: 80, label: "Local Street 4" },
+                      { x: 49, y: 28, label: "Mobileye" },
+                      { x: 90, y: 6, label: "Wiz" },
+                      { x: 95, y: 43, label: "Waze" },
+                      { x: 53, y: 79, label: "Elementor" },
                     ];
                   })
                 }
@@ -813,6 +893,90 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
         )}
       </Section>
 
+      {/* ===== BRANDING ASSET (bottom-left) =====
+          Per user spec 2026-07-02: "On all mockups, the bottom left
+          branding asset should be this as default, ...1782505047256-bpy1ln.png
+          and replaceable". */}
+      <Section title="Branding asset (bottom-left)">
+        <Field label="Image URL (defaults to AI Salon brand image — click Replace on the canvas in edit mode to swap)">
+          <input
+            type="url"
+            value={data.brandingAsset?.imageUrl ?? ""}
+            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            onChange={(e) =>
+              update((d) => {
+                if (!d.brandingAsset) d.brandingAsset = {};
+                d.brandingAsset.imageUrl = e.target.value || undefined;
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Height (px)">
+            <input
+              type="number"
+              step="2"
+              min="8"
+              value={data.brandingAsset?.height ?? 48}
+              onChange={(e) =>
+                update((d) => {
+                  if (!d.brandingAsset) d.brandingAsset = {};
+                  d.brandingAsset.height = parseFloat(e.target.value) || 48;
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Position X (%)">
+            <input
+              type="number"
+              step="0.5"
+              placeholder="2.7"
+              value={data.brandingAsset?.pos?.x ?? ""}
+              onChange={(e) =>
+                update((d) => {
+                  if (!d.brandingAsset) d.brandingAsset = {};
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n)) {
+                    d.brandingAsset.pos = { ...(d.brandingAsset.pos ?? { x: 2.7, y: 94 }), x: n };
+                  } else {
+                    d.brandingAsset.pos = undefined;
+                  }
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Position Y (%)">
+            <input
+              type="number"
+              step="0.5"
+              placeholder="94"
+              value={data.brandingAsset?.pos?.y ?? ""}
+              onChange={(e) =>
+                update((d) => {
+                  if (!d.brandingAsset) d.brandingAsset = {};
+                  const n = parseFloat(e.target.value);
+                  if (Number.isFinite(n)) {
+                    d.brandingAsset.pos = { ...(d.brandingAsset.pos ?? { x: 2.7, y: 94 }), y: n };
+                  } else {
+                    d.brandingAsset.pos = undefined;
+                  }
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+        </div>
+        <p className="text-[0.55rem] text-black/40 leading-tight">
+          Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
+          &ldquo;⠿ Move branding&rdquo; handle to reposition the brand image
+          anywhere on the canvas. Click the <strong>Replace</strong> button
+          overlay to swap the image from the brand library.
+        </p>
+      </Section>
+
       {/* ===== SPONSORS ===== */}
       <Section title={`Collaborators (${data.collaborators.length})`}>
         {data.collaborators.map((s, idx) => (
@@ -1002,27 +1166,38 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /**
- * TextStyleRow — a compact row with Font size + Color inputs for a
- * specific text section (Full name / Title / Company / Role / Topic /
- * Topic description / Bio / Expertise).
+ * TextStyleRow — a compact row with Font size + Color + Align controls
+ * for a specific text section (Full name / Title / Company / Role / Topic
+ * / Topic description / Bio / Expertise / Header).
  *
- * Per user spec 2026-07-02: "I should be able to select the font size
- * and color of each specific text section". When the inputs are empty,
- * the canvas falls back to the default font size + color for that
- * section.
+ * Per user spec 2026-07-02:
+ *   - "I should be able to select the font size and color of each
+ *      specific text section".
+ *   - "Add to all mockups and all text fields and sections the align
+ *      left, center or right options, and also font size to each text
+ *      field".
+ *
+ * When the inputs are empty, the canvas falls back to the default font
+ * size + color + align for that section.
  */
 function TextStyleRow({
   label,
   fontSize,
   fontColor,
+  align,
   defaultFontSize,
   onChange,
 }: {
   label: string;
   fontSize?: number;
   fontColor?: string;
+  align?: "left" | "center" | "right";
   defaultFontSize: number;
-  onChange: (fontSize: number | undefined, fontColor: string | undefined) => void;
+  onChange: (
+    fontSize: number | undefined,
+    fontColor: string | undefined,
+    align: "left" | "center" | "right" | undefined,
+  ) => void;
 }) {
   return (
     <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1.5">
@@ -1040,8 +1215,8 @@ function TextStyleRow({
             value={fontSize ?? ""}
             onChange={(e) => {
               const n = parseFloat(e.target.value);
-              if (Number.isFinite(n) && n > 0) onChange(n, fontColor);
-              else onChange(undefined, fontColor);
+              if (Number.isFinite(n) && n > 0) onChange(n, fontColor, align);
+              else onChange(undefined, fontColor, align);
             }}
             className="form-input w-20"
             title={`Font size in px (default: ${defaultFontSize}px). Empty = use default.`}
@@ -1053,19 +1228,40 @@ function TextStyleRow({
           <input
             type="color"
             value={fontColor ?? "#000000"}
-            onChange={(e) => onChange(fontSize, e.target.value)}
+            onChange={(e) => onChange(fontSize, e.target.value, align)}
             className="h-7 w-9 rounded border border-black/15 cursor-pointer"
             title="Text color (click to pick). Default = black or theme color."
           />
           <button
             type="button"
-            onClick={() => onChange(fontSize, undefined)}
+            onClick={() => onChange(fontSize, undefined, align)}
             className="text-[0.55rem] text-black/50 hover:text-black underline"
             title="Reset color to default"
           >
             reset
           </button>
         </label>
+      </div>
+      {/* Align L / C / R — per user spec 2026-07-02. */}
+      <div className="flex items-center gap-1">
+        <span className="text-[0.6rem] font-semibold text-black/60 w-8">Align</span>
+        {(["left", "center", "right"] as const).map((a) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() =>
+              onChange(fontSize, fontColor, align === a ? undefined : a)
+            }
+            className={`px-2 py-0.5 text-[0.55rem] font-semibold rounded border transition ${
+              (align ?? "left") === a
+                ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                : "border-black/15 bg-white text-black/60 hover:bg-black/5"
+            }`}
+            title={`Align ${a}`}
+          >
+            {a === "left" ? "⟵ L" : a === "center" ? "↔ C" : "⟶ R"}
+          </button>
+        ))}
       </div>
     </div>
   );

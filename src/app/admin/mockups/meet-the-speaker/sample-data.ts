@@ -44,6 +44,15 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
     imagePlacement: { focusX: 50, focusY: 50, zoom: 1 },
     imageScale: 1,
   },
+  // Branding asset at the bottom-LEFT corner. Defaults to the AI Salon
+  // brand image hosted on Vercel Blob. Replaceable via the canvas Replace
+  // button (edit mode) or the form view URL input.
+  // Per user spec 2026-07-02.
+  brandingAsset: {
+    imageUrl:
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    height: 48,
+  },
   heroOverlay: {
     gradientColors: ["#6A5ACD", "#FF005C"],
     gradientOpacity: 0.45,
@@ -54,16 +63,14 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
   heroStyle: 1,
   heroStyle2Url:
     "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png",
-  // "Local Street" pins — overlaid on hero style #2. Default labels
-  // match the 4 "Placeholder N" positions baked into the source image
-  // (top-left, top-right, bottom-right, bottom-left). Admin can rename
-  // to actual neighborhoods (Sarona, Yafo, etc.) and reposition via
-  // the form view.
+  // "Local Street" pins — overlaid on hero style #2.
+  // Per user spec 2026-07-02: default to Mobileye / Wiz / Waze / Elementor
+  // at the four canonical positions on the network graph image.
   localStreetPins: [
-    { x: 18, y: 22, label: "Local Street 1" },
-    { x: 82, y: 18, label: "Local Street 2" },
-    { x: 85, y: 78, label: "Local Street 3" },
-    { x: 15, y: 80, label: "Local Street 4" },
+    { x: 49, y: 28, label: "Mobileye" },
+    { x: 90, y: 6, label: "Wiz" },
+    { x: 95, y: 43, label: "Waze" },
+    { x: 53, y: 79, label: "Elementor" },
   ],
   collaborators: [
     {

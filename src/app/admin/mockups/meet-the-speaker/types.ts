@@ -17,6 +17,25 @@ import type { SectionLayout } from "../shared/section-edit";
 export type SpeakerRole = "Speaker" | "Moderator" | "Panelist" | "Host";
 
 /**
+ * TextStyle — per-text-section font size + color + alignment overrides.
+ * All fields optional; the canvas falls back to per-section defaults
+ * when a field is unset.
+ *
+ * Per user spec 2026-07-02: "Add to all mockups and all text fields and
+ * sections the align left, center or right options, and also font size
+ * to each text field".
+ */
+export type TextStyle = {
+  /** Font size in px. When undefined, the canvas uses the section default. */
+  fontSize?: number;
+  /** Text color (any CSS color string). When undefined, the section default. */
+  color?: string;
+  /** Horizontal alignment: "left" | "center" | "right". When undefined, the
+   *  section's default alignment is used. */
+  align?: "left" | "center" | "right";
+};
+
+/**
  * ImagePlacement — per-image pan/zoom that controls how an image is
  * cropped inside its container. Stored as part of the JSON so it
  * round-trips through the editor and is reproducible on export.
@@ -94,23 +113,28 @@ export type MeetTheSpeakerData = {
     photoRotation?: number;
   };
   /**
-   * Per-text-section font + color overrides. Each key matches a text
-   * element on the canvas (fullName, title, company, role, topic,
-   * topicDescription, bio, expertise). When a value is set, the canvas
-   * uses it instead of the default font size / color.
+   * Per-text-section font + color + alignment overrides. Each key matches
+   * a text element on the canvas (fullName, title, company, role, topic,
+   * topicDescription, bio, expertise, header). When a value is set, the
+   * canvas uses it instead of the default font size / color / align.
    *
-   * Per user spec 2026-07-02: "I should be able to select the font
-   * size and color of each specific text section".
+   * Per user spec 2026-07-02:
+   *   - "I should be able to select the font size and color of each
+   *      specific text section".
+   *   - "Add to all mockups and all text fields and sections the align
+   *      left, center or right options, and also font size to each text
+   *      field".
    */
   textStyles?: {
-    fullName?: { fontSize?: number; color?: string };
-    title?: { fontSize?: number; color?: string };
-    company?: { fontSize?: number; color?: string };
-    role?: { fontSize?: number; color?: string };
-    topic?: { fontSize?: number; color?: string };
-    topicDescription?: { fontSize?: number; color?: string };
-    bio?: { fontSize?: number; color?: string };
-    expertise?: { fontSize?: number; color?: string };
+    header?: TextStyle;
+    fullName?: TextStyle;
+    title?: TextStyle;
+    company?: TextStyle;
+    role?: TextStyle;
+    topic?: TextStyle;
+    topicDescription?: TextStyle;
+    bio?: TextStyle;
+    expertise?: TextStyle;
   };
   /** Event context (auto-filled from the event picker). */
   event: {
@@ -140,6 +164,31 @@ export type MeetTheSpeakerData = {
      * `transform: rotate(<deg>deg)` on the graphic's container.
      */
     rotation?: number;
+    /**
+     * Free-form position of the graphic container, as % of canvas
+     * (0–100 for x and y). When set, the graphic is positioned at
+     * this point (top-left corner) instead of its default bottom-right
+     * anchor. Set by dragging the graphic in edit mode — per user spec
+     * 2026-07-02: "Graphic (z=8) should be able to drag with my mousse
+     * all over the canvas without limitation".
+     */
+    pos?: { x: number; y: number };
+  };
+  /**
+   * Branding asset at the bottom-LEFT corner of the canvas. Defaults to
+   * the AI Salon brand image hosted on Vercel Blob. Replaceable via the
+   * canvas Replace button (edit mode) or the form view URL input.
+   *
+   * Per user spec 2026-07-02: "On all mockups, the bottom left branding
+   * asset should be this as default, https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png
+   * and replaceable".
+   */
+  brandingAsset?: {
+    imageUrl?: string;
+    /** Height in px. Default 48. */
+    height?: number;
+    /** Free-form position as % of canvas. Default = bottom-left corner. */
+    pos?: { x: number; y: number };
   };
   /** Geometric triangle overlays on the right side (behind speaker photo). */
   heroOverlay: {
@@ -257,6 +306,7 @@ export type ImageSlot =
   | { kind: "speaker-photo" }
   | { kind: "graphic" }
   | { kind: "hero-style2" }
+  | { kind: "branding-asset" }
   | { kind: "sponsor"; group: "collaborators" | "sponsors"; index: number };
 
 /** Helper: clamp a number to [min, max]. */

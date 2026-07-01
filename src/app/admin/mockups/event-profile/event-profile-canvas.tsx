@@ -87,6 +87,10 @@ type Props = {
   onHeroScaleYChange?: (n: number) => void;
   /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
+  /** Called when the bottom-LEFT branding asset is dragged via its
+   *  "⠿ Move branding" handle. Updates `data.brandingAsset.pos`
+   *  (free-form {x, y} as % of canvas). */
+  onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -108,6 +112,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroScaleXChange,
       onHeroScaleYChange,
       onSectionZChange,
+      onBrandingAssetPosChange,
       previewScale = 1,
     },
     ref,
@@ -491,6 +496,58 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             </SectionBox>
           )}
 
+          {/* ===== BRANDING ASSET (bottom-LEFT corner by default, replaceable + draggable) =====
+              Per user spec 2026-07-02: "On all mockups, the bottom left
+              branding asset should be this as default, ...1782505047256-bpy1ln.png
+              and replaceable". Renders the AI Salon brand image at the
+              bottom-left corner, draggable to anywhere on the canvas.
+
+              Placed AFTER the existing BRANDING (bottom-right) SectionBox
+              so the two coexist (the existing one is the wordmark text in
+              the bottom-right corner; this is the bottom-LEFT image asset).
+              z = TEXT_Z + 2 = 52 = above text sections (50) but below the
+              ObjectPropertiesPanel. */}
+          {(() => {
+            const height = data.brandingAsset?.height ?? 48;
+            const pos = data.brandingAsset?.pos;
+            // Default: bottom-left corner with ~32px margin = ~2.7% left, ~94% top.
+            const leftPct = pos ? pos.x : 2.7;
+            const topPct = pos ? pos.y : 94;
+            return (
+              <DraggablePhotoContainer
+                leftPct={leftPct}
+                topPct={topPct}
+                widthPct={(height * 2) / 12}  // approx aspect-ratio based width (1200-wide canvas)
+                heightPct={height / 12}        // height as % of 1200px canvas
+                zIndex={TEXT_Z + 2}
+                rotation={0}
+                editable={editable}
+                previewScale={previewScale}
+                onPosChange={onBrandingAssetPosChange}
+                moveLabel="⠿ Move branding"
+              >
+                <EditableImage
+                  slot={{ kind: "branding-asset" }}
+                  src={
+                    data.brandingAsset?.imageUrl ||
+                    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+                  }
+                  alt="Brand mark"
+                  placement={undefined}
+                  editable={editable}
+                  previewScale={previewScale}
+                  onPickImage={onPickImage}
+                  onPlacementChange={onPlacementChange}
+                  onSizeChange={onSizeChange}
+                  sizeMultiplier={(data.brandingAsset?.height ?? 48) / 48}
+                  sizeLabel="branding"
+                  containerClass="absolute inset-0"
+                  objectFit="contain"
+                />
+              </DraggablePhotoContainer>
+            );
+          })()}
+
           {/* ===== OBJECT PROPERTIES PANEL (Section 1) =====
               Floating panel (top-right of canvas) shown when a section is
               selected. Contains X/Y coordinate inputs + Front/Back layer
@@ -750,6 +807,7 @@ function ResizeHandle({
 function slotKey(slot: ImageSlot): string {
   if (slot.kind === "hero") return "hero";
   if (slot.kind === "speaker") return `speaker-${slot.index}`;
+  if (slot.kind === "branding-asset") return "branding-asset";
   return `sponsor-${slot.group}-${slot.index}`;
 }
 
@@ -874,6 +932,118 @@ function SponsorLogo({
             style={{ pointerEvents: "auto" }}
           />
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * DraggablePhotoContainer — wraps the bottom-LEFT branding asset (or any
+ * small image container that needs free-form positioning) and lets the
+ * user drag the entire container anywhere on the canvas.
+ *
+ * Mirrors the same component in meet-the-speaker-canvas.tsx and
+ * speaker-intro-canvas.tsx. The drag handle is a small grip bar at the
+ * top-center of the container so it doesn't conflict with the inner
+ * image's pan (which is triggered by dragging the image itself).
+ *
+ * Per user spec 2026-07-02: "On all mockups, the bottom left branding
+ * asset should be this as default, ...1782505047256-bpy1ln.png and
+ * replaceable" + "Should be able to drag the [image] all around the
+ * canvas without limitation".
+ */
+function DraggablePhotoContainer({
+  leftPct,
+  topPct,
+  widthPct,
+  heightPct,
+  zIndex,
+  rotation,
+  editable,
+  previewScale,
+  onPosChange,
+  moveLabel = "⠿ Move",
+  children,
+}: {
+  leftPct: number;
+  topPct: number;
+  widthPct: number;
+  heightPct: number;
+  zIndex: number;
+  rotation: number;
+  editable?: boolean;
+  previewScale: number;
+  onPosChange?: (pos: { x: number; y: number }) => void;
+  moveLabel?: string;
+  children: React.ReactNode;
+}) {
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeftPct: number;
+    startTopPct: number;
+  } | null>(null);
+
+  function handleGripMouseDown(e: React.MouseEvent) {
+    if (!editable || !onPosChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeftPct: leftPct,
+      startTopPct: topPct,
+    };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      // Convert screen px → % of canvas. Canvas is CANVAS_W × CANVAS_H
+      // at preview scale, so 1% = (CANVAS_W * previewScale) / 100 px
+      // horizontally and (CANVAS_H * previewScale) / 100 vertically.
+      const pctX = (dx / (CANVAS_W * previewScale)) * 100;
+      const pctY = (dy / (CANVAS_H * previewScale)) * 100;
+      // No clamp — user spec: "drag all around the canvas without
+      // limitation". The canvas border (overflow-hidden) clips the
+      // bleed naturally.
+      onPosChange({ x: d.startLeftPct + pctX, y: d.startTopPct + pctY });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        width: `${widthPct}%`,
+        height: `${heightPct}%`,
+        zIndex,
+        ...(rotation ? { transform: `rotate(${rotation}deg)` } : {}),
+        transformOrigin: "center center",
+      }}
+    >
+      {children}
+      {/* Drag handle — only shown in edit mode. A small grip bar at the
+          top-center of the container. Dragging it moves the container. */}
+      {editable && onPosChange && (
+        <div
+          onMouseDown={handleGripMouseDown}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-100 transition"
+          style={{ pointerEvents: "auto" }}
+          title="Drag to move the container — can be placed anywhere on the canvas"
+        >
+          {moveLabel}
+        </div>
       )}
     </div>
   );

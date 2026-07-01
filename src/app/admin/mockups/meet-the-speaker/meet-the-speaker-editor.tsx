@@ -105,6 +105,9 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       next.graphic.imageUrl = url;
     } else if (slot.kind === "hero-style2") {
       next.heroStyle2Url = url;
+    } else if (slot.kind === "branding-asset") {
+      if (!next.brandingAsset) next.brandingAsset = {};
+      next.brandingAsset.imageUrl = url;
     } else {
       const arr =
         slot.group === "collaborators" ? next.collaborators : next.sponsors;
@@ -134,6 +137,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     if (slot.kind === "speaker-photo") return data.speaker.photoUrl;
     if (slot.kind === "graphic") return data.graphic.imageUrl;
     if (slot.kind === "hero-style2") return data.heroStyle2Url;
+    if (slot.kind === "branding-asset") return data.brandingAsset?.imageUrl;
     const arr =
       slot.group === "collaborators" ? data.collaborators : data.sponsors;
     return arr[slot.index]?.logoUrl;
@@ -272,7 +276,11 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       next.graphic.imageScale = newMultiplier;
     } else if (slot.kind === "hero-style2") {
       next.heroStyle2Scale = newMultiplier;
-    } else {
+    } else if (slot.kind === "branding-asset") {
+      if (!next.brandingAsset) next.brandingAsset = {};
+      // Convert the size multiplier to a height in px (default 48 at 1×).
+      next.brandingAsset.height = Math.max(8, Math.round(48 * newMultiplier));
+    } else if (slot.kind === "sponsor") {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
       if (item) item.logoSize = newMultiplier;
@@ -428,6 +436,35 @@ export function MeetTheSpeakerEditor({ events }: Props) {
   function handleHeroStyle2PosChange(pos: { x: number; y: number }) {
     const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
     next.heroStyle2Pos = pos;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a brand graphic (meerkat) container position change (free drag).
+   *  Per user spec 2026-07-02: "Graphic (z=8) should be able to drag with
+   *  my mousse all over the canvas without limitation". */
+  function handleGraphicPosChange(pos: { x: number; y: number }) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    next.graphic.pos = pos;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a branding asset (bottom-left) container position change. */
+  function handleBrandingAssetPosChange(pos: { x: number; y: number }) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    if (!next.brandingAsset) next.brandingAsset = {};
+    next.brandingAsset.pos = pos;
     setData(next);
     if (rafRef.current === null) {
       rafRef.current = requestAnimationFrame(() => {
@@ -883,6 +920,8 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 onPhotoPosChange={handlePhotoPosChange}
                 onLocalStreetPinMove={handleLocalStreetPinMove}
                 onHeroStyle2PosChange={handleHeroStyle2PosChange}
+                onGraphicPosChange={handleGraphicPosChange}
+                onBrandingAssetPosChange={handleBrandingAssetPosChange}
               />
             </div>
           </div>

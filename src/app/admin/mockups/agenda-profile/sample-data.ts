@@ -136,4 +136,15 @@ export const SAMPLE_DATA: EventProfileData = {
   collaborators: [],
   qrCodeUrl: "https://aisalon.massapro.com/events/ai-cmo-blueprint-2026-06-18",
   footerCredit: "Platform by MassaPro",
+  /**
+   * Branding asset at the bottom-LEFT corner. Defaults to the AI Salon
+   * brand image hosted on Vercel Blob (user spec 2026-07-02). Replaceable
+   * via the canvas Replace button (edit mode) or the form view URL input.
+   * Draggable via the "⠿ Move branding" handle.
+   */
+  brandingAsset: {
+    imageUrl:
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    height: 48,
+  },
 };

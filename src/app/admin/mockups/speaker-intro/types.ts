@@ -216,6 +216,22 @@ export type SpeakerIntroData = {
     height?: number;
   };
   /**
+   * Branding asset at the bottom-LEFT corner of the canvas. Defaults
+   * to the AI Salon brand image hosted on Vercel Blob. Replaceable via
+   * the canvas Replace button (edit mode) or the form view URL input.
+   *
+   * Per user spec 2026-07-02: "On all mockups, the bottom left branding
+   * asset should be this as default, ...1782505047256-bpy1ln.png and
+   * replaceable".
+   */
+  brandingAsset?: {
+    imageUrl?: string;
+    /** Height in px. Default 48. */
+    height?: number;
+    /** Free-form position as % of canvas. Default = bottom-left corner. */
+    pos?: { x: number; y: number };
+  };
+  /**
    * Section layout — per-section draggable position + scale, set when
    * the user toggles "Edit sections" and drags/resizes text sections
    * (header, topic, speakers, sponsors, collaborators, branding, qr,
@@ -248,6 +264,7 @@ export type SpeakerIntroData = {
 export type ImageSlot =
   | { kind: "hero" }
   | { kind: "speaker"; index: number }
+  | { kind: "branding-asset" }
   | { kind: "sponsor"; group: "collaborators" | "sponsors"; index: number };
 
 /**

@@ -939,6 +939,113 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           />
         </Field>
       </Section>
+
+      {/* ===== BRANDING ASSET (bottom-LEFT) =====
+          Per user spec 2026-07-02: "On all mockups, the bottom left
+          branding asset should be this as default, ...1782505047256-bpy1ln.png
+          and replaceable". Renders at the bottom-LEFT corner by default,
+          draggable via the "⠿ Move branding" handle on the canvas. */}
+      <Section title="Branding asset (bottom-left)">
+        <Field label="Image URL">
+          <input
+            type="url"
+            value={data.brandingAsset?.imageUrl ?? ""}
+            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            onChange={(e) =>
+              update((d) => {
+                d.brandingAsset = {
+                  ...(d.brandingAsset ?? {}),
+                  imageUrl: e.target.value || undefined,
+                };
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Height (px)">
+            <input
+              type="number"
+              min="8"
+              max="200"
+              value={data.brandingAsset?.height ?? 48}
+              onChange={(e) =>
+                update((d) => {
+                  d.brandingAsset = {
+                    ...(d.brandingAsset ?? {}),
+                    height: parseInt(e.target.value, 10) || 48,
+                  };
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Reset position">
+            <button
+              type="button"
+              onClick={() =>
+                update((d) => {
+                  if (d.brandingAsset) d.brandingAsset.pos = undefined;
+                })
+              }
+              disabled={!data.brandingAsset?.pos}
+              className="form-input text-left text-xs text-black/60 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Reset to the default bottom-left corner (2.7% left, 94% top)"
+            >
+              Reset to corner
+            </button>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Position X (%)">
+            <input
+              type="number"
+              step="0.1"
+              min="-20"
+              max="120"
+              value={data.brandingAsset?.pos?.x ?? 2.7}
+              onChange={(e) =>
+                update((d) => {
+                  d.brandingAsset = {
+                    ...(d.brandingAsset ?? {}),
+                    pos: {
+                      x: parseFloat(e.target.value) || 0,
+                      y: d.brandingAsset?.pos?.y ?? 94,
+                    },
+                  };
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Position Y (%)">
+            <input
+              type="number"
+              step="0.1"
+              min="-20"
+              max="120"
+              value={data.brandingAsset?.pos?.y ?? 94}
+              onChange={(e) =>
+                update((d) => {
+                  d.brandingAsset = {
+                    ...(d.brandingAsset ?? {}),
+                    pos: {
+                      x: d.brandingAsset?.pos?.x ?? 2.7,
+                      y: parseFloat(e.target.value) || 0,
+                    },
+                  };
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+        </div>
+        <p className="text-[0.65rem] text-black/40">
+          Defaults to bottom-left (X=2.7%, Y=94%). Drag the{" "}
+          <strong>⠿ Move branding</strong> handle on the canvas in edit mode
+          to position it freely.
+        </p>
+      </Section>
     </div>
   );
 }

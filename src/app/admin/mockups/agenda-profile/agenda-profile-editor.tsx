@@ -82,6 +82,9 @@ export function AgendaProfileEditor({ events }: Props) {
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
       if (sp) sp.photoUrl = url;
+    } else if (slot.kind === "branding-asset") {
+      if (!next.brandingAsset) next.brandingAsset = {};
+      next.brandingAsset.imageUrl = url;
     } else {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
@@ -110,6 +113,7 @@ export function AgendaProfileEditor({ events }: Props) {
       const sp = [...data.speakers].sort((a, b) => a.order - b.order)[slot.index];
       return sp?.photoUrl;
     }
+    if (slot.kind === "branding-asset") return data.brandingAsset?.imageUrl;
     const arr = slot.group === "collaborators" ? data.collaborators : data.sponsors;
     return arr[slot.index]?.logoUrl;
   }
@@ -205,6 +209,12 @@ export function AgendaProfileEditor({ events }: Props) {
     } else if (slot.kind === "speaker") {
       const sp = next.speakers.sort((a, b) => a.order - b.order)[slot.index];
       if (sp) sp.photoSize = newMultiplier;
+    } else if (slot.kind === "branding-asset") {
+      // Corner-resize on the branding asset is converted from a multiplier
+      // back into a height-in-px so the form-view Height input stays in
+      // sync with the canvas handles. 1.0× → 48px (the default).
+      if (!next.brandingAsset) next.brandingAsset = {};
+      next.brandingAsset.height = Math.max(8, Math.round(48 * newMultiplier));
     } else {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
@@ -317,6 +327,21 @@ export function AgendaProfileEditor({ events }: Props) {
   function handleHeroZChange(z: number) {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
     next.heroZ = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a free-form position change for the bottom-left branding asset
+   *  (dragged via the "⠿ Move branding" handle on the canvas). */
+  function handleBrandingAssetPosChange(pos: { x: number; y: number }) {
+    const next: EventProfileData = JSON.parse(JSON.stringify(data));
+    if (!next.brandingAsset) next.brandingAsset = {};
+    next.brandingAsset.pos = pos;
     setData(next);
     if (rafRef.current === null) {
       rafRef.current = requestAnimationFrame(() => {
@@ -788,6 +813,7 @@ export function AgendaProfileEditor({ events }: Props) {
                 onHeroScaleXChange={handleHeroScaleXChange}
                 onHeroScaleYChange={handleHeroScaleYChange}
                 onSectionZChange={handleSectionZChange}
+                onBrandingAssetPosChange={handleBrandingAssetPosChange}
               />
             </div>
           </div>

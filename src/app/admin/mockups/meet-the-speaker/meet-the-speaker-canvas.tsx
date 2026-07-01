@@ -83,6 +83,13 @@ type Props = {
   /** Called when the Style 2 hero image container is dragged to a new
    *  free-form position (user spec 2026-07-02). */
   onHeroStyle2PosChange?: (pos: { x: number; y: number }) => void;
+  /** Called when the brand graphic (meerkat) container is dragged to a
+   *  new free-form position (user spec 2026-07-02: "Graphic (z=8) should
+   *  be able to drag with my mousse all over the canvas without
+   *  limitation"). */
+  onGraphicPosChange?: (pos: { x: number; y: number }) => void;
+  /** Called when the bottom-left branding asset is dragged. */
+  onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -106,6 +113,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
       onPhotoPosChange,
       onLocalStreetPinMove,
       onHeroStyle2PosChange,
+      onGraphicPosChange,
+      onBrandingAssetPosChange,
       previewScale = 1,
     },
     ref,
@@ -306,27 +315,31 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           );
         })()}
 
-        {/* ===== MEERKAT GRAPHIC (bottom-right corner) ===== */}
+        {/* ===== MEERKAT GRAPHIC (bottom-right corner by default, freely draggable) =====
+            Per user spec 2026-07-02: "Graphic (z=8) should be able to drag
+            with my mousse all over the canvas without limitation". The
+            graphic container can be freely positioned via `graphic.pos`. */}
         {(() => {
           const sizeMult = Math.max(0.01, data.graphic.imageScale ?? 1);
           const widthPct = 18 * sizeMult;
           const heightPct = 30 * sizeMult;
-          // Anchor to bottom-right with 2% margin.
-          const leftPct = Math.max(40, 98 - widthPct);
-          const topPct = Math.max(20, 98 - heightPct);
+          // Default anchor: bottom-right with 2% margin.
+          const graphicPos = data.graphic.pos;
+          const leftPct = graphicPos ? graphicPos.x : Math.max(40, 98 - widthPct);
+          const topPct = graphicPos ? graphicPos.y : Math.max(20, 98 - heightPct);
           const graphicRot = data.graphic.rotation ?? 0;
           return (
-            <div
-              className="absolute pointer-events-auto"
-              style={{
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
-                width: `${widthPct}%`,
-                height: `${heightPct}%`,
-                zIndex: graphicZ,
-                ...(graphicRot ? { transform: `rotate(${graphicRot}deg)` } : {}),
-                transformOrigin: "center center",
-              }}
+            <DraggablePhotoContainer
+              leftPct={leftPct}
+              topPct={topPct}
+              widthPct={widthPct}
+              heightPct={heightPct}
+              zIndex={graphicZ}
+              rotation={graphicRot}
+              editable={editable}
+              previewScale={previewScale}
+              onPosChange={onGraphicPosChange}
+              moveLabel="⠿ Move graphic"
             >
               <EditableImage
                 slot={{ kind: "graphic" }}
@@ -343,7 +356,53 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 containerClass="absolute inset-0"
                 objectFit="contain"
               />
-            </div>
+            </DraggablePhotoContainer>
+          );
+        })()}
+
+        {/* ===== BRANDING ASSET (bottom-LEFT corner by default, replaceable + draggable) =====
+            Per user spec 2026-07-02: "On all mockups, the bottom left
+            branding asset should be this as default, ...1782505047256-bpy1ln.png
+            and replaceable". Renders the AI Salon brand image at the
+            bottom-left corner, draggable to anywhere on the canvas. */}
+        {(() => {
+          const height = data.brandingAsset?.height ?? 48;
+          const pos = data.brandingAsset?.pos;
+          // Default: bottom-left corner with 32px margin = ~2.7% left, ~94% top.
+          const leftPct = pos ? pos.x : 2.7;
+          const topPct = pos ? pos.y : 94;
+          return (
+            <DraggablePhotoContainer
+              leftPct={leftPct}
+              topPct={topPct}
+              widthPct={(height * 2) / 12}  // approx aspect-ratio based width
+              heightPct={(height / 8)}       // height as % of 800px canvas
+              zIndex={TEXT_Z + 2}
+              rotation={0}
+              editable={editable}
+              previewScale={previewScale}
+              onPosChange={onBrandingAssetPosChange}
+              moveLabel="⠿ Move branding"
+            >
+              <EditableImage
+                slot={{ kind: "branding-asset" }}
+                src={
+                  data.brandingAsset?.imageUrl ||
+                  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+                }
+                alt="Brand mark"
+                placement={undefined}
+                editable={editable}
+                previewScale={previewScale}
+                onPickImage={onPickImage}
+                onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
+                sizeMultiplier={(data.brandingAsset?.height ?? 48) / 48}
+                sizeLabel="branding"
+                containerClass="absolute inset-0"
+                objectFit="contain"
+              />
+            </DraggablePhotoContainer>
           );
         })()}
 
@@ -367,19 +426,21 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           label="Speaker info"
           guideId="speaker-info"
         >
-          {/* Header */}
+          {/* Header — per-section font size + color + align overrides
+              (user spec 2026-07-02). */}
           <h2
             className="font-extrabold leading-none tracking-tight"
             style={{
-              fontSize: "32px",
-              color: data.header.color,
+              fontSize: `${data.textStyles?.header?.fontSize ?? 32}px`,
+              color: data.textStyles?.header?.color ?? data.header.color,
+              textAlign: data.textStyles?.header?.align ?? "left",
               textTransform: "lowercase",
             }}
           >
             {data.header.text}
           </h2>
 
-          {/* Speaker name — per-section font size + color overrides
+          {/* Speaker name — per-section font size + color + align overrides
               (user spec 2026-07-02: "select the font size and color of
               each specific text section"). */}
           <h1
@@ -387,6 +448,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             style={{
               fontSize: `${data.textStyles?.fullName?.fontSize ?? 56}px`,
               color: data.textStyles?.fullName?.color ?? "#000000",
+              textAlign: data.textStyles?.fullName?.align ?? "left",
             }}
           >
             {data.speaker.fullName}
@@ -399,6 +461,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               style={{
                 fontSize: `${data.textStyles?.title?.fontSize ?? 18}px`,
                 color: data.textStyles?.title?.color ?? "rgba(0,0,0,0.8)",
+                textAlign: data.textStyles?.title?.align ?? "left",
               }}
             >
               {data.speaker.title}
@@ -412,6 +475,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               style={{
                 fontSize: `${data.textStyles?.company?.fontSize ?? 16}px`,
                 color: data.textStyles?.company?.color ?? "rgba(0,0,0,0.6)",
+                textAlign: data.textStyles?.company?.align ?? "left",
               }}
             >
               {data.speaker.company}
@@ -430,6 +494,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 fontSize: `${data.textStyles?.role?.fontSize ?? 11}px`,
                 color: data.textStyles?.role?.color ?? data.header.color,
                 letterSpacing: "0.16em",
+                textAlign: data.textStyles?.role?.align ?? "left",
               }}
             >
               {data.speaker.role}
@@ -439,7 +504,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {/* Topic */}
           {data.speaker.topic && (
             <div className="mt-5">
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2" style={{ justifyContent: data.textStyles?.topic?.align === "center" ? "center" : data.textStyles?.topic?.align === "right" ? "flex-end" : "flex-start" }}>
                 <span
                   className="font-bold uppercase tracking-wider"
                   style={{
@@ -455,6 +520,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                   style={{
                     fontSize: `${data.textStyles?.topic?.fontSize ?? 20}px`,
                     color: data.textStyles?.topic?.color ?? "#000000",
+                    textAlign: data.textStyles?.topic?.align ?? "left",
                   }}
                 >
                   {data.speaker.topic}
@@ -466,6 +532,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                   style={{
                     fontSize: `${data.textStyles?.topicDescription?.fontSize ?? 15}px`,
                     color: data.textStyles?.topicDescription?.color ?? "rgba(0,0,0,0.7)",
+                    textAlign: data.textStyles?.topicDescription?.align ?? "left",
                   }}
                 >
                   {data.speaker.topicDescription}
@@ -481,6 +548,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               style={{
                 fontSize: `${data.textStyles?.bio?.fontSize ?? 13}px`,
                 color: data.textStyles?.bio?.color ?? "rgba(0,0,0,0.75)",
+                textAlign: data.textStyles?.bio?.align ?? "left",
               }}
             >
               {data.speaker.bio}
@@ -494,6 +562,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               style={{
                 fontSize: `${data.textStyles?.expertise?.fontSize ?? 12}px`,
                 color: data.textStyles?.expertise?.color ?? "rgba(0,0,0,0.65)",
+                textAlign: data.textStyles?.expertise?.align ?? "left",
               }}
             >
               {data.speaker.expertise}
@@ -774,6 +843,7 @@ function DraggablePhotoContainer({
   editable,
   previewScale,
   onPosChange,
+  moveLabel = "⠿ Move",
   children,
 }: {
   leftPct: number;
@@ -785,6 +855,7 @@ function DraggablePhotoContainer({
   editable?: boolean;
   previewScale: number;
   onPosChange?: (pos: { x: number; y: number }) => void;
+  moveLabel?: string;
   children: React.ReactNode;
 }) {
   const dragRef = useRef<{
@@ -848,11 +919,11 @@ function DraggablePhotoContainer({
       {editable && onPosChange && (
         <div
           onMouseDown={handleGripMouseDown}
-          className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-0 group-hover:opacity-100 transition"
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-100 transition"
           style={{ pointerEvents: "auto" }}
-          title="Drag to move the photo container — the photo can be moved anywhere on the canvas"
+          title="Drag to move the container — can be placed anywhere on the canvas"
         >
-          ⠿ Move
+          {moveLabel}
         </div>
       )}
     </div>
@@ -1322,6 +1393,7 @@ function slotKey(slot: ImageSlot): string {
   if (slot.kind === "speaker-photo") return "speaker-photo";
   if (slot.kind === "graphic") return "graphic";
   if (slot.kind === "hero-style2") return "hero-style2";
+  if (slot.kind === "branding-asset") return "branding-asset";
   return `sponsor-${slot.group}-${slot.index}`;
 }
 
