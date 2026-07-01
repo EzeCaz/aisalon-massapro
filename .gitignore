@@ -19,6 +19,13 @@ dist/
 # Google Drive OAuth token (contains refresh_token — never commit)
 scripts/.gdrive-token.json
 
+# Tokens vault — plaintext-seeded encryptor + Fernet key must NEVER be
+# pushed (GitHub secret scanning blocks them and they leak prod creds).
+# Only the encrypted vault (tokens.md.enc) + decrypt_tokens.py are safe
+# to push.
+scripts/encrypt_tokens.py
+download/TokenKey
+
 # Local backup artifacts (large tarballs + manifests — keep local + Drive,
 # never push to git)
 download/aisalon-massapro-V*.tar.gz
@@ -49,3 +56,4 @@ scripts/patch-salon-paths.py
 /tmp/prod_db_url.txt
 old-deployment/
 tool-results/
+.git-backup-*/
