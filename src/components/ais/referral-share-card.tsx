@@ -43,12 +43,23 @@ export function ReferralShareCard({
   const [copied, setCopied] = React.useState(false);
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [statsLoading, setStatsLoading] = React.useState(variant === "full");
+  // Defer browser-only checks to after mount so SSR HTML matches the
+  // first client render (avoids hydration mismatch warnings).
+  // - canNativeShare: only true on browsers that expose navigator.share
+  // - clientOrigin: window.location.origin captured after mount, so the
+  //   share URL is stable between server & first client paint.
+  const [canNativeShare, setCanNativeShare] = React.useState(false);
+  const [clientOrigin, setClientOrigin] = React.useState<string | null>(null);
 
-  // Build the share URL on the client (so we get the right origin for
-  // the current environment — preview vs production).
+  React.useEffect(() => {
+    setCanNativeShare(typeof navigator !== "undefined" && !!navigator.share);
+    setClientOrigin(typeof window !== "undefined" ? window.location.origin : null);
+  }, []);
+
+  // Use the prop if provided; otherwise fall back to the SSR-safe constant
+  // on the server, and the captured client origin after mount.
   const origin =
-    siteUrl ||
-    (typeof window !== "undefined" ? window.location.origin : "https://aisalon.massapro.com");
+    siteUrl || clientOrigin || "https://aisalon.massapro.com";
   const sharePath = eventSlug ? `/e/${eventSlug}` : "/events";
   const shareUrl = React.useMemo(() => {
     const u = new URL(sharePath, origin);
@@ -129,7 +140,7 @@ export function ReferralShareCard({
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           {copied ? "Copied" : "Copy"}
         </button>
-        {typeof navigator !== "undefined" && navigator.share && (
+        {canNativeShare && (
           <button
             type="button"
             onClick={nativeShare}
