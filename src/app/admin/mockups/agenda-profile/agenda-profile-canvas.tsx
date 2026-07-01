@@ -291,9 +291,6 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
               }}
             />
-            <span className="text-xs text-black/40">
-              {visibleSessions.length} of {data.sessions.length} sessions shown
-            </span>
           </div>
           <div className="flex flex-col">
             {visibleSessions.length === 0 ? (
@@ -345,9 +342,6 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
               }}
             />
-            <span className="text-xs text-black/40">
-              {visibleSpeakers.length} of {data.speakers.length} shown
-            </span>
           </div>
           <div className="grid grid-cols-3 gap-4">
             {visibleSpeakers.map((speaker, idx) => (
