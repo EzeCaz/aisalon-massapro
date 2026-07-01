@@ -57,3 +57,7 @@ scripts/patch-salon-paths.py
 old-deployment/
 tool-results/
 .git-backup-*/
+
+# Multi-agent worklog — may contain references to rotated secrets,
+# per-session scratch notes. Keep local, never push.
+worklog.md
