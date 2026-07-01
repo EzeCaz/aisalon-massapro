@@ -32,12 +32,37 @@ async function authorize(meId: string, meRole: string, meEmail: string | null, e
   if (normalizeRole(meRole) === ROLES.CO_HOST) {
     return await isEventCoHost(meId, eventId);
   }
-  // Speaker of this event → allowed (read-only — enforced by the
-  // PUT/POST/PATCH handlers which block SPEAKER role).
-  if (normalizeRole(meRole) === ROLES.SPEAKER) {
-    return await isEventSpeaker(meId, eventId);
+  // Anyone linked as a Speaker on this event (via Speaker.userId) gets
+  // read-only access — regardless of User.role. This mirrors the
+  // V5.16 fix in /events/[slug]/page.tsx (canViewEventPrep).
+  //
+  // Rationale: convert-to-speaker / link-speaker never mutate
+  // User.role — they only create a Speaker row with userId. So a
+  // MEMBER who is invited to speak must still be able to read the
+  // prep questions for that event. The authoritative check is the
+  // Speaker row link, NOT User.role.
+  //
+  // Read-only enforcement happens in the POST/PUT/PATCH handlers via
+  // isSpeakerOnly() below.
+  return await isEventSpeaker(meId, eventId);
+}
+
+/**
+ * Returns true iff the user's ONLY access to this event is via the
+ * Speaker row link (i.e., they are NOT an admin-tier or co-host).
+ * Used by the POST/PUT/PATCH handlers to enforce "speakers are
+ * read-only" — but unlike the old `me.role === "SPEAKER"` check, this
+ * correctly catches MEMBERs who were invited to speak.
+ */
+async function isSpeakerOnly(meId: string, meRole: string, meEmail: string | null, eventId: string): Promise<boolean> {
+  if (can(meRole, "events.edit") || isSuperAdmin({ email: meEmail, role: meRole })) {
+    return false;
   }
-  return false;
+  if (normalizeRole(meRole) === ROLES.CO_HOST) {
+    const isCoHost = await isEventCoHost(meId, eventId);
+    if (isCoHost) return false;
+  }
+  return await isEventSpeaker(meId, eventId);
 }
 
 export async function GET(
@@ -226,8 +251,11 @@ export async function POST(
   if (!authorized) {
     return NextResponse.json({ error: "Forbidden — Super Admin, Admin, or Co-host of this event only" }, { status: 403 });
   }
-  // SPEAKER role is read-only — they can GET but not POST suggestions.
-  if (normalizeRole(me.role) === ROLES.SPEAKER) {
+  // Speakers (anyone whose ONLY access is via Speaker.userId) are
+  // read-only — they can GET but not POST suggestions. This catches
+  // MEMBERs invited to speak, not just users with User.role === SPEAKER.
+  const speakerOnly = await isSpeakerOnly(me.id, me.role, me.email, event.id);
+  if (speakerOnly) {
     return NextResponse.json({ error: "Speakers have read-only access to Event Prep" }, { status: 403 });
   }
   const body = await req.json();
