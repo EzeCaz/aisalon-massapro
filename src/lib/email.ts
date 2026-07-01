@@ -99,6 +99,13 @@ export async function sendMail(opts: {
  * Used by the email sign-up flow: the user enters email + name, we
  * generate a random password, hash it, store it, and email the plaintext
  * to the user.
+ *
+ * The "Sign in" button links to {siteUrl}/login (the login page), with
+ * ?callbackUrl=/events so the user lands on the events list after
+ * signing in. We ALSO print the full URL in plain text below the button
+ * — some email clients (notably Outlook desktop) strip the href from
+ * <a> tags or break them with link-protection wrappers, so the plain-
+ * text fallback lets the user copy-paste if the button doesn't work.
  */
 export async function sendPasswordEmail(opts: {
   to: string;
@@ -107,7 +114,13 @@ export async function sendPasswordEmail(opts: {
   siteUrl: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const firstName = opts.name?.split(" ")[0] || "there";
-  const loginUrl = `${opts.siteUrl.replace(/\/$/, "")}/login`;
+  // Strip any trailing slash from siteUrl + append /login.
+  // Add ?callbackUrl=/events so the user lands on the events list
+  // (not the event page they may have come from) after a successful
+  // sign-in. This avoids the "I clicked Sign in and it took me to an
+  // event page instead of the login page" confusion.
+  const base = opts.siteUrl.replace(/\/$/, "");
+  const loginUrl = `${base}/login?callbackUrl=${encodeURIComponent("/events")}`;
   const subject = "Your AI Salon Tel Aviv login";
   const text = `Hi ${firstName},
 
@@ -117,7 +130,11 @@ Here is your one-time password for your first login:
 
     ${opts.password}
 
-Sign in here: ${loginUrl}
+Go to the login page here:
+${loginUrl}
+
+(If the button above doesn't work in your email client, copy and paste
+the URL into your browser.)
 
 After you sign in, you can change your password from your profile page.
 
@@ -137,10 +154,14 @@ MassaPro · https://massapro.com`;
       ${opts.password}
     </div>
   </div>
-  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 24px;">
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 12px;">
     <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background: #000; color: #fff; text-decoration: none; font-weight: 600; border-radius: 6px;">
-      Sign in →
+      Go to login page →
     </a>
+  </p>
+  <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 0 0 20px; word-break: break-all;">
+    If the button doesn't work, copy and paste this URL into your browser:<br/>
+    <a href="${loginUrl}" style="color: #004F98; word-break: break-all;">${loginUrl}</a>
   </p>
   <p style="font-size: 13px; line-height: 1.5; color: #777; margin: 0;">
     After you sign in, you can change your password from your profile page.

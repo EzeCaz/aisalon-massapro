@@ -59,6 +59,10 @@ import {
   Download,
   AlertCircle,
   Archive,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Mail as MailIcon,
 } from "lucide-react";
 
 type LinkedSpeaker = {
@@ -1680,6 +1684,16 @@ function EditMemberDialog({
   // dropdown).
   const [existingCompanies, setExistingCompanies] = useState<string[]>([]);
 
+  // ---- Super-Admin-only: credential management state ----
+  // These are independent of the main profile-save flow — they hit a
+  // separate endpoint (/api/admin/members/[id]/credentials) and don't
+  // require the rest of the form to be saved first.
+  const [credEmail, setCredEmail] = useState("");
+  const [credPassword, setCredPassword] = useState("");
+  const [credShowPassword, setCredShowPassword] = useState(false);
+  const [credSendEmail, setCredSendEmail] = useState(false);
+  const [credSaving, setCredSaving] = useState(false);
+
   // Reset form whenever the member changes (i.e. when the dialog opens
   // for a different member). We use useEffect so the form fields sync
   // even when the dialog is reused across members.
@@ -1698,6 +1712,14 @@ function EditMemberDialog({
       setInvitedToSpeak(member.invitedToSpeak || "");
       setMemberRole(member.role || ROLES.MEMBER);
       setPhotoUrl(member.photoUrl ?? null);
+      // Reset credential fields whenever the member changes — the email
+      // field shows the current primary email as a starting point, and
+      // the password field is always blank (we never re-display an
+      // existing password — they're hashed, not recoverable).
+      setCredEmail(member.email || "");
+      setCredPassword("");
+      setCredShowPassword(false);
+      setCredSendEmail(false);
     }
   }, [member]);
 
@@ -1783,6 +1805,80 @@ function EditMemberDialog({
       toast.error((e as Error).message, { id: t, duration: 8000 });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ---- Super-Admin-only: save credentials (email + password) ----
+  // Hits /api/admin/members/[id]/credentials — separate from the main
+  // profile PATCH. Either field can be sent independently (partial
+  // update). The endpoint is SUPER_ADMIN-only; we hide the UI section
+  // entirely for non-Super-Admins so this handler only fires when the
+  // current user is a Super Admin.
+  const handleSaveCredentials = async () => {
+    if (!member) return;
+    const trimmedEmail = credEmail.trim();
+    const emailChanged =
+      trimmedEmail.length > 0 &&
+      trimmedEmail.toLowerCase() !== member.email.toLowerCase();
+    const passwordChanged = credPassword.length > 0;
+    if (!emailChanged && !passwordChanged) {
+      toast.info("Nothing to save — no email or password changes.");
+      return;
+    }
+    if (passwordChanged && (credPassword.length < 6 || credPassword.length > 128)) {
+      toast.error("Password must be 6–128 characters.");
+      return;
+    }
+    if (emailChanged && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.error("New email is not a valid address.");
+      return;
+    }
+    setCredSaving(true);
+    const t = toast.loading("Updating credentials…");
+    try {
+      const payload: Record<string, unknown> = { sendEmail: credSendEmail };
+      if (emailChanged) payload.email = trimmedEmail;
+      if (passwordChanged) payload.password = credPassword;
+      const res = await fetch(`/api/admin/members/${member.id}/credentials`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      let msg = "Credentials updated";
+      if (d?.warning) {
+        msg = `Credentials updated — but: ${d.warning}`;
+        toast.warning(msg, { id: t, duration: 8000 });
+      } else if (credSendEmail && passwordChanged) {
+        msg = `Password updated + emailed to ${d?.user?.email || trimmedEmail}`;
+        toast.success(msg, { id: t });
+      } else if (passwordChanged && !credSendEmail) {
+        msg = "Password updated (NOT emailed — tell the user manually)";
+        toast.success(msg, { id: t, duration: 6000 });
+      } else if (emailChanged) {
+        msg = `Email changed to ${d?.user?.email || trimmedEmail}`;
+        toast.success(msg, { id: t });
+      } else {
+        toast.success(msg, { id: t });
+      }
+      // If email changed, clear the password field but keep the dialog
+      // open so the admin can verify the new email rendered correctly.
+      if (emailChanged && member) {
+        // Reflect the new email on the member object so the dialog
+        // header + other UI updates. (The parent will refetch via
+        // onSaved() below, which gives a fully fresh Member.)
+        member.email = d?.user?.email || trimmedEmail;
+        setCredEmail(member.email);
+      }
+      setCredPassword("");
+      onSaved();
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setCredSaving(false);
     }
   };
 
@@ -2074,6 +2170,138 @@ function EditMemberDialog({
                 </p>
               )}
           </div>
+
+          {/* ---- Super-Admin-only: Credentials section ----
+              Lets the Super Admin change a member's primary email AND/OR
+              set a new password (manually typed, not auto-generated).
+              This is the fix for the "speaker can't log in" support case
+              — the auto-emailed 8-char base64url password is fragile
+              (email clients can mangle monospace text), so the admin
+              can set a clean memorable password and tell the user
+              verbally / via DM.
+
+              Hidden entirely for non-Super-Admins. Hidden for Super
+              Admin targets (their credentials are immutable via UI). */}
+          {isSuperAdminEmail(currentUserEmail) &&
+            !isSuperAdminEmail(member.email) && (
+              <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[0.65rem] font-bold uppercase tracking-widest text-[#FF005A] flex items-center gap-1.5">
+                    <KeyRound className="h-3 w-3" />
+                    Credentials (Super Admin)
+                  </div>
+                  <span className="text-[0.55rem] font-bold uppercase bg-[#820A7D] text-white px-1.5 py-0.5 rounded">
+                    Sensitive
+                  </span>
+                </div>
+
+                <p className="text-[0.7rem] text-black/60 leading-relaxed">
+                  Change this member&apos;s sign-in email or set a new password.
+                  The previous primary email is automatically kept as a
+                  secondary (so they can still sign in via the old inbox).
+                  Passwords are hashed — we never display the current one.
+                </p>
+
+                {/* Email field */}
+                <div>
+                  <label className="block text-xs font-semibold text-black/60 mb-1">
+                    Primary email
+                  </label>
+                  <div className="relative">
+                    <MailIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+                    <input
+                      type="email"
+                      value={credEmail}
+                      onChange={(e) => setCredEmail(e.target.value)}
+                      placeholder="member@example.com"
+                      autoComplete="off"
+                      className="w-full rounded-md border border-black/15 bg-white pl-8 pr-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                    />
+                  </div>
+                  {credEmail.trim().toLowerCase() !== member.email.toLowerCase() && (
+                    <p className="mt-1 text-[0.65rem] text-[#FF005A] font-semibold">
+                      ↳ Will change primary email from <code className="bg-black/5 px-1 rounded">{member.email}</code>
+                    </p>
+                  )}
+                </div>
+
+                {/* Password field */}
+                <div>
+                  <label className="block text-xs font-semibold text-black/60 mb-1">
+                    New password <span className="text-black/40 font-normal">(leave blank to keep current)</span>
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+                    <input
+                      type={credShowPassword ? "text" : "password"}
+                      value={credPassword}
+                      onChange={(e) => setCredPassword(e.target.value)}
+                      placeholder="Type a new password (6–128 chars)"
+                      autoComplete="new-password"
+                      className="w-full rounded-md border border-black/15 bg-white pl-8 pr-10 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCredShowPassword(!credShowPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/80 p-1"
+                      title={credShowPassword ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {credShowPassword ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  {credPassword && (
+                    <p className="mt-1 text-[0.65rem] text-black/50">
+                      {credPassword.length} chars {credPassword.length < 6 && "· too short (need 6+)"}
+                    </p>
+                  )}
+                </div>
+
+                {/* Email-the-password toggle */}
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={credSendEmail}
+                    onChange={(e) => setCredSendEmail(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-[0.7rem] text-black/70 leading-snug">
+                    <strong>Email the new password to the user.</strong> Default
+                    OFF — typically you tell them verbally / via DM (more
+                    reliable than the email round-trip, which is the reason
+                    this feature exists).
+                  </span>
+                </label>
+
+                {/* Save button — separate from the main Save changes button */}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSaveCredentials}
+                    disabled={
+                      credSaving ||
+                      (!credEmail.trim() && !credPassword) ||
+                      (credPassword.length > 0 && credPassword.length < 6) ||
+                      (!!credEmail.trim() &&
+                        credEmail.trim().toLowerCase() === member.email.toLowerCase() &&
+                        !credPassword)
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[#820A7D] text-white px-3 py-1.5 text-xs font-semibold hover:bg-[#6a085f] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {credSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-3.5 w-3.5" />
+                    )}
+                    Save credentials
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
 
         <DialogFooter>
