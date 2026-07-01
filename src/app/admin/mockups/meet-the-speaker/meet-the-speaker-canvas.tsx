@@ -137,17 +137,81 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
           }}
         >
-        {/* ===== RIGHT COLUMN BACKGROUND (gradient triangles) =====
-            Applies X/Y scale multipliers from the HeroOverlayControl
-            sliders. Default = 55% canvas width × 85% canvas height.
-            The ONLY limitation is the canvas border — no arbitrary
-            0.25–3 clamp. Any overflow is clipped by the canvas's
-            `overflow-hidden`. (User spec 2026-06-28.) */}
-        {(() => {
-          const sx = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
-          const sy = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
-          const heroRot = data.heroOverlay.rotation ?? 0;
-          return (
+        {/* ===== RIGHT COLUMN BACKGROUND (hero overlay) =====
+            Style 1 (default): Geometric gradient triangles via SVG.
+              Applies X/Y scale multipliers from the HeroOverlayControl
+              sliders. Default = 55% canvas width × 85% canvas height.
+            Style 2: Pre-designed low-poly network graph image
+              (heroStyle2Url) fills the right column, with 4 editable
+              "Local Street" pin labels overlaid at the corners. The
+              image's built-in "Placeholder 1–4" labels are visually
+              covered by the editable pins (positioned to match). */}
+        {data.heroStyle === 2 ? (
+          <>
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: "45%",
+                top: "0",
+                width: "55%",
+                height: "85%",
+                zIndex: heroZ,
+              }}
+              aria-hidden
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={data.heroStyle2Url || "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png"}
+                alt=""
+                className="absolute inset-0 w-full h-full"
+                style={{ objectFit: "cover", objectPosition: "center" }}
+              />
+            </div>
+            {/* "Local Street" pins — editable labels overlaid at the
+                four corners of the hero image. Each pin is positioned
+                via % of canvas (0–100) so it scales with the canvas. */}
+            {(data.localStreetPins ?? []).map((pin, i) => (
+              <div
+                key={`local-street-${i}`}
+                className="absolute pointer-events-none flex flex-col items-center"
+                style={{
+                  left: `${pin.x}%`,
+                  top: `${pin.y}%`,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: heroZ + 1,
+                }}
+              >
+                {/* Pin dot — small circle marker, similar to the
+                    location pins in speaker-intro / event-profile. */}
+                <div
+                  className="rounded-full bg-white shadow-md border-2 flex items-center justify-center"
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderColor: data.event.brandColors[0] || "#FF005C",
+                    color: data.event.brandColors[0] || "#FF005C",
+                    fontSize: "13px",
+                    fontWeight: 800,
+                  }}
+                >
+                  {i + 1}
+                </div>
+                {/* Pin label — user-editable text under the dot. */}
+                <div
+                  className="mt-1 px-2 py-0.5 rounded bg-white/90 shadow-sm text-black"
+                  style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em" }}
+                >
+                  {pin.label}
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          (() => {
+            const sx = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
+            const sy = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
+            const heroRot = data.heroOverlay.rotation ?? 0;
+            return (
         <div
           className="absolute pointer-events-none"
           style={{
@@ -194,8 +258,9 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             <polygon points="60,10 95,30 70,70" fill="url(#mts-grad-2)" opacity={0.7} />
           </svg>
         </div>
-          );
-        })()}
+            );
+          })()
+        )}
 
         {/* ===== SPEAKER PHOTO (right side, large) ===== */}
         {(() => {

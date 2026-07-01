@@ -48,6 +48,23 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
     gradientColors: ["#6A5ACD", "#FF005C"],
     gradientOpacity: 0.45,
   },
+  // Hero style picker — defaults to 1 (geometric gradient triangles).
+  // Switch to 2 to use the pre-designed low-poly network graph image
+  // with 4 editable "Local Street" pins at the corners.
+  heroStyle: 1,
+  heroStyle2Url:
+    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png",
+  // "Local Street" pins — overlaid on hero style #2. Default labels
+  // match the 4 "Placeholder N" positions baked into the source image
+  // (top-left, top-right, bottom-right, bottom-left). Admin can rename
+  // to actual neighborhoods (Sarona, Yafo, etc.) and reposition via
+  // the form view.
+  localStreetPins: [
+    { x: 18, y: 22, label: "Local Street 1" },
+    { x: 82, y: 18, label: "Local Street 2" },
+    { x: 85, y: 78, label: "Local Street 3" },
+    { x: 15, y: 80, label: "Local Street 4" },
+  ],
   collaborators: [
     {
       name: "Alison.AI",

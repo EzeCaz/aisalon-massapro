@@ -192,6 +192,18 @@ export function mapEventToMeetTheSpeakerData(
       gradientColors: ["#6A5ACD", "#FF005C"],
       gradientOpacity: 0.45,
     },
+    // Default to Style 1 (gradient triangles). Admin can switch to 2
+    // in the form view to use the pre-designed hero image with 4
+    // editable "Local Street" pins at the corners.
+    heroStyle: 1,
+    heroStyle2Url:
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png",
+    localStreetPins: [
+      { x: 18, y: 22, label: "Local Street 1" },
+      { x: 82, y: 18, label: "Local Street 2" },
+      { x: 85, y: 78, label: "Local Street 3" },
+      { x: 15, y: 80, label: "Local Street 4" },
+    ],
     collaborators: [],
     sponsors: [],
     qrCodeUrl:

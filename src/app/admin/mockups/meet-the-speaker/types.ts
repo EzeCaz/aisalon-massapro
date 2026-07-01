@@ -129,6 +129,36 @@ export type MeetTheSpeakerData = {
      */
     rotation?: number;
   };
+  /**
+   * Hero style picker — selects which hero visual is rendered on the
+   * right side of the canvas (behind/around the speaker photo).
+   *
+   *   1 = (default) Geometric gradient triangles via SVG (the original
+   *       heroOverlay rendering — see `heroOverlay` field above).
+   *   2 = Pre-designed hero image (low-poly network graph with 4
+   *       "Placeholder" labels at the corners — see `heroStyle2Url`).
+   *       When Style 2 is selected, the 4 `localStreetPins` are
+   *       overlaid on top of the image and replace the placeholder
+   *       labels visually.
+   */
+  heroStyle?: 1 | 2;
+  /**
+   * Image URL for hero style #2. Defaults to the AI Salon branded
+   * low-poly network graph uploaded to Vercel Blob.
+   */
+  heroStyle2Url?: string;
+  /**
+   * "Local Street" pins — 4 editable labels overlaid on hero style #2
+   * at the four corners (where the source image has "Placeholder 1–4"
+   * baked into the pixels). The pin labels are user-editable so the
+   * admin can rename "Local Street 1" to actual neighborhood names
+   * (e.g. "Sarona", "Yafo") like the location pins in
+   * speaker-intro / event-profile.
+   *
+   * Each pin's (x, y) is a percentage of the canvas (0–100). Defaults
+   * to the four corners.
+   */
+  localStreetPins?: { x: number; y: number; label: string }[];
   /** "In collaboration with:" logos (bottom-right). */
   collaborators: Sponsor[];
   /** "Sponsored by:" logos (bottom-right, below collaborators). */

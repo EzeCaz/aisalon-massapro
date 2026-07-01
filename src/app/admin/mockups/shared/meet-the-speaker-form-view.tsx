@@ -243,6 +243,144 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
 
       {/* ===== HERO OVERLAY ===== */}
       <Section title="Hero overlay (gradient)">
+        {/* ===== HERO STYLE PICKER =====
+            Per user spec 2026-07-02: "ad another hero image alternative,
+            and add it a style Number 2". Style 1 = geometric gradient
+            triangles (default). Style 2 = pre-designed low-poly network
+            graph image with 4 editable "Local Street" pins. */}
+        <Field label="Hero style">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => update((d) => { d.heroStyle = 1; })}
+              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
+                (data.heroStyle ?? 1) === 1
+                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+              }`}
+            >
+              Style 1 — Gradient triangles
+            </button>
+            <button
+              type="button"
+              onClick={() => update((d) => { d.heroStyle = 2; })}
+              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
+                data.heroStyle === 2
+                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+              }`}
+            >
+              Style 2 — Network image
+            </button>
+          </div>
+        </Field>
+
+        {/* Style 2 image URL — only shown when Style 2 is selected. */}
+        {data.heroStyle === 2 && (
+          <Field label="Style 2 image URL">
+            <input
+              type="text"
+              value={data.heroStyle2Url ?? ""}
+              onChange={(e) => update((d) => { d.heroStyle2Url = e.target.value; })}
+              className="form-input"
+              placeholder="https://..."
+            />
+          </Field>
+        )}
+
+        {/* ===== LOCAL STREET PINS (Style 2 only) =====
+            Per user spec 2026-07-02: "the placeholder 1,2,3,4 please
+            make them editable as the location pins, and call them
+            Local Street". Mirrors the location pin editor pattern in
+            speaker-intro / event-profile. */}
+        {data.heroStyle === 2 && (
+          <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
+                Local Street pins (4)
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  update((d) => {
+                    d.localStreetPins = [
+                      { x: 18, y: 22, label: "Local Street 1" },
+                      { x: 82, y: 18, label: "Local Street 2" },
+                      { x: 85, y: 78, label: "Local Street 3" },
+                      { x: 15, y: 80, label: "Local Street 4" },
+                    ];
+                  })
+                }
+                className="text-[0.55rem] text-black/50 hover:text-black underline"
+              >
+                Reset to defaults
+              </button>
+            </div>
+            {(data.localStreetPins ?? []).map((pin, i) => (
+              <div key={i} className="rounded border border-black/10 bg-white p-2 space-y-1.5">
+                <div className="text-[0.6rem] font-semibold text-black/70">
+                  Pin #{i + 1}
+                </div>
+                <Field label="Label">
+                  <input
+                    type="text"
+                    value={pin.label}
+                    onChange={(e) =>
+                      update((d) => {
+                        if (!d.localStreetPins) return;
+                        d.localStreetPins[i] = { ...d.localStreetPins[i], label: e.target.value };
+                      })
+                    }
+                    className="form-input"
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="X (%)">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={Math.round(pin.x)}
+                      onChange={(e) =>
+                        update((d) => {
+                          if (!d.localStreetPins) return;
+                          d.localStreetPins[i] = { ...d.localStreetPins[i], x: parseFloat(e.target.value) || 0 };
+                        })
+                      }
+                      className="form-input"
+                    />
+                  </Field>
+                  <Field label="Y (%)">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={Math.round(pin.y)}
+                      onChange={(e) =>
+                        update((d) => {
+                          if (!d.localStreetPins) return;
+                          d.localStreetPins[i] = { ...d.localStreetPins[i], y: parseFloat(e.target.value) || 0 };
+                        })
+                      }
+                      className="form-input"
+                    />
+                  </Field>
+                </div>
+              </div>
+            ))}
+            <p className="text-[0.55rem] text-black/40 leading-tight">
+              The 4 pins overlay the "Placeholder 1–4" labels baked into
+              the Style 2 image. Edit the label to rename (e.g. "Sarona",
+              "Yafo") or adjust X/Y % to reposition.
+            </p>
+          </div>
+        )}
+
+        {/* Style 1 controls — only shown when Style 1 (or unset) is selected. */}
+        {(data.heroStyle ?? 1) === 1 && (
+          <>
         <Field label="Gradient colors (comma-separated)">
           <GradientColorPicker
             colors={data.heroOverlay.gradientColors}
@@ -363,6 +501,8 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             Rotate button cycles 0° → 90° → 180° → 270° → 0°.
           </p>
         </div>
+          </>
+        )}
       </Section>
 
       {/* ===== SPONSORS ===== */}
