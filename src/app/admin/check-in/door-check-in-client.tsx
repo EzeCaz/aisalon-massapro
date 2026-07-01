@@ -24,6 +24,10 @@ type LookupResult = {
   firstCheckIn?: boolean;
   alreadyUsedAt?: string;
   alreadyUsedBy?: string;
+  /** Co-host pre-approval state (Task 4). */
+  approved?: boolean;
+  approvedBy?: { id: string; name: string | null; email: string } | null;
+  approvedAt?: string;
   rsvp?: {
     id: string;
     email: string;
@@ -97,6 +101,14 @@ export function DoorCheckInClient({ adminName }: { adminName: string }) {
           toast.error(data.message || `Lookup failed (HTTP ${res.status})`);
           setResult(data);
         }
+      } else if (res.status === 403 && data.found && data.approved === false) {
+        // Co-host has not approved this code yet — show a dedicated
+        // "Not approved" panel (not the green HIT panel). The code is
+        // valid but the attendee needs to ask their co-host to approve.
+        setResult(data);
+        toast.warning("Code not approved — ask a co-host to approve this RSVP", {
+          duration: 6000,
+        });
       } else {
         setResult(data);
         if (data.firstCheckIn === false && data.alreadyUsedAt) {
@@ -125,7 +137,7 @@ export function DoorCheckInClient({ adminName }: { adminName: string }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
       {/* Header */}
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFAC30]/15 text-[#FFAC30]">
@@ -187,7 +199,9 @@ export function DoorCheckInClient({ adminName }: { adminName: string }) {
       {/* Result */}
       {result && (
         <div className="space-y-3">
-          {result.found && result.rsvp ? (
+          {result.found && result.rsvp && result.approved === false ? (
+            <NotApprovedPanel result={result} onReset={handleReset} />
+          ) : result.found && result.rsvp ? (
             <HitPanel result={result} onReset={handleReset} />
           ) : (
             <MissPanel result={result} onReset={handleReset} />
@@ -214,6 +228,21 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
   const checkedInAt = rsvp.checkedInAt ? new Date(rsvp.checkedInAt) : null;
   const doorCheckedAt = rsvp.doorCheckedAt ? new Date(rsvp.doorCheckedAt) : null;
   const alreadyUsed = result.firstCheckIn === false && !!doorCheckedAt;
+  const approvedAt = result.approvedAt ? new Date(result.approvedAt) : null;
+  const approverName = result.approvedBy?.name || result.approvedBy?.email || "a co-host";
+
+  // Format the approval timestamp as "HH:MM on the DD, MMM YY" (per user spec).
+  const approvalFormatted = approvedAt
+    ? new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jerusalem",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        day: "2-digit",
+        month: "short",
+        year: "2-digit",
+      }).format(approvedAt)
+    : "";
 
   const photoUrl = user?.photoUrl || user?.image;
 
@@ -240,8 +269,47 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
         </span>
       </div>
 
-      {/* Already-used warning banner — prominent, can't miss it. */}
-      {alreadyUsed && doorCheckedAt && (
+      {/* Approval banner — always shown when the code was approved.
+          On first use: green "Approved by X at HH:MM on DD MMM YY".
+          On repeat use: amber "Approved by X at HH:MM on DD MMM YY, and already accessed the event"
+          (per user spec). */}
+      {approvedAt && (
+        <div
+          className={`rounded-lg px-4 py-3 border ${
+            alreadyUsed
+              ? "bg-[#FFAC30]/15 border-[#FFAC30]/40"
+              : "bg-[#007E72]/10 border-[#007E72]/30"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            <CheckCircle2
+              className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
+                alreadyUsed ? "text-[#8a5a00]" : "text-[#007E72]"
+              }`}
+            />
+            <div
+              className={`text-sm ${
+                alreadyUsed ? "text-[#8a5a00]" : "text-[#007E72]"
+              }`}
+            >
+              <strong>
+                Approved by {approverName} at {approvalFormatted}
+                {alreadyUsed && ", and already accessed the event"}.
+              </strong>
+              {!alreadyUsed && (
+                <div className="mt-0.5 text-xs opacity-80">
+                  First door check-in recorded — attendee may enter.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy already-used warning banner — kept for backwards-compat
+          on codes that were door-checked before the approval flow was
+          added (no approvedAt). */}
+      {alreadyUsed && doorCheckedAt && !approvedAt && (
         <div className="rounded-lg bg-[#FFAC30]/15 border border-[#FFAC30]/40 px-4 py-3">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-[#8a5a00] mt-0.5 flex-shrink-0" />
@@ -395,6 +463,51 @@ function MissPanel({ result, onReset }: { result: LookupResult; onReset: () => v
           <li>• The attendee mistyped their code (codes are 8 chars, no I/L/O/U).</li>
           <li>• The attendee hasn&apos;t checked in yet — ask them to open the event page and tap &quot;I&apos;m here — Check in&quot;.</li>
           <li>• The code was generated for a different event and may have been invalidated.</li>
+        </ul>
+      </div>
+      <button
+        type="button"
+        onClick={onReset}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2.5 text-sm hover:bg-black/90"
+      >
+        <RotateCcw className="h-4 w-4" /> Try another code
+      </button>
+    </div>
+  );
+}
+
+/**
+ * NotApprovedPanel — shown when the code exists but the co-host hasn't
+ * approved it for door entry yet. Distinct amber/pink styling so door
+ * staff immediately know this isn't a "miss" — the attendee is real,
+ * they just need approval.
+ */
+function NotApprovedPanel({ result, onReset }: { result: LookupResult; onReset: () => void }) {
+  const rsvp = result.rsvp!;
+  const event = rsvp.event;
+  const eventStart = new Date(event.startsAt);
+  return (
+    <div className="rounded-xl border-2 border-[#FF005A]/50 bg-gradient-to-br from-[#FF005A]/10 to-[#FFAC30]/5 p-6 space-y-4">
+      <div className="flex items-center gap-2 text-[#FF005A]">
+        <AlertCircle className="h-6 w-6" />
+        <span className="font-bold uppercase tracking-wider">Not approved</span>
+      </div>
+      <p className="text-sm text-black/70 leading-relaxed">
+        This code belongs to <strong>{rsvp.name || rsvp.email}</strong> for{" "}
+        <strong>{event.title}</strong> ({new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Jerusalem",
+          month: "long",
+          day: "numeric",
+        }).format(eventStart)}), but a co-host has not yet approved them for door entry.
+      </p>
+      <div className="rounded-lg bg-white border border-[#FF005A]/30 p-4">
+        <div className="text-xs font-bold uppercase tracking-widest text-[#FF005A] mb-2">
+          What to do
+        </div>
+        <ul className="space-y-1 text-sm text-black/70">
+          <li>• Ask the attendee to message the event co-host.</li>
+          <li>• The co-host can approve them on the event&apos;s admin page (Manage Event → RSVPs tab → Approve).</li>
+          <li>• Once approved, the attendee can return to the door and you can re-scan their code.</li>
         </ul>
       </div>
       <button

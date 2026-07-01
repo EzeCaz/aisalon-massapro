@@ -120,6 +120,7 @@ model User {
   // row per user (enforced by ReferralAttribution.referredUserId @unique).
   signupAttributedTo    ReferralAttribution?  @relation("ReferredSignupReferredUser")
   referredRsvps         EventRsvp[]           @relation("ReferredRsvpReferrer")
+  approvedRsvps         EventRsvp[]           @relation("EventRsvpApprover")
   // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -558,6 +559,15 @@ model EventRsvp {
   // generated but not yet verified at the door.
   doorCheckedAt    DateTime?
   doorCheckedBy    String?
+  // ----------------------------------------------------------------
+  // Co-host pre-approval for entry. A co-host (or admin) marks an RSVP
+  // as "approved to check in" before the event. Door-staff lookup then
+  // shows who approved + when. Codes without approval are rejected at
+  // the door (the panel says "Not approved — ask the co-host to approve
+  // this RSVP first"). Null = not yet approved.
+  approvedByCoHostId String?
+  approvedByCoHost   User? @relation("EventRsvpApprover", fields: [approvedByCoHostId], references: [id], onDelete: SetNull)
+  approvedAt         DateTime?
   // ----------------------------------------------------------------
   // UTM referral — set when a visitor lands on the event page with
   // ?utm_uid=<hex> and RSVPs. The userId of the referring member

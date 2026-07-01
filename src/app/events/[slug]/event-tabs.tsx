@@ -10,7 +10,7 @@ import { PresentationsTab } from "./tabs/presentations-tab";
 import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
 import { ManageEventTab } from "./tabs/manage-event-tab";
 import { EventPrepTab } from "./tabs/event-prep-tab";
-import type { CoHost } from "@/components/admin/event-editor";
+import type { CoHost, EventSpeaker } from "@/components/admin/event-editor";
 import type { Rsvp } from "@/components/events/rsvp-check-in-card";
 
 type EventStats = {
@@ -106,6 +106,7 @@ export function EventTabs({
   isSpeaker = false,
   coHosts = [],
   eventStats = null,
+  speakersForEditor = [],
 }: {
   event: EventData;
   me: Me;
@@ -122,6 +123,8 @@ export function EventTabs({
   isSpeaker?: boolean;
   coHosts?: CoHost[];
   eventStats?: EventStats | null;
+  /** Full speaker roster for the EventEditor (managers only). Empty for non-managers. */
+  speakersForEditor?: EventSpeaker[];
 }) {
   const [tab, setTab] = useState("overview");
   // Force re-mount of agenda tabs when the admin edits agenda so the
@@ -257,8 +260,10 @@ export function EventTabs({
               rsvpUrl: event.rsvpUrl,
             }}
             coHosts={coHosts}
+            speakers={speakersForEditor}
             stats={stats}
             canManageCoHosts={canManageCoHosts}
+            canManageSpeakers={canManageEvent}
             isSuperAdmin={isSuperAdmin}
             showBackButton={false}
           />

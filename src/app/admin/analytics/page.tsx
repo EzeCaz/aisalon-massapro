@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
+import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminAnalyticsClient } from "./analytics-client";
 import Link from "next/link";
 import { BarChart3, ArrowLeft } from "lucide-react";
@@ -40,6 +41,7 @@ export default async function AdminAnalyticsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
+      <AdminTabs role={me.role} />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-8">

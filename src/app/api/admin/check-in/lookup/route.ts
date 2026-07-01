@@ -94,6 +94,9 @@ export async function GET(req: NextRequest) {
       checkedInAt: true,
       doorCheckedAt: true,
       doorCheckedBy: true,
+      // Co-host pre-approval fields
+      approvedByCoHostId: true,
+      approvedAt: true,
       createdAt: true,
       user: {
         select: {
@@ -147,6 +150,53 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // CO-HOST APPROVAL CHECK — a code can only be admitted at the door if
+  // a co-host (or admin) has pre-approved it on the event. If approval
+  // is missing, return 403 with a clear "not approved" message so the
+  // door staff know to ask the attendee to contact the co-host. We
+  // DON'T set doorCheckedAt in this path — the code is still unused.
+  if (!rsvp.approvedByCoHostId || !rsvp.approvedAt) {
+    return NextResponse.json(
+      {
+        found: true,
+        normalized,
+        approved: false,
+        message:
+          "This check-in code has not been approved by a co-host yet. Ask the attendee to message the event co-host, who can approve them on the event admin page.",
+        rsvp: {
+          ...rsvp,
+          checkedInAt: rsvp.checkedInAt?.toISOString() ?? null,
+          doorCheckedAt: rsvp.doorCheckedAt?.toISOString() ?? null,
+          approvedByCoHostId: rsvp.approvedByCoHostId,
+          approvedAt: rsvp.approvedAt?.toISOString() ?? null,
+          createdAt: rsvp.createdAt.toISOString(),
+          event: {
+            ...rsvp.event,
+            startsAt: rsvp.event.startsAt.toISOString(),
+            endsAt: rsvp.event.endsAt.toISOString(),
+          },
+        },
+        lookedUpBy: { id: me.id, name: me.name },
+        lookedUpAt: new Date().toISOString(),
+      },
+      { status: 403 }
+    );
+  }
+
+  // Fetch the approver's name + email so the door panel can show
+  // "Approved by [Co-host_name] at HH:MM on DD MMM YY".
+  const approver = await db.user.findUnique({
+    where: { id: rsvp.approvedByCoHostId },
+    select: { id: true, name: true, email: true },
+  });
+
+  const approvalInfo = {
+    approvedBy: approver
+      ? { id: approver.id, name: approver.name, email: approver.email }
+      : null,
+    approvedAt: rsvp.approvedAt.toISOString(),
+  };
+
   // SINGLE-USE ENFORCEMENT — if doorCheckedAt is already set, this code
   // has already been used at the door. Return success (so door staff see
   // the attendee info) but flag firstCheckIn: false + the original
@@ -155,6 +205,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       found: true,
       normalized,
+      approved: true,
+      ...approvalInfo,
       firstCheckIn: false,
       alreadyUsedAt: rsvp.doorCheckedAt.toISOString(),
       alreadyUsedBy: rsvp.doorCheckedBy,
@@ -196,6 +248,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       found: true,
       normalized,
+      approved: true,
+      ...approvalInfo,
       firstCheckIn: false,
       alreadyUsedAt: refreshed?.doorCheckedAt?.toISOString() ?? null,
       alreadyUsedBy: refreshed?.doorCheckedBy,
@@ -218,6 +272,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     found: true,
     normalized,
+    approved: true,
+    ...approvalInfo,
     firstCheckIn: true,
     rsvp: {
       ...rsvp,

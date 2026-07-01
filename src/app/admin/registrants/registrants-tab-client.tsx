@@ -62,6 +62,10 @@ type Rsvp = {
   checkedInAt: string | null;
   doorCheckedAt: string | null;
   doorCheckedBy: string | null;
+  /** Co-host pre-approval for door entry (Task 4). */
+  approvedByCoHostId?: string | null;
+  approvedAt?: string | null;
+  approvedByCoHost?: RsvpUser | null;
   event: RsvpEvent;
   user: RsvpUser | null;
 };
@@ -369,6 +373,10 @@ export function RegistrantsTabClient({
   }
 
   const [generatingId, setGeneratingId] = React.useState<string | null>(null);
+  // Task 4 — track which RSVP is currently being approved / revoked so we
+  // can show a spinner on the right button.
+  const [approvingId, setApprovingId] = React.useState<string | null>(null);
+  const [revokingApprovalId, setRevokingApprovalId] = React.useState<string | null>(null);
 
   async function handleGenerateCode(rsvp: Rsvp) {
     setGeneratingId(rsvp.id);
@@ -402,6 +410,92 @@ export function RegistrantsTabClient({
       toast.error((e as Error).message, { id: t, duration: 8000 });
     } finally {
       setGeneratingId(null);
+    }
+  }
+
+  /**
+   * Task 4 — Approve an RSVP for door check-in. Calls the per-event
+   * approval endpoint (POST /api/admin/events/[id]/rsvps/[rsvpId]/approve).
+   * On success, updates local state so the cell flips to the "Approved"
+   * badge without a re-fetch.
+   */
+  async function handleApprove(rsvp: Rsvp) {
+    setApprovingId(rsvp.id);
+    const t = toast.loading("Approving RSVP for door check-in…");
+    try {
+      const res = await fetch(
+        `/api/admin/events/${rsvp.eventId}/rsvps/${rsvp.id}/approve`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setRsvps((prev) =>
+        prev.map((r) =>
+          r.id === rsvp.id
+            ? {
+                ...r,
+                approvedAt: data.approvedAt,
+                approvedByCoHostId: data.approvedBy?.id ?? null,
+                approvedByCoHost: data.approvedBy
+                  ? {
+                      id: data.approvedBy.id,
+                      email: data.approvedBy.email,
+                      name: data.approvedBy.name,
+                    }
+                  : null,
+              }
+            : r
+        )
+      );
+      toast.success(
+        data.alreadyApproved
+          ? "Already approved (no change)"
+          : "Approved — attendee can now check in at the door",
+        { id: t, duration: 5000 }
+      );
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
+  /**
+   * Task 4 — Revoke a previous approval (only possible if door staff
+   * haven't scanned the code yet). Calls DELETE on the same endpoint.
+   */
+  async function handleRevokeApproval(rsvp: Rsvp) {
+    setRevokingApprovalId(rsvp.id);
+    const t = toast.loading("Revoking approval…");
+    try {
+      const res = await fetch(
+        `/api/admin/events/${rsvp.eventId}/rsvps/${rsvp.id}/approve`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      setRsvps((prev) =>
+        prev.map((r) =>
+          r.id === rsvp.id
+            ? {
+                ...r,
+                approvedAt: null,
+                approvedByCoHostId: null,
+                approvedByCoHost: null,
+              }
+            : r
+        )
+      );
+      toast.success("Approval revoked", { id: t });
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setRevokingApprovalId(null);
     }
   }
 
@@ -624,6 +718,7 @@ export function RegistrantsTabClient({
                 <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Source</th>
                 <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Registered</th>
                 <th className="text-left px-4 py-3 font-bold">Check-in code</th>
+                <th className="text-left px-4 py-3 font-bold">Door approval</th>
                 <th className="text-right px-4 py-3 font-bold">Actions</th>
               </tr>
             </thead>
@@ -741,6 +836,73 @@ export function RegistrantsTabClient({
                           )}
                           Generate
                         </button>
+                      ) : (
+                        <span className="text-xs text-black/30 italic">—</span>
+                      )}
+                    </td>
+                    {/* Door approval cell (Task 4) — co-hosts/admins can
+                        pre-approve an RSVP for door entry. Shows either:
+                          - "Approved by [name] at HH:MM DD MMM" badge (green)
+                          - "Approve" button (if code exists, not yet approved,
+                            and the viewer can manage this event)
+                          - "—" if no code yet (approval requires a code first) */}
+                    <td className="px-4 py-3 align-top">
+                      {r.approvedAt && r.approvedByCoHost ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center gap-1 text-[0.6rem] font-bold uppercase bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded w-fit">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            Approved
+                          </span>
+                          <span className="text-[0.65rem] text-black/50">
+                            by {r.approvedByCoHost.name || r.approvedByCoHost.email}
+                          </span>
+                          <span className="text-[0.65rem] text-black/40">
+                            {new Intl.DateTimeFormat("en-GB", {
+                              timeZone: "Asia/Jerusalem",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: false,
+                              day: "2-digit",
+                              month: "short",
+                              year: "2-digit",
+                            }).format(new Date(r.approvedAt))}
+                          </span>
+                          {!r.doorCheckedAt && canGenerateCode(r) && (
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeApproval(r)}
+                              disabled={revokingApprovalId === r.id}
+                              title="Revoke approval (only possible before door check-in)"
+                              className="inline-flex items-center gap-1 text-[0.6rem] font-semibold text-red-600/70 hover:text-red-700 hover:underline w-fit disabled:opacity-50"
+                            >
+                              {revokingApprovalId === r.id ? (
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              ) : (
+                                <X className="h-2.5 w-2.5" />
+                              )}
+                              Revoke
+                            </button>
+                          )}
+                        </div>
+                      ) : r.checkInCode && canGenerateCode(r) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(r)}
+                          disabled={approvingId === r.id}
+                          title="Approve this RSVP for door check-in"
+                          className="inline-flex items-center gap-1 rounded-md border border-[#007E72]/40 text-[#007E72] px-2.5 py-1.5 text-xs font-semibold hover:bg-[#007E72]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {approvingId === r.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+                          Approve
+                        </button>
+                      ) : r.checkInCode ? (
+                        <span className="text-[0.65rem] text-black/40 italic">
+                          Not approved
+                        </span>
                       ) : (
                         <span className="text-xs text-black/30 italic">—</span>
                       )}

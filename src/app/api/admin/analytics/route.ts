@@ -139,10 +139,14 @@ export async function GET() {
     };
   });
 
-  // ---------- Recent visits (last 20) ----------
+  // ---------- Recent visits (last 50, with full UTM columns) ----------
+  // Increased from 20 → 50 and added ALL utm_* columns so the admin can
+  // filter by any UTM dimension (source/medium/campaign/content/term/uid)
+  // per the user spec point E ("Always add the utms on the columns and as
+  // a filter").
   const recentVisits = await db.referralVisit.findMany({
     orderBy: { createdAt: "desc" },
-    take: 20,
+    take: 50,
     include: {
       referrer: { select: { name: true, email: true, utmUid: true } },
     },
@@ -151,7 +155,12 @@ export async function GET() {
     id: v.id,
     createdAt: v.createdAt.toISOString(),
     landingPath: v.landingPath,
+    utmSource: v.utmSource,
+    utmMedium: v.utmMedium,
     utmCampaign: v.utmCampaign,
+    utmContent: v.utmContent,
+    utmTerm: v.utmTerm,
+    utmUid: v.utmUid,
     isNewVisitor: v.isNewVisitor,
     referrer: {
       name: v.referrer.name,
@@ -160,10 +169,10 @@ export async function GET() {
     },
   }));
 
-  // ---------- Recent signups (last 20) ----------
+  // ---------- Recent signups (last 50, with full UTM columns) ----------
   const recentSignups = await db.referralAttribution.findMany({
     orderBy: { convertedAt: "desc" },
-    take: 20,
+    take: 50,
     include: {
       referredUser: { select: { name: true, email: true } },
       referrer: { select: { name: true, email: true, utmUid: true } },
@@ -172,6 +181,7 @@ export async function GET() {
   const recentSignupsJson = recentSignups.map((s) => ({
     id: s.id,
     convertedAt: s.convertedAt.toISOString(),
+    utmUid: s.utmUid,
     referredUser: {
       name: s.referredUser.name,
       email: s.referredUser.email,
@@ -230,6 +240,89 @@ export async function GET() {
     visits: r._count._all,
   }));
 
+  // ---------- Event registrations / check-ins / attended (Task 3-H) ----------
+  // Pulls RSVPs that were attributed to a referrer (referredByUserId IS NOT NULL)
+  // and joins to the event so the admin sees — per event — how many registered,
+  // how many checked in at the door (doorCheckedAt), and how many attended
+  // (doorCheckedAt + the co-host approved them: approvedAt IS NOT NULL).
+  //
+  // "Attended" here = door-staff scanned their code AND a co-host had pre-
+  // approved them (the strictest signal of a real, intentional attendee).
+  const attributedRsvps = await db.eventRsvp.findMany({
+    where: { referredByUserId: { not: null } },
+    select: {
+      id: true,
+      eventId: true,
+      status: true,
+      referredByUserId: true,
+      checkedInAt: true,
+      doorCheckedAt: true,
+      approvedAt: true,
+      createdAt: true,
+      email: true,
+      name: true,
+      event: { select: { id: true, title: true, slug: true, startsAt: true } },
+      referredBy: { select: { id: true, name: true, email: true, utmUid: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  const eventRegistrations = attributedRsvps.map((r) => ({
+    rsvpId: r.id,
+    eventId: r.event.id,
+    eventTitle: r.event.title,
+    eventSlug: r.event.slug,
+    eventStartsAt: r.event.startsAt.toISOString(),
+    attendeeName: r.name,
+    attendeeEmail: r.email,
+    status: r.status,
+    registeredAt: r.createdAt.toISOString(),
+    checkedInAt: r.checkedInAt?.toISOString() ?? null,
+    doorCheckedAt: r.doorCheckedAt?.toISOString() ?? null,
+    approvedAt: r.approvedAt?.toISOString() ?? null,
+    // "Attended" = the strictest signal — co-host pre-approved AND door
+    // staff scanned the code at the venue.
+    attended: !!(r.doorCheckedAt && r.approvedAt),
+    referrer: r.referredBy
+      ? {
+          id: r.referredBy.id,
+          name: r.referredBy.name,
+          email: r.referredBy.email,
+          utmUid: r.referredBy.utmUid,
+        }
+      : null,
+  }));
+
+  // ---------- Members "interested in" long-tail (Task 3-G) ----------
+  // Raw counts per distinct interestedIn keyword. The CLIENT applies
+  // the <10% grouping (groupLongTail helper) so the threshold can be
+  // tweaked without a server round-trip.
+  const membersWithInterests = await db.user.findMany({
+    where: { interestedIn: { not: null } },
+    select: { interestedIn: true, role: true, utmUid: true, createdAt: true },
+  });
+  // interestedIn is a free-text field — split on commas + semicolons so
+  // each individual interest gets counted.
+  const interestCounts = new Map<string, number>();
+  for (const m of membersWithInterests) {
+    if (!m.interestedIn) continue;
+    const parts = m.interestedIn
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (parts.length === 0) {
+      // No separators — treat the whole string as one interest
+      interestCounts.set(m.interestedIn, (interestCounts.get(m.interestedIn) || 0) + 1);
+    } else {
+      for (const p of parts) {
+        interestCounts.set(p, (interestCounts.get(p) || 0) + 1);
+      }
+    }
+  }
+  const interestedInRows = Array.from(interestCounts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+
   return NextResponse.json({
     summary: {
       totalVisits,
@@ -243,5 +336,8 @@ export async function GET() {
     recentSignups: recentSignupsJson,
     visitsByDay,
     topLandingPages,
+    // New sections (Task 3):
+    eventRegistrations,
+    interestedInRows,
   });
 }

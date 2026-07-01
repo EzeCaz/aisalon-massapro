@@ -14,7 +14,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from "lucide-react";
-import { EventEditor, type CoHost, type EventForEditor } from "@/components/admin/event-editor";
+import { EventEditor, type CoHost, type EventForEditor, type EventSpeaker } from "@/components/admin/event-editor";
 
 type EventStats = {
   rsvps: number;
@@ -47,8 +47,12 @@ type ManageEventTabProps = {
     rsvpUrl: string | null;
   };
   coHosts: CoHost[];
+  /** Full speaker roster (managers only). Empty array for non-managers. */
+  speakers?: EventSpeaker[];
   stats: EventStats;
   canManageCoHosts: boolean;
+  /** Whether the viewer can add/edit/remove speakers (Admin / Super Admin / Co-host of this event). */
+  canManageSpeakers?: boolean;
   isSuperAdmin: boolean;
   /** When true, show the "Back to events" link (admin context). When false, we're on the event page itself. */
   showBackButton?: boolean;
@@ -57,19 +61,20 @@ type ManageEventTabProps = {
 export function ManageEventTab({
   event,
   coHosts,
+  speakers = [],
   stats,
   canManageCoHosts,
+  canManageSpeakers = false,
   isSuperAdmin,
   showBackButton = false,
 }: ManageEventTabProps) {
   const eventForEditor: EventForEditor = {
     ...event,
     coHosts,
-    // The manage-event tab on the event page itself doesn't load the full
-    // speaker roster (speakers are managed from /admin/events/[id]).
-    // We pass an empty array + canManageSpeakers=false so the
-    // SpeakersManager hides itself on this surface.
-    speakers: [],
+    // Full speaker roster is now plumbed through from the page server
+    // component (managers only). SpeakersManager will render the roster
+    // AND the add/edit/remove UI when canManageSpeakers is true.
+    speakers,
     _count: {
       images: stats.images,
       speakers: stats.speakers,
@@ -133,7 +138,7 @@ export function ManageEventTab({
         event={eventForEditor}
         canDelete={isSuperAdmin}
         canManageCoHosts={canManageCoHosts}
-        canManageSpeakers={false}
+        canManageSpeakers={canManageSpeakers}
         showBackButton={showBackButton}
         backHref="/admin/events"
       />

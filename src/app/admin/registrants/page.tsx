@@ -28,7 +28,7 @@ export default async function AdminRegistrantsPage() {
   // For CO_HOST, this is the list of event IDs they co-host.
   const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
 
-  // Fetch RSVPs with check-in code + door-check-in state.
+  // Fetch RSVPs with check-in code + door-check-in state + approval info.
   // Only fetch user info for RSVPs that have a linked user.
   // Scope by event IDs for CO_HOST users.
   const rsvps = await db.eventRsvp.findMany({
@@ -39,6 +39,7 @@ export default async function AdminRegistrantsPage() {
         select: { id: true, title: true, slug: true, startsAt: true },
       },
       user: { select: { id: true, email: true, name: true } },
+      approvedByCoHost: { select: { id: true, email: true, name: true } },
     },
   });
 

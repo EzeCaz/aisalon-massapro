@@ -214,6 +214,26 @@ export default async function EventDetailPage({ params }: Params) {
       role: string;
     };
   }> = [];
+  // Fetch full speaker roster for managers so the Manage Event tab can
+  // render the same SpeakersManager component as /admin/events/[id].
+  // Non-managers don't get this data (SpeakersManager hides itself).
+  let speakersForEditorList: Array<{
+    id: string;
+    eventId: string;
+    name: string;
+    role: string | null;
+    company: string | null;
+    bio: string | null;
+    topic: string | null;
+    photoUrl: string | null;
+    contactEmail: string | null;
+    userId: string | null;
+    order: number;
+    createdAt: Date;
+    updatedAt: Date;
+    user: { id: string; email: string; name: string | null } | null;
+    _count: { images: number; presentations: number; messages: number };
+  }> = [];
   if (canManageEvent) {
     const rows = await db.eventCoHost.findMany({
       where: { eventId: event.id },
@@ -236,6 +256,35 @@ export default async function EventDetailPage({ params }: Params) {
       id: c.id,
       createdAt: c.createdAt.toISOString(),
       user: c.user,
+    }));
+
+    // Full speaker roster with the shape EventForEditor.speakers expects.
+    const speakerRows = await db.speaker.findMany({
+      where: { eventId: event.id },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      include: {
+        user: { select: { id: true, email: true, name: true } },
+        _count: {
+          select: { images: true, presentations: true, messages: true },
+        },
+      },
+    });
+    speakersForEditorList = speakerRows.map((s) => ({
+      id: s.id,
+      eventId: s.eventId,
+      name: s.name,
+      role: s.role,
+      company: s.company,
+      bio: s.bio,
+      topic: s.topic,
+      photoUrl: s.photoUrl,
+      contactEmail: s.contactEmail,
+      userId: s.userId,
+      order: s.order,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      user: s.user,
+      _count: s._count,
     }));
   }
 
@@ -277,6 +326,15 @@ export default async function EventDetailPage({ params }: Params) {
       endsAt: a.endsAt?.toISOString() || null,
     })),
   };
+
+  // Serialize the manager-only speaker roster (with _count + dates as ISO
+  // strings so it's safe to pass across the RSC boundary into the client
+  // EventEditor → SpeakersManager).
+  const speakersForEditor = speakersForEditorList.map((s) => ({
+    ...s,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  }));
 
   // The "isAdmin" prop historically only drove the "Manage Agenda" tab.
   // We keep it (for backward compat with existing tab components) but
@@ -437,6 +495,7 @@ export default async function EventDetailPage({ params }: Params) {
           isSpeaker={isSpeakerOfThisEvent}
           coHosts={coHostsList}
           eventStats={eventStats}
+          speakersForEditor={speakersForEditor}
         />
       </main>
 
