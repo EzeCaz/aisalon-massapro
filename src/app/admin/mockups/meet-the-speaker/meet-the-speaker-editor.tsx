@@ -103,6 +103,8 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       next.speaker.photoUrl = url;
     } else if (slot.kind === "graphic") {
       next.graphic.imageUrl = url;
+    } else if (slot.kind === "hero-style2") {
+      next.heroStyle2Url = url;
     } else {
       const arr =
         slot.group === "collaborators" ? next.collaborators : next.sponsors;
@@ -121,6 +123,8 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       next.speaker.photoPlacement = placement;
     } else if (slot.kind === "graphic") {
       next.graphic.imagePlacement = placement;
+    } else if (slot.kind === "hero-style2") {
+      next.heroStyle2Placement = placement;
     }
     // sponsors use object-contain — no placement.
     return next;
@@ -129,6 +133,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
   function urlForSlot(slot: ImageSlot): string | undefined {
     if (slot.kind === "speaker-photo") return data.speaker.photoUrl;
     if (slot.kind === "graphic") return data.graphic.imageUrl;
+    if (slot.kind === "hero-style2") return data.heroStyle2Url;
     const arr =
       slot.group === "collaborators" ? data.collaborators : data.sponsors;
     return arr[slot.index]?.logoUrl;
@@ -257,13 +262,16 @@ export function MeetTheSpeakerEditor({ events }: Props) {
   }
 
   /** Apply a resize drag — updates the size multiplier on the targeted slot
-   *  (photoSize for speaker, imageScale for graphic, logoSize for sponsor). */
+   *  (photoSize for speaker, imageScale for graphic, logoSize for sponsor,
+   *  heroStyle2Scale for Style 2 hero image). */
   function applySizeChange(slot: ImageSlot, newMultiplier: number): MeetTheSpeakerData {
     const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
     if (slot.kind === "speaker-photo") {
       next.speaker.photoSize = newMultiplier;
     } else if (slot.kind === "graphic") {
       next.graphic.imageScale = newMultiplier;
+    } else if (slot.kind === "hero-style2") {
+      next.heroStyle2Scale = newMultiplier;
     } else {
       const arr = slot.group === "collaborators" ? next.collaborators : next.sponsors;
       const item = arr[slot.index];
@@ -378,6 +386,48 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     if (layer === "hero") next.heroZ = z;
     else if (layer === "photo") next.photoZ = z;
     else next.graphicZ = z;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a speaker photo container position change (free drag). */
+  function handlePhotoPosChange(pos: { x: number; y: number }) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    next.speaker.photoPos = pos;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a Local Street pin position change (free drag on canvas). */
+  function handleLocalStreetPinMove(index: number, pos: { x: number; y: number }) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    if (!next.localStreetPins) next.localStreetPins = [];
+    if (next.localStreetPins[index]) {
+      next.localStreetPins[index] = { ...next.localStreetPins[index], ...pos };
+    }
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
+  /** Apply a Style 2 hero image container position change (free drag). */
+  function handleHeroStyle2PosChange(pos: { x: number; y: number }) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    next.heroStyle2Pos = pos;
     setData(next);
     if (rafRef.current === null) {
       rafRef.current = requestAnimationFrame(() => {
@@ -665,6 +715,20 @@ export function MeetTheSpeakerEditor({ events }: Props) {
               <code className="font-mono">imageScale</code>, and{" "}
               <code className="font-mono">logoSize</code> in the JSON to resize
               containers.
+              <div className="mt-2">
+                <strong>New (2026-07-02):</strong>{" "}
+                Drag the <code className="font-mono">⠿ Move</code> handle on the
+                speaker photo to move it freely around the canvas — no longer
+                anchored to the top-right.
+                {data.heroStyle === 2 && (
+                  <>
+                    {" "}For Style 2, the hero image has a{" "}
+                    <code className="font-mono">⠿ Move hero</code> handle (free
+                    position), corner handles (resize), mouse-wheel zoom, and a{" "}
+                    <em>Replace</em> button. Local Street pins are also draggable.
+                  </>
+                )}
+              </div>
             </>
           )}
           {sectionsEditMode && (
@@ -816,6 +880,9 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 onHeroScaleXChange={handleHeroScaleXChange}
                 onHeroScaleYChange={handleHeroScaleYChange}
                 onSectionZChange={handleSectionZChange}
+                onPhotoPosChange={handlePhotoPosChange}
+                onLocalStreetPinMove={handleLocalStreetPinMove}
+                onHeroStyle2PosChange={handleHeroStyle2PosChange}
               />
             </div>
           </div>

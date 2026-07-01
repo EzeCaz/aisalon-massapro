@@ -33,6 +33,8 @@ export const K_LOGIN_HERO = "loginHero";
 export const K_LOGIN_BANNER = "loginBanner";
 /** Canonical key for the WhatsApp "Join our group" link shown in the header. */
 export const K_WHATSAPP_GROUP_URL = "whatsappGroupUrl";
+/** Canonical key for the LinkedIn "Join us" link shown in the header. */
+export const K_LINKEDIN_URL = "linkedinUrl";
 /** Canonical key for the Google Analytics 4 Measurement ID (e.g. "G-XXXXXXXXXX"). */
 export const K_GA4_MEASUREMENT_ID = "ga4MeasurementId";
 /** Canonical key for the Meta (Facebook) Pixel ID (e.g. "123456789012345"). */
@@ -47,6 +49,7 @@ export const ALL_KEYS: ReadonlySet<string> = new Set([
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
   K_WHATSAPP_GROUP_URL,
+  K_LINKEDIN_URL,
   K_GA4_MEASUREMENT_ID,
   K_META_PIXEL_ID,
 ]);
@@ -69,6 +72,9 @@ export const DEFAULTS: Record<string, string> = {
   // Default WhatsApp group invite link — the AI Salon TLV community group.
   // Admin can override at /admin/images (no redeploy needed).
   [K_WHATSAPP_GROUP_URL]: "https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3",
+  // Default LinkedIn showcase URL — the AI Salon Tel Aviv chapter.
+  // Admin can override at /admin/images (no redeploy needed).
+  [K_LINKEDIN_URL]: "https://www.linkedin.com/showcase/ai-salon-tel-aviv",
   // Empty string = GA4 disabled. Admin sets a valid G-XXXXXXXXXX ID at
   // /admin/images to enable.
   [K_GA4_MEASUREMENT_ID]: "",
@@ -83,6 +89,7 @@ export type PublicSettings = {
   loginHero: string;
   loginBanner: string;
   whatsappGroupUrl: string;
+  linkedinUrl: string;
   ga4MeasurementId: string;
   metaPixelId: string;
 };
@@ -116,6 +123,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     loginHero: map.get(K_LOGIN_HERO) ?? DEFAULTS[K_LOGIN_HERO],
     loginBanner: map.get(K_LOGIN_BANNER) ?? DEFAULTS[K_LOGIN_BANNER],
     whatsappGroupUrl: map.get(K_WHATSAPP_GROUP_URL) ?? DEFAULTS[K_WHATSAPP_GROUP_URL],
+    linkedinUrl: map.get(K_LINKEDIN_URL) ?? DEFAULTS[K_LINKEDIN_URL],
     ga4MeasurementId: map.get(K_GA4_MEASUREMENT_ID) ?? DEFAULTS[K_GA4_MEASUREMENT_ID],
     metaPixelId: map.get(K_META_PIXEL_ID) ?? DEFAULTS[K_META_PIXEL_ID],
   };

@@ -14,9 +14,9 @@ import { getPublicSettings } from "@/lib/site-settings";
  *
  * Renders the LinkedIn "Join us" pill AND the WhatsApp "Join our group"
  * pill on the LEFT of the Events link — visible to everyone (logged-in
- * or not). The WhatsApp URL comes from SiteSetting `whatsappGroupUrl`
- * (admin-editable at /admin/images, no redeploy needed). The LinkedIn
- * URL is hardcoded to the AI Salon TLV LinkedIn showcase.
+ * or not). Both URLs come from SiteSetting rows (`linkedinUrl` and
+ * `whatsappGroupUrl`), admin-editable at /admin/images, no redeploy
+ * needed.
  */
 export async function AppHeader() {
   const session = await getServerSession(authOptions);
@@ -42,14 +42,15 @@ export async function AppHeader() {
     return "/admin";
   })();
 
-  // Public site settings — includes the WhatsApp group URL. Safe to read
-  // for anonymous visitors (the URL is shown publicly in the header).
+  // Public site settings — includes the WhatsApp + LinkedIn URLs. Safe
+  // to read for anonymous visitors (the URLs are shown publicly in the
+  // header).
   const settings = await getPublicSettings();
   const whatsappUrl = settings.whatsappGroupUrl;
-  // LinkedIn showcase for the AI Salon Tel Aviv chapter. Hardcoded —
-  // unlikely to change per-chapter and not admin-editable (keep the
-  // admin UI simple).
-  const linkedInUrl = "https://www.linkedin.com/showcase/ai-salon-tel-aviv";
+  // LinkedIn showcase for the AI Salon Tel Aviv chapter. Admin-editable
+  // at /admin/images (no redeploy needed). Defaults to the AI Salon TLV
+  // LinkedIn showcase when no SiteSetting row exists.
+  const linkedInUrl = settings.linkedinUrl;
 
   const navLinks = [
     { href: "/events", label: "Events" },

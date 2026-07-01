@@ -76,11 +76,41 @@ export type MeetTheSpeakerData = {
      */
     photoSize?: number;
     /**
+     * Free-form position of the speaker photo container, as % of canvas
+     * (0–100 for x and y). When set, the photo container is positioned
+     * at this point (top-left corner) instead of its default anchor
+     * (top-right with 5% margin). Set by dragging the photo container
+     * in edit mode — the photo can move anywhere on the canvas, with
+     * only the canvas border clipping the bleed (per user spec
+     * 2026-07-02: "Should be able to drag the Photo URL image all
+     * around the canvas without limitation").
+     */
+    photoPos?: { x: number; y: number };
+    /**
      * Rotation in degrees (0, 90, 180, 270). Each click of the "Rotate"
      * button in the z-index section advances by 90°. Applied via CSS
      * `transform: rotate(<deg>deg)` on the photo's container.
      */
     photoRotation?: number;
+  };
+  /**
+   * Per-text-section font + color overrides. Each key matches a text
+   * element on the canvas (fullName, title, company, role, topic,
+   * topicDescription, bio, expertise). When a value is set, the canvas
+   * uses it instead of the default font size / color.
+   *
+   * Per user spec 2026-07-02: "I should be able to select the font
+   * size and color of each specific text section".
+   */
+  textStyles?: {
+    fullName?: { fontSize?: number; color?: string };
+    title?: { fontSize?: number; color?: string };
+    company?: { fontSize?: number; color?: string };
+    role?: { fontSize?: number; color?: string };
+    topic?: { fontSize?: number; color?: string };
+    topicDescription?: { fontSize?: number; color?: string };
+    bio?: { fontSize?: number; color?: string };
+    expertise?: { fontSize?: number; color?: string };
   };
   /** Event context (auto-filled from the event picker). */
   event: {
@@ -148,6 +178,33 @@ export type MeetTheSpeakerData = {
    */
   heroStyle2Url?: string;
   /**
+   * Pan/zoom for the Style 2 hero image — set by dragging the image
+   * (pan) and scrolling the wheel (zoom) in edit mode.
+   */
+  heroStyle2Placement?: ImagePlacement;
+  /**
+   * Size multiplier for the Style 2 hero image container. 1 = default
+   * (55% canvas width × 85% height). Set by dragging the corner
+   * handles in edit mode.
+   */
+  heroStyle2Scale?: number;
+  /**
+   * Free-form position of the Style 2 hero image container, as % of
+   * canvas (0–100 for x and y). When set, the hero image container is
+   * positioned at this point (top-left corner) instead of its default
+   * anchor (top-right at 45% left, 0% top). Set by dragging the hero
+   * image container in edit mode — per user spec 2026-07-02: "Should
+   * be able to drag the image all around the canvas without any
+   * limitations".
+   */
+  heroStyle2Pos?: { x: number; y: number };
+  /**
+   * Rotation in degrees (0, 90, 180, 270) for the Style 2 hero image.
+   * Cycled by the Rotate button in the Layer z-index section. Applied
+   * via CSS `transform: rotate(<deg>deg)` on the hero image container.
+   */
+  heroStyle2Rotation?: number;
+  /**
    * "Local Street" pins — 4 editable labels overlaid on hero style #2
    * at the four corners (where the source image has "Placeholder 1–4"
    * baked into the pixels). The pin labels are user-editable so the
@@ -156,7 +213,8 @@ export type MeetTheSpeakerData = {
    * speaker-intro / event-profile.
    *
    * Each pin's (x, y) is a percentage of the canvas (0–100). Defaults
-   * to the four corners.
+   * to the four corners. Per user spec 2026-07-02, pins are draggable
+   * on the canvas (not just editable via X/Y inputs).
    */
   localStreetPins?: { x: number; y: number; label: string }[];
   /** "In collaboration with:" logos (bottom-right). */
@@ -198,6 +256,7 @@ export type MeetTheSpeakerData = {
 export type ImageSlot =
   | { kind: "speaker-photo" }
   | { kind: "graphic" }
+  | { kind: "hero-style2" }
   | { kind: "sponsor"; group: "collaborators" | "sponsors"; index: number };
 
 /** Helper: clamp a number to [min, max]. */

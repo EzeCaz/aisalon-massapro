@@ -47,8 +47,12 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
         </Field>
       </Section>
 
-      {/* ===== SPEAKER ===== */}
-      <Section title="Speaker">
+      {/* ===== SPEAKER — SECTION 1: IDENTITY =====
+          Per user spec 2026-07-02: "Separate the sections as follows:
+            Section 1: Full name, Title, Company, Role
+            Section 2: Topic, Topic description, Bio, Expertise"
+          Each text field gets its own Font size + Color controls (spec B). */}
+      <Section title="Speaker · Section 1 — Identity (Full name · Title · Company · Role)">
         <Field label="Full name">
           <input
             type="text"
@@ -57,6 +61,22 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Full name — font size + color"
+          fontSize={data.textStyles?.fullName?.fontSize}
+          fontColor={data.textStyles?.fullName?.color}
+          defaultFontSize={56}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.fullName = {
+                ...(d.textStyles.fullName ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Title">
             <input
@@ -75,6 +95,38 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
+        <TextStyleRow
+          label="Title — font size + color"
+          fontSize={data.textStyles?.title?.fontSize}
+          fontColor={data.textStyles?.title?.color}
+          defaultFontSize={18}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.title = {
+                ...(d.textStyles.title ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Company — font size + color"
+          fontSize={data.textStyles?.company?.fontSize}
+          fontColor={data.textStyles?.company?.color}
+          defaultFontSize={16}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.company = {
+                ...(d.textStyles.company ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <Field label="Role">
           <select
             value={data.speaker.role}
@@ -91,6 +143,26 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             <option value="Host">Host</option>
           </select>
         </Field>
+        <TextStyleRow
+          label="Role — font size + color"
+          fontSize={data.textStyles?.role?.fontSize}
+          fontColor={data.textStyles?.role?.color}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.role = {
+                ...(d.textStyles.role ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
+      </Section>
+
+      {/* ===== SPEAKER — SECTION 2: TOPIC + BIO ===== */}
+      <Section title="Speaker · Section 2 — Topic & Bio (Topic · Topic description · Bio · Expertise)">
         <Field label="Topic">
           <input
             type="text"
@@ -99,6 +171,22 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Topic — font size + color"
+          fontSize={data.textStyles?.topic?.fontSize}
+          fontColor={data.textStyles?.topic?.color}
+          defaultFontSize={20}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.topic = {
+                ...(d.textStyles.topic ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <Field label="Topic description">
           <input
             type="text"
@@ -107,6 +195,22 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Topic description — font size + color"
+          fontSize={data.textStyles?.topicDescription?.fontSize}
+          fontColor={data.textStyles?.topicDescription?.color}
+          defaultFontSize={15}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.topicDescription = {
+                ...(d.textStyles.topicDescription ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <Field label="Bio">
           <textarea
             value={data.speaker.bio}
@@ -115,6 +219,22 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             rows={3}
           />
         </Field>
+        <TextStyleRow
+          label="Bio — font size + color"
+          fontSize={data.textStyles?.bio?.fontSize}
+          fontColor={data.textStyles?.bio?.color}
+          defaultFontSize={13}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.bio = {
+                ...(d.textStyles.bio ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <Field label="Expertise (optional second paragraph)">
           <textarea
             value={data.speaker.expertise ?? ""}
@@ -123,6 +243,22 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             rows={2}
           />
         </Field>
+        <TextStyleRow
+          label="Expertise — font size + color"
+          fontSize={data.textStyles?.expertise?.fontSize}
+          fontColor={data.textStyles?.expertise?.color}
+          defaultFontSize={12}
+          onChange={(fontSize, fontColor) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.expertise = {
+                ...(d.textStyles.expertise ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+              };
+            })
+          }
+        />
         <Field label="Photo URL">
           <input
             type="url"
@@ -131,20 +267,67 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
-        <Field label="Photo size (×)">
-          <input
-            type="number"
-            step="0.1"
-            min="0.01"
-            value={data.speaker.photoSize ?? 1}
-            onChange={(e) =>
-              update((d) => {
-                d.speaker.photoSize = parseFloat(e.target.value) || 1;
-              })
-            }
-            className="form-input"
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Photo size (×)">
+            <input
+              type="number"
+              step="0.1"
+              min="0.01"
+              value={data.speaker.photoSize ?? 1}
+              onChange={(e) =>
+                update((d) => {
+                  d.speaker.photoSize = parseFloat(e.target.value) || 1;
+                })
+              }
+              className="form-input"
+            />
+          </Field>
+          <Field label="Photo position (X%, Y%) — free drag on canvas">
+            <div className="grid grid-cols-2 gap-1">
+              <input
+                type="number"
+                step="0.5"
+                placeholder="auto"
+                value={data.speaker.photoPos?.x ?? ""}
+                onChange={(e) =>
+                  update((d) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n)) {
+                      d.speaker.photoPos = { ...(d.speaker.photoPos ?? { x: 50, y: 5 }), x: n };
+                    } else {
+                      d.speaker.photoPos = undefined;
+                    }
+                  })
+                }
+                className="form-input"
+              />
+              <input
+                type="number"
+                step="0.5"
+                placeholder="auto"
+                value={data.speaker.photoPos?.y ?? ""}
+                onChange={(e) =>
+                  update((d) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n)) {
+                      d.speaker.photoPos = { ...(d.speaker.photoPos ?? { x: 50, y: 5 }), y: n };
+                    } else {
+                      d.speaker.photoPos = undefined;
+                    }
+                  })
+                }
+                className="form-input"
+              />
+            </div>
+          </Field>
+        </div>
+        <p className="text-[0.55rem] text-black/40 leading-tight">
+          Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
+          &ldquo;⠿ Move&rdquo; handle on the photo to reposition it freely —
+          the photo can move anywhere on the canvas. Use the X/Y inputs here
+          for precise adjustments; clear them to restore the default
+          top-right anchor.
+        </p>
       </Section>
 
       {/* ===== EVENT ===== */}
@@ -406,8 +589,10 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+          </>
+        )}
 
-        {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
+        {/* ===== LAYER Z-INDEX + ROTATE CONTROLS — shown for BOTH styles =====
             Per user spec 2026-06-28: "Move all 'Capabilities' controls
             (toggles, inputs, visibility settings) from the canvas slider
             to the Left Sidebar for all mockup pages."
@@ -417,14 +602,19 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             Per user spec 2026-06-30: "to the Layer z-index (Front = on top)
             below the front button add a rotate button for all the creatives,
             Hero (z=5), Photo (z=3), and Graphic (z=4)" — each creative gets
-            a Rotate button that advances by 90° (0 → 90 → 180 → 270 → 0). */}
+            a Rotate button that advances by 90° (0 → 90 → 180 → 270 → 0).
+
+            Per user spec 2026-07-02: this section is now shown for BOTH
+            Style 1 and Style 2 (previously it was hidden when Style 2 was
+            selected). For Style 2, the Hero rotate button cycles the
+            `heroStyle2Rotation` field instead of `heroOverlay.rotation`. */}
         <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
           <div className="text-[0.65rem] font-bold uppercase tracking-wider text-black/50">
-            Layer z-index (Front = on top)
+            Layer z-index (Front = on top) — applies to both styles
           </div>
           <div className="grid grid-cols-3 gap-2">
             {([
-              { key: "hero", label: "Hero", zVal: data.heroZ ?? 1, rot: data.heroOverlay.rotation ?? 0 },
+              { key: "hero", label: "Hero", zVal: data.heroZ ?? 1, rot: data.heroStyle === 2 ? (data.heroStyle2Rotation ?? 0) : (data.heroOverlay.rotation ?? 0) },
               { key: "photo", label: "Photo", zVal: data.photoZ ?? 3, rot: data.speaker.photoRotation ?? 0 },
               { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 4, rot: data.graphic.rotation ?? 0 },
             ] as const).map((layer) => (
@@ -475,15 +665,17 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                   </button>
                 </div>
                 {/* Rotate button — advances by 90° on each click.
-                    Per user spec 2026-06-30: "below the front button add a
-                    rotate button for all the creatives, Hero / Photo / Graphic". */}
+                    For Style 2, the Hero rotate button cycles
+                    `heroStyle2Rotation` instead of `heroOverlay.rotation`. */}
                 <button
                   type="button"
                   onClick={() =>
                     update((d) => {
                       const next = (layer.rot + 90) % 360;
-                      if (layer.key === "hero") d.heroOverlay.rotation = next;
-                      else if (layer.key === "photo") d.speaker.photoRotation = next;
+                      if (layer.key === "hero") {
+                        if (d.heroStyle === 2) d.heroStyle2Rotation = next;
+                        else d.heroOverlay.rotation = next;
+                      } else if (layer.key === "photo") d.speaker.photoRotation = next;
                       else d.graphic.rotation = next;
                     })
                   }
@@ -499,9 +691,125 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           <p className="text-[0.55rem] text-black/40 leading-tight">
             Default: hero (back) → photo → graphic (top). Click Front/Back to override.
             Rotate button cycles 0° → 90° → 180° → 270° → 0°.
+            {data.heroStyle === 2
+              ? " Style 2 active — Hero rotate cycles the Style 2 image rotation."
+              : " Style 1 active — Hero rotate cycles the gradient triangles rotation."}
           </p>
         </div>
-          </>
+
+        {/* ===== STYLE 2 HERO IMAGE CONTROLS =====
+            Per user spec 2026-07-02: Style 2 hero image should be
+            replaceable, draggable, resizeable, zoomable. The replace
+            + drag + resize + zoom are handled on the canvas (edit
+            mode). These form fields expose the underlying values for
+            precise control + a "Reset position" shortcut. */}
+        {data.heroStyle === 2 && (
+          <div className="rounded-md border border-[#FF005A]/20 bg-[#FF005A]/[0.03] p-3 space-y-2">
+            <div className="text-[0.65rem] font-bold uppercase tracking-wider text-[#FF005A]">
+              Style 2 hero image — position & size
+            </div>
+            <Field label="Style 2 image URL (also replaceable via the canvas Replace button in edit mode)">
+              <input
+                type="text"
+                value={data.heroStyle2Url ?? ""}
+                onChange={(e) => update((d) => { d.heroStyle2Url = e.target.value; })}
+                className="form-input"
+                placeholder="https://..."
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Position X (%)">
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="45"
+                  value={data.heroStyle2Pos?.x ?? ""}
+                  onChange={(e) =>
+                    update((d) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) {
+                        d.heroStyle2Pos = { ...(d.heroStyle2Pos ?? { x: 45, y: 0 }), x: n };
+                      } else {
+                        d.heroStyle2Pos = undefined;
+                      }
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+              <Field label="Position Y (%)">
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={data.heroStyle2Pos?.y ?? ""}
+                  onChange={(e) =>
+                    update((d) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) {
+                        d.heroStyle2Pos = { ...(d.heroStyle2Pos ?? { x: 45, y: 0 }), y: n };
+                      } else {
+                        d.heroStyle2Pos = undefined;
+                      }
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Size scale (×) — also resizeable via corner handles">
+                <input
+                  type="number"
+                  step="0.05"
+                  min="0.01"
+                  value={data.heroStyle2Scale ?? 1}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.heroStyle2Scale = parseFloat(e.target.value) || 1;
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+              <Field label="Rotation (°) — also via Rotate button above">
+                <input
+                  type="number"
+                  step="90"
+                  min="0"
+                  max="270"
+                  value={data.heroStyle2Rotation ?? 0}
+                  onChange={(e) =>
+                    update((d) => {
+                      d.heroStyle2Rotation = ((parseFloat(e.target.value) || 0) % 360 + 360) % 360;
+                    })
+                  }
+                  className="form-input"
+                />
+              </Field>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                update((d) => {
+                  d.heroStyle2Pos = undefined;
+                  d.heroStyle2Scale = 1;
+                  d.heroStyle2Rotation = 0;
+                  d.heroStyle2Placement = undefined;
+                })
+              }
+              className="text-[0.55rem] text-black/50 hover:text-black underline"
+            >
+              Reset position, size, rotation, zoom (restore defaults)
+            </button>
+            <p className="text-[0.55rem] text-black/40 leading-tight">
+              Tip: Toggle <strong>Edit images</strong> on the canvas to drag
+              the &ldquo;⠿ Move hero&rdquo; handle (free position), drag the
+              corner handles (resize), scroll the mouse wheel over the image
+              (zoom), or click the <strong>Replace</strong> button to swap
+              the image from the brand library.
+            </p>
+          </div>
         )}
       </Section>
 
@@ -690,6 +998,76 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * TextStyleRow — a compact row with Font size + Color inputs for a
+ * specific text section (Full name / Title / Company / Role / Topic /
+ * Topic description / Bio / Expertise).
+ *
+ * Per user spec 2026-07-02: "I should be able to select the font size
+ * and color of each specific text section". When the inputs are empty,
+ * the canvas falls back to the default font size + color for that
+ * section.
+ */
+function TextStyleRow({
+  label,
+  fontSize,
+  fontColor,
+  defaultFontSize,
+  onChange,
+}: {
+  label: string;
+  fontSize?: number;
+  fontColor?: string;
+  defaultFontSize: number;
+  onChange: (fontSize: number | undefined, fontColor: string | undefined) => void;
+}) {
+  return (
+    <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1.5">
+      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40">
+        {label}
+      </div>
+      <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
+        <label className="inline-flex items-center gap-1.5">
+          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Size</span>
+          <input
+            type="number"
+            step="1"
+            min="1"
+            placeholder={String(defaultFontSize)}
+            value={fontSize ?? ""}
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              if (Number.isFinite(n) && n > 0) onChange(n, fontColor);
+              else onChange(undefined, fontColor);
+            }}
+            className="form-input w-20"
+            title={`Font size in px (default: ${defaultFontSize}px). Empty = use default.`}
+          />
+          <span className="text-[0.55rem] font-mono text-black/40">px</span>
+        </label>
+        <label className="inline-flex items-center gap-1.5">
+          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Color</span>
+          <input
+            type="color"
+            value={fontColor ?? "#000000"}
+            onChange={(e) => onChange(fontSize, e.target.value)}
+            className="h-7 w-9 rounded border border-black/15 cursor-pointer"
+            title="Text color (click to pick). Default = black or theme color."
+          />
+          <button
+            type="button"
+            onClick={() => onChange(fontSize, undefined)}
+            className="text-[0.55rem] text-black/50 hover:text-black underline"
+            title="Reset color to default"
+          >
+            reset
+          </button>
+        </label>
+      </div>
+    </div>
   );
 }
 

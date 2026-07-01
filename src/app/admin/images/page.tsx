@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
 import { WhatsAppLinkEditor } from "./whatsapp-link-editor";
+import { LinkedInLinkEditor } from "./linkedin-link-editor";
 import { AnalyticsSettingsEditor } from "./analytics-settings-editor";
 import { getPublicSettings } from "@/lib/site-settings";
 
@@ -105,6 +106,16 @@ export default async function AdminImagesPage() {
         <div className="mt-8">
           <WhatsAppLinkEditor
             currentUrl={settings.whatsappGroupUrl}
+            canEdit={isSuper}
+          />
+        </div>
+
+        {/* LinkedIn "Join us" link editor — sits below the WhatsApp editor.
+            SUPER_ADMIN-only writes (enforced by the API), but visible to any
+            admin viewer so they can see the current value. */}
+        <div className="mt-6">
+          <LinkedInLinkEditor
+            currentUrl={settings.linkedinUrl}
             canEdit={isSuper}
           />
         </div>

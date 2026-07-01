@@ -72,6 +72,17 @@ type Props = {
   onHeroScaleYChange?: (n: number) => void;
   /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
+  /** Called when the speaker photo container is dragged to a new
+   *  free-form position (user spec 2026-07-02: "drag the Photo URL
+   *  image all around the canvas without limitation"). The pos is in
+   *  % of canvas (0–100 for x and y). */
+  onPhotoPosChange?: (pos: { x: number; y: number }) => void;
+  /** Called when a Local Street pin (Style 2) is dragged to a new
+   *  position on the canvas. The pos is in % of canvas (0–100). */
+  onLocalStreetPinMove?: (index: number, pos: { x: number; y: number }) => void;
+  /** Called when the Style 2 hero image container is dragged to a new
+   *  free-form position (user spec 2026-07-02). */
+  onHeroStyle2PosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -92,6 +103,9 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroScaleXChange,
       onHeroScaleYChange,
       onSectionZChange,
+      onPhotoPosChange,
+      onLocalStreetPinMove,
+      onHeroStyle2PosChange,
       previewScale = 1,
     },
     ref,
@@ -145,65 +159,44 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               (heroStyle2Url) fills the right column, with 4 editable
               "Local Street" pin labels overlaid at the corners. The
               image's built-in "Placeholder 1–4" labels are visually
-              covered by the editable pins (positioned to match). */}
+              covered by the editable pins (positioned to match).
+
+              Per user spec 2026-07-02, Style 2 hero image is:
+                B. Replaceable via a "Replace" button overlay (edit mode)
+                C. Layer z-index + rotate (controlled from the form view)
+                D. Draggable all around the canvas (free position)
+                E. Resize corners + mouse wheel zoom (edit mode)
+              Local Street pins are also draggable on the canvas (spec A). */}
         {data.heroStyle === 2 ? (
           <>
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: "45%",
-                top: "0",
-                width: "55%",
-                height: "85%",
-                zIndex: heroZ,
-              }}
-              aria-hidden
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={data.heroStyle2Url || "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png"}
-                alt=""
-                className="absolute inset-0 w-full h-full"
-                style={{ objectFit: "cover", objectPosition: "center" }}
-              />
-            </div>
+            <DraggableHeroStyle2Image
+              data={data}
+              heroZ={heroZ}
+              editable={editable}
+              previewScale={previewScale}
+              onPickImage={onPickImage}
+              onPlacementChange={onPlacementChange}
+              onSizeChange={onSizeChange}
+              onHeroStyle2PosChange={onHeroStyle2PosChange}
+            />
             {/* "Local Street" pins — editable labels overlaid at the
                 four corners of the hero image. Each pin is positioned
-                via % of canvas (0–100) so it scales with the canvas. */}
+                via % of canvas (0–100) so it scales with the canvas.
+
+                Per user spec 2026-07-02 (spec A): pins are draggable
+                on the canvas (not just editable via X/Y inputs in the
+                form view). Dragging the pin dot updates its (x, y). */}
             {(data.localStreetPins ?? []).map((pin, i) => (
-              <div
+              <DraggableLocalStreetPin
                 key={`local-street-${i}`}
-                className="absolute pointer-events-none flex flex-col items-center"
-                style={{
-                  left: `${pin.x}%`,
-                  top: `${pin.y}%`,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: heroZ + 1,
-                }}
-              >
-                {/* Pin dot — small circle marker, similar to the
-                    location pins in speaker-intro / event-profile. */}
-                <div
-                  className="rounded-full bg-white shadow-md border-2 flex items-center justify-center"
-                  style={{
-                    width: "28px",
-                    height: "28px",
-                    borderColor: data.event.brandColors[0] || "#FF005C",
-                    color: data.event.brandColors[0] || "#FF005C",
-                    fontSize: "13px",
-                    fontWeight: 800,
-                  }}
-                >
-                  {i + 1}
-                </div>
-                {/* Pin label — user-editable text under the dot. */}
-                <div
-                  className="mt-1 px-2 py-0.5 rounded bg-white/90 shadow-sm text-black"
-                  style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em" }}
-                >
-                  {pin.label}
-                </div>
-              </div>
+                pin={pin}
+                index={i}
+                brandColor={data.event.brandColors[0] || "#FF005C"}
+                zIndex={heroZ + 1}
+                editable={editable}
+                previewScale={previewScale}
+                onMove={onLocalStreetPinMove}
+              />
             ))}
           </>
         ) : (
@@ -262,28 +255,37 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           })()
         )}
 
-        {/* ===== SPEAKER PHOTO (right side, large) ===== */}
+        {/* ===== SPEAKER PHOTO (right side, large) =====
+            Per user spec 2026-07-02: "Should be able to drag the Photo
+            URL image all around the canvas without limitation". The
+            photo container can be freely positioned via `photoPos`. A
+            drag handle (top-center grip) lets the user move the
+            container without conflicting with the inner-image pan
+            (which is triggered by dragging the image itself). */}
         {(() => {
           // photoSize: 1 = 45% canvas width × 60% height (default).
           // Anchored to top-right, grows downward + leftward.
           const sizeMult = Math.max(0.01, data.speaker.photoSize ?? 1);
           const widthPct = 45 * sizeMult;
           const heightPct = 60 * sizeMult;
-          // Anchor top-right at 95% (5% margin from right); left shifts as width grows.
-          const leftPct = Math.max(35, 95 - widthPct);
+          // If photoPos is set, use it (free drag position). Otherwise
+          // anchor top-right at 95% (5% margin from right); left shifts
+          // as width grows.
+          const photoPos = data.speaker.photoPos;
+          const leftPct = photoPos ? photoPos.x : Math.max(35, 95 - widthPct);
+          const topPct = photoPos ? photoPos.y : 5;
           const photoRot = data.speaker.photoRotation ?? 0;
           return (
-            <div
-              className="absolute"
-              style={{
-                left: `${leftPct}%`,
-                top: "5%",
-                width: `${widthPct}%`,
-                height: `${heightPct}%`,
-                zIndex: photoZ,
-                ...(photoRot ? { transform: `rotate(${photoRot}deg)` } : {}),
-                transformOrigin: "center center",
-              }}
+            <DraggablePhotoContainer
+              leftPct={leftPct}
+              topPct={topPct}
+              widthPct={widthPct}
+              heightPct={heightPct}
+              zIndex={photoZ}
+              rotation={photoRot}
+              editable={editable}
+              previewScale={previewScale}
+              onPosChange={onPhotoPosChange}
             >
               <EditableImage
                 slot={{ kind: "speaker-photo" }}
@@ -300,7 +302,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 containerClass="absolute inset-0 rounded-lg overflow-hidden shadow-2xl"
                 objectFit="cover"
               />
-            </div>
+            </DraggablePhotoContainer>
           );
         })()}
 
@@ -377,10 +379,15 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             {data.header.text}
           </h2>
 
-          {/* Speaker name */}
+          {/* Speaker name — per-section font size + color overrides
+              (user spec 2026-07-02: "select the font size and color of
+              each specific text section"). */}
           <h1
             className="mt-4 font-extrabold text-black leading-tight tracking-tight"
-            style={{ fontSize: "56px" }}
+            style={{
+              fontSize: `${data.textStyles?.fullName?.fontSize ?? 56}px`,
+              color: data.textStyles?.fullName?.color ?? "#000000",
+            }}
           >
             {data.speaker.fullName}
           </h1>
@@ -389,7 +396,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.speaker.title && (
             <p
               className="mt-2 text-black/80 font-semibold leading-snug"
-              style={{ fontSize: "18px" }}
+              style={{
+                fontSize: `${data.textStyles?.title?.fontSize ?? 18}px`,
+                color: data.textStyles?.title?.color ?? "rgba(0,0,0,0.8)",
+              }}
             >
               {data.speaker.title}
             </p>
@@ -399,9 +409,30 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.speaker.company && (
             <p
               className="mt-0.5 text-black/60 font-medium leading-snug"
-              style={{ fontSize: "16px" }}
+              style={{
+                fontSize: `${data.textStyles?.company?.fontSize ?? 16}px`,
+                color: data.textStyles?.company?.color ?? "rgba(0,0,0,0.6)",
+              }}
             >
               {data.speaker.company}
+            </p>
+          )}
+
+          {/* Speaker role — newly rendered on the canvas per user spec
+              2026-07-02 ("Full name, Title, Company, Role, Topic, …"
+              listed as editable text sections). Previously the role was
+              in the data but not displayed. Now shown as a small pill
+              below the company, with the brand color. */}
+          {data.speaker.role && (
+            <p
+              className="mt-1 inline-block font-bold uppercase tracking-wider"
+              style={{
+                fontSize: `${data.textStyles?.role?.fontSize ?? 11}px`,
+                color: data.textStyles?.role?.color ?? data.header.color,
+                letterSpacing: "0.16em",
+              }}
+            >
+              {data.speaker.role}
             </p>
           )}
 
@@ -420,8 +451,11 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                   Topic:
                 </span>
                 <span
-                  className="font-bold text-black leading-snug"
-                  style={{ fontSize: "20px" }}
+                  className="font-bold leading-snug"
+                  style={{
+                    fontSize: `${data.textStyles?.topic?.fontSize ?? 20}px`,
+                    color: data.textStyles?.topic?.color ?? "#000000",
+                  }}
                 >
                   {data.speaker.topic}
                 </span>
@@ -429,7 +463,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
               {data.speaker.topicDescription && (
                 <p
                   className="mt-1 text-black/70 leading-snug"
-                  style={{ fontSize: "15px" }}
+                  style={{
+                    fontSize: `${data.textStyles?.topicDescription?.fontSize ?? 15}px`,
+                    color: data.textStyles?.topicDescription?.color ?? "rgba(0,0,0,0.7)",
+                  }}
                 >
                   {data.speaker.topicDescription}
                 </p>
@@ -441,7 +478,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.speaker.bio && (
             <p
               className="mt-5 text-black/75 leading-relaxed"
-              style={{ fontSize: "13px" }}
+              style={{
+                fontSize: `${data.textStyles?.bio?.fontSize ?? 13}px`,
+                color: data.textStyles?.bio?.color ?? "rgba(0,0,0,0.75)",
+              }}
             >
               {data.speaker.bio}
             </p>
@@ -451,7 +491,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.speaker.expertise && (
             <p
               className="mt-3 text-black/65 leading-relaxed"
-              style={{ fontSize: "12px" }}
+              style={{
+                fontSize: `${data.textStyles?.expertise?.fontSize ?? 12}px`,
+                color: data.textStyles?.expertise?.color ?? "rgba(0,0,0,0.65)",
+              }}
             >
               {data.speaker.expertise}
             </p>
@@ -712,6 +755,346 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
 // ---------------------------------------------------------------------------
 
 /**
+ * DraggablePhotoContainer — wraps the speaker photo (or any large image
+ * container) and lets the user drag the entire container to a free-form
+ * position on the canvas. The drag handle is a small grip bar at the
+ * top-center of the container so it doesn't conflict with the inner
+ * image's pan (which is triggered by dragging the image itself).
+ *
+ * Per user spec 2026-07-02: "Should be able to drag the Photo URL
+ * image all around the canvas without limitation".
+ */
+function DraggablePhotoContainer({
+  leftPct,
+  topPct,
+  widthPct,
+  heightPct,
+  zIndex,
+  rotation,
+  editable,
+  previewScale,
+  onPosChange,
+  children,
+}: {
+  leftPct: number;
+  topPct: number;
+  widthPct: number;
+  heightPct: number;
+  zIndex: number;
+  rotation: number;
+  editable?: boolean;
+  previewScale: number;
+  onPosChange?: (pos: { x: number; y: number }) => void;
+  children: React.ReactNode;
+}) {
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeftPct: number;
+    startTopPct: number;
+  } | null>(null);
+
+  function handleGripMouseDown(e: React.MouseEvent) {
+    if (!editable || !onPosChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeftPct: leftPct,
+      startTopPct: topPct,
+    };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      // Convert screen px → % of canvas. Canvas is CANVAS_W × CANVAS_H
+      // at preview scale, so 1% = (CANVAS_W * previewScale) / 100 px
+      // horizontally and (CANVAS_H * previewScale) / 100 vertically.
+      const pctX = (dx / (CANVAS_W * previewScale)) * 100;
+      const pctY = (dy / (CANVAS_H * previewScale)) * 100;
+      // No clamp — user spec: "drag all around the canvas without
+      // limitation". The canvas border (overflow-hidden) clips the
+      // bleed naturally.
+      onPosChange({ x: d.startLeftPct + pctX, y: d.startTopPct + pctY });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        width: `${widthPct}%`,
+        height: `${heightPct}%`,
+        zIndex,
+        ...(rotation ? { transform: `rotate(${rotation}deg)` } : {}),
+        transformOrigin: "center center",
+      }}
+    >
+      {children}
+      {/* Drag handle — only shown in edit mode. A small grip bar at the
+          top-center of the container. Dragging it moves the container. */}
+      {editable && onPosChange && (
+        <div
+          onMouseDown={handleGripMouseDown}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-0 group-hover:opacity-100 transition"
+          style={{ pointerEvents: "auto" }}
+          title="Drag to move the photo container — the photo can be moved anywhere on the canvas"
+        >
+          ⠿ Move
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * DraggableHeroStyle2Image — the Style 2 hero image (low-poly network
+ * graph) wrapped in a draggable + resizeable + zoomable container.
+ *
+ * Per user spec 2026-07-02:
+ *   B. The hero image should be able to replace when clicking on the
+ *      edit image and then selecting the replace button over it
+ *   D. Should be able to drag the image all around the canvas without
+ *      any limitations
+ *   E. Should be able to shrink or enlarge it using the corners, or
+ *      the mouse scroll
+ *
+ * The container is positioned via `data.heroStyle2Pos` (free-form %).
+ * The inner image uses `data.heroStyle2Placement` (focusX/focusY/zoom)
+ * for pan/zoom, and `data.heroStyle2Scale` for the container's size
+ * multiplier (corner drag).
+ *
+ * Layer z-index + rotation are controlled from the form view (the
+ * existing Layer z-index section now applies to BOTH styles, not just
+ * Style 1).
+ */
+function DraggableHeroStyle2Image({
+  data,
+  heroZ,
+  editable,
+  previewScale,
+  onPickImage,
+  onPlacementChange,
+  onSizeChange,
+  onHeroStyle2PosChange,
+}: {
+  data: MeetTheSpeakerData;
+  heroZ: number;
+  editable?: boolean;
+  previewScale: number;
+  onPickImage?: (slot: ImageSlot) => void;
+  onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, n: number) => void;
+  onHeroStyle2PosChange?: (pos: { x: number; y: number }) => void;
+}) {
+  // Default: 55% canvas width × 85% canvas height, anchored at 45% left, 0% top.
+  const sizeMult = Math.max(0.01, data.heroStyle2Scale ?? 1);
+  const widthPct = 55 * sizeMult;
+  const heightPct = 85 * sizeMult;
+  const pos = data.heroStyle2Pos;
+  const leftPct = pos ? pos.x : 45;
+  const topPct = pos ? pos.y : 0;
+
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeftPct: number;
+    startTopPct: number;
+  } | null>(null);
+
+  function handleGripMouseDown(e: React.MouseEvent) {
+    if (!editable || !onHeroStyle2PosChange) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeftPct: leftPct,
+      startTopPct: topPct,
+    };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      const pctX = (dx / (CANVAS_W * previewScale)) * 100;
+      const pctY = (dy / (CANVAS_H * previewScale)) * 100;
+      onHeroStyle2PosChange({ x: d.startLeftPct + pctX, y: d.startTopPct + pctY });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      className="absolute group"
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        width: `${widthPct}%`,
+        height: `${heightPct}%`,
+        zIndex: heroZ,
+        cursor: editable ? "move" : "default",
+        outline: editable ? "2px dashed rgba(0, 102, 255, 0.7)" : undefined,
+        outlineOffset: editable ? "-2px" : undefined,
+        ...(data.heroStyle2Rotation ? { transform: `rotate(${data.heroStyle2Rotation}deg)` } : {}),
+        transformOrigin: "center center",
+      }}
+    >
+      <EditableImage
+        slot={{ kind: "hero-style2" }}
+        src={data.heroStyle2Url || "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png"}
+        alt="Hero background"
+        placement={data.heroStyle2Placement}
+        editable={editable}
+        previewScale={previewScale}
+        onPickImage={onPickImage}
+        onPlacementChange={onPlacementChange}
+        onSizeChange={onSizeChange}
+        sizeMultiplier={data.heroStyle2Scale ?? 1}
+        sizeLabel="hero"
+        containerClass="absolute inset-0 overflow-hidden"
+        objectFit="cover"
+      />
+      {/* Drag handle bar — only in edit mode. Dragging it moves the
+          whole hero image container anywhere on the canvas. */}
+      {editable && onHeroStyle2PosChange && (
+        <div
+          onMouseDown={handleGripMouseDown}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-100 transition"
+          style={{ pointerEvents: "auto" }}
+          title="Drag to move the hero image — it can be placed anywhere on the canvas"
+        >
+          ⠿ Move hero
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * DraggableLocalStreetPin — a single "Local Street" pin (dot + label)
+ * overlaid on the Style 2 hero image. Per user spec 2026-07-02 (spec A):
+ * pins should be draggable on the canvas (not just editable via X/Y
+ * inputs in the form view). Dragging the pin dot updates its (x, y).
+ *
+ * The pin's (x, y) is stored as % of canvas (0–100). The drag converts
+ * screen-px deltas to canvas-% using the preview scale.
+ */
+function DraggableLocalStreetPin({
+  pin,
+  index,
+  brandColor,
+  zIndex,
+  editable,
+  previewScale,
+  onMove,
+}: {
+  pin: { x: number; y: number; label: string };
+  index: number;
+  brandColor: string;
+  zIndex: number;
+  editable?: boolean;
+  previewScale: number;
+  onMove?: (index: number, pos: { x: number; y: number }) => void;
+}) {
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startPinX: number;
+    startPinY: number;
+  } | null>(null);
+
+  function handleMouseDown(e: React.MouseEvent) {
+    if (!editable || !onMove) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPinX: pin.x,
+      startPinY: pin.y,
+    };
+    const onMove2 = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      const pctX = (dx / (CANVAS_W * previewScale)) * 100;
+      const pctY = (dy / (CANVAS_H * previewScale)) * 100;
+      // No clamp — let the pin move anywhere; canvas border clips naturally.
+      onMove(index, { x: d.startPinX + pctX, y: d.startPinY + pctY });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove2);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove2);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      className={`absolute flex flex-col items-center ${editable ? "pointer-events-auto cursor-move" : "pointer-events-none"}`}
+      style={{
+        left: `${pin.x}%`,
+        top: `${pin.y}%`,
+        transform: "translate(-50%, -50%)",
+        zIndex,
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {/* Pin dot — small circle marker. */}
+      <div
+        className="rounded-full bg-white shadow-md border-2 flex items-center justify-center"
+        style={{
+          width: "28px",
+          height: "28px",
+          borderColor: brandColor,
+          color: brandColor,
+          fontSize: "13px",
+          fontWeight: 800,
+        }}
+      >
+        {index + 1}
+      </div>
+      {/* Pin label — user-editable text under the dot. */}
+      <div
+        className="mt-1 px-2 py-0.5 rounded bg-white/90 shadow-sm text-black"
+        style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em" }}
+      >
+        {pin.label}
+      </div>
+      {editable && (
+        <div className="absolute -top-5 left-1/2 -translate-x-1/2 rounded bg-[#FF005A] text-white px-1.5 py-0.5 text-[8px] font-mono whitespace-nowrap opacity-100 pointer-events-none">
+          drag to move
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * EditableImage — same pattern as the Speaker Intro canvas.
  * Wraps a next/image with placement (object-position + scale) and
  * (optionally) edit-mode interactions: click-to-replace, drag-to-pan,
@@ -938,6 +1321,7 @@ const step = e.deltaY < 0 ? 0.1 : -0.1;
 function slotKey(slot: ImageSlot): string {
   if (slot.kind === "speaker-photo") return "speaker-photo";
   if (slot.kind === "graphic") return "graphic";
+  if (slot.kind === "hero-style2") return "hero-style2";
   return `sponsor-${slot.group}-${slot.index}`;
 }
 
