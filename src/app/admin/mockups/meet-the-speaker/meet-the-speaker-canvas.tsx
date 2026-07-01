@@ -634,25 +634,48 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
         >
           <h3
             className="font-extrabold text-black leading-tight"
-            style={{ fontSize: "22px" }}
+            style={{
+              fontSize: `${data.textStyles?.eventName?.fontSize ?? 22}px`,
+              color: data.textStyles?.eventName?.color ?? "#000000",
+              textAlign: data.textStyles?.eventName?.align ?? "right",
+            }}
           >
             {data.event.name}
           </h3>
           <p
             className="mt-1.5 text-black/70 font-semibold"
-            style={{ fontSize: "14px" }}
+            style={{
+              fontSize: `${data.textStyles?.eventDate?.fontSize ?? 14}px`,
+              color: data.textStyles?.eventDate?.color ?? undefined,
+              textAlign: data.textStyles?.eventDate?.align ?? "right",
+            }}
           >
-            {data.event.date}
+            <span style={{ color: data.textStyles?.eventDate?.color ?? undefined }}>
+              {data.event.date}
+            </span>
             {data.event.time && (
               <>
                 <span className="mx-2 text-black/30">·</span>
-                {data.event.time}
+                <span
+                  style={{
+                    fontSize: data.textStyles?.eventTime?.fontSize
+                      ? `${data.textStyles.eventTime.fontSize}px`
+                      : undefined,
+                    color: data.textStyles?.eventTime?.color ?? undefined,
+                  }}
+                >
+                  {data.event.time}
+                </span>
               </>
             )}
           </p>
           <p
             className="mt-0.5 text-black/55"
-            style={{ fontSize: "13px" }}
+            style={{
+              fontSize: `${data.textStyles?.venue?.fontSize ?? 13}px`,
+              color: data.textStyles?.venue?.color ?? undefined,
+              textAlign: data.textStyles?.venue?.align ?? "right",
+            }}
           >
             {data.event.venue}
           </p>
@@ -726,41 +749,11 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           )}
         </SectionBox>
 
-        {/* ===== BRANDING (bottom-right corner) ===== */}
-        <SectionBox
-          active={sectionsEditable}
-          selected={selectedId === "branding"}
-          onSelect={() => setSelectedId("branding")}
-          pos={data.sectionLayout?.branding?.pos}
-          scale={data.sectionLayout?.branding?.scale ?? 1}
-          boxSize={data.sectionLayout?.branding?.boxSize}
-          onMove={(p) => onSectionMove?.("branding", p)}
-          onResize={(s) => onSectionResize?.("branding", s)}
-          onBoxResize={(sz) => onSectionBoxResize?.("branding", sz)}
-          previewScale={previewScale}
-          canvasW={CANVAS_W}
-          canvasH={CANVAS_H}
-          className="absolute flex items-center gap-2"
-          style={{ right: "32px", bottom: "24px", zIndex: sectionZFor("branding") }}
-          anchor="top-right"
-          accentColor="#FF005A"
-          label="Branding"
-          guideId="branding"
-        >
-          <span
-            className="inline-flex items-center text-black"
-            style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-0.02em" }}
-          >
-            <span
-              className="inline-block w-5 h-5 mr-1.5 rounded-sm"
-              style={{
-                background: `linear-gradient(135deg, ${data.event.brandColors[0]}, ${data.event.brandColors[1]})`,
-              }}
-              aria-hidden
-            />
-            <span className="lowercase">ai salon</span>
-          </span>
-        </SectionBox>
+        {/* ===== BRANDING (bottom-right corner) =====
+            REMOVED per user spec 2026-07-02: "On the meet the speaker mockup
+            delete this section: ...ai salon...". The bottom-LEFT branding
+            asset (DraggablePhotoContainer below) remains as the only branding
+            element on this mockup. */}
 
         {/* Optional footer credit (bottom-left) */}
         {data.footerCredit && (
@@ -778,12 +771,23 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
             className="absolute"
-            style={{ left: "60px", bottom: "24px", fontSize: "10px", zIndex: sectionZFor("footer") }}
+            style={{
+              left: "60px",
+              bottom: "24px",
+              fontSize: `${data.textStyles?.footer?.fontSize ?? 10}px`,
+              zIndex: sectionZFor("footer"),
+            }}
             accentColor="#FF005A"
             label="Footer"
             guideId="footer"
           >
-            <span className="text-black/40">
+            <span
+              style={{
+                color: data.textStyles?.footer?.color ?? undefined,
+                textAlign: data.textStyles?.footer?.align ?? undefined,
+                display: "block",
+              }}
+            >
               {data.footerCredit}
             </span>
           </SectionBox>

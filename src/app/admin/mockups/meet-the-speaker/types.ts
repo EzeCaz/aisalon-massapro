@@ -135,6 +135,13 @@ export type MeetTheSpeakerData = {
     topicDescription?: TextStyle;
     bio?: TextStyle;
     expertise?: TextStyle;
+    /** Per user spec 2026-07-02: add align L/C/R + font size + color to the
+     *  Event context section (event name / date / time / venue / footer). */
+    eventName?: TextStyle;
+    eventDate?: TextStyle;
+    eventTime?: TextStyle;
+    venue?: TextStyle;
+    footer?: TextStyle;
   };
   /** Event context (auto-filled from the event picker). */
   event: {

@@ -689,40 +689,11 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           )}
         </SectionBox>
 
-        {/* ===== 9. BRANDING (bottom-right corner) ===== */}
-        {/* Replaced the text "ai salon" wordmark with the meerkat brand image
-            per user request (Task ID: mockup-editor-v2). */}
-        <SectionBox
-          active={sectionsEditable}
-          selected={selectedId === "branding"}
-          onSelect={() => setSelectedId("branding")}
-          pos={data.sectionLayout?.branding?.pos}
-          scale={data.sectionLayout?.branding?.scale ?? 1}
-          boxSize={data.sectionLayout?.branding?.boxSize}
-          onMove={(p) => onSectionMove?.("branding", p)}
-          onResize={(s) => onSectionResize?.("branding", s)}
-          onBoxResize={(sz) => onSectionBoxResize?.("branding", sz)}
-          previewScale={previewScale}
-          canvasW={CANVAS_W}
-          canvasH={CANVAS_H}
-          className="absolute flex items-center gap-2"
-          style={{ right: "48px", bottom: "32px", zIndex: sectionZFor("branding") }}
-          anchor="top-right"
-          accentColor="#FF005A"
-          label="Branding"
-          guideId="branding"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={data.branding?.imageUrl ?? "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"}
-            alt="ai salon"
-            style={{
-              height: `${(data.branding?.height ?? 48)}px`,
-              width: "auto",
-              objectFit: "contain",
-            }}
-          />
-        </SectionBox>
+        {/* ===== 9. BRANDING (bottom-right corner) =====
+            REMOVED per user spec 2026-07-02: "On the speaker intro mockup
+            erase this: ...data-guide-id='branding'...". The bottom-LEFT
+            branding asset (DraggablePhotoContainer below) remains as the
+            only branding element on this mockup. */}
 
         {/* Optional footer credit (bottom-left) */}
         {data.footerCredit && (

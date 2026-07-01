@@ -476,20 +476,10 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             </div>
           </div>
 
-          {/* Branding (bottom-right) */}
-          <span
-            className="inline-flex items-center text-black"
-            style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-0.02em" }}
-          >
-            <span
-              className="inline-block w-5 h-5 mr-1.5 rounded-sm"
-              style={{
-                background: `linear-gradient(135deg, ${data.event.brandColors[0]}, ${data.event.brandColors[1]})`,
-              }}
-              aria-hidden
-            />
-            <span className="lowercase">ai salon</span>
-          </span>
+          {/* Branding (bottom-right) — REMOVED per user spec 2026-07-02:
+              "On the agenda profile mockup erase this: ...ai salon...".
+              The bottom-LEFT branding asset (DraggablePhotoContainer below)
+              remains as the only branding element on this mockup. */}
         </SectionBox>
 
         {/* Optional footer credit */}

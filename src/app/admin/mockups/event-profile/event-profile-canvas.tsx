@@ -435,41 +435,11 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             </SectionBox>
           )}
 
-          {/* ===== BRANDING (bottom-right corner) ===== */}
-          <SectionBox
-            active={sectionsEditable}
-            selected={selectedId === "qr-branding"}
-            onSelect={() => setSelectedId("qr-branding")}
-            pos={data.sectionLayout?.["qr-branding"]?.pos ?? data.sectionLayout?.branding?.pos}
-            scale={data.sectionLayout?.["qr-branding"]?.scale ?? data.sectionLayout?.branding?.scale ?? 1}
-            boxSize={data.sectionLayout?.["qr-branding"]?.boxSize ?? data.sectionLayout?.branding?.boxSize}
-            onMove={(p) => onSectionMove?.("qr-branding", p)}
-            onResize={(s) => onSectionResize?.("qr-branding", s)}
-            onBoxResize={(sz) => onSectionBoxResize?.("qr-branding", sz)}
-            previewScale={previewScale}
-            canvasW={CANVAS_W}
-            canvasH={CANVAS_H}
-            className="absolute flex items-center gap-2"
-            style={{ right: "56px", bottom: "40px", zIndex: sectionZFor("qr-branding") }}
-            anchor="top-right"
-            accentColor="#FF005A"
-            label="Branding"
-            guideId="qr-branding"
-          >
-            <span
-              className="inline-flex items-center text-white drop-shadow"
-              style={{ fontSize: "26px", fontWeight: 800, letterSpacing: "-0.02em" }}
-            >
-              <span
-                className="inline-block w-6 h-6 mr-2 rounded-sm"
-                style={{
-                  background: `linear-gradient(135deg, ${data.event.brandColors[0]}, ${data.event.brandColors[1]})`,
-                }}
-                aria-hidden
-              />
-              <span className="lowercase">ai salon</span>
-            </span>
-          </SectionBox>
+          {/* ===== BRANDING (bottom-right corner) =====
+              REMOVED per user spec 2026-07-02: "Event profile mockup erase
+              this: ...ai salon...". The bottom-LEFT branding asset
+              (DraggablePhotoContainer below) remains as the only branding
+              element on this mockup. */}
 
           {/* Optional footer credit */}
           {data.footerCredit && (

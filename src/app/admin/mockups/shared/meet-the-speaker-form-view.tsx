@@ -374,6 +374,24 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Event name — font size + color + align"
+          fontSize={data.textStyles?.eventName?.fontSize}
+          fontColor={data.textStyles?.eventName?.color}
+          align={data.textStyles?.eventName?.align}
+          defaultFontSize={22}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventName = {
+                ...(d.textStyles.eventName ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Date">
             <input
@@ -392,6 +410,42 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
+        <TextStyleRow
+          label="Date — font size + color + align"
+          fontSize={data.textStyles?.eventDate?.fontSize}
+          fontColor={data.textStyles?.eventDate?.color}
+          align={data.textStyles?.eventDate?.align}
+          defaultFontSize={14}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventDate = {
+                ...(d.textStyles.eventDate ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Time — font size + color + align"
+          fontSize={data.textStyles?.eventTime?.fontSize}
+          fontColor={data.textStyles?.eventTime?.color}
+          align={data.textStyles?.eventTime?.align}
+          defaultFontSize={14}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventTime = {
+                ...(d.textStyles.eventTime ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Venue">
           <input
             type="text"
@@ -400,6 +454,24 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Venue — font size + color + align"
+          fontSize={data.textStyles?.venue?.fontSize}
+          fontColor={data.textStyles?.venue?.color}
+          align={data.textStyles?.venue?.align}
+          defaultFontSize={13}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.venue = {
+                ...(d.textStyles.venue ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Brand color 1">
             <ColorInput
@@ -430,6 +502,24 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Footer credit — font size + color + align"
+          fontSize={data.textStyles?.footer?.fontSize}
+          fontColor={data.textStyles?.footer?.color}
+          align={data.textStyles?.footer?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.footer = {
+                ...(d.textStyles.footer ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
       </Section>
 
       {/* ===== GRAPHIC (meerkat) ===== */}

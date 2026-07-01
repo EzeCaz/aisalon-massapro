@@ -909,36 +909,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
         />
       </Section>
 
-      {/* ===== BRANDING ===== */}
-      <Section title="Branding (bottom-right)">
-        <Field label="Image URL">
-          <input
-            type="url"
-            value={data.branding?.imageUrl ?? ""}
-            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
-            onChange={(e) =>
-              update((d) => {
-                d.branding = { ...(d.branding ?? {}), imageUrl: e.target.value || undefined };
-              })
-            }
-            className="form-input"
-          />
-        </Field>
-        <Field label="Height (px)">
-          <input
-            type="number"
-            min="16"
-            max="200"
-            value={data.branding?.height ?? 48}
-            onChange={(e) =>
-              update((d) => {
-                d.branding = { ...(d.branding ?? {}), height: parseInt(e.target.value, 10) || 48 };
-              })
-            }
-            className="form-input"
-          />
-        </Field>
-      </Section>
+      {/* ===== BRANDING (bottom-right) — REMOVED per user spec 2026-07-02 =====
+          The canvas SectionBox for this was deleted; only the bottom-LEFT
+          branding asset below remains. The `data.branding` field is kept in
+          the type so existing JSON data doesn't break, but it no longer
+          renders anywhere. */}
 
       {/* ===== BRANDING ASSET (bottom-LEFT) =====
           Per user spec 2026-07-02: "On all mockups, the bottom left
