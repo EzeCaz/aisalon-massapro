@@ -31,6 +31,9 @@ download/TokenKey
 download/aisalon-massapro-V*.tar.gz
 download/aisalon-massapro-V*-MANIFEST.txt
 download/v*-backup/
+download/backup-*/
+download/backup-*.zip
+download/preview-shots/
 
 # typescript
 tsconfig.tsbuildinfo

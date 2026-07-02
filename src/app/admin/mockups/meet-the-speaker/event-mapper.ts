@@ -199,10 +199,12 @@ export function mapEventToMeetTheSpeakerData(
     heroStyle2Url:
       "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png",
     localStreetPins: [
-      { x: 18, y: 22, label: "Local Street 1" },
-      { x: 82, y: 18, label: "Local Street 2" },
-      { x: 85, y: 78, label: "Local Street 3" },
-      { x: 15, y: 80, label: "Local Street 4" },
+      // Per user spec 2026-07-02: default to Mobileye / Wiz / Waze / Elementor
+      // at the four canonical positions on the network graph image.
+      { x: 49, y: 28, label: "Mobileye" },
+      { x: 90, y: 6, label: "Wiz" },
+      { x: 95, y: 43, label: "Waze" },
+      { x: 53, y: 79, label: "Elementor" },
     ],
     collaborators: [],
     sponsors: [],
