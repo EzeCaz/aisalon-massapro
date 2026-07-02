@@ -1036,7 +1036,7 @@ function DraggableHeroStyle2Image({
     >
       <EditableImage
         slot={{ kind: "hero-style2" }}
-        src={data.heroStyle2Url || "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png"}
+        src={data.heroStyle2Url || "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782940769382-r2twkn.png"}
         alt="Hero background"
         placement={data.heroStyle2Placement}
         editable={editable}

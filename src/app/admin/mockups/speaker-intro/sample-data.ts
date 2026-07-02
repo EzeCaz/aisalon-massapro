@@ -85,7 +85,7 @@ export const SAMPLE_DATA: SpeakerIntroData = {
   ],
   heroOverlay: {
     imageUrl:
-      "https://aisalon.massapro.com/images/TLV-2.jpg",
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782987131384-reozea.png",
     gradientColors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
     gradientOpacity: 0.55,
   },

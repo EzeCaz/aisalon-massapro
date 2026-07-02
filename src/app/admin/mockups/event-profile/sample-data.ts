@@ -19,7 +19,7 @@ export const SAMPLE_DATA: EventProfileData = {
     sourceEventSlug: undefined,
   },
   heroOverlay: {
-    imageUrl: "https://aisalon.massapro.com/images/TLV-2.jpg",
+    imageUrl: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782656127534-p7pu9m.png",
     gradientColors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
     gradientOpacity: 0.55,
     imagePlacement: { focusX: 50, focusY: 50, zoom: 1 },

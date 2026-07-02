@@ -197,7 +197,7 @@ export function mapEventToMeetTheSpeakerData(
     // editable "Local Street" pins at the corners.
     heroStyle: 1,
     heroStyle2Url:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782931538498-jh1lom.png",
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782940769382-r2twkn.png",
     localStreetPins: [
       // Per user spec 2026-07-02: default to Mobileye / Wiz / Waze / Elementor
       // at the four canonical positions on the network graph image.

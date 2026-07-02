@@ -50,7 +50,7 @@ const DEFAULT_AVATAR =
      </svg>`,
   );
 
-const DEFAULT_HERO = "https://aisalon.massapro.com/images/TLV-2.jpg";
+const DEFAULT_HERO = "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782987131384-reozea.png";
 
 const DEFAULT_PINS = [
   { label: "Sarona", x: 78, y: 18 },

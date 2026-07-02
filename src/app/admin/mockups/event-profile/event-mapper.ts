@@ -32,7 +32,7 @@ const DEFAULT_AVATAR =
      </svg>`,
   );
 
-const DEFAULT_HERO = "https://aisalon.massapro.com/images/TLV-2.jpg";
+const DEFAULT_HERO = "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782656127534-p7pu9m.png";
 
 const DEFAULT_PLACEMENT: ImagePlacement = { focusX: 50, focusY: 50, zoom: 1 };
 
