@@ -247,3 +247,51 @@ function sha256Hex(s: string): string {
   const crypto = require("node:crypto") as typeof import("node:crypto");
   return crypto.createHash("sha256").update(s, "utf-8").digest("hex");
 }
+
+// ----------------------------------------------------------------------------
+// High-level convenience: logCapiEvent — used by /api/track/open & /click.
+// Builds a MetaPayload from the human-friendly input, persists a TrackingLog
+// stub, and attempts the Meta CAPI send (best-effort — failures are logged
+// but never thrown, since email open pixels must always return 200).
+// ----------------------------------------------------------------------------
+
+export type LogCapiEventInput = {
+  userId: string;
+  userEmail: string;
+  userRole: string;
+  eventId: string | null;
+  eventTitle: string | null;
+  stage: string | null;
+  emailId: string;
+  eventName: "Open" | "Click" | "Send" | "Bounce" | "Deliver";
+  eventSourceUrl: string | null;
+  trackingLogId: string;
+};
+
+export async function logCapiEvent(input: LogCapiEventInput): Promise<{ id: string; metaSentAt: Date | null }> {
+  const { PrismaClient } = require("@prisma/client") as typeof import("@prisma/client");
+  const prisma = new PrismaClient();
+  try {
+    const payload = buildMetaPayload({
+      eventName: input.eventName as MetaEventName,
+      actionSource: "email",
+      eventSourceUrl: input.eventSourceUrl,
+      userEmail: input.userEmail,
+      userId: input.userId,
+      eventTitle: input.eventTitle,
+      stage: input.stage,
+      emailId: input.emailId,
+    });
+    return await recordAndSendMeta(
+      payload,
+      input.trackingLogId,
+      input.eventName.toUpperCase() as "OPEN" | "CLICK",
+      input.eventSourceUrl,
+      null, // userAgent
+      null, // ip
+      prisma,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}

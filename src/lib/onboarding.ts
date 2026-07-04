@@ -23,6 +23,26 @@ export function needsOnboarding(user: OnboardingAwareUser | null): boolean {
 }
 
 /**
+ * A user needs to set a password if their account was created via
+ * OAuth (Google) or pre-imported without a password hash. Self-signup
+ * via credentials always has a password, so this returns false for them.
+ *
+ * The check is purely client-side UX — the actual password-set flow
+ * requires a valid reset token. This function is only used to decide
+ * whether to *redirect* the user to /set-password; the route itself
+ * enforces the token.
+ */
+type PasswordAwareUser = {
+  passwordHash?: string | null;
+};
+
+export function needsSetPassword(user: PasswordAwareUser | null): boolean {
+  if (!user) return false; // not signed in — let the auth gate handle it
+  if (!user.passwordHash) return true; // no password set yet (OAuth / imported)
+  return false;
+}
+
+/**
  * The canonical list of "I am interested in…" options shown on the
  * onboarding form (mirrors the AI Salon TLV intake spreadsheet).
  * The "Other" option is a free-text field appended after the chosen
