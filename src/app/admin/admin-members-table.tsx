@@ -64,6 +64,7 @@ import {
   EyeOff,
   Mail as MailIcon,
 } from "lucide-react";
+import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
 
 type LinkedSpeaker = {
   id: string;
@@ -913,7 +914,7 @@ function CardsView({
                             )}
                             {m.importSource && (
                               <span
-                                title={`Imported from ${m.importSource} on ${m.importedAt ? new Date(m.importedAt).toLocaleString() : ""}`}
+                                title={`Imported from ${m.importSource} on ${m.importedAt ? formatDateTimeTlv(m.importedAt) : ""}`}
                                 className="inline-flex items-center gap-0.5 text-[0.55rem] font-bold uppercase bg-[#00E6FF]/20 text-[#007E72] px-1.5 py-0.5 rounded"
                               >
                                 <FileText className="h-2.5 w-2.5" /> Imported
@@ -1407,13 +1408,13 @@ function TableView({
                   <td className="px-3 py-2 text-black/60">{m._count.images}</td>
                   <td className="px-3 py-2 text-black/60">{m.importSource || "—"}</td>
                   <td className="px-3 py-2 text-black/60">
-                    {m.importedAt ? new Date(m.importedAt).toLocaleDateString() : "—"}
+                    {m.importedAt ? formatDateTlv(m.importedAt) : "—"}
                   </td>
                   <td className="px-3 py-2 text-black/60">
-                    {m.onboardedAt ? new Date(m.onboardedAt).toLocaleDateString() : "—"}
+                    {m.onboardedAt ? formatDateTlv(m.onboardedAt) : "—"}
                   </td>
                   <td className="px-3 py-2 text-black/60">
-                    {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
+                    {m.createdAt ? formatDateTlv(m.createdAt) : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <span
@@ -2509,7 +2510,7 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
           <DetailRow
             icon={<Calendar className="h-3.5 w-3.5" />}
             label="Imported at"
-            value={new Date(member.importedAt).toLocaleString()}
+            value={formatDateTimeTlv(member.importedAt)}
           />
         )}
       </div>
@@ -2829,7 +2830,7 @@ function ConvertToSpeakerDialog({
               {events.length === 0 && <option value="">No events available</option>}
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  {ev.title} ({new Date(ev.startsAt).toLocaleDateString()})
+                  {ev.title} ({formatDateTlv(ev.startsAt)})
                 </option>
               ))}
             </select>

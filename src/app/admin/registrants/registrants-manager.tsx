@@ -27,6 +27,7 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
+import { formatDateTlv } from "@/lib/datetime-tlv";
 
 type EventRow = {
   id: string;
@@ -286,7 +287,7 @@ export function RegistrantsManager({ events }: Props) {
                       )}
                     </td>
                     <td className="p-3 text-[0.65rem] text-black/50">
-                      {new Date(r.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                      {formatDateTlv(r.createdAt)}
                     </td>
                   </tr>
                 );

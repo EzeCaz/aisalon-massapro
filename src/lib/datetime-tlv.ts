@@ -128,3 +128,81 @@ export function localDatetimeInputToIso(local: string): string {
   const utc = new Date(date.getTime() - offsetMinutes * 60000);
   return utc.toISOString();
 }
+
+/**
+ * Format a Date/ISO string as a full date+time string in Asia/Jerusalem
+ * wall-clock time. **Stable across server (UTC) and client (any timezone)**
+ * — same string on both sides, so it's safe to use inside React Server-
+ * Rendered HTML without triggering hydration mismatches.
+ *
+ * Output: "6/4/2026, 11:19:26 AM" (en-US style, but timezone-pinned to Israel)
+ *
+ * Use this anywhere a date needs to be rendered into HTML that will be
+ * hydrated on the client. Without the explicit `timeZone`, the server
+ * (typically UTC) and client (user's local timezone) would produce
+ * different strings → hydration error.
+ */
+export function formatDateTimeTlv(iso: string | Date | null | undefined): string {
+  if (!iso) return "";
+  try {
+    const d = iso instanceof Date ? iso : new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ_TLV,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Format a Date/ISO string as a date-only string in Asia/Jerusalem
+ * wall-clock time. Stable across server/client (same reason as above).
+ *
+ * Output: "6/4/2026" (en-US style, timezone-pinned to Israel)
+ */
+export function formatDateTlv(iso: string | Date | null | undefined): string {
+  if (!iso) return "";
+  try {
+    const d = iso instanceof Date ? iso : new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ_TLV,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Format a Date/ISO string as a time-only string in Asia/Jerusalem
+ * wall-clock time. Stable across server/client.
+ *
+ * Output: "11:19:26 AM" (en-US style, timezone-pinned to Israel)
+ */
+export function formatTimeTlv(iso: string | Date | null | undefined): string {
+  if (!iso) return "";
+  try {
+    const d = iso instanceof Date ? iso : new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ_TLV,
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return "";
+  }
+}

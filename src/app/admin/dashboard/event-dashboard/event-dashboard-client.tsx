@@ -26,6 +26,7 @@ import {
   type ActiveSelection,
   toggleActiveSelection,
 } from "@/components/ais/analytics-shell";
+import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
 
 // ---------------------------------------------------------------------------
 // Types — mirror the props passed from the server page.
@@ -473,7 +474,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
                 const count = rsvps.filter((r) => r.eventId === ev.id).length;
                 return (
                   <option key={ev.id} value={ev.id}>
-                    {ev.title} — {new Date(ev.startsAt).toLocaleDateString()} ({count})
+                    {ev.title} — {formatDateTlv(ev.startsAt)} ({count})
                   </option>
                 );
               })}
@@ -1026,7 +1027,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                   {r.doorCheckedAt ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
                       <DoorOpen className="h-3 w-3" />
-                      {new Date(r.doorCheckedAt).toLocaleString()}
+                      {formatDateTimeTlv(r.doorCheckedAt)}
                     </span>
                   ) : (
                     <span className="text-black/30 italic">—</span>
@@ -1036,7 +1037,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                   {r.attendedAt ? (
                     <span className="inline-flex items-center gap-1 text-[#004F98] font-semibold">
                       <CheckCircle2 className="h-3 w-3" />
-                      {new Date(r.attendedAt).toLocaleString()}
+                      {formatDateTimeTlv(r.attendedAt)}
                     </span>
                   ) : r.noShow ? (
                     <span className="text-xs text-red-600 font-semibold">No-show</span>
@@ -1054,7 +1055,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                   )}
                 </td>
                 <td className="px-4 py-2 text-xs text-black/60">
-                  {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}
+                  {r.createdAt ? formatDateTlv(r.createdAt) : "—"}
                 </td>
               </tr>
             ))}

@@ -19,6 +19,7 @@ import {
   Shield,
 } from "lucide-react";
 import { roleBadgeClass, roleLabel, isSuperAdminEmail } from "@/lib/permissions";
+import { formatDateTimeTlv } from "@/lib/datetime-tlv";
 
 type Archiver = {
   id: string;
@@ -208,7 +209,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
                   {m.archivedAt ? (
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {new Date(m.archivedAt).toLocaleString()}
+                      {formatDateTimeTlv(m.archivedAt)}
                     </div>
                   ) : (
                     <span className="text-black/30 italic">—</span>

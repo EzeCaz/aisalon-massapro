@@ -34,6 +34,7 @@ import {
   Clock,
 } from "lucide-react";
 import { PhotoUploadField } from "@/components/ais/photo-upload-field";
+import { formatDateTimeTlv, formatDateTlv, formatTimeTlv } from "@/lib/datetime-tlv";
 
 type RsvpEvent = {
   id: string;
@@ -771,7 +772,7 @@ export function RegistrantsTabClient({
                         <ExternalLink className="h-3 w-3" />
                       </Link>
                       <div className="text-xs text-black/50">
-                        {new Date(r.event.startsAt).toLocaleDateString()}
+                        {formatDateTlv(r.event.startsAt)}
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
@@ -791,7 +792,7 @@ export function RegistrantsTabClient({
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/60">
-                      {new Date(r.createdAt).toLocaleString()}
+                      {formatDateTimeTlv(r.createdAt)}
                     </td>
                     {/* Check-in code cell — shows the 8-char code if generated,
                         or a "Generate" button if the user is allowed to issue one.
@@ -802,7 +803,7 @@ export function RegistrantsTabClient({
                         <div className="flex flex-col gap-1">
                           <code
                             className="font-mono font-bold text-sm tracking-wider text-black bg-[#FF005A]/5 px-2 py-1 rounded inline-block w-fit"
-                            title={`Code generated ${r.checkedInAt ? new Date(r.checkedInAt).toLocaleString() : ""}`}
+                            title={`Code generated ${r.checkedInAt ? formatDateTimeTlv(r.checkedInAt) : ""}`}
                           >
                             {r.checkInCode}
                           </code>
@@ -811,7 +812,7 @@ export function RegistrantsTabClient({
                               <CheckCircle2 className="h-2.5 w-2.5" />
                               Used at door
                               <span className="font-normal lowercase text-emerald-600/80">
-                                {new Date(r.doorCheckedAt).toLocaleTimeString()}
+                                {formatTimeTlv(r.doorCheckedAt)}
                               </span>
                             </span>
                           ) : (
@@ -1155,7 +1156,7 @@ function AddRegistrantDialog({
             >
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
-                  {ev.title} ({new Date(ev.startsAt).toLocaleDateString()})
+                  {ev.title} ({formatDateTlv(ev.startsAt)})
                 </option>
               ))}
             </select>
@@ -1325,7 +1326,7 @@ function EditRegistrantDialog({
             </div>
             <div>
               <strong>Registered:</strong>{" "}
-              {new Date(rsvp.createdAt).toLocaleString()}
+              {formatDateTimeTlv(rsvp.createdAt)}
             </div>
             <div>
               <strong>Source:</strong>{" "}

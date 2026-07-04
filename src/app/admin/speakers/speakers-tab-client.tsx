@@ -21,6 +21,7 @@ import {
   Search,
 } from "lucide-react";
 import { PhotoUploadField } from "@/components/ais/photo-upload-field";
+import { formatDateTlv } from "@/lib/datetime-tlv";
 
 type SpeakerEvent = {
   id: string;
@@ -158,7 +159,7 @@ export function SpeakersTabClient({
           <option value="ALL">All events ({speakers.length})</option>
           {events.map((ev) => (
             <option key={ev.id} value={ev.id}>
-              {ev.title} ({new Date(ev.startsAt).toLocaleDateString()})
+              {ev.title} ({formatDateTlv(ev.startsAt)})
             </option>
           ))}
         </select>
@@ -258,7 +259,7 @@ export function SpeakersTabClient({
                     )}
                     {s.event && (
                       <div className="text-xs text-black/50">
-                        {new Date(s.event.startsAt).toLocaleDateString()}
+                        {formatDateTlv(s.event.startsAt)}
                       </div>
                     )}
                   </td>
@@ -479,7 +480,7 @@ function SpeakerEditor({
               >
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    {ev.title} ({new Date(ev.startsAt).toLocaleDateString()})
+                    {ev.title} ({formatDateTlv(ev.startsAt)})
                   </option>
                 ))}
               </select>

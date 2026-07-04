@@ -24,6 +24,7 @@ import {
   type ActiveSelection,
   toggleActiveSelection,
 } from "@/components/ais/analytics-shell";
+import { formatDateTlv } from "@/lib/datetime-tlv";
 
 type Member = {
   id: string;
@@ -850,10 +851,10 @@ export function MemberDashboard({ members }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-xs text-black/60">
-                    {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
+                    {m.createdAt ? formatDateTlv(m.createdAt) : "—"}
                   </td>
                   <td className="px-4 py-2 text-xs text-black/60">
-                    {m.importedAt ? new Date(m.importedAt).toLocaleDateString() : "—"}
+                    {m.importedAt ? formatDateTlv(m.importedAt) : "—"}
                   </td>
                 </tr>
               ))}
