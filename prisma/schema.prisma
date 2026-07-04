@@ -122,6 +122,10 @@ model User {
   referredRsvps         EventRsvp[]           @relation("ReferredRsvpReferrer")
   approvedRsvps         EventRsvp[]           @relation("EventRsvpApprover")
   // ----------------------------------------------------------------
+  // Email orchestrator + flows — back-relations
+  emailQueueItems       EmailQueue[]          @relation("EmailQueueUser")
+  flowRuns              EmailFlowRun[]        @relation("EmailFlowRunUser")
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -215,6 +219,10 @@ model Event {
   prepQuestions  EventPrepQuestion[]
   /// Suggested edits to those questions (from admins/co-hosts).
   prepSuggestions EventPrepSuggestion[]
+  /// Email orchestrator queue items for this event (5-stage + flow runs).
+  emailQueueItems EmailQueue[]
+  /// Email flows triggered by this event (null triggerEventId = all events).
+  triggerFlows    EmailFlow[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -578,6 +586,18 @@ model EventRsvp {
   referredByUserId String?
   referredBy       User?  @relation("ReferredRsvpReferrer", fields: [referredByUserId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
+  // Post-event attendance tracking (admin-set). Independent from door
+  // check-in — someone can check in at the door and still leave early
+  // (no-show for content), or attend without a door check-in (admin
+  // override). Both fields null = event not yet post-processed.
+  attendedAt        DateTime?
+  noShow            Boolean   @default(false)
+  attendedMarkedBy  String? // admin userId who set the attendance
+  // ----------------------------------------------------------------
+  // Email orchestrator + flows — back-relations
+  emailQueueItems   EmailQueue[]
+  flowRuns          EmailFlowRun[]
+  // ----------------------------------------------------------------
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -786,4 +806,190 @@ model ReferralAttribution {
   @@index([referrerUserId])
   @@index([utmUid])
   @@index([convertedAt])
+}
+
+// ===========================================================================
+// EMAIL ORCHESTRATOR + FLOW BUILDER (V5.20 — layered on top of V5.19)
+// ===========================================================================
+// These models power the Orchestrator + Flows tabs under /admin/email.
+// They are ADDITIVE — they do not modify any existing model's behavior.
+// The legacy EmailCampaign system (above) continues to work unchanged.
+// ===========================================================================
+
+/// One row per (RSVP × stage) in the 5-stage orchestrator, OR per
+/// (flow run × step) in the flow builder. Status tracks the email
+/// lifecycle from PENDING → SENT → OPENED/CLICKED.
+model EmailQueue {
+  id              String   @id @default(cuid())
+  // --- who / what ---
+  rsvpId          String
+  rsvp            EventRsvp @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  eventId         String
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?     @relation("EmailQueueUser", fields: [userId], references: [id], onDelete: SetNull)
+  email           String
+  // --- stage info ---
+  stage           Int       // 1=awareness, 2=reminder, 3=final-prep, 4=day-of, 5=recap
+  // --- flow info ---
+  // When set, this queue row is part of a flow run. When null, it's a
+  // legacy stage-based orchestrator row.
+  flowRunId       String?
+  flowRun         EmailFlowRun? @relation(fields: [flowRunId], references: [id], onDelete: SetNull)
+  flowStepId      String?
+  // --- status ---
+  status          String    @default("PENDING") // PENDING | QUEUED | SENT | OPENED | CLICKED | SKIPPED | FAILED
+  // --- timing ---
+  scheduledFor    DateTime  // when this stage should fire (relative to event.startsAt)
+  sentAt          DateTime?
+  openedAt        DateTime?
+  clickedAt       DateTime?
+  // --- content snapshot ---
+  subject         String?
+  htmlBody        String?   // the rendered HTML actually sent (for audit / replay)
+  // --- failure ---
+  errorMessage    String?
+  attemptCount    Int       @default(0)
+  // --- links ---
+  trackingLogs    TrackingLog[]
+  // --- meta ---
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([rsvpId, stage])
+  @@index([eventId, stage])
+  @@index([status, scheduledFor])
+  @@index([email])
+  @@index([flowRunId])
+  @@index([flowStepId])
+}
+
+/// Admin-editable per-stage copy for the 5-stage orchestrator.
+/// Each stage has a subject + HTML body template with {{eventTitle}},
+/// {{firstName}}, etc. tokens. The stopIfNotOpenedHours rule lets the
+/// orchestrator halt the chain if a stage isn't opened in time.
+model EmailStageTemplate {
+  id          String   @id @default(cuid())
+  stage       Int      @unique // 1..5
+  name        String   // "Awareness" | "Reminder" | "Final Prep" | "Day-Of" | "Recap"
+  subject     String
+  htmlBody    String   // HTML template with {{eventTitle}}, {{firstName}}, etc.
+  stopIfNotOpenedHours Int?
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+  // --- back-relations ---
+  flowSteps   EmailFlowStep[] // flow steps that use this template
+
+  @@index([stage])
+}
+
+/// Per-event audit log for email opens + clicks. Also stores the
+/// Meta CAPI payload (constructed always; sent to Graph API only
+/// when META_ACCESS_TOKEN + META_PIXEL_ID env vars are set).
+model TrackingLog {
+  id            String     @id @default(cuid())
+  queueId       String
+  queue         EmailQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  type          String     // "OPEN" | "CLICK"
+  targetUrl     String?    // only for CLICK
+  userAgent     String?
+  ip            String?
+  // --- Meta CAPI ---
+  metaPayload   Json?
+  metaSentAt    DateTime?  // null = not actually sent to Meta
+  createdAt     DateTime   @default(now())
+
+  @@index([queueId, createdAt])
+  @@index([type])
+}
+
+/// A rule-based email flow (replaces the fixed 5-stage orchestrator
+/// for flows that need branching). Each flow has a trigger (e.g.
+/// RSVP_GOING), a set of steps (each with a template + delay + branch
+/// rules), and runs (one per triggered user).
+model EmailFlow {
+  id           String   @id @default(cuid())
+  name         String   // "TLV default — registered→attended"
+  description  String?
+  // --- trigger ---
+  triggerKind  String   // "RSVP_GOING" | "DOOR_CHECKED_IN" | "MARKED_ATTENDED" | "MARKED_NO_SHOW" | "MANUAL"
+  triggerEventId String? // null = all events
+  triggerEvent Event?   @relation(fields: [triggerEventId], references: [id], onDelete: SetNull)
+  // --- state ---
+  status       String   @default("DRAFT") // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
+  // --- branch evaluation delay (hours after each send) ---
+  branchEvaluationDelayHours Int @default(5)
+  // --- relations ---
+  steps        EmailFlowStep[]
+  runs         EmailFlowRun[]
+  // --- meta ---
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String?
+
+  @@index([status, triggerKind])
+  @@index([triggerEventId])
+}
+
+/// A single step in an email flow. Position 1..5. Each step has a
+/// template (or is wait-only), a delay before firing, and branch
+/// rules evaluated after the send + branchEvaluationDelayHours.
+model EmailFlowStep {
+  id          String   @id @default(cuid())
+  flowId      String
+  flow        EmailFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  position    Int      // 1..5 (max 5 per flow)
+  // --- what to send ---
+  templateId  String?  // null = wait-only step (no email sent)
+  template    EmailStageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  subjectOverride String?
+  // --- delay BEFORE this step fires ---
+  delayValue  Int      @default(0)
+  delayUnit   String   @default("HOURS") // "MINUTES" | "HOURS" | "DAYS"
+  // --- branch rules (JSON array of { rule, action, targetStepPosition? }) ---
+  branchRulesJson String?
+  // --- audience filter (JSON-serialized Filter) ---
+  filterJson       String?
+  // --- meta ---
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([flowId, position])
+  @@index([flowId, position])
+}
+
+/// A single user's journey through a flow. Created when the flow's
+/// trigger fires. Status tracks the state machine:
+/// ACTIVE → WAITING_BRANCH → (HALTED | COMPLETED | ERROR).
+model EmailFlowRun {
+  id          String   @id @default(cuid())
+  flowId      String
+  flow        EmailFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation("EmailFlowRunUser", fields: [userId], references: [id], onDelete: SetNull)
+  rsvpId      String?
+  rsvp        EventRsvp? @relation(fields: [rsvpId], references: [id], onDelete: SetNull)
+  eventId     String?
+  // --- state machine ---
+  currentStepPosition Int    @default(1)
+  status              String @default("ACTIVE") // "ACTIVE" | "WAITING_BRANCH" | "HALTED" | "COMPLETED" | "ERROR"
+  nextRunAt           DateTime? // when worker should next process this run
+  lastQueueId         String? // last EmailQueue row created for this run
+  lastStepSentAt      DateTime?
+  // --- branch evaluation ---
+  branchEvalAt        DateTime?
+  branchEvaluated     Boolean  @default(false)
+  // --- audit log (JSON array of { at, step, action, reason }) ---
+  historyJson         String  @default("[]")
+  // --- back-relations ---
+  queueItems          EmailQueue[]
+  // --- meta ---
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([flowId, status, nextRunAt])
+  @@index([status, nextRunAt])
+  @@index([userId])
+  @@index([rsvpId])
 }

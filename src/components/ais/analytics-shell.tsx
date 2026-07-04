@@ -20,13 +20,26 @@ import {
  *   B. Sort A-Z / Z-A on every column
  *   C. Per-column filter (text match OR dropdown of distinct values)
  *   D. Master filter: any active column filter narrows the ENTIRE dashboard
- *      (all panels re-compute from the filtered row set, not just the table)
+ *      (all panels re-compute from the filtered row set, not just the table).
+ *      Also supports cross-filtering: clicking a slice/bar/row in a chart
+ *      sets an "active selection" that further narrows the dashboard.
  *   E. UTM columns + UTM filters (just regular columns named utm_*)
  *   F. Style mirrors the existing "dashboard report" filter bar (boxed
  *      <Filter> panel with selects + search + Clear button)
  * ========================================================================== */
 
 export type ViewMode = "table" | "bar" | "pie";
+
+/**
+ * Active "report" selection — set when the admin clicks a slice/bar/row
+ * in a chart, or clicks a stat card. Drives cross-filtering: the entire
+ * dashboard re-filters to the rows matching this selection. Modeled on
+ * non-member-dashboard.tsx's ActiveSelection pattern (lines 83-170).
+ *
+ * `kind` is the dimension name (e.g. "status", "company", "interestedIn",
+ * "utmSource"); `value` is the specific bucket that was clicked.
+ */
+export type ActiveSelection = { kind: string; value: string } | null;
 
 export type ColumnDef<T> = {
   /** Object key to read the cell value from, OR a getter function. */
@@ -413,9 +426,15 @@ const AISALON_PALETTE = [
 export function AnalyticsBarChart({
   rows,
   height = 220,
+  activeValue,
+  onSliceClick,
 }: {
   rows: ChartRow[];
   height?: number;
+  /** Currently active slice value (for cross-filtering). When set, non-active bars render at opacity 0.4. */
+  activeValue?: string | null;
+  /** When provided, bars become clickable — clicking a bar sets the active selection. */
+  onSliceClick?: (label: string) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -431,8 +450,16 @@ export function AnalyticsBarChart({
         {rows.map((r, i) => {
           const color = r.color || AISALON_PALETTE[i % AISALON_PALETTE.length];
           const pct = (r.value / max) * 100;
+          const isActive = !activeValue || activeValue === r.label;
+          const clickable = !!onSliceClick;
           return (
-            <div key={r.label} className="flex items-center gap-3">
+            <div
+              key={r.label}
+              className={`flex items-center gap-3 ${clickable ? "cursor-pointer" : ""}`}
+              onClick={() => clickable && onSliceClick!(r.label)}
+              title={clickable ? `Click to filter dashboard to "${r.label}"` : undefined}
+              style={{ opacity: isActive ? 1 : 0.4 }}
+            >
               <div
                 className="text-xs font-semibold text-black/60 w-32 truncate flex-shrink-0"
                 title={r.label}
@@ -459,9 +486,15 @@ export function AnalyticsBarChart({
 export function AnalyticsPieChart({
   rows,
   height = 260,
+  activeValue,
+  onSliceClick,
 }: {
   rows: ChartRow[];
   height?: number;
+  /** Currently active slice value (for cross-filtering). When set, non-active slices render at opacity 0.4. */
+  activeValue?: string | null;
+  /** When provided, slices become clickable — clicking a slice sets the active selection. */
+  onSliceClick?: (label: string) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -489,9 +522,7 @@ export function AnalyticsPieChart({
     const end = (acc / total) * 360;
     return { ...r, color, start, end };
   });
-  const gradient = slices
-    .map((s) => `${s.color} ${s.start}deg ${s.end}deg`)
-    .join(", ");
+  const clickable = !!onSliceClick;
 
   return (
     <div
@@ -499,18 +530,31 @@ export function AnalyticsPieChart({
       style={{ minHeight: height }}
     >
       <div
-        className="rounded-full flex-shrink-0"
+        className={`rounded-full flex-shrink-0 ${clickable ? "cursor-pointer" : ""}`}
         style={{
           width: 200,
           height: 200,
-          background: `conic-gradient(${gradient})`,
+          background: `conic-gradient(${slices
+            .map((s) => `${s.color} ${s.start}deg ${s.end}deg`)
+            .join(", ")})`,
         }}
+        // Click on the pie itself can't determine which slice without math,
+        // but we still want the cursor pointer hint. Slice-specific clicks
+        // happen via the legend rows below.
+        title={clickable ? "Click a slice in the legend to filter" : undefined}
       />
       <div className="flex-1 space-y-1.5 w-full">
         {slices.map((s) => {
           const pct = ((s.value / total) * 100).toFixed(1);
+          const isActive = !activeValue || activeValue === s.label;
           return (
-            <div key={s.label} className="flex items-center gap-2 text-xs">
+            <div
+              key={s.label}
+              className={`flex items-center gap-2 text-xs ${clickable ? "cursor-pointer hover:bg-black/[0.03] rounded -mx-1 px-1 py-0.5" : ""}`}
+              onClick={() => clickable && onSliceClick!(s.label)}
+              title={clickable ? `Click to filter dashboard to "${s.label}"` : undefined}
+              style={{ opacity: isActive ? 1 : 0.4 }}
+            >
               <span
                 className="inline-block w-3 h-3 rounded-sm flex-shrink-0"
                 style={{ backgroundColor: s.color }}
@@ -606,9 +650,20 @@ export function getDistinctValues<T>(rows: T[], col: ColumnDef<T>): { value: str
 
 /**
  * Apply the master filter pipeline to a row set:
- *   1. Per-column filters (exact match if value is in distinct set, else substring)
- *   2. Global search (substring match across ALL columns)
- *   3. Sort by sortKey + sortDir
+ *   1. Cross-filter "active selection" (optional) — narrows to rows whose
+ *      value on the active dimension matches `active.value`. The dimension
+ *      is resolved by matching `active.kind` against a column's `key`
+ *      (case-insensitive equality). If no matching column is found, the
+ *      active selection is silently ignored (this happens for "stat"
+ *      kinds that don't map to a single column — the dashboard is
+ *      expected to handle those by passing a custom predicate).
+ *   2. Per-column filters (exact match if value is in distinct set, else substring)
+ *   3. Global search (substring match across ALL columns)
+ *   4. Sort by sortKey + sortDir
+ *
+ * For cross-filtering on dimensions that aren't simple column matches
+ * (e.g. "any interest in this CSV list"), pass a custom `activePredicate`
+ * — it overrides the column-lookup path.
  *
  * Returns the filtered + sorted rows. This is the heart of the "master
  * filter that updates the entire dashboard" behavior (point D in the spec).
@@ -619,9 +674,29 @@ export function applyFilters<T>(
   filters: FilterState,
   globalSearch: string,
   sortKey: string | null,
-  sortDir: "asc" | "desc"
+  sortDir: "asc" | "desc",
+  active?: ActiveSelection,
+  activePredicate?: (row: T, active: { kind: string; value: string }) => boolean
 ): T[] {
   let out = rows;
+
+  // Cross-filter active selection
+  if (active) {
+    if (activePredicate) {
+      out = out.filter((r) => activePredicate(r, active));
+    } else {
+      const col = columns.find(
+        (c) => c.key.toLowerCase() === active.kind.toLowerCase()
+      );
+      if (col) {
+        out = out.filter((r) => {
+          const cellV = col.accessor ? col.accessor(r) : (r as Record<string, unknown>)[col.key];
+          const s = cellV === null || cellV === undefined ? "—" : String(cellV);
+          return s === active.value || s.toLowerCase() === active.value.toLowerCase();
+        });
+      }
+    }
+  }
 
   // Per-column filters
   for (const [k, v] of Object.entries(filters)) {
@@ -667,6 +742,50 @@ export function applyFilters<T>(
   return out;
 }
 
+/**
+ * Toggle an active selection: if the same selection is already active,
+ * clear it (return null); otherwise set it. Used by chart slice / bar
+ * click handlers + stat card click handlers.
+ */
+export function toggleActiveSelection(
+  prev: ActiveSelection,
+  next: ActiveSelection
+): ActiveSelection {
+  if (prev && next && prev.kind === next.kind && prev.value === next.value) {
+    return null;
+  }
+  return next;
+}
+
+/**
+ * Render an active selection chip with a × to clear. Mirrors the
+ * "Selection: <kind>: <value> ×" pattern from non-member-dashboard.tsx
+ * lines 463-491.
+ */
+export function ActiveSelectionChip({
+  active,
+  onClear,
+  labelFor,
+}: {
+  active: { kind: string; value: string };
+  onClear: () => void;
+  /** Optional: map `kind` to a friendlier label (e.g. "utmSource" → "UTM Source"). */
+  labelFor?: (kind: string) => string;
+}) {
+  const kindLabel = labelFor ? labelFor(active.kind) : active.kind;
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      className="inline-flex items-center gap-1 bg-[#FF005A]/10 text-[#FF005A] font-semibold px-2 py-1 rounded-full hover:bg-[#FF005A]/20 text-xs"
+    >
+      <span className="opacity-70">{kindLabel}:</span>
+      <span>{active.value}</span>
+      <span className="text-base leading-none ml-0.5">×</span>
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Hook: useAnalyticsState — centralizes view-mode + sort + filter    |
 /* state for one analytics panel. Pass the initial rows + columns.    */
@@ -696,5 +815,38 @@ export function useAnalyticsState<T>(initialRows: T[]) {
     setFilters,
     globalSearch,
     setGlobalSearch,
+  };
+}
+
+/**
+ * useDashboardState — extension of useAnalyticsState that also tracks
+ * the cross-filter "active selection". Used by dashboards that want
+ * clickable charts (Member Dashboard, Event Dashboard). Referral
+ * Analytics uses the simpler useAnalyticsState because each panel
+ * is independent (no cross-panel filtering).
+ */
+export function useDashboardState<T>(initialRows: T[]) {
+  const base = useAnalyticsState<T>(initialRows);
+  const [active, setActive] = React.useState<ActiveSelection>(null);
+
+  const toggleActive = React.useCallback((sel: ActiveSelection) => {
+    setActive((prev) => toggleActiveSelection(prev, sel));
+  }, []);
+
+  const clearActive = React.useCallback(() => setActive(null), []);
+
+  const clearAll = React.useCallback(() => {
+    setActive(null);
+    base.setFilters({});
+    base.setGlobalSearch("");
+  }, [base]);
+
+  return {
+    ...base,
+    active,
+    setActive,
+    toggleActive,
+    clearActive,
+    clearAll,
   };
 }

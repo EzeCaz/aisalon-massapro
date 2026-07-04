@@ -1,0 +1,538 @@
+// AI Salon Tel Aviv — MassaPro platform
+// Prisma schema
+//
+// Provider is `postgresql` so the same schema works in both local dev
+// (any Postgres — local Docker, Neon dev DB, Supabase, etc.) and on
+// Vercel production (Vercel Postgres / Neon). SQLite is intentionally
+// NOT used because Vercel's serverless filesystem is read-only and
+// ephemeral — local file SQLite simply cannot persist writes there.
+//
+// On Vercel: create a Postgres database from the project's Storage tab
+// (1 click), then copy the value of `POSTGRES_PRISMA_URL` (set
+// automatically by Vercel) into the existing `DATABASE_URL` env var.
+// (Or, equivalently, paste the connection string from any other
+// Postgres provider — Neon, Supabase, Railway, etc.)
+//
+// Locally: set DATABASE_URL to your local Postgres URL, e.g.
+//   DATABASE_URL=postgresql://user:pass@localhost:5432/aisalon
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------- Users & Members ----------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  image         String?
+  // ---------------- Profile fields (user-editable) ----------------
+  bio           String?  // free-form short bio
+  linkedinUrl   String?  // https://www.linkedin.com/in/...
+  company       String?  // e.g. "MassaPro"
+  companyUrl    String?  // https://...
+  portfolioUrl  String?  // personal site / portfolio
+  photoUrl      String?  // user-uploaded photo (overrides Google `image` when set)
+  // ----------------------------------------------------------------
+  // Email/password login: bcrypt-hashed password. Null when the user
+  // signed in via Google only. Set on first email sign-up, and on
+  // subsequent password resets.
+  passwordHash  String?
+  // ----------------------------------------------------------------
+  // Imported-from-spreadsheet fields (admin-only). Captured from the
+  // AI Salon TLV intake form so the admin can see who applied, what
+  // they're interested in, what they applied for, and whether they
+  // were invited to speak. Visible only in the admin panel.
+  mobile            String?  // phone number from the intake form
+  interestedIn      String?  // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
+  profileCategories String?  // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
+  appliedFor        String?  // e.g. "Fast pitch", "Presentation/Lecure"
+  invitedToSpeak    String?  // admin-set indicator (e.g. "Yes" / event slug)
+  importSource      String?  // e.g. "excel:AI Salon TLV.xlsx"
+  importedAt        DateTime?
+  // ----------------------------------------------------------------
+  // Onboarding: set to NOW() the first time a self-registered user
+  // fills out the /onboarding form. Null = the user hasn't completed
+  // the intake form yet. Pre-imported users (importSource set) skip
+  // onboarding — they already have intake data from the spreadsheet.
+  onboardedAt       DateTime?
+  // ----------------------------------------------------------------
+  // Soft-delete (archive) — set when a Super Admin archives a member.
+  // Archived members are excluded from the main members list and from
+  // most queries, but their row is preserved for audit. Only Super
+  // Admins can view the archive list at /admin/members/archive and
+  // restore archived members. Null = active (not archived).
+  archivedAt        DateTime?
+  archivedBy        String?
+  archiver          User?    @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
+  archivedUsers     User[]    @relation("UserArchiver")
+  // ----------------------------------------------------------------
+  role          String   @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CO_HOST" | "MEMBER"
+  tags          MemberTag[] // tags assigned to this member (admin-managed)
+  images        EventImage[]
+  presentations PresentationFile[]
+  speakerMessages SpeakerMessage[] // messages this user sent to speakers
+  // User-to-user direct messages (community chat)
+  sentMessages     ConversationMessage[] @relation("SentMessages")
+  receivedMessages ConversationMessage[] @relation("ReceivedMessages")
+  // Speakers linked to this user (for in-app chat with members)
+  speakers         Speaker[]
+  // ----------------------------------------------------------------
+  // Secondary emails — admin can attach multiple emails to a single
+  // user so that signing in with any of them resolves to the same
+  // account. User.email itself is still the unique primary email
+  // (and the value displayed in the admin table).
+  secondaryEmails  UserEmail[]
+  // ----------------------------------------------------------------
+  // Email campaigns & templates — back-relations
+  emailCampaigns    EmailCampaign[]  @relation("EmailCampaignCreator")
+  emailTemplates    EmailTemplate[]  @relation("EmailTemplateCreator")
+  emailRecipients   EmailRecipient[] @relation("EmailRecipientUser")
+  eventRsvps        EventRsvp[]      @relation("EventRsvpUser")
+  eventCoHosts      EventCoHost[]    @relation("EventCoHostUser")
+  coHostAddedBy     EventCoHost[]    @relation("EventCoHostAdder")
+  // ----------------------------------------------------------------
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// A secondary email attached to a User. The User.email column is
+/// always the PRIMARY email (immutable identity). Additional emails
+/// here allow a single user to sign in with multiple addresses —
+/// e.g. john@work.com (primary) + john@gmail.com (secondary).
+///
+/// On sign-in, the auth callback first looks up User.email directly;
+/// if that misses, it falls back to UserEmail.email — if found, the
+/// signed-in user is treated as the linked User.
+model UserEmail {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String   @unique
+  label     String?  // optional note: "Work", "Personal", etc.
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// A direct message between two platform users (community chat).
+/// Used to power the inbox / chat feature in the top-right of the header.
+model ConversationMessage {
+  id           String   @id @default(cuid())
+  senderId     String
+  sender       User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId  String
+  recipient    User     @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  body         String
+  readAt       DateTime? // null = unread by recipient
+  createdAt    DateTime @default(now())
+
+  @@index([senderId, createdAt])
+  @@index([recipientId, readAt])
+  @@index([senderId, recipientId, createdAt])
+}
+
+/// A tag the admin can assign to a member: "Speaker", "Builder", "Investor", etc.
+model MemberTag {
+  id        String   @id @default(cuid())
+  label     String   @unique // e.g. "Speaker", "Builder", "Investor"
+  color     String?  // optional AIS palette color hex
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------- Events ----------------------------
+
+model Event {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  subtitle      String?
+  chapter       String   @default("Tel Aviv") // e.g. "Tel Aviv"
+  venue         String?
+  address       String?
+  city          String?
+  country       String?  // e.g. "ISR"
+  mapUrl        String?
+  startsAt      DateTime
+  endsAt        DateTime
+  description   String?  // long-form description / "About Event"
+  takeaways     String?  // "What you'll take home"
+  intendedFor   String?  // "This event is built for: ..."
+  rsvpUrl       String?  // external RSVP form
+  coverImage    String?  // legacy: external URL for the event's cover image
+  // The "main" image for this event — a pointer to one of the
+  // EventImage rows uploaded via the gallery. Used as the hero image
+  // on the event page and the thumbnail on /events. When null, the
+  // gallery's first image (by slideOrder) is used as a fallback.
+  mainImageId   String?
+  mainImage     EventImage? @relation("EventMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  speakers      Speaker[]
+  agenda        EventAgendaItem[]
+  images        EventImage[]
+  presentations PresentationFile[]
+  rsvps         EventRsvp[]
+  coHosts       EventCoHost[]
+}
+
+/// Speaker at an event — has name, role, company, topic, photo.
+model Speaker {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name           String
+  role           String?   // e.g. "AI Product Lead, Amdocs"
+  company        String?
+  bio            String?
+  topic          String?   // talk title
+  photoUrl       String?
+  // Optional contact email — used to AUTO-LINK a Speaker to a platform User
+  // (by matching email). When linked, members can chat with the speaker
+  // via the in-app ConversationMessage system (two-way). When not linked,
+  // the old SpeakerMessage flow (one-way email relay via admin) is used.
+  contactEmail   String?
+  // Optional explicit link to a User account. Either set by the admin
+  // (rare) or auto-populated from contactEmail on speaker creation.
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order          Int      @default(0)
+  images         EventImage[] // images linked to this speaker
+  presentations  PresentationFile[] // presentations linked to this speaker
+  // Lead-speaker relation: agenda items where this speaker is the primary
+  // speaker (for non-PANEL items, or for the PANEL moderator).
+  agendaItems    EventAgendaItem[] @relation("AgendaLeadSpeaker")
+  // Panelist relation: PANEL agenda items where this speaker appears as a
+  // panelist (not the moderator).
+  panelItems     EventAgendaItem[] @relation("AgendaPanelist")
+  messages       SpeakerMessage[] // messages left by community members for this speaker
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/// A message left by a community member for a speaker.
+/// Stored so the speaker (or admin) can read & respond out-of-band
+/// (e.g. via email or LinkedIn). The platform itself does not (yet)
+/// support bidirectional chat — this is the "first contact" hop.
+model SpeakerMessage {
+  id          String   @id @default(cuid())
+  speakerId   String
+  speaker     Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  fromUserId  String?
+  fromUser    User?    @relation(fields: [fromUserId], references: [id], onDelete: SetNull)
+  fromName    String   // snapshot in case the user is later deleted
+  fromEmail   String   // snapshot — this is how the speaker replies
+  body        String
+  createdAt   DateTime @default(now())
+
+  @@index([speakerId, createdAt])
+  @@index([fromUserId])
+}
+
+/// One row in the event agenda — can be a talk, a break, fast pitch, etc.
+model EventAgendaItem {
+  id             String   @id @default(cuid())
+  eventId        String
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  startsAt       DateTime
+  endsAt         DateTime?
+  title          String   // e.g. "Welcome by Ezequiel Sznaider"
+  description    String?  // optional longer description (used by fast pitch sessions and other items)
+  type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME" | "PANEL"
+  // For non-PANEL items: the lead speaker. For PANEL items: the moderator
+  // (optional — one of the panelists can take that role if no moderator).
+  speakerId      String?
+  speaker        Speaker? @relation("AgendaLeadSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
+  // Panelists for PANEL-type items (m:n). Empty for non-PANEL items.
+  // Stored via the implicit _EventAgendaItemToSpeaker join table.
+  panelists      Speaker[] @relation("AgendaPanelist")
+  presentations  PresentationFile[] // files uploaded for this specific agenda item
+  createdAt      DateTime @default(now())
+}
+
+// ---------------------------- Event Images ----------------------------
+
+/// One image uploaded by a community member for a specific event.
+/// Can be linked to one or more speakers (so members can tag
+/// "this photo is from Ohad's talk", "this photo is from Boris's talk", etc.)
+model EventImage {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId  String
+  uploader    User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileUrl     String   // served from /uploads/events/<eventId>/<filename>
+  fileSize    Int      @default(0)
+  width       Int?
+  height      Int?
+  mimeType    String   @default("image/jpeg")
+  caption     String?
+  // Slideshow ordering — admin/member can reorder. Lower = earlier.
+  slideOrder  Int      @default(0)
+  // Linked speakers — many-to-many (an image can be from multiple talks/speakers)
+  speakers    Speaker[]
+  // Back-relation: events that have this image as their mainImage.
+  // (One image can be the main of at most one event — the FK lives on Event.)
+  mainOfEvents Event[] @relation("EventMainImage")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([eventId, slideOrder])
+  @@index([uploaderId])
+}
+
+// ---------------------------- Presentation Files ----------------------------
+
+/// One presentation/document uploaded for a specific event — PDF, PPT(X),
+/// Keynote, Google Slides export, handouts, etc. Linked to one or more
+/// speakers (the presenters) and optionally to one specific agenda item
+/// (the session the file was presented in).
+///
+/// Stored in Vercel Blob at `events/<eventId>/presentations/<filename>`
+/// — same reason as EventImage: Vercel's serverless filesystem is
+/// read-only at runtime.
+model PresentationFile {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId    String
+  uploader      User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName      String   // original filename, e.g. "AI-CMO-Blueprint.pdf"
+  fileUrl       String   // Vercel Blob URL
+  fileSize      Int      @default(0)
+  mimeType      String   @default("application/pdf")
+  title         String?  // optional display title (defaults to fileName)
+  description   String?  // optional short description
+  // Optional link to a specific agenda item — null means "general event
+  // file" (e.g. event wrap-up deck, sponsor deck, etc.)
+  agendaItemId  String?
+  agendaItem    EventAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: SetNull)
+  // Linked speakers (presenters) — many-to-many (a deck can be co-presented)
+  speakers      Speaker[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([eventId])
+  @@index([uploaderId])
+  @@index([agendaItemId])
+}
+
+// ---------------------------- Email Campaigns & Templates ----------------------------
+
+/// A reusable email template. Created by an admin via the "Create template"
+/// button on the Email tab, or by cloning an existing sent campaign via the
+/// "Save as template" button. Templates are picked from the campaign
+/// composer's template picker, which loads their subject + bodyHtml into the
+/// composer as a starting point.
+model EmailTemplate {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String?
+  category      String   @default("general")
+  subject       String
+  bodyHtml      String
+  bodyText      String?
+  signatureHtml String?
+  thumbnailUrl  String?
+  createdBy     String
+  creator       User     @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  campaigns     EmailCampaign[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdBy])
+  @@index([category])
+}
+
+/// An email campaign — a single send-out to a list of recipients.
+/// Tracks status from DRAFT → SCHEDULED → SENDING → SENT (or FAILED).
+/// The subject/body are snapshotted at send time so that later edits to
+/// the source template don't change what was actually sent.
+model EmailCampaign {
+  id                    String   @id @default(cuid())
+  name                  String
+  templateId            String?
+  template              EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  subjectSnapshot       String
+  bodyHtmlSnapshot      String
+  bodyTextSnapshot      String?
+  signatureHtmlSnapshot String?
+  listSource            String   // "ALL_MEMBERS" | "TAG:Speaker" | "EVENT:abc123" | "MANUAL:list@x.com,..." etc.
+  listConfigJson        String   // JSON payload describing the recipient list filter
+  recipientCount        Int      @default(0)
+  status                String   @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED
+  scheduledAt           DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  fromName              String?
+  fromEmail             String?
+  replyTo               String?
+  createdBy             String
+  creator               User     @relation("EmailCampaignCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  recipients            EmailRecipient[]
+  events                EmailEvent[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([createdBy])
+  @@index([templateId])
+}
+
+/// One recipient of one campaign. Tracks per-recipient delivery state
+/// (queued → sent → opened → clicked → replied) and stores the unique
+/// trackToken used to identify this recipient in open/click tracking
+/// pixels and links.
+model EmailRecipient {
+  id            String   @id @default(cuid())
+  campaignId    String
+  campaign      EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?    @relation("EmailRecipientUser", fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  name          String?
+  trackToken    String   @unique
+  messageId     String?  // SMTP Message-ID, for matching bounces/replies
+  status        String   @default("QUEUED") // QUEUED | SENT | FAILED | BOUNCED | COMPLAINED
+  errorReason   String?
+  retryCount    Int      @default(0) // incremented by /api/cron/email on each retry attempt
+  sentAt        DateTime?
+  firstOpenedAt DateTime?
+  lastOpenedAt  DateTime?
+  openCount     Int      @default(0)
+  firstClickedAt DateTime?
+  lastClickedAt DateTime?
+  clickCount    Int      @default(0)
+  repliedAt     DateTime?
+  replySnippet  String?
+  events        EmailEvent[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([campaignId, email])
+  @@index([campaignId])
+  @@index([userId])
+  @@index([email])
+  @@index([trackToken])
+  @@index([messageId])
+  @@index([status])
+}
+
+/// One tracking event for one campaign/recipient. Types include
+/// SENT, DELIVERED, OPENED, CLICKED, REPLIED, BOUNCED, COMPLAINED.
+/// `details` is free-form JSON (e.g. the URL that was clicked).
+model EmailEvent {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipientId String?
+  recipient   EmailRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  email       String
+  type        String
+  details     String?
+  userAgent   String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([campaignId, type, createdAt])
+  @@index([recipientId, type])
+  @@index([email])
+}
+
+// ---------------------------- Event RSVPs & Co-Hosts ----------------------------
+
+/// RSVP for an event. Created when a member (or external guest) confirms
+/// attendance. Used by the email campaign system's "EVENT:<eventId>" list
+/// source to send only to people who RSVP'd to a specific event.
+///
+/// On the day of the event, members can click "I'm here — Check in" on
+/// the public event page (/e/[slug]). This generates a unique `checkInCode`
+/// (8-char Crockford base32, formatted as XXXX-XXXX) that the user shows
+/// at the door to enter the venue. The code is idempotent — clicking
+/// "Check in" again returns the same code.
+model EventRsvp {
+  id           String    @id @default(cuid())
+  eventId      String
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?     @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
+  email        String
+  name         String?
+  status       String    @default("GOING") // GOING | MAYBE | NOT_GOING
+  source       String    @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
+  // --------------- Event-day check-in (entry ticket) ---------------
+  // 8-char Crockford base32 code (excludes O/0/I/1/L to avoid confusion).
+  // Generated server-side via crypto.randomBytes when the user clicks
+  // "Check in" on the public event page. Stored formatted as "XXXX-XXXX".
+  // Unique across ALL events so door staff can scan without event context.
+  checkInCode  String?   @unique
+  checkedInAt  DateTime?
+  // ----------------------------------------------------------------
+  // Door check-in (single-use enforcement). Set the FIRST time door
+  // staff look up this code at /admin/check-in. Once set, subsequent
+  // lookups return a "code already used" warning so the same code
+  // cannot be used to re-enter the venue. Null = code has been
+  // generated but not yet verified at the door.
+  doorCheckedAt    DateTime?
+  doorCheckedBy    String?
+  // ----------------------------------------------------------------
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([eventId, email])
+  @@index([eventId])
+  @@index([userId])
+  @@index([email])
+}
+
+/// Co-host of an event (admin-designated collaborators, in addition to the
+/// implicit event creator). Used to give non-admin users admin-style access
+/// to a specific event's dashboard (images, agenda, RSVPs).
+model EventCoHost {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("EventCoHostUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedBy   String?
+  adder     User?    @relation("EventCoHostAdder", fields: [addedBy], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+// ---------------------------- Site Settings ----------------------------
+
+/// A single key/value site-level setting. Used for admin-managed global
+/// configuration that can be changed at runtime WITHOUT a redeploy — e.g.
+/// the brand image selected as the favicon, the login-page hero, the
+/// login-page banner, etc.
+///
+/// The `key` is one of a small fixed set (see K_* constants in
+/// `src/lib/site-settings.ts`). The `value` is always a string — typically
+/// a Vercel Blob URL or a public/ path that points at an image.
+///
+/// SUPER_ADMIN-only writes (enforced at the API layer). Publicly readable
+/// via GET /api/site-settings (returns only the safe-to-expose keys).
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}

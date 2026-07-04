@@ -122,7 +122,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
     // Layer z-indices (defaults match the original hard-coded order).
     const heroZ = data.heroZ ?? 1;
     const photoZ = data.photoZ ?? 3;
-    const graphicZ = data.graphicZ ?? 4;
+    const graphicZ = data.graphicZ ?? 8;
     // Text sections always render at zIndex >= 50 so they stay above
     // images and overlays.
     const TEXT_Z = 50;

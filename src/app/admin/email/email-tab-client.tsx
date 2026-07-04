@@ -16,6 +16,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -35,7 +41,9 @@ import {
   Loader2,
   Mail,
   FilePlus2,
+  Workflow,
 } from "lucide-react";
+import { OrchestratorPanel } from "./orchestrator-panel";
 
 // ----------------------------------------------------------------------------
 // Types — mirror the Prisma models we serialized in the server page.
@@ -205,6 +213,44 @@ export function EmailTabClient({
   };
 
   return (
+    <Tabs defaultValue="campaigns" className="space-y-6">
+      <TabsList className="bg-black/[0.04] p-1 h-auto">
+        <TabsTrigger
+          value="campaigns"
+          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5"
+        >
+          <Mail className="h-3.5 w-3.5 mr-1.5" />
+          Campaigns
+        </TabsTrigger>
+        <TabsTrigger
+          value="orchestrator"
+          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 relative"
+        >
+          <Workflow className="h-3.5 w-3.5 mr-1.5" />
+          Orchestrator
+          <Badge
+            className="ml-1.5 h-4 px-1 text-[0.55rem] font-bold uppercase tracking-wider bg-[#FF005A] text-white border-0"
+            variant="default"
+          >
+            New
+          </Badge>
+        </TabsTrigger>
+        <TabsTrigger
+          value="flows"
+          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 relative"
+        >
+          <Workflow className="h-3.5 w-3.5 mr-1.5" />
+          Flows
+          <Badge
+            className="ml-1.5 h-4 px-1 text-[0.55rem] font-bold uppercase tracking-wider bg-[#00E6FF] text-black border-0"
+            variant="default"
+          >
+            New
+          </Badge>
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="campaigns" className="space-y-10 m-0">
     <div className="space-y-10">
       {/* Templates section (shown at top — small, so admins see them first) */}
       <section>
@@ -385,6 +431,62 @@ export function EmailTabClient({
         </DialogContent>
       </Dialog>
     </div>
+      </TabsContent>
+
+      <TabsContent value="orchestrator" className="m-0">
+        <OrchestratorPanel />
+      </TabsContent>
+
+      <TabsContent value="flows" className="m-0">
+        <div className="rounded-lg border border-neutral-200 bg-white p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-neutral-900">Email Flow Builder</h2>
+              <p className="text-sm text-neutral-500">
+                Build automated email sequences with conditional branches (if opened → halt, if not opened → step 2),
+                audience filters (company, role, interestedIn, etc.), and 5-email max per flow.
+              </p>
+            </div>
+            <a
+              href="/admin/email/flows"
+              className="inline-flex items-center gap-2 rounded bg-[#FF005A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#d8004d]"
+            >
+              <Workflow className="h-4 w-4" /> Open Flow Builder
+            </a>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-neutral-200 p-4">
+              <div className="mb-2 text-2xl">🎯</div>
+              <h3 className="text-sm font-bold text-neutral-900">Trigger</h3>
+              <p className="mt-1 text-xs text-neutral-600">
+                Start the flow on RSVP, door check-in, attended mark, no-show mark, or manually.
+              </p>
+            </div>
+            <div className="rounded-lg border border-neutral-200 p-4">
+              <div className="mb-2 text-2xl">🔀</div>
+              <h3 className="text-sm font-bold text-neutral-900">Branch</h3>
+              <p className="mt-1 text-xs text-neutral-600">
+                If opened → halt. If not opened → wait 5h and send step 2. Up to 5 steps per flow.
+              </p>
+            </div>
+            <div className="rounded-lg border border-neutral-200 p-4">
+              <div className="mb-2 text-2xl">👥</div>
+              <h3 className="text-sm font-bold text-neutral-900">Filter</h3>
+              <p className="mt-1 text-xs text-neutral-600">
+                Target by company, role, interestedIn, appliedFor, profileCategories — re-evaluated at each send.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg bg-[#00E6FF]/10 p-4 text-xs text-neutral-700">
+            <strong>Tracking:</strong> Every send fires the open pixel + click redirect (legacy orchestrator's tracking,
+            already wired). GA4 + Meta CAPI events fire via <code className="rounded bg-white px-1">/api/track/event</code>{" "}
+            on RSVP, door check-in, and attendance marks.
+          </div>
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 }
 

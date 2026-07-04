@@ -10,17 +10,22 @@ import {
   Ticket,
   DoorOpen,
   Users,
+  CheckCircle2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   ToggleableChartCard,
-  ChartTypeToggleGroup,
   ChartTypeButton,
   useChartTypeState,
   type ChartType,
 } from "@/components/admin/toggleable-chart-card";
 import { MEMBER_TAG_CATALOG, tagColor } from "@/lib/tags";
+import {
+  ActiveSelectionChip,
+  type ActiveSelection,
+  toggleActiveSelection,
+} from "@/components/ais/analytics-shell";
 
 // ---------------------------------------------------------------------------
 // Types — mirror the props passed from the server page.
@@ -46,6 +51,14 @@ type RsvpUser = {
   importSource: string | null;
   mobile: string | null;
   bio: string | null;
+  utmUid: string | null;
+};
+
+type ReferringUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  utmUid: string | null;
 };
 
 type Rsvp = {
@@ -62,8 +75,12 @@ type Rsvp = {
   checkedInAt: string | null;
   doorCheckedAt: string | null;
   doorCheckedBy: string | null;
+  approvedAt: string | null;
+  attendedAt: string | null;
+  noShow: boolean;
   event: RsvpEvent;
   user: RsvpUser | null;
+  referredBy: ReferringUser | null;
 };
 
 type EventOption = {
@@ -110,36 +127,182 @@ const DEFAULT_CHART_TYPES: Record<ChartId, ChartType> = {
   roleSplit: "pie",
 };
 
+// Dimension labels for the active-selection chip
+const DIMENSION_LABELS: Record<string, string> = {
+  event: "Event",
+  status: "Status",
+  codeState: "Code state",
+  source: "Source",
+  company: "Company",
+  interestedIn: "Interested in",
+  profileCategories: "Category",
+  appliedFor: "Applied for",
+  role: "Role",
+  utmUid: "Referrer UTM UID",
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
-  // ---- Filters ----
+  // ---- Per-column filters (Item 2C) ----
   const [eventFilter, setEventFilter] = React.useState<string>("ALL");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+  const [sourceFilter, setSourceFilter] = React.useState<string>("ALL");
+  const [companyFilter, setCompanyFilter] = React.useState<string>("ALL");
+  const [interestedFilter, setInterestedFilter] = React.useState<string>("ALL");
+  const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL");
+  const [appliedFilter, setAppliedFilter] = React.useState<string>("ALL");
+  const [roleFilter, setRoleFilter] = React.useState<string>("ALL");
+  const [utmUidFilter, setUtmUidFilter] = React.useState<string>("ALL");
+
+  // ---- Cross-filter active selection (Item 2D) ----
+  const [active, setActive] = React.useState<ActiveSelection>(null);
+
+  const toggleActive = React.useCallback((sel: ActiveSelection) => {
+    setActive((prev) => toggleActiveSelection(prev, sel));
+  }, []);
 
   // ---- Chart type state ----
   const { chartTypes, setChartType, setAllChartTypes, globalActive } =
     useChartTypeState(CHART_IDS, DEFAULT_CHART_TYPES);
 
-  // ---- Derived data ----
-  // Filter RSVPs by the selected event + status + search query.
+  // ---- Distinct values for per-column dropdowns ----
+  const distinct = React.useMemo(() => {
+    const sources = new Set<string>();
+    const companies = new Set<string>();
+    const interested = new Set<string>();
+    const categories = new Set<string>();
+    const appliedFor = new Set<string>();
+    const roles = new Set<string>();
+    const utmUids = new Set<string>();
+    for (const r of rsvps) {
+      sources.add(r.source);
+      if (r.user?.company) companies.add(r.user.company.trim());
+      if (r.user?.interestedIn)
+        for (const v of r.user.interestedIn.split(",").map((s) => s.trim()).filter(Boolean))
+          interested.add(v);
+      if (r.user?.profileCategories)
+        for (const v of r.user.profileCategories.split(",").map((s) => s.trim()).filter(Boolean))
+          categories.add(v);
+      if (r.user?.appliedFor)
+        for (const v of r.user.appliedFor.split(/[/,]/).map((s) => s.trim()).filter(Boolean))
+          appliedFor.add(v);
+      if (r.user) roles.add(r.user.role || "MEMBER");
+      if (r.referredBy?.utmUid) utmUids.add(r.referredBy.utmUid);
+    }
+    return {
+      sources: Array.from(sources).sort(),
+      companies: Array.from(companies).sort(),
+      interested: Array.from(interested).sort(),
+      categories: Array.from(categories).sort(),
+      appliedFor: Array.from(appliedFor).sort(),
+      roles: Array.from(roles).sort(),
+      utmUids: Array.from(utmUids).sort(),
+    };
+  }, [rsvps]);
+
+  // ---- Derived data — apply ALL filters (per-column + cross-filter) ----
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase().trim();
     return rsvps.filter((r) => {
       const matchEvent = eventFilter === "ALL" || r.eventId === eventFilter;
       const matchStatus = statusFilter === "ALL" || r.status === statusFilter;
+      const matchSource = sourceFilter === "ALL" || r.source === sourceFilter;
+      const matchCompany =
+        companyFilter === "ALL" ||
+        (r.user?.company || "").trim() === companyFilter;
+      const matchInterested =
+        interestedFilter === "ALL" ||
+        (r.user?.interestedIn || "")
+          .split(",")
+          .map((s) => s.trim())
+          .includes(interestedFilter);
+      const matchCategory =
+        categoryFilter === "ALL" ||
+        (r.user?.profileCategories || "")
+          .split(",")
+          .map((s) => s.trim())
+          .includes(categoryFilter);
+      const matchApplied =
+        appliedFilter === "ALL" || r.user?.appliedFor === appliedFilter;
+      const matchRole =
+        roleFilter === "ALL" || (r.user?.role || "MEMBER") === roleFilter;
+      const matchUtmUid =
+        utmUidFilter === "ALL" || r.referredBy?.utmUid === utmUidFilter;
       const matchSearch =
         !q ||
         (r.name || "").toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
         (r.user?.company || "").toLowerCase().includes(q) ||
-        (r.user?.interestedIn || "").toLowerCase().includes(q);
-      return matchEvent && matchStatus && matchSearch;
+        (r.user?.interestedIn || "").toLowerCase().includes(q) ||
+        (r.referredBy?.utmUid || "").toLowerCase().includes(q);
+
+      // Cross-filter active selection (Item 2D)
+      let matchActive = true;
+      if (active) {
+        if (active.kind === "event") {
+          matchActive = r.event.title === active.value;
+        } else if (active.kind === "status") {
+          matchActive = r.status === active.value;
+        } else if (active.kind === "codeState") {
+          if (active.value === "No code") matchActive = !r.checkInCode;
+          else if (active.value === "Code generated")
+            matchActive = !!r.checkInCode && !r.doorCheckedAt;
+          else if (active.value === "Used at door") matchActive = !!r.doorCheckedAt;
+        } else if (active.kind === "source") {
+          matchActive = r.source === active.value;
+        } else if (active.kind === "company") {
+          matchActive = (r.user?.company || "").trim() === active.value;
+        } else if (active.kind === "interestedIn") {
+          matchActive = (r.user?.interestedIn || "")
+            .split(",")
+            .map((s) => s.trim())
+            .includes(active.value);
+        } else if (active.kind === "profileCategories") {
+          matchActive = (r.user?.profileCategories || "")
+            .split(",")
+            .map((s) => s.trim())
+            .includes(active.value);
+        } else if (active.kind === "appliedFor") {
+          matchActive = r.user?.appliedFor === active.value;
+        } else if (active.kind === "role") {
+          matchActive = (r.user?.role || "MEMBER") === active.value;
+        } else if (active.kind === "utmUid") {
+          matchActive = r.referredBy?.utmUid === active.value;
+        }
+      }
+
+      return (
+        matchEvent &&
+        matchStatus &&
+        matchSource &&
+        matchCompany &&
+        matchInterested &&
+        matchCategory &&
+        matchApplied &&
+        matchRole &&
+        matchUtmUid &&
+        matchSearch &&
+        matchActive
+      );
     });
-  }, [rsvps, eventFilter, statusFilter, search]);
+  }, [
+    rsvps,
+    eventFilter,
+    statusFilter,
+    sourceFilter,
+    companyFilter,
+    interestedFilter,
+    categoryFilter,
+    appliedFilter,
+    roleFilter,
+    utmUidFilter,
+    search,
+    active,
+  ]);
 
   // ---- Stats ----
   const stats = React.useMemo(() => computeStats(filtered, events), [filtered, events]);
@@ -159,9 +322,13 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
         "Profile Categories",
         "Applied For",
         "Role",
+        "Referrer Name",
+        "Referrer Email",
+        "Referrer UTM UID",
         "Check-in Code",
         "Code Generated At",
         "Door Check-in At",
+        "Attended At",
         "Registered At",
       ],
       ...filtered.map((r) => [
@@ -176,9 +343,13 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
         r.user?.profileCategories || "",
         r.user?.appliedFor || "",
         r.user?.role || "",
+        r.referredBy?.name || "",
+        r.referredBy?.email || "",
+        r.referredBy?.utmUid || "",
         r.checkInCode || "",
         r.checkedInAt ? new Date(r.checkedInAt).toISOString() : "",
         r.doorCheckedAt ? new Date(r.doorCheckedAt).toISOString() : "",
+        r.attendedAt ? new Date(r.attendedAt).toISOString() : "",
         new Date(r.createdAt).toISOString(),
       ]),
     ];
@@ -196,10 +367,41 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
 
   const showEventSplit = eventFilter === "ALL";
 
+  const hasFilters =
+    eventFilter !== "ALL" ||
+    statusFilter !== "ALL" ||
+    sourceFilter !== "ALL" ||
+    companyFilter !== "ALL" ||
+    interestedFilter !== "ALL" ||
+    categoryFilter !== "ALL" ||
+    appliedFilter !== "ALL" ||
+    roleFilter !== "ALL" ||
+    utmUidFilter !== "ALL" ||
+    !!search ||
+    !!active;
+
+  function clearAll() {
+    setEventFilter("ALL");
+    setStatusFilter("ALL");
+    setSourceFilter("ALL");
+    setCompanyFilter("ALL");
+    setInterestedFilter("ALL");
+    setCategoryFilter("ALL");
+    setAppliedFilter("ALL");
+    setRoleFilter("ALL");
+    setUtmUidFilter("ALL");
+    setSearch("");
+    setActive(null);
+  }
+
+  // Per-chart active-value resolver.
+  const activeFor = (kind: string) =>
+    active && active.kind === kind ? active.value : null;
+
   return (
     <div className="space-y-8">
-      {/* Top stats — registrants, codes generated, door check-ins, conversion rate */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Top stats — registrants, codes generated, door check-ins, attended, conversion rate */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard
           label="Registrants"
           value={stats.total}
@@ -219,14 +421,20 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           icon={<DoorOpen className="h-3.5 w-3.5" />}
         />
         <StatCard
+          label="Attended"
+          value={stats.attended}
+          accent="#004F98"
+          icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+        />
+        <StatCard
           label="Conversion rate"
-          value={stats.total > 0 ? `${((stats.doorCheckedIn / stats.total) * 100).toFixed(1)}%` : "—"}
+          value={stats.total > 0 ? `${((stats.attended / stats.total) * 100).toFixed(1)}%` : "—"}
           accent="#00E6FF"
           icon={<BarChart3 className="h-3.5 w-3.5" />}
         />
       </div>
 
-      {/* Filters */}
+      {/* Filters — dashboard-report canonical style (Item 2F) */}
       <div className="rounded-lg border border-black/10 bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="h-4 w-4 text-black/40" />
@@ -236,7 +444,21 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Global search (Item 2C — searches across ALL columns) */}
           <div className="lg:col-span-2">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              <Search className="inline h-3 w-3 mr-1" />
+              Search all columns
+            </label>
+            <Input
+              placeholder="Name, email, company, referrer UTM UID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          {/* Per-column dropdown: Event */}
+          <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               <CalendarDays className="inline h-3 w-3 mr-1" />
               Event
@@ -257,6 +479,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
               })}
             </select>
           </div>
+          {/* Per-column dropdown: Status */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               Status
@@ -272,31 +495,140 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
               <option value="NOT_GOING">Not going</option>
             </select>
           </div>
+          {/* Per-column dropdown: Source */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
-              Search
+              Source
             </label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/30" />
-              <Input
-                placeholder="Name, email, company…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9"
-              />
-            </div>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">All sources ({distinct.sources.length})</option>
+              {distinct.sources.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="flex items-end justify-end lg:col-span-4">
+          {/* Per-column dropdown: Company */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Company
+            </label>
+            <select
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.companies.length})</option>
+              {distinct.companies.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Interested in */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Interested in
+            </label>
+            <select
+              value={interestedFilter}
+              onChange={(e) => setInterestedFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.interested.length})</option>
+              {distinct.interested.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Profile categories */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Profile categories
+            </label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.categories.length})</option>
+              {distinct.categories.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Applied for */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Applied for
+            </label>
+            <select
+              value={appliedFilter}
+              onChange={(e) => setAppliedFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.appliedFor.length})</option>
+              {distinct.appliedFor.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Role */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Member role
+            </label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.roles.length})</option>
+              {distinct.roles.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Referrer UTM UID (Item 2E) */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Referrer UTM UID
+            </label>
+            <select
+              value={utmUidFilter}
+              onChange={(e) => setUtmUidFilter(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.utmUids.length})</option>
+              {distinct.utmUids.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end justify-end lg:col-span-2">
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 className="h-9"
-                onClick={() => {
-                  setEventFilter("ALL");
-                  setStatusFilter("ALL");
-                  setSearch("");
-                }}
+                onClick={clearAll}
+                disabled={!hasFilters}
               >
                 Clear filters
               </Button>
@@ -306,6 +638,20 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Active cross-filter selection chip (Item 2D) */}
+        {active && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <span className="font-bold uppercase tracking-widest text-black/40">
+              Selection:
+            </span>
+            <ActiveSelectionChip
+              active={active}
+              onClear={() => setActive(null)}
+              labelFor={(k) => DIMENSION_LABELS[k] || k}
+            />
+          </div>
+        )}
       </div>
 
       {/* Charts toolbar — global "Set all" control */}
@@ -317,6 +663,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </h2>
           <p className="text-xs text-black/50 mt-0.5">
             Toggle each chart between bar, pie, and table — or switch them all at once.
+            Click a slice / bar / row to filter the dashboard to that selection.
           </p>
         </div>
         <div className="inline-flex items-center gap-1 rounded-md border border-black/15 bg-white p-0.5">
@@ -344,7 +691,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
         </div>
       </div>
 
-      {/* Charts grid */}
+      {/* Charts grid — every chart's slices/bars/rows are clickable (Item 2D) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {showEventSplit && (
           <ToggleableChartCard
@@ -356,6 +703,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
             colorOffset={0}
             orientation="horizontal"
             height={260}
+            activeValue={activeFor("event")}
+            onSliceClick={(label) =>
+              toggleActive({ kind: "event", value: label })
+            }
           />
         )}
         <ToggleableChartCard
@@ -367,6 +718,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={0}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("status")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "status", value: label })
+          }
         />
         <ToggleableChartCard
           title="Check-in code state"
@@ -377,6 +732,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={2}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("codeState")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "codeState", value: label })
+          }
         />
         <ToggleableChartCard
           title="RSVP source"
@@ -387,6 +746,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={3}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("source")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "source", value: label })
+          }
         />
         <ToggleableChartCard
           title="Top companies"
@@ -397,6 +760,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={4}
           orientation="horizontal"
           height={260}
+          activeValue={activeFor("company")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "company", value: label })
+          }
         />
         <ToggleableChartCard
           title="Interested in"
@@ -407,6 +774,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={0}
           orientation="horizontal"
           height={260}
+          activeValue={activeFor("interestedIn")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "interestedIn", value: label })
+          }
         />
         <ToggleableChartCard
           title="Profile categories"
@@ -417,6 +788,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={2}
           orientation="horizontal"
           height={260}
+          activeValue={activeFor("profileCategories")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "profileCategories", value: label })
+          }
         />
         <ToggleableChartCard
           title="Applied for"
@@ -427,6 +802,10 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={4}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("appliedFor")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "appliedFor", value: label })
+          }
         />
         <ToggleableChartCard
           title="Member role"
@@ -437,10 +816,14 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           colorOffset={5}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("role")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "role", value: label })
+          }
         />
       </div>
 
-      {/* Registrants table — full data, sortable */}
+      {/* Registrants table — ALL columns sortable (Item 2B), with UTM UID column (Item 2E) */}
       <RegistrantsTable rsvps={filtered} />
     </div>
   );
@@ -475,13 +858,28 @@ function StatCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// RegistrantsTable — every column is now sortable (Item 2B) and there's a
+// new "UTM UID" column showing the referrer's utm_uid (Item 2E).
+// ---------------------------------------------------------------------------
+
+type SortField =
+  | "name"
+  | "event"
+  | "company"
+  | "interestedIn"
+  | "status"
+  | "checkInCode"
+  | "doorCheckedAt"
+  | "attendedAt"
+  | "createdAt"
+  | "utmUid";
+
 function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
-  const [sortField, setSortField] = React.useState<
-    "name" | "event" | "company" | "createdAt" | "doorCheckedAt"
-  >("createdAt");
+  const [sortField, setSortField] = React.useState<SortField>("createdAt");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc");
 
-  function toggleSort(field: typeof sortField) {
+  function toggleSort(field: SortField) {
     if (field === sortField) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
@@ -508,13 +906,33 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
           av = (a.user?.company || "").toLowerCase();
           bv = (b.user?.company || "").toLowerCase();
           break;
-        case "createdAt":
-          av = new Date(a.createdAt).getTime();
-          bv = new Date(b.createdAt).getTime();
+        case "interestedIn":
+          av = (a.user?.interestedIn || "").toLowerCase();
+          bv = (b.user?.interestedIn || "").toLowerCase();
+          break;
+        case "status":
+          av = a.status;
+          bv = b.status;
+          break;
+        case "checkInCode":
+          av = a.checkInCode || "";
+          bv = b.checkInCode || "";
           break;
         case "doorCheckedAt":
           av = a.doorCheckedAt ? new Date(a.doorCheckedAt).getTime() : 0;
           bv = b.doorCheckedAt ? new Date(b.doorCheckedAt).getTime() : 0;
+          break;
+        case "attendedAt":
+          av = a.attendedAt ? new Date(a.attendedAt).getTime() : 0;
+          bv = b.attendedAt ? new Date(b.attendedAt).getTime() : 0;
+          break;
+        case "utmUid":
+          av = (a.referredBy?.utmUid || "").toLowerCase();
+          bv = (b.referredBy?.utmUid || "").toLowerCase();
+          break;
+        case "createdAt":
+          av = new Date(a.createdAt).getTime();
+          bv = new Date(b.createdAt).getTime();
           break;
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
@@ -531,51 +949,23 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
           Registrants ({sorted.length})
         </h3>
         <p className="text-xs text-black/50 mt-0.5">
-          Click a column header to sort. Use the filters above to slice the data.
+          Click any column header to sort A–Z / Z–A. Use the filters above to slice the data, or click a chart slice to cross-filter.
         </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
             <tr>
-              <SortHeader
-                label="Name"
-                field="name"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label="Event"
-                field="event"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label="Company"
-                field="company"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
-              <th className="text-left px-4 py-2 font-bold">Interested in</th>
-              <th className="text-left px-4 py-2 font-bold">Status</th>
-              <th className="text-left px-4 py-2 font-bold">Code</th>
-              <SortHeader
-                label="Door check-in"
-                field="doorCheckedAt"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
-              <SortHeader
-                label="Registered"
-                field="createdAt"
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={toggleSort}
-              />
+              <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Event" field="event" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Company" field="company" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Interested in" field="interestedIn" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Status" field="status" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Code" field="checkInCode" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Door check-in" field="doorCheckedAt" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Attended" field="attendedAt" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Referrer UTM UID" field="utmUid" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Registered" field="createdAt" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>
@@ -607,7 +997,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                         >
                           {s}
                         </span>
-                        ))}
+                      ))}
                   </div>
                 </td>
                 <td className="px-4 py-2">
@@ -643,13 +1033,34 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                   )}
                 </td>
                 <td className="px-4 py-2 text-xs text-black/60">
+                  {r.attendedAt ? (
+                    <span className="inline-flex items-center gap-1 text-[#004F98] font-semibold">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {new Date(r.attendedAt).toLocaleString()}
+                    </span>
+                  ) : r.noShow ? (
+                    <span className="text-xs text-red-600 font-semibold">No-show</span>
+                  ) : (
+                    <span className="text-black/30 italic">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  {r.referredBy?.utmUid ? (
+                    <code className="text-xs font-mono bg-black/5 px-1.5 py-0.5 rounded">
+                      {r.referredBy.utmUid}
+                    </code>
+                  ) : (
+                    <span className="text-xs text-black/30 italic">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-xs text-black/60">
                   {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}
                 </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-black/40 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-black/40 text-sm">
                   No registrants match your filters.
                 </td>
               </tr>
@@ -674,21 +1085,21 @@ function SortHeader({
   onSort,
 }: {
   label: string;
-  field: "name" | "event" | "company" | "createdAt" | "doorCheckedAt";
-  sortField: string;
+  field: SortField;
+  sortField: SortField;
   sortDir: "asc" | "desc";
-  onSort: (f: "name" | "event" | "company" | "createdAt" | "doorCheckedAt") => void;
+  onSort: (f: SortField) => void;
 }) {
-  const active = field === sortField;
+  const isActive = field === sortField;
   return (
     <th
-      className="text-left px-4 py-2 font-bold cursor-pointer hover:bg-black/5 select-none"
+      className="text-left px-4 py-2 font-bold cursor-pointer hover:bg-black/5 select-none whitespace-nowrap"
       onClick={() => onSort(field)}
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <span className={`text-[0.65rem] ${active ? "text-[#FF005A]" : "text-black/30"}`}>
-          {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+        <span className={`text-[0.65rem] ${isActive ? "text-[#FF005A]" : "text-black/30"}`}>
+          {isActive ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
         </span>
       </span>
     </th>
@@ -703,6 +1114,12 @@ function computeStats(rsvps: Rsvp[], events: EventOption[]) {
   const total = rsvps.length;
   const codesGenerated = rsvps.filter((r) => !!r.checkInCode).length;
   const doorCheckedIn = rsvps.filter((r) => !!r.doorCheckedAt).length;
+  // "Attended" — prefer the explicit post-event attendedAt field; fall
+  // back to the door signal (co-host approved AND door-staff scanned).
+  const attended = rsvps.filter(
+    (r) => r.attendedAt != null || (!!r.doorCheckedAt && !!r.approvedAt),
+  ).length;
+  const noShow = rsvps.filter((r) => r.noShow).length;
 
   // Registrants per event (only used in "all events" mode)
   const byEvent = new Map<string, number>();
@@ -808,6 +1225,8 @@ function computeStats(rsvps: Rsvp[], events: EventOption[]) {
     total,
     codesGenerated,
     doorCheckedIn,
+    attended,
+    noShow,
     eventSplit,
     statusSplit,
     codeState,
@@ -824,4 +1243,3 @@ function computeStats(rsvps: Rsvp[], events: EventOption[]) {
 // future chart variations need them.
 void tagColor;
 void MEMBER_TAG_CATALOG;
-void ChartTypeToggleGroup;

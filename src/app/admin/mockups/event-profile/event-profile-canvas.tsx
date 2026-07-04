@@ -91,6 +91,15 @@ type Props = {
    *  "⠿ Move branding" handle. Updates `data.brandingAsset.pos`
    *  (free-form {x, y} as % of canvas). */
   onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
+  /**
+   * Called when the hero image is dragged via its "⠿ Move hero" grip
+   * bar. Updates `data.heroOverlay.pos` (free-form {x, y} as % of canvas).
+   *
+   * Per user spec 2026-07-04: "make sure i am able to drag with my mouse
+   * the hero image along the entire canvas and not only by using the
+   * Photo position (X%, Y%)".
+   */
+  onHeroPosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -113,6 +122,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroScaleYChange,
       onSectionZChange,
       onBrandingAssetPosChange,
+      onHeroPosChange,
       previewScale = 1,
     },
     ref,
@@ -164,20 +174,32 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               sliders. 1× = full canvas (default). <1 = shrinks within
               the canvas, >1 = overflows (clipped by canvas overflow:hidden).
               The ONLY limitation is the canvas border — no arbitrary
-              0.25–3 clamp. (User spec 2026-06-28.) */}
+              0.25–3 clamp. (User spec 2026-06-28.)
+
+              Wrapped in DraggablePhotoContainer so the user can drag the
+              hero anywhere on the canvas via the "⠿ Move hero" grip bar
+              (per user spec 2026-07-04). */}
           {(() => {
             const scaleX = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
             const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
+            // Default anchor: top-left (0, 0). When `data.heroOverlay.pos`
+            // is set (i.e. the user has dragged the grip bar), use those
+            // coordinates instead.
+            const pos = data.heroOverlay.pos;
+            const heroLeft = pos ? pos.x : 0;
+            const heroTop = pos ? pos.y : 0;
             return (
-          <div
-            className="absolute"
-            style={{
-              left: 0,
-              top: 0,
-              width: `${100 * scaleX}%`,
-              height: `${100 * scaleY}%`,
-              zIndex: heroZ,
-            }}
+          <DraggablePhotoContainer
+            leftPct={heroLeft}
+            topPct={heroTop}
+            widthPct={100 * scaleX}
+            heightPct={100 * scaleY}
+            zIndex={heroZ}
+            rotation={0}
+            editable={editable}
+            previewScale={previewScale}
+            onPosChange={onHeroPosChange}
+            moveLabel="⠿ Move hero"
           >
             {/* Hero image wrapped with explicit z-index = triangleZ + 1 so the
                 image always renders IN FRONT of the triangle overlay by default
@@ -313,14 +335,16 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                   left: `${pin.x}%`,
                   top: `${pin.y}%`,
                   transform: "translate(-50%, -120%)",
-                  fontSize: "13px",
+                  fontSize: `${data.textStyles?.locationPinLabel?.fontSize ?? 13}px`,
                   letterSpacing: "0.12em",
+                  color: data.textStyles?.locationPinLabel?.color,
+                  textAlign: data.textStyles?.locationPinLabel?.align,
                 }}
               >
                 {pin.label}
               </span>
             ))}
-          </div>
+          </DraggablePhotoContainer>
             );
           })()}
 
@@ -346,19 +370,33 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
           >
             <p
               className="font-bold uppercase tracking-[0.18em] text-white/95 drop-shadow"
-              style={{ fontSize: "13px", letterSpacing: "0.25em" }}
+              style={{
+                fontSize: `${data.textStyles?.eventDateVenue?.fontSize ?? 13}px`,
+                letterSpacing: "0.25em",
+                color: data.textStyles?.eventDateVenue?.color,
+                textAlign: data.textStyles?.eventDateVenue?.align,
+              }}
             >
               {data.event.date} · {data.event.venue}
             </p>
             <h1
               className="mt-3 font-extrabold text-white leading-[1.0] tracking-tight drop-shadow-lg"
-              style={{ fontSize: "72px" }}
+              style={{
+                fontSize: `${data.textStyles?.eventName?.fontSize ?? 72}px`,
+                color: data.textStyles?.eventName?.color,
+                textAlign: data.textStyles?.eventName?.align,
+              }}
             >
               {data.event.name}
             </h1>
             <p
               className="mt-3 font-bold text-white/90 leading-tight drop-shadow"
-              style={{ fontSize: "22px", letterSpacing: "-0.01em" }}
+              style={{
+                fontSize: `${data.textStyles?.eventTopic?.fontSize ?? 22}px`,
+                letterSpacing: "-0.01em",
+                color: data.textStyles?.eventTopic?.color,
+                textAlign: data.textStyles?.eventTopic?.align,
+              }}
             >
               {data.event.topic}
             </p>
@@ -390,7 +428,12 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 <div className="flex flex-col items-end gap-1.5">
                   <span
                     className="text-white/85 font-semibold uppercase tracking-wider drop-shadow"
-                    style={{ fontSize: "11px", letterSpacing: "0.18em" }}
+                    style={{
+                      fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 11}px`,
+                      letterSpacing: "0.18em",
+                      color: data.textStyles?.collaboratorsLabel?.color,
+                      textAlign: data.textStyles?.collaboratorsLabel?.align,
+                    }}
                   >
                     In collaboration with
                   </span>
@@ -413,7 +456,12 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 <div className="flex flex-col items-end gap-1.5">
                   <span
                     className="text-white/85 font-semibold uppercase tracking-wider drop-shadow"
-                    style={{ fontSize: "11px", letterSpacing: "0.18em" }}
+                    style={{
+                      fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 11}px`,
+                      letterSpacing: "0.18em",
+                      color: data.textStyles?.sponsorsLabel?.color,
+                      textAlign: data.textStyles?.sponsorsLabel?.align,
+                    }}
                   >
                     Sponsored by
                   </span>
@@ -457,12 +505,26 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               canvasW={CANVAS_W}
               canvasH={CANVAS_H}
               className="absolute"
-              style={{ left: "56px", bottom: "32px", fontSize: "11px", zIndex: sectionZFor("footer") }}
+              style={{
+                left: "56px",
+                bottom: "32px",
+                fontSize: `${data.textStyles?.footerCredit?.fontSize ?? 11}px`,
+                zIndex: sectionZFor("footer"),
+              }}
               accentColor="#FF005A"
               label="Footer"
               guideId="footer"
             >
-              <span className="text-white/60 drop-shadow">{data.footerCredit}</span>
+              <span
+                className="text-white/60 drop-shadow"
+                style={{
+                  color: data.textStyles?.footerCredit?.color,
+                  textAlign: data.textStyles?.footerCredit?.align,
+                  display: "block",
+                }}
+              >
+                {data.footerCredit}
+              </span>
             </SectionBox>
           )}
 

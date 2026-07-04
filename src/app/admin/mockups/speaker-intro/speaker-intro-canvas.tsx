@@ -90,6 +90,15 @@ type Props = {
    * position as % of canvas).
    */
   onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
+  /**
+   * Called when the hero image is dragged via its "⠿ Move hero" grip
+   * bar. Updates `data.heroOverlay.pos` (free-form {x, y} as % of canvas).
+   *
+   * Per user spec 2026-07-04: "make sure i am able to drag with my mouse
+   * the hero image along the entire canvas and not only by using the
+   * Photo position (X%, Y%)".
+   */
+  onHeroPosChange?: (pos: { x: number; y: number }) => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
 };
@@ -113,6 +122,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroScaleYChange,
       onSectionZChange,
       onBrandingAssetPosChange,
+      onHeroPosChange,
       previewScale = 1,
     },
     ref,
@@ -196,26 +206,31 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           //     min/max clamp is applied here. (User spec 2026-06-28.)
           const scale = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
           const heroWidth = 58 * scale; // % of canvas
-          // Anchor to the right edge: as scale grows past 100/58 ≈ 1.72,
-          // heroLeft would go negative; we clamp to 0 so the right edge
-          // stays anchored to the canvas right border and the bleed goes
-          // off the LEFT side (clipped by overflow-hidden).
-          const heroLeft = Math.max(0, 100 - heroWidth);
+          // Default anchor: top-right (clamped so the right edge stays
+          // anchored to the canvas right border; the bleed goes off the
+          // LEFT side and is clipped by overflow-hidden). When the user
+          // has dragged the hero via the "⠿ Move hero" grip bar,
+          // `data.heroOverlay.pos` overrides this default.
+          const defaultHeroLeft = Math.max(0, 100 - heroWidth);
+          const pos = data.heroOverlay.pos;
+          const heroLeft = pos ? pos.x : defaultHeroLeft;
           // imageScaleY: 1 = full canvas height. scale < 1 shrinks
           // vertically; scale > 1 bleeds off the bottom (clipped).
           const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
           const heroHeight = 100 * scaleY; // % of canvas
-          const heroTop = 0; // anchored to top
+          const heroTop = pos ? pos.y : 0; // default: anchored to top
           return (
-        <div
-          className="absolute"
-          style={{
-            left: `${heroLeft}%`,
-            top: `${heroTop}%`,
-            width: `${heroWidth}%`,
-            height: `${heroHeight}%`,
-            zIndex: heroZ,
-          }}
+        <DraggablePhotoContainer
+          leftPct={heroLeft}
+          topPct={heroTop}
+          widthPct={heroWidth}
+          heightPct={heroHeight}
+          zIndex={heroZ}
+          rotation={0}
+          editable={editable}
+          previewScale={previewScale}
+          onPosChange={onHeroPosChange}
+          moveLabel="⠿ Move hero"
         >
           {/* Background image (Tel Aviv skyline + beach).
               Wrapped in a div with explicit zIndex = triangleZ + 1 so the
@@ -354,8 +369,10 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     left: `${pin.x}%`,
                     top: `${pin.y}%`,
                     transform: "translate(-50%, -180%)",
-                    fontSize: "11px",
+                    fontSize: `${data.textStyles?.locationPinLabel?.fontSize ?? 11}px`,
                     letterSpacing: "0.12em",
+                    color: data.textStyles?.locationPinLabel?.color,
+                    textAlign: data.textStyles?.locationPinLabel?.align,
                   }}
                 >
                   {pin.label}
@@ -363,7 +380,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               </div>
             );
           })}
-        </div>
+        </DraggablePhotoContainer>
           );
         })()}
 
@@ -389,13 +406,21 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         >
           <h1
             className="font-extrabold text-black leading-none tracking-tight"
-            style={{ fontSize: `${44 * (data.event.nameFontScale ?? 1)}px` }}
+            style={{
+              fontSize: `${data.textStyles?.eventName?.fontSize ?? (44 * (data.event.nameFontScale ?? 1))}px`,
+              color: data.textStyles?.eventName?.color,
+              textAlign: data.textStyles?.eventName?.align,
+            }}
           >
             {data.event.name}
           </h1>
           <p
             className="mt-3 text-black/70 font-semibold"
-            style={{ fontSize: "16px" }}
+            style={{
+              fontSize: `${data.textStyles?.eventDate?.fontSize ?? 16}px`,
+              color: data.textStyles?.eventDate?.color,
+              textAlign: data.textStyles?.eventDate?.align,
+            }}
           >
             {data.event.date}
             {data.event.time && (
@@ -407,7 +432,11 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </p>
           <p
             className="mt-1 text-black/60"
-            style={{ fontSize: "14px" }}
+            style={{
+              fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 14}px`,
+              color: data.textStyles?.eventVenue?.color,
+              textAlign: data.textStyles?.eventVenue?.align,
+            }}
           >
             {data.event.venue}
           </p>
@@ -443,7 +472,11 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           />
           <h2
             className="font-extrabold text-black leading-tight"
-            style={{ fontSize: `${24 * (data.event.topicFontScale ?? 1)}px` }}
+            style={{
+              fontSize: `${data.textStyles?.eventTopic?.fontSize ?? (24 * (data.event.topicFontScale ?? 1))}px`,
+              color: data.textStyles?.eventTopic?.color,
+              textAlign: data.textStyles?.eventTopic?.align,
+            }}
           >
             {data.event.topic}
           </h2>
@@ -478,7 +511,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </div>
           <span
             className="text-black font-semibold uppercase tracking-wider"
-            style={{ fontSize: "10px", letterSpacing: "0.15em" }}
+            style={{
+              fontSize: `${data.textStyles?.registerHere?.fontSize ?? 10}px`,
+              letterSpacing: "0.15em",
+              color: data.textStyles?.registerHere?.color,
+              textAlign: data.textStyles?.registerHere?.align,
+            }}
           >
             Register here
           </span>
@@ -513,7 +551,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             />
             <span
               className="font-bold text-black uppercase tracking-widest"
-              style={{ fontSize: "12px", letterSpacing: "0.2em" }}
+              style={{
+                fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 12}px`,
+                letterSpacing: "0.2em",
+                color: data.textStyles?.speakersLabel?.color,
+                textAlign: data.textStyles?.speakersLabel?.align,
+              }}
             >
               Speakers
             </span>
@@ -611,6 +654,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                         onPickImage={onPickImage}
                         onPlacementChange={onPlacementChange}
                         onSizeChange={onSizeChange}
+                        textStyles={data.textStyles}
                       />
                     </div>
                   );
@@ -645,7 +689,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             <div className="flex flex-col items-end gap-1.5">
               <span
                 className="text-black/60 font-semibold uppercase tracking-wider"
-                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                style={{
+                  fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 10}px`,
+                  letterSpacing: "0.18em",
+                  color: data.textStyles?.collaboratorsLabel?.color,
+                  textAlign: data.textStyles?.collaboratorsLabel?.align,
+                }}
               >
                 In collaboration with
               </span>
@@ -668,7 +717,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             <div className="flex flex-col items-end gap-1.5">
               <span
                 className="text-black/60 font-semibold uppercase tracking-wider"
-                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                style={{
+                  fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 10}px`,
+                  letterSpacing: "0.18em",
+                  color: data.textStyles?.sponsorsLabel?.color,
+                  textAlign: data.textStyles?.sponsorsLabel?.align,
+                }}
               >
                 Sponsored by
               </span>
@@ -711,12 +765,24 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
             className="absolute"
-            style={{ left: "48px", bottom: "32px", fontSize: "11px", zIndex: sectionZFor("footer") }}
+            style={{
+              left: "48px",
+              bottom: "32px",
+              fontSize: `${data.textStyles?.footerCredit?.fontSize ?? 11}px`,
+              zIndex: sectionZFor("footer"),
+            }}
             accentColor="#FF005A"
             label="Footer"
             guideId="footer"
           >
-            <span className="text-black/40">
+            <span
+              className="text-black/40"
+              style={{
+                color: data.textStyles?.footerCredit?.color,
+                textAlign: data.textStyles?.footerCredit?.align,
+                display: "block",
+              }}
+            >
               {data.footerCredit}
             </span>
           </SectionBox>
@@ -1135,6 +1201,7 @@ function SpeakerCard({
   onPickImage,
   onPlacementChange,
   onSizeChange,
+  textStyles,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -1144,6 +1211,11 @@ function SpeakerCard({
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  /** Per-section text style overrides (speakerName / speakerTitle /
+   *  speakerBio / speakerSessionTime / speakerRole keys). Passed down
+   *  from the parent canvas so all speaker cards share one visual
+   *  treatment. */
+  textStyles?: SpeakerIntroData["textStyles"];
 }) {
   // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
@@ -1182,9 +1254,11 @@ function SpeakerCard({
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold tracking-wider"
               style={{
-                fontSize: "9px",
+                fontSize: `${textStyles?.speakerSessionTime?.fontSize ?? 9}px`,
                 letterSpacing: "0.08em",
                 background: "#004F98",
+                color: textStyles?.speakerSessionTime?.color,
+                textAlign: textStyles?.speakerSessionTime?.align,
               }}
             >
               {speaker.sessionTime}
@@ -1192,7 +1266,11 @@ function SpeakerCard({
           )}
           <span
             className="font-bold text-black leading-tight"
-            style={{ fontSize: "16px" }}
+            style={{
+              fontSize: `${textStyles?.speakerName?.fontSize ?? 16}px`,
+              color: textStyles?.speakerName?.color,
+              textAlign: textStyles?.speakerName?.align,
+            }}
           >
             {speaker.fullName}
           </span>
@@ -1200,9 +1278,11 @@ function SpeakerCard({
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold uppercase tracking-wider"
               style={{
-                fontSize: "9px",
+                fontSize: `${textStyles?.speakerRole?.fontSize ?? 9}px`,
                 letterSpacing: "0.1em",
                 background: accentColor,
+                color: textStyles?.speakerRole?.color,
+                textAlign: textStyles?.speakerRole?.align,
               }}
             >
               {speaker.role}
@@ -1212,9 +1292,11 @@ function SpeakerCard({
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold uppercase tracking-wider"
               style={{
-                fontSize: "9px",
+                fontSize: `${textStyles?.speakerRole?.fontSize ?? 9}px`,
                 letterSpacing: "0.1em",
                 background: "#004F98",
+                color: textStyles?.speakerRole?.color,
+                textAlign: textStyles?.speakerRole?.align,
               }}
             >
               {speaker.role}
@@ -1223,7 +1305,11 @@ function SpeakerCard({
         </div>
         <p
           className="text-black/70 leading-snug mt-0.5"
-          style={{ fontSize: "12px" }}
+          style={{
+            fontSize: `${textStyles?.speakerTitle?.fontSize ?? 12}px`,
+            color: textStyles?.speakerTitle?.color,
+            textAlign: textStyles?.speakerTitle?.align,
+          }}
         >
           {speaker.title}
           {speaker.company && (
@@ -1236,7 +1322,11 @@ function SpeakerCard({
         {speaker.bio && (
           <p
             className="text-black/50 leading-snug mt-1"
-            style={{ fontSize: "11px" }}
+            style={{
+              fontSize: `${textStyles?.speakerBio?.fontSize ?? 11}px`,
+              color: textStyles?.speakerBio?.color,
+              textAlign: textStyles?.speakerBio?.align,
+            }}
           >
             {speaker.bio}
           </p>

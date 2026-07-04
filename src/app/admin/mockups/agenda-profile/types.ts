@@ -21,6 +21,28 @@
 export type { SectionLayout, SectionPos, SectionId } from "../shared/section-edit";
 import type { SectionLayout } from "../shared/section-edit";
 
+/**
+ * TextStyle — per-text-section font size + color + alignment overrides.
+ * All fields optional; the canvas falls back to per-section defaults
+ * when a field is unset.
+ *
+ * Per user spec 2026-07-02: "Add to all mockups and all text fields and
+ * sections the align left, center or right options, and also font size
+ * to each text field".
+ *
+ * Re-declared inline (mirroring ../shared/text-style-row.tsx) to avoid
+ * a circular type import.
+ */
+export type TextStyle = {
+  /** Font size in px. When undefined, the canvas uses the section default. */
+  fontSize?: number;
+  /** Text color (any CSS color string). When undefined, the section default. */
+  color?: string;
+  /** Horizontal alignment: "left" | "center" | "right". When undefined, the
+   *  section's default alignment is used. */
+  align?: "left" | "center" | "right";
+};
+
 export type ImagePlacement = {
   focusX?: number;
   focusY?: number;
@@ -118,6 +140,17 @@ export type EventProfileData = {
     /** Vertical scale multiplier for the hero image. 1 = default
      *  (top 450px). 0.5 = top 225px, 2 = 900px. */
     imageScaleY?: number;
+    /**
+     * Free-form position of the hero container as % of canvas (0-100).
+     * When undefined, the hero renders at its default anchor (top-left:
+     * `left = 0`, `top = 0`). When set, the canvas uses these coordinates
+     * directly so the user can drag the hero anywhere on the canvas.
+     *
+     * Per user spec 2026-07-04: "make sure i am able to drag with my
+     * mouse the hero image along the entire canvas and not only by using
+     * the Photo position (X%, Y%)".
+     */
+    pos?: { x: number; y: number };
   };
   /** Agenda list — sessions in chronological order. */
   sessions: Session[];
@@ -126,6 +159,73 @@ export type EventProfileData = {
   /** Sponsors at the bottom. */
   sponsors: Sponsor[];
   collaborators: Sponsor[];
+  /**
+   * Per-text-section font + color + alignment overrides. Each key matches
+   * a text element the canvas renders. When a value is set, the canvas
+   * uses it instead of the default font size / color / align for that
+   * section.
+   *
+   * Per user spec 2026-07-02:
+   *   - "I should be able to select the font size and color of each
+   *      specific text section".
+   *   - "Add to all mockups and all text fields and sections the align
+   *      left, center or right options, and also font size to each text
+   *      field".
+   *
+   * The sessionXxx and speakerXxx keys apply uniformly to every agenda
+   * row / speaker card (not per-row overrides) — they share one visual
+   * treatment per the rest of the mockup's styling model.
+   */
+  textStyles?: {
+    /** Hero "AI Salon Tel Aviv Presents" eyebrow line. */
+    presentsLabel?: TextStyle;
+    /** Large event title (h1, hero). */
+    eventName?: TextStyle;
+    /** "Date · Time · Venue" line under the event name. */
+    eventDateVenue?: TextStyle;
+    /** Event topic (h2 at bottom of hero). */
+    eventTopic?: TextStyle;
+    /** Event description under the topic. */
+    eventDescription?: TextStyle;
+    /** "Agenda" section header label. */
+    agendaLabel?: TextStyle;
+    /** "Speakers" section header label. */
+    speakersLabel?: TextStyle;
+    /** "In collaboration with" label above the collaborator logos. */
+    collaboratorsLabel?: TextStyle;
+    /** "Sponsored by" label above the sponsor logos. */
+    sponsorsLabel?: TextStyle;
+    /** "Register here" label next to the QR code. */
+    registerHere?: TextStyle;
+    /** "Scan to RSVP on the event page" hint under "Register here". */
+    registerHint?: TextStyle;
+    /** Optional footer credit (bottom-left). */
+    footerCredit?: TextStyle;
+    /** Agenda row: start time (e.g. "18:30"). */
+    sessionStartTime?: TextStyle;
+    /** Agenda row: optional end time (small, under start time). */
+    sessionEndTime?: TextStyle;
+    /** Agenda row: type pill text (e.g. "Talk" / "Panel"). */
+    sessionTypePill?: TextStyle;
+    /** Agenda row: session title. */
+    sessionTitle?: TextStyle;
+    /** Agenda row: speaker name line. */
+    sessionSpeakerName?: TextStyle;
+    /** Agenda row: optional description line. */
+    sessionDescription?: TextStyle;
+    /** Speaker card: optional session-time pill text. */
+    speakerSessionTime?: TextStyle;
+    /** Speaker card: optional role pill text (Moderator / Panelist / Host). */
+    speakerRole?: TextStyle;
+    /** Speaker card: full name. */
+    speakerName?: TextStyle;
+    /** Speaker card: "title, company" line. */
+    speakerTitle?: TextStyle;
+    /** Speaker card: optional session title (italic, in quotes). */
+    speakerSessionTitle?: TextStyle;
+    /** Speaker card: optional bio paragraph. */
+    speakerBio?: TextStyle;
+  };
   /** URL the QR code points to. */
   qrCodeUrl: string;
   footerCredit?: string;

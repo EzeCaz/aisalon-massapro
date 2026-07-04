@@ -258,6 +258,8 @@ export async function GET() {
       checkedInAt: true,
       doorCheckedAt: true,
       approvedAt: true,
+      attendedAt: true,
+      noShow: true,
       createdAt: true,
       email: true,
       name: true,
@@ -280,9 +282,13 @@ export async function GET() {
     checkedInAt: r.checkedInAt?.toISOString() ?? null,
     doorCheckedAt: r.doorCheckedAt?.toISOString() ?? null,
     approvedAt: r.approvedAt?.toISOString() ?? null,
-    // "Attended" = the strictest signal — co-host pre-approved AND door
-    // staff scanned the code at the venue.
-    attended: !!(r.doorCheckedAt && r.approvedAt),
+    // "Attended" — prefer the explicit post-event attendedAt field
+    // (set by admins via PATCH /api/admin/rsvps/[id]/attendance). Fall
+    // back to the strict door signal (co-host pre-approved AND door
+    // staff scanned the code) when attendance hasn't been marked yet.
+    attendedAt: r.attendedAt?.toISOString() ?? null,
+    noShow: r.noShow,
+    attended: r.attendedAt != null ? true : !!(r.doorCheckedAt && r.approvedAt),
     referrer: r.referredBy
       ? {
           id: r.referredBy.id,

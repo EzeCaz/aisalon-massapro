@@ -19,6 +19,28 @@ import type { SectionLayout } from "../shared/section-edit";
 export type SpeakerRole = "Speaker" | "Moderator" | "Panelist" | "Host";
 
 /**
+ * TextStyle — per-text-section font size + color + alignment overrides.
+ * All fields optional; the canvas falls back to per-section defaults
+ * when a field is unset.
+ *
+ * Per user spec 2026-07-02: "Add to all mockups and all text fields and
+ * sections the align left, center or right options, and also font size
+ * to each text field".
+ *
+ * Re-declared inline (mirroring
+ * ../shared/text-style-row.tsx) to avoid a circular type import.
+ */
+export type TextStyle = {
+  /** Font size in px. When undefined, the canvas uses the section default. */
+  fontSize?: number;
+  /** Text color (any CSS color string). When undefined, the section default. */
+  color?: string;
+  /** Horizontal alignment: "left" | "center" | "right". When undefined, the
+   *  section's default alignment is used. */
+  align?: "left" | "center" | "right";
+};
+
+/**
  * ImagePlacement — per-image pan/zoom that controls how an image is
  * cropped inside its container. Stored as part of the JSON so it
  * round-trips through the editor and is reproducible on export.
@@ -147,6 +169,44 @@ export type SpeakerIntroData = {
     flowDirection?: "row" | "col";
     lastRowAlign?: "left" | "center" | "spread";
   };
+  /**
+   * Per-text-section font + color + alignment overrides. Each key matches
+   * a text element the canvas renders (eventName, eventDate, eventVenue,
+   * eventTopic, registerHere, speakersLabel, collaboratorsLabel,
+   * sponsorsLabel, footerCredit, locationPinLabel, speakerName,
+   * speakerTitle, speakerBio, speakerSessionTime, speakerRole). When a
+   * value is set, the canvas uses it instead of the default font size /
+   * color / align for that section.
+   *
+   * Per user spec 2026-07-02:
+   *   - "I should be able to select the font size and color of each
+   *      specific text section".
+   *   - "Add to all mockups and all text fields and sections the align
+   *      left, center or right options, and also font size to each text
+   *      field".
+   *
+   * The speakerName / speakerTitle / speakerBio / speakerSessionTime /
+   * speakerRole styles apply uniformly to every speaker card (they are
+   * not per-speaker overrides) — that matches the rest of the mockup's
+   * styling model where speaker cards share one visual treatment.
+   */
+  textStyles?: {
+    eventName?: TextStyle;
+    eventDate?: TextStyle;
+    eventVenue?: TextStyle;
+    eventTopic?: TextStyle;
+    registerHere?: TextStyle;
+    speakersLabel?: TextStyle;
+    collaboratorsLabel?: TextStyle;
+    sponsorsLabel?: TextStyle;
+    footerCredit?: TextStyle;
+    locationPinLabel?: TextStyle;
+    speakerName?: TextStyle;
+    speakerTitle?: TextStyle;
+    speakerBio?: TextStyle;
+    speakerSessionTime?: TextStyle;
+    speakerRole?: TextStyle;
+  };
   /** "In collaboration with:" logos (bottom-right). */
   collaborators: Sponsor[];
   /** "Sponsored by:" logos (bottom-right, below collaborators). */
@@ -191,6 +251,18 @@ export type SpeakerIntroData = {
      * portion of a tall skyline image).
      */
     imageScaleY?: number;
+    /**
+     * Free-form position of the hero container as % of canvas (0-100).
+     * When undefined, the hero renders at its default anchor (top-right:
+     * `left = max(0, 100 - heroWidth)`, `top = 0`). When set, the canvas
+     * uses these coordinates directly so the user can drag the hero
+     * anywhere on the canvas.
+     *
+     * Per user spec 2026-07-04: "make sure i am able to drag with my
+     * mouse the hero image along the entire canvas and not only by using
+     * the Photo position (X%, Y%)".
+     */
+    pos?: { x: number; y: number };
     /**
      * Whether to render the geometric triangle SVG overlay on top of the
      * hero image. Defaults to true. Automatically set to false when the

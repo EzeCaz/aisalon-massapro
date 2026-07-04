@@ -445,6 +445,25 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /** Apply a free-form position change for the hero image — fires when
+   *  the user drags the "⠿ Move hero" grip bar on the canvas. Updates
+   *  `data.heroOverlay.pos` (free-form {x, y} as % of canvas).
+   *
+   *  Per user spec 2026-07-04: "make sure i am able to drag with my
+   *  mouse the hero image along the entire canvas and not only by using
+   *  the Photo position (X%, Y%)". */
+  const handleHeroPosChange = useCallback((pos: { x: number; y: number }) => {
+    const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    next.heroOverlay.pos = pos;
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }, [data]);
+
   // --- toolbar actions ------------------------------------------------
 
   function handleReset() {
@@ -902,6 +921,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 onHeroScaleYChange={handleHeroScaleYChange}
                 onSectionZChange={handleSectionZChange}
                 onBrandingAssetPosChange={handleBrandingAssetPosChange}
+                onHeroPosChange={handleHeroPosChange}
               />
             </div>
           </div>

@@ -21,6 +21,28 @@
 export type { SectionLayout, SectionPos, SectionId } from "../shared/section-edit";
 import type { SectionLayout } from "../shared/section-edit";
 
+/**
+ * TextStyle — per-text-section font size + color + alignment overrides.
+ * All fields optional; the canvas falls back to per-section defaults
+ * when a field is unset.
+ *
+ * Per user spec 2026-07-02: "Add to all mockups and all text fields and
+ * sections the align left, center or right options, and also font size
+ * to each text field".
+ *
+ * Re-declared inline (mirroring ../shared/text-style-row.tsx) to avoid
+ * a circular type import.
+ */
+export type TextStyle = {
+  /** Font size in px. When undefined, the canvas uses the section default. */
+  fontSize?: number;
+  /** Text color (any CSS color string). When undefined, the section default. */
+  color?: string;
+  /** Horizontal alignment: "left" | "center" | "right". When undefined, the
+   *  section's default alignment is used. */
+  align?: "left" | "center" | "right";
+};
+
 export type ImagePlacement = {
   focusX?: number;
   focusY?: number;
@@ -118,6 +140,17 @@ export type EventProfileData = {
     /** Vertical scale multiplier for the hero image. 1 = full canvas
      *  height (default). 0.5 = top half only, 2 = double height. */
     imageScaleY?: number;
+    /**
+     * Free-form position of the hero container as % of canvas (0-100).
+     * When undefined, the hero renders at its default anchor (top-left:
+     * `left = 0`, `top = 0`). When set, the canvas uses these coordinates
+     * directly so the user can drag the hero anywhere on the canvas.
+     *
+     * Per user spec 2026-07-04: "make sure i am able to drag with my
+     * mouse the hero image along the entire canvas and not only by using
+     * the Photo position (X%, Y%)".
+     */
+    pos?: { x: number; y: number };
     /** Whether to render the triangle gradient overlay. Defaults true.
      *  Per layer-management spec: when "Yes", the triangle strictly
      *  renders BEHIND the hero image (controlled by triangleZ default). */
@@ -134,6 +167,40 @@ export type EventProfileData = {
   /** Sponsors at the bottom. */
   sponsors: Sponsor[];
   collaborators: Sponsor[];
+  /**
+   * Per-text-section font + color + alignment overrides. Each key matches
+   * a text element the canvas renders (eventDateVenue, eventName,
+   * eventTopic, collaboratorsLabel, sponsorsLabel, footerCredit,
+   * locationPinLabel). When a value is set, the canvas uses it instead
+   * of the default font size / color / align for that section.
+   *
+   * Per user spec 2026-07-02:
+   *   - "I should be able to select the font size and color of each
+   *      specific text section".
+   *   - "Add to all mockups and all text fields and sections the align
+   *      left, center or right options, and also font size to each text
+   *      field".
+   *
+   * Note: this mockup is intentionally minimal (no agenda / speakers
+   * grid rendered on the canvas — see file header). The keys below cover
+   * every text element the canvas actually renders.
+   */
+  textStyles?: {
+    /** Top-left "<date> · <venue>" header line. */
+    eventDateVenue?: TextStyle;
+    /** Large event title (h1). */
+    eventName?: TextStyle;
+    /** Event topic under the title. */
+    eventTopic?: TextStyle;
+    /** "In collaboration with" label above the collaborator logos. */
+    collaboratorsLabel?: TextStyle;
+    /** "Sponsored by" label above the sponsor logos. */
+    sponsorsLabel?: TextStyle;
+    /** Optional footer credit (bottom-left). */
+    footerCredit?: TextStyle;
+    /** Location pin labels overlaid on the hero (all pins share one style). */
+    locationPinLabel?: TextStyle;
+  };
   /** URL the QR code points to. */
   qrCodeUrl: string;
   footerCredit?: string;

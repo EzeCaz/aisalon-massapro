@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { SpeakerIntroData } from "../speaker-intro/types";
 import { GradientColorPicker } from "./gradient-color-picker";
+import { TextStyleRow } from "./text-style-row";
 
 /**
  * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
@@ -63,6 +64,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Event name — font size + color + align"
+          fontSize={data.textStyles?.eventName?.fontSize}
+          fontColor={data.textStyles?.eventName?.color}
+          align={data.textStyles?.eventName?.align}
+          defaultFontSize={44}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventName = {
+                ...(d.textStyles.eventName ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Date">
             <input
@@ -83,6 +102,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
+        <TextStyleRow
+          label="Event date + time — font size + color + align"
+          fontSize={data.textStyles?.eventDate?.fontSize}
+          fontColor={data.textStyles?.eventDate?.color}
+          align={data.textStyles?.eventDate?.align}
+          defaultFontSize={16}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventDate = {
+                ...(d.textStyles.eventDate ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Venue">
           <input
             type="text"
@@ -91,6 +128,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Venue — font size + color + align"
+          fontSize={data.textStyles?.eventVenue?.fontSize}
+          fontColor={data.textStyles?.eventVenue?.color}
+          align={data.textStyles?.eventVenue?.align}
+          defaultFontSize={14}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventVenue = {
+                ...(d.textStyles.eventVenue ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Topic">
           <input
             type="text"
@@ -99,6 +154,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Topic — font size + color + align"
+          fontSize={data.textStyles?.eventTopic?.fontSize}
+          fontColor={data.textStyles?.eventTopic?.color}
+          align={data.textStyles?.eventTopic?.align}
+          defaultFontSize={24}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventTopic = {
+                ...(d.textStyles.eventTopic ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Event name font scale (×)">
             <input
@@ -145,6 +218,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Register here label — font size + color + align"
+          fontSize={data.textStyles?.registerHere?.fontSize}
+          fontColor={data.textStyles?.registerHere?.color}
+          align={data.textStyles?.registerHere?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.registerHere = {
+                ...(d.textStyles.registerHere ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Brand color 1">
             <ColorInput
@@ -167,6 +258,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Footer credit — font size + color + align"
+          fontSize={data.textStyles?.footerCredit?.fontSize}
+          fontColor={data.textStyles?.footerCredit?.color}
+          align={data.textStyles?.footerCredit?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.footerCredit = {
+                ...(d.textStyles.footerCredit ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
       </Section>
 
       {/* ===== SPEAKERS ===== */}
@@ -259,6 +368,118 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             })()}
           </p>
         </div>
+        {/* ===== Per-section TextStyle controls for the speaker cards =====
+            These apply uniformly to EVERY speaker card on the canvas
+            (not per-speaker overrides) — speaker cards share one visual
+            treatment per the rest of the mockup's styling model. */}
+        <TextStyleRow
+          label="“Speakers” header label — font size + color + align"
+          fontSize={data.textStyles?.speakersLabel?.fontSize}
+          fontColor={data.textStyles?.speakersLabel?.color}
+          align={data.textStyles?.speakersLabel?.align}
+          defaultFontSize={12}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakersLabel = {
+                ...(d.textStyles.speakersLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Speaker name — font size + color + align (all cards)"
+          fontSize={data.textStyles?.speakerName?.fontSize}
+          fontColor={data.textStyles?.speakerName?.color}
+          align={data.textStyles?.speakerName?.align}
+          defaultFontSize={16}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakerName = {
+                ...(d.textStyles.speakerName ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Speaker title · company — font size + color + align (all cards)"
+          fontSize={data.textStyles?.speakerTitle?.fontSize}
+          fontColor={data.textStyles?.speakerTitle?.color}
+          align={data.textStyles?.speakerTitle?.align}
+          defaultFontSize={12}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakerTitle = {
+                ...(d.textStyles.speakerTitle ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Speaker bio — font size + color + align (all cards)"
+          fontSize={data.textStyles?.speakerBio?.fontSize}
+          fontColor={data.textStyles?.speakerBio?.color}
+          align={data.textStyles?.speakerBio?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakerBio = {
+                ...(d.textStyles.speakerBio ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Speaker session-time pill text — font size + color + align (all cards)"
+          fontSize={data.textStyles?.speakerSessionTime?.fontSize}
+          fontColor={data.textStyles?.speakerSessionTime?.color}
+          align={data.textStyles?.speakerSessionTime?.align}
+          defaultFontSize={9}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakerSessionTime = {
+                ...(d.textStyles.speakerSessionTime ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
+        <TextStyleRow
+          label="Speaker role pill text (Moderator / Panelist) — font size + color + align (all cards)"
+          fontSize={data.textStyles?.speakerRole?.fontSize}
+          fontColor={data.textStyles?.speakerRole?.color}
+          align={data.textStyles?.speakerRole?.align}
+          defaultFontSize={9}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.speakerRole = {
+                ...(d.textStyles.speakerRole ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {speakersSorted.map(({ sp, origIdx }) => (
           <SubCard
             key={`spk-${origIdx}`}
@@ -626,6 +847,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
       {/* ===== LOCATION PINS ===== */}
       <Section title={`Location pins (${data.locationPins.length})`}>
+        <TextStyleRow
+          label="Location pin label (all pins) — font size + color + align"
+          fontSize={data.textStyles?.locationPinLabel?.fontSize}
+          fontColor={data.textStyles?.locationPinLabel?.color}
+          align={data.textStyles?.locationPinLabel?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.locationPinLabel = {
+                ...(d.textStyles.locationPinLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.locationPins.map((pin, idx) => (
           <SubCard
             key={`pin-${idx}`}
@@ -748,6 +987,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
       {/* ===== SPONSORS / COLLABORATORS ===== */}
       <Section title={`Collaborators (${data.collaborators.length})`}>
+        <TextStyleRow
+          label="“In collaboration with” label — font size + color + align"
+          fontSize={data.textStyles?.collaboratorsLabel?.fontSize}
+          fontColor={data.textStyles?.collaboratorsLabel?.color}
+          align={data.textStyles?.collaboratorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.collaboratorsLabel = {
+                ...(d.textStyles.collaboratorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.collaborators.map((s, idx) => (
           <SubCard
             key={`coll-${idx}`}
@@ -829,6 +1086,24 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
       </Section>
 
       <Section title={`Sponsors (${data.sponsors.length})`}>
+        <TextStyleRow
+          label="“Sponsored by” label — font size + color + align"
+          fontSize={data.textStyles?.sponsorsLabel?.fontSize}
+          fontColor={data.textStyles?.sponsorsLabel?.color}
+          align={data.textStyles?.sponsorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.sponsorsLabel = {
+                ...(d.textStyles.sponsorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.sponsors.map((s, idx) => (
           <SubCard
             key={`spo-${idx}`}

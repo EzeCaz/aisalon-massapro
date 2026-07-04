@@ -1,18 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  CartesianGrid,
-} from "recharts";
+import { useMemo, useState, useCallback } from "react";
 import {
   Search,
   ArrowUpDown,
@@ -26,6 +14,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MEMBER_TAG_CATALOG, tagColor } from "@/lib/tags";
+import {
+  ToggleableChartCard,
+  ChartTypeButton,
+  useChartTypeState,
+} from "@/components/admin/toggleable-chart-card";
+import {
+  ActiveSelectionChip,
+  type ActiveSelection,
+  toggleActiveSelection,
+} from "@/components/ais/analytics-shell";
 
 type Member = {
   id: string;
@@ -43,6 +41,7 @@ type Member = {
   importSource: string | null;
   importedAt: string | null;
   onboardedAt: string | null;
+  utmUid: string | null;
   role: string;
   tags: { id: string; label: string; color: string | null }[];
   _count: { images: number; presentations: number; speakers: number };
@@ -64,7 +63,18 @@ const AIS_COLORS = [
   "#a855f7", // violet
 ];
 
-type SortField = "name" | "createdAt" | "importedAt" | "company" | "appliedFor";
+// Every column in the table is now sortable (Item 2B).
+type SortField =
+  | "name"
+  | "createdAt"
+  | "importedAt"
+  | "company"
+  | "appliedFor"
+  | "interestedIn"
+  | "profileCategories"
+  | "tags"
+  | "source"
+  | "utmUid";
 type SortDir = "asc" | "desc";
 
 // --- Chart type toggle --------------------------------------------------
@@ -72,10 +82,7 @@ type SortDir = "asc" | "desc";
 // or a table. The admin can switch each chart individually via a 3-button
 // segmented control in the chart card header, or switch ALL charts at once
 // via the "Set all" control above the charts grid.
-//
-// Defaults preserve the original V3.3 rendering except "Signups over time"
-// which was a line chart — it is now a vertical bar chart by default.
-type ChartType = "bar" | "pie" | "table";
+type ChartType2 = "bar" | "pie" | "table";
 
 const CHART_IDS = [
   "signups",
@@ -87,7 +94,7 @@ const CHART_IDS = [
 ] as const;
 type ChartId = (typeof CHART_IDS)[number];
 
-const DEFAULT_CHART_TYPES: Record<ChartId, ChartType> = {
+const DEFAULT_CHART_TYPES: Record<ChartId, ChartType2> = {
   signups: "bar",
   source: "pie",
   interestedIn: "bar",
@@ -96,16 +103,37 @@ const DEFAULT_CHART_TYPES: Record<ChartId, ChartType> = {
   tags: "bar",
 };
 
+// Dimension labels for the active-selection chip
+const DIMENSION_LABELS: Record<string, string> = {
+  source: "Source",
+  interestedIn: "Interested in",
+  profileCategories: "Category",
+  appliedFor: "Applied for",
+  tags: "Tag",
+  utmUid: "UTM UID",
+};
+
 export function MemberDashboard({ members }: Props) {
-  // --- Filters -----------------------------------------------------------
+  // --- Per-column filters (Item 2C) --------------------------------------
+  // One dropdown per column, plus a global search + From/To date range.
   const [search, setSearch] = useState("");
-  const [filterSource, setFilterSource] = useState<"all" | "imported" | "self">("all");
-  const [filterApplied, setFilterApplied] = useState<string>("");
-  const [filterTag, setFilterTag] = useState<string>("");
+  const [filterSource, setFilterSource] = useState<string>("ALL");
+  const [filterApplied, setFilterApplied] = useState<string>("ALL");
+  const [filterTag, setFilterTag] = useState<string>("ALL");
+  const [filterInterested, setFilterInterested] = useState<string>("ALL");
+  const [filterCategory, setFilterCategory] = useState<string>("ALL");
+  const [filterUtmUid, setFilterUtmUid] = useState<string>("ALL");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
 
-  // --- Sort --------------------------------------------------------------
+  // --- Cross-filter active selection (Item 2D) ---------------------------
+  const [active, setActive] = useState<ActiveSelection>(null);
+
+  const toggleActive = useCallback((sel: ActiveSelection) => {
+    setActive((prev) => toggleActiveSelection(prev, sel));
+  }, []);
+
+  // --- Sort (Item 2B) -----------------------------------------------------
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -118,7 +146,37 @@ export function MemberDashboard({ members }: Props) {
     }
   }
 
-  // --- Derived data ------------------------------------------------------
+  // --- Chart type state (preserved from previous version) ----------------
+  const { chartTypes, setChartType, setAllChartTypes, globalActive } =
+    useChartTypeState(CHART_IDS, DEFAULT_CHART_TYPES);
+
+  // --- Distinct values for per-column dropdowns (Item 2C) ----------------
+  const distinct = useMemo(() => {
+    const interested = new Set<string>();
+    const categories = new Set<string>();
+    const utmUids = new Set<string>();
+    const appliedForSet = new Set<string>();
+    for (const m of members) {
+      if (m.interestedIn)
+        for (const v of m.interestedIn.split(",").map((s) => s.trim()).filter(Boolean))
+          interested.add(v);
+      if (m.profileCategories)
+        for (const v of m.profileCategories.split(",").map((s) => s.trim()).filter(Boolean))
+          categories.add(v);
+      if (m.utmUid) utmUids.add(m.utmUid);
+      if (m.appliedFor)
+        for (const v of m.appliedFor.split(/[/,]/).map((s) => s.trim()).filter(Boolean))
+          appliedForSet.add(v);
+    }
+    return {
+      interested: Array.from(interested).sort(),
+      categories: Array.from(categories).sort(),
+      utmUids: Array.from(utmUids).sort(),
+      appliedFor: Array.from(appliedForSet).sort(),
+    };
+  }, [members]);
+
+  // --- Derived data: apply ALL filters (per-column + cross-filter) -------
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return members.filter((m) => {
@@ -126,20 +184,87 @@ export function MemberDashboard({ members }: Props) {
         !q ||
         (m.name || "").toLowerCase().includes(q) ||
         m.email.toLowerCase().includes(q) ||
-        (m.company || "").toLowerCase().includes(q);
+        (m.company || "").toLowerCase().includes(q) ||
+        (m.utmUid || "").toLowerCase().includes(q);
       const matchSource =
-        filterSource === "all" ||
+        filterSource === "ALL" ||
         (filterSource === "imported" && !!m.importSource) ||
         (filterSource === "self" && !m.importSource);
-      const matchApplied = !filterApplied || m.appliedFor === filterApplied;
-      const matchTag = !filterTag || m.tags.some((t) => t.label === filterTag);
+      const matchApplied =
+        filterApplied === "ALL" || m.appliedFor === filterApplied;
+      const matchTag =
+        filterTag === "ALL" || m.tags.some((t) => t.label === filterTag);
+      const matchInterested =
+        filterInterested === "ALL" ||
+        (m.interestedIn || "")
+          .split(",")
+          .map((s) => s.trim())
+          .includes(filterInterested);
+      const matchCategory =
+        filterCategory === "ALL" ||
+        (m.profileCategories || "")
+          .split(",")
+          .map((s) => s.trim())
+          .includes(filterCategory);
+      const matchUtmUid =
+        filterUtmUid === "ALL" || m.utmUid === filterUtmUid;
       const created = new Date(m.createdAt);
       const matchFrom = !fromDate || created >= new Date(fromDate);
       const matchTo = !toDate || created <= new Date(toDate + "T23:59:59");
-      return matchSearch && matchSource && matchApplied && matchTag && matchFrom && matchTo;
-    });
-  }, [members, search, filterSource, filterApplied, filterTag, fromDate, toDate]);
 
+      // --- Cross-filter active selection (Item 2D) ---------------------
+      let matchActive = true;
+      if (active) {
+        if (active.kind === "source") {
+          if (active.value === "Imported") matchActive = !!m.importSource;
+          else if (active.value === "Self-registered") matchActive = !m.importSource;
+        } else if (active.kind === "interestedIn") {
+          matchActive = (m.interestedIn || "")
+            .split(",")
+            .map((s) => s.trim())
+            .includes(active.value);
+        } else if (active.kind === "profileCategories") {
+          matchActive = (m.profileCategories || "")
+            .split(",")
+            .map((s) => s.trim())
+            .includes(active.value);
+        } else if (active.kind === "appliedFor") {
+          matchActive = m.appliedFor === active.value;
+        } else if (active.kind === "tags") {
+          matchActive = m.tags.some((t) => t.label === active.value);
+        } else if (active.kind === "utmUid") {
+          matchActive = m.utmUid === active.value;
+        }
+      }
+
+      return (
+        matchSearch &&
+        matchSource &&
+        matchApplied &&
+        matchTag &&
+        matchInterested &&
+        matchCategory &&
+        matchUtmUid &&
+        matchFrom &&
+        matchTo &&
+        matchActive
+      );
+    });
+  }, [
+    members,
+    search,
+    filterSource,
+    filterApplied,
+    filterTag,
+    filterInterested,
+    filterCategory,
+    filterUtmUid,
+    fromDate,
+    toDate,
+    active,
+  ]);
+
+  // --- Sorted (Item 2B) --------------------------------------------------
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
@@ -166,6 +291,26 @@ export function MemberDashboard({ members }: Props) {
           av = (a.appliedFor || "").toLowerCase();
           bv = (b.appliedFor || "").toLowerCase();
           break;
+        case "interestedIn":
+          av = (a.interestedIn || "").toLowerCase();
+          bv = (b.interestedIn || "").toLowerCase();
+          break;
+        case "profileCategories":
+          av = (a.profileCategories || "").toLowerCase();
+          bv = (b.profileCategories || "").toLowerCase();
+          break;
+        case "tags":
+          av = a.tags.map((t) => t.label).join(",").toLowerCase();
+          bv = b.tags.map((t) => t.label).join(",").toLowerCase();
+          break;
+        case "source":
+          av = a.importSource ? "imported" : "self";
+          bv = b.importSource ? "imported" : "self";
+          break;
+        case "utmUid":
+          av = (a.utmUid || "").toLowerCase();
+          bv = (b.utmUid || "").toLowerCase();
+          break;
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
@@ -176,35 +321,6 @@ export function MemberDashboard({ members }: Props) {
 
   // --- Chart data --------------------------------------------------------
   const stats = useMemo(() => computeStats(filtered), [filtered]);
-
-  // --- Chart type state --------------------------------------------------
-  // Per-chart render type (bar / pie / table). The admin can toggle each
-  // chart individually via the segmented control in the chart header, or
-  // switch all charts at once via the "Set all" control above the grid.
-  const [chartTypes, setChartTypes] = useState<Record<ChartId, ChartType>>(
-    DEFAULT_CHART_TYPES
-  );
-
-  function setChartType(id: ChartId, type: ChartType) {
-    setChartTypes((prev) => ({ ...prev, [id]: type }));
-  }
-
-  function setAllChartTypes(type: ChartType) {
-    setChartTypes(() => {
-      const next = {} as Record<ChartId, ChartType>;
-      for (const id of CHART_IDS) next[id] = type;
-      return next;
-    });
-  }
-
-  // True when every chart is currently the same type — used to highlight
-  // the "active" button in the global "Set all" control.
-  const allSameType = (Object.keys(chartTypes) as ChartId[]).every(
-    (id) => chartTypes[id] === chartTypes.signups
-  );
-  const globalActive: ChartType | null = allSameType
-    ? chartTypes.signups
-    : null;
 
   // --- CSV export --------------------------------------------------------
   function exportCsv() {
@@ -221,6 +337,7 @@ export function MemberDashboard({ members }: Props) {
         "Invited",
         "Import Source",
         "Tags",
+        "UTM UID",
         "Created At",
         "Onboarded At",
       ],
@@ -236,6 +353,7 @@ export function MemberDashboard({ members }: Props) {
         m.invitedToSpeak || "",
         m.importSource || "",
         m.tags.map((t) => t.label).join("; "),
+        m.utmUid || "",
         new Date(m.createdAt).toISOString(),
         m.onboardedAt ? new Date(m.onboardedAt).toISOString() : "",
       ]),
@@ -252,6 +370,38 @@ export function MemberDashboard({ members }: Props) {
     URL.revokeObjectURL(url);
   }
 
+  // True when any filter is set — drives the Clear button visibility.
+  const hasFilters =
+    !!search ||
+    filterSource !== "ALL" ||
+    filterApplied !== "ALL" ||
+    filterTag !== "ALL" ||
+    filterInterested !== "ALL" ||
+    filterCategory !== "ALL" ||
+    filterUtmUid !== "ALL" ||
+    !!fromDate ||
+    !!toDate ||
+    !!active;
+
+  function clearAll() {
+    setSearch("");
+    setFilterSource("ALL");
+    setFilterApplied("ALL");
+    setFilterTag("ALL");
+    setFilterInterested("ALL");
+    setFilterCategory("ALL");
+    setFilterUtmUid("ALL");
+    setFromDate("");
+    setToDate("");
+    setActive(null);
+  }
+
+  // Per-chart active-value resolver: returns active.value if the active
+  // selection matches this chart's kind, else null (so all slices render
+  // at full opacity).
+  const activeFor = (kind: string) =>
+    active && active.kind === kind ? active.value : null;
+
   return (
     <div className="space-y-8">
       {/* Top stats */}
@@ -262,7 +412,7 @@ export function MemberDashboard({ members }: Props) {
         <StatCard label="Onboarded" value={stats.onboardedCount} accent="#820A7D" />
       </div>
 
-      {/* Filters */}
+      {/* Filters — dashboard-report canonical style (Item 2F) */}
       <div className="rounded-lg border border-black/10 bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="h-4 w-4 text-black/40" />
@@ -272,34 +422,35 @@ export function MemberDashboard({ members }: Props) {
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="lg:col-span-1">
+          {/* Global search (Item 2C — searches across ALL columns) */}
+          <div className="lg:col-span-2">
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
-              Search
+              <Search className="inline h-3 w-3 mr-1" />
+              Search all columns
             </label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/30" />
-              <Input
-                placeholder="Name, email, company…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9"
-              />
-            </div>
+            <Input
+              placeholder="Name, email, company, UTM UID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9"
+            />
           </div>
+          {/* Per-column dropdown: Source */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               Source
             </label>
             <select
               value={filterSource}
-              onChange={(e) => setFilterSource(e.target.value as "all" | "imported" | "self")}
+              onChange={(e) => setFilterSource(e.target.value)}
               className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
             >
-              <option value="all">All sources</option>
+              <option value="ALL">All sources</option>
               <option value="imported">Imported only</option>
               <option value="self">Self-registered only</option>
             </select>
           </div>
+          {/* Per-column dropdown: Applied for */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               Applied for
@@ -309,11 +460,51 @@ export function MemberDashboard({ members }: Props) {
               onChange={(e) => setFilterApplied(e.target.value)}
               className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
             >
-              <option value="">Any</option>
-              <option value="Fast pitch">Fast pitch</option>
-              <option value="Presentation/Lecure">Presentation/Lecture</option>
+              <option value="ALL">Any</option>
+              {distinct.appliedFor.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
             </select>
           </div>
+          {/* Per-column dropdown: Interested in (CSV token) */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Interested in
+            </label>
+            <select
+              value={filterInterested}
+              onChange={(e) => setFilterInterested(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.interested.length})</option>
+              {distinct.interested.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Profile categories (CSV token) */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              Profile categories
+            </label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.categories.length})</option>
+              {distinct.categories.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Per-column dropdown: Tag */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               Tag
@@ -323,7 +514,7 @@ export function MemberDashboard({ members }: Props) {
               onChange={(e) => setFilterTag(e.target.value)}
               className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
             >
-              <option value="">Any tag</option>
+              <option value="ALL">Any tag</option>
               {MEMBER_TAG_CATALOG.map((t) => (
                 <option key={t.label} value={t.label}>
                   {t.label}
@@ -331,6 +522,25 @@ export function MemberDashboard({ members }: Props) {
               ))}
             </select>
           </div>
+          {/* Per-column dropdown: UTM UID (Item 2E) */}
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              UTM UID
+            </label>
+            <select
+              value={filterUtmUid}
+              onChange={(e) => setFilterUtmUid(e.target.value)}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="ALL">Any ({distinct.utmUids.length})</option>
+              {distinct.utmUids.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* Date range */}
           <div>
             <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
               <Calendar className="inline h-3 w-3 mr-1" />
@@ -355,34 +565,37 @@ export function MemberDashboard({ members }: Props) {
               className="h-9"
             />
           </div>
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => {
-                setSearch("");
-                setFilterSource("all");
-                setFilterApplied("");
-                setFilterTag("");
-                setFromDate("");
-                setToDate("");
-              }}
-            >
-              Clear filters
-            </Button>
-          </div>
-          <div className="flex items-end justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={exportCsv}
-            >
-              <Download className="h-3.5 w-3.5 mr-1" /> Export CSV
-            </Button>
+          <div className="flex items-end justify-end lg:col-span-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={clearAll}
+                disabled={!hasFilters}
+              >
+                Clear filters
+              </Button>
+              <Button variant="outline" size="sm" className="h-9" onClick={exportCsv}>
+                <Download className="h-3.5 w-3.5 mr-1" /> Export CSV
+              </Button>
+            </div>
           </div>
         </div>
+
+        {/* Active cross-filter selection chip (Item 2D) */}
+        {active && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <span className="font-bold uppercase tracking-widest text-black/40">
+              Selection:
+            </span>
+            <ActiveSelectionChip
+              active={active}
+              onClear={() => setActive(null)}
+              labelFor={(k) => DIMENSION_LABELS[k] || k}
+            />
+          </div>
+        )}
       </div>
 
       {/* Charts toolbar — global "Set all" control */}
@@ -394,6 +607,7 @@ export function MemberDashboard({ members }: Props) {
           </h2>
           <p className="text-xs text-black/50 mt-0.5">
             Toggle each chart between bar, pie, and table — or switch them all at once.
+            Click a slice / bar / row to filter the dashboard to that selection.
           </p>
         </div>
         <div className="inline-flex items-center gap-1 rounded-md border border-black/15 bg-white p-0.5">
@@ -421,8 +635,10 @@ export function MemberDashboard({ members }: Props) {
         </div>
       </div>
 
-      {/* Charts grid */}
+      {/* Charts grid — every chart's slices/bars/rows are clickable (Item 2D) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Signups over time is a timeseries — clicking a month narrows to members
+            who signed up in that month (active.kind = "createdAt-month"). */}
         <ToggleableChartCard
           title="Signups over time"
           subtitle={`${stats.signupsOverTime.length} months`}
@@ -432,6 +648,10 @@ export function MemberDashboard({ members }: Props) {
           colorOffset={0}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("createdAt-month")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "createdAt-month", value: label })
+          }
         />
         <ToggleableChartCard
           title="Source split"
@@ -442,6 +662,10 @@ export function MemberDashboard({ members }: Props) {
           colorOffset={0}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("source")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "source", value: label })
+          }
         />
         <ToggleableChartCard
           title="I am interested in…"
@@ -452,6 +676,10 @@ export function MemberDashboard({ members }: Props) {
           colorOffset={0}
           orientation="horizontal"
           height={260}
+          activeValue={activeFor("interestedIn")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "interestedIn", value: label })
+          }
         />
         <ToggleableChartCard
           title="Tell us more about yourself"
@@ -462,6 +690,10 @@ export function MemberDashboard({ members }: Props) {
           colorOffset={2}
           orientation="horizontal"
           height={260}
+          activeValue={activeFor("profileCategories")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "profileCategories", value: label })
+          }
         />
         <ToggleableChartCard
           title="Applied for"
@@ -472,6 +704,10 @@ export function MemberDashboard({ members }: Props) {
           colorOffset={4}
           orientation="vertical"
           height={240}
+          activeValue={activeFor("appliedFor")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "appliedFor", value: label })
+          }
         />
         <ToggleableChartCard
           title="Top tags"
@@ -483,17 +719,21 @@ export function MemberDashboard({ members }: Props) {
           orientation="horizontal"
           height={260}
           useTagColors
+          activeValue={activeFor("tags")}
+          onSliceClick={(label) =>
+            toggleActive({ kind: "tags", value: label })
+          }
         />
       </div>
 
-      {/* Sortable members table */}
+      {/* Sortable members table — ALL columns sortable (Item 2B) */}
       <div className="rounded-lg border border-black/10 overflow-hidden">
         <div className="bg-black/5 px-4 py-3 border-b border-black/10">
           <h3 className="text-sm font-bold text-black">
             Members ({sorted.length})
           </h3>
           <p className="text-xs text-black/50 mt-0.5">
-            Click a column header to sort. Use the filters above to slice the data.
+            Click any column header to sort A–Z / Z–A. Use the filters above to slice the data, or click a chart slice to cross-filter.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -502,11 +742,12 @@ export function MemberDashboard({ members }: Props) {
               <tr>
                 <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Company" field="company" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                <th className="text-left px-4 py-2 font-bold">Interested in</th>
-                <th className="text-left px-4 py-2 font-bold">Categories</th>
+                <SortHeader label="Interested in" field="interestedIn" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Categories" field="profileCategories" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Applied" field="appliedFor" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-                <th className="text-left px-4 py-2 font-bold">Tags</th>
-                <th className="text-left px-4 py-2 font-bold">Source</th>
+                <SortHeader label="Tags" field="tags" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                <SortHeader label="Source" field="source" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                <SortHeader label="UTM UID" field="utmUid" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Created" field="createdAt" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Imported" field="importedAt" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
               </tr>
@@ -599,6 +840,15 @@ export function MemberDashboard({ members }: Props) {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2">
+                    {m.utmUid ? (
+                      <code className="text-xs font-mono bg-black/5 px-1.5 py-0.5 rounded">
+                        {m.utmUid}
+                      </code>
+                    ) : (
+                      <span className="text-xs text-black/30 italic">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-xs text-black/60">
                     {m.createdAt ? new Date(m.createdAt).toLocaleDateString() : "—"}
                   </td>
@@ -609,7 +859,7 @@ export function MemberDashboard({ members }: Props) {
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-black/40 text-sm">
+                  <td colSpan={10} className="px-4 py-8 text-center text-black/40 text-sm">
                     No members match your filters.
                   </td>
                 </tr>
@@ -646,292 +896,9 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 }
 
 // ---------------------------------------------------------------------------
-// ToggleableChartCard — chart card with a 3-button segmented control in the
-// header that switches the body between Bar / Pie / Table views. All three
-// views render the SAME underlying data (an array of { label, count } rows);
-// they're just three different visual representations of it.
-//
-// Props:
-//   - title, subtitle: header text
-//   - chartType: current render mode
-//   - onTypeChange: callback when the admin picks a different mode
-//   - data: { label, count }[] — the rows to visualize
-//   - colorOffset: rotate the AIS color palette so adjacent charts don't
-//     start on the same color
-//   - orientation: "horizontal" = horizontal bar chart (good for long
-//     category labels like "I am interested in…"); "vertical" = vertical
-//     bar chart (good for timeseries / few categories like "Source split")
-//   - height: pixel height for the chart canvas (table mode grows beyond
-//     this if there are many rows, up to a max of height+120)
-//   - useTagColors: if true, use the tag-catalog colors (tagColor()) for
-//     each row instead of the AIS palette — used by the Top tags chart
+// SortHeader — extended to support ALL columns (Item 2B). The previous
+// version only sorted 5 of 9 columns; now every column is sortable.
 // ---------------------------------------------------------------------------
-
-type ChartRow = { label: string; count: number };
-
-function ToggleableChartCard({
-  title,
-  subtitle,
-  chartType,
-  onTypeChange,
-  data,
-  colorOffset = 0,
-  orientation = "vertical",
-  height = 240,
-  useTagColors = false,
-}: {
-  title: string;
-  subtitle?: string;
-  chartType: ChartType;
-  onTypeChange: (t: ChartType) => void;
-  data: ChartRow[];
-  colorOffset?: number;
-  orientation?: "horizontal" | "vertical";
-  height?: number;
-  useTagColors?: boolean;
-}) {
-  const colorFor = (label: string, i: number) =>
-    useTagColors
-      ? tagColor(label) || AIS_COLORS[(i + colorOffset) % AIS_COLORS.length]
-      : AIS_COLORS[(i + colorOffset) % AIS_COLORS.length];
-
-  const total = data.reduce((sum, r) => sum + r.count, 0);
-  // Table view can grow taller than the chart canvas — cap at height + 120
-  // so a 10-row table doesn't blow past the screen.
-  const tableMaxHeight = Math.max(height, Math.min(height + 120, data.length * 32 + 40));
-
-  return (
-    <div className="border border-black/10 rounded-lg p-4 bg-white">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-sm font-bold text-black">{title}</h3>
-          {subtitle && <p className="text-xs text-black/50 mt-0.5">{subtitle}</p>}
-        </div>
-        <ChartTypeToggleGroup current={chartType} onChange={onTypeChange} />
-      </div>
-
-      {/* BAR view */}
-      {chartType === "bar" && (
-        <ResponsiveContainer
-          width="100%"
-          height={orientation === "horizontal" ? Math.max(height, data.length * 28 + 40) : height}
-        >
-          {orientation === "horizontal" ? (
-            <BarChart data={data} layout="vertical" margin={{ left: 20, right: 8, top: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" horizontal={false} />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={140}
-                tick={{ fontSize: 10 }}
-                stroke="#00000060"
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
-                {data.map((entry, i) => (
-                  <Cell key={i} fill={colorFor(entry.label, i)} />
-                ))}
-              </Bar>
-            </BarChart>
-          ) : (
-            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00000010" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#00000060" />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#00000060" />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid #00000020",
-                  fontSize: 12,
-                }}
-              />
-              <Bar dataKey="count" name="Members" radius={[4, 4, 0, 0]}>
-                {data.map((entry, i) => (
-                  <Cell key={i} fill={colorFor(entry.label, i)} />
-                ))}
-              </Bar>
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      )}
-
-      {/* PIE view */}
-      {chartType === "pie" && (
-        <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="count"
-              nameKey="label"
-              cx="50%"
-              cy="50%"
-              outerRadius={Math.min(80, (height - 40) / 2)}
-              label={(entry) =>
-                `${entry.label} (${entry.count})`
-              }
-              labelLine={false}
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={colorFor(entry.label, i)} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                borderRadius: 8,
-                border: "1px solid #00000020",
-                fontSize: 12,
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      )}
-
-      {/* TABLE view */}
-      {chartType === "table" && (
-        <div
-          className="overflow-auto rounded-md border border-black/10"
-          style={{ maxHeight: tableMaxHeight }}
-        >
-          <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
-              <tr>
-                <th className="text-left px-3 py-2 font-bold">Label</th>
-                <th className="text-right px-3 py-2 font-bold w-20">Count</th>
-                <th className="text-right px-3 py-2 font-bold w-20">Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-3 py-6 text-center text-black/40">
-                    No data
-                  </td>
-                </tr>
-              ) : (
-                data.map((entry, i) => {
-                  const pct = total > 0 ? (entry.count / total) * 100 : 0;
-                  return (
-                    <tr
-                      key={`${entry.label}-${i}`}
-                      className="border-t border-black/5 hover:bg-black/[0.02]"
-                    >
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="h-2.5 w-2.5 rounded-sm shrink-0"
-                            style={{ backgroundColor: colorFor(entry.label, i) }}
-                          />
-                          <span className="font-medium text-black truncate">{entry.label}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                        {entry.count}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs text-black/50 tabular-nums">
-                        {pct.toFixed(1)}%
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-            {data.length > 0 && (
-              <tfoot className="sticky bottom-0 bg-black/[0.03] border-t border-black/10">
-                <tr>
-                  <td className="px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-black/60">
-                    Total
-                  </td>
-                  <td className="px-3 py-2 text-right font-bold tabular-nums text-black">
-                    {total}
-                  </td>
-                  <td className="px-3 py-2 text-right text-xs text-black/50 tabular-nums">
-                    100.0%
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ChartTypeToggleGroup — the 3-button segmented control that lives in the
-// top-right of each chart card. Highlights the currently active mode.
-// ---------------------------------------------------------------------------
-function ChartTypeToggleGroup({
-  current,
-  onChange,
-}: {
-  current: ChartType;
-  onChange: (t: ChartType) => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-0.5 rounded-md border border-black/10 bg-black/[0.02] p-0.5 shrink-0">
-      <ChartTypeButton
-        active={current === "bar"}
-        onClick={() => onChange("bar")}
-        icon={<BarChart3 className="h-3.5 w-3.5" />}
-        label="Bar"
-      />
-      <ChartTypeButton
-        active={current === "pie"}
-        onClick={() => onChange("pie")}
-        icon={<PieChartIcon className="h-3.5 w-3.5" />}
-        label="Pie"
-      />
-      <ChartTypeButton
-        active={current === "table"}
-        onClick={() => onChange("table")}
-        icon={<TableIcon className="h-3.5 w-3.5" />}
-        label="Table"
-      />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ChartTypeButton — one button in a ChartTypeToggleGroup (or in the global
-// "Set all" control). Active state is highlighted with the AIS pink + a
-// subtle shadow; inactive uses a muted gray that darkens on hover.
-// ---------------------------------------------------------------------------
-function ChartTypeButton({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={`Show as ${label.toLowerCase()}`}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[0.65rem] font-bold transition-colors ${
-        active
-          ? "bg-white text-[#FF005A] shadow-sm"
-          : "text-black/50 hover:text-black/80"
-      }`}
-    >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-}
 
 function SortHeader({
   label,
@@ -946,22 +913,27 @@ function SortHeader({
   sortDir: SortDir;
   onSort: (f: SortField) => void;
 }) {
-  const active = field === sortField;
+  const isActive = field === sortField;
   return (
     <th
-      className="text-left px-4 py-2 font-bold cursor-pointer hover:bg-black/5 select-none"
+      className="text-left px-4 py-2 font-bold cursor-pointer hover:bg-black/5 select-none whitespace-nowrap"
       onClick={() => onSort(field)}
     >
       <span className="inline-flex items-center gap-1">
         {label}
         <ArrowUpDown
-          className={`h-3 w-3 ${active ? "text-[#FF005A]" : "text-black/30"}`}
-          style={{ transform: active && sortDir === "desc" ? "rotate(180deg)" : undefined }}
+          className={`h-3 w-3 ${isActive ? "text-[#FF005A]" : "text-black/30"}`}
+          style={{ transform: isActive && sortDir === "desc" ? "rotate(180deg)" : undefined }}
         />
       </span>
     </th>
   );
 }
+
+// Suppress unused-import warnings — kept for type completeness / future use.
+void PieChartIcon;
+void TableIcon;
+void MEMBER_TAG_CATALOG;
 
 // ---------------------------------------------------------------------------
 // Stats computation
@@ -998,7 +970,8 @@ function computeStats(members: Member[]) {
     { label: "Self-registered", count: selfCount },
   ].filter((s) => s.count > 0);
 
-  // Interested in (union of CSV values)
+  // Interested in (union of CSV values) — long-tail <10% grouped under "Other interests"
+  // per the dashboard spec (matches Referral Analytics behavior). (Item 2G — already in place.)
   const interestedCounts = new Map<string, number>();
   for (const m of members) {
     if (!m.interestedIn) continue;
@@ -1006,9 +979,20 @@ function computeStats(members: Member[]) {
       interestedCounts.set(v, (interestedCounts.get(v) || 0) + 1);
     }
   }
-  const interestedInCounts = Array.from(interestedCounts.entries())
+  const rawInterestedIn = Array.from(interestedCounts.entries())
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
+  // Apply long-tail grouping: any single category whose share of total is <10%
+  // gets collapsed into "Other interests".
+  const totalInterested = rawInterestedIn.reduce((sum, r) => sum + r.count, 0);
+  const interestedInCounts = (() => {
+    if (totalInterested === 0) return rawInterestedIn;
+    const keep = rawInterestedIn.filter((r) => r.count / totalInterested >= 0.1);
+    const group = rawInterestedIn.filter((r) => r.count / totalInterested < 0.1);
+    if (group.length === 0) return keep;
+    const otherCount = group.reduce((sum, r) => sum + r.count, 0);
+    return [...keep, { label: "Other interests", count: otherCount }];
+  })();
 
   // Profile categories
   const catCounts = new Map<string, number>();

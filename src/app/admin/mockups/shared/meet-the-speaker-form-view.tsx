@@ -766,7 +766,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             Per user spec 2026-06-28: "Move all 'Capabilities' controls
             (toggles, inputs, visibility settings) from the canvas slider
             to the Left Sidebar for all mockup pages."
-            Default z-order: heroZ=1 (back), photoZ=3 (front), graphicZ=4 (top).
+            Default z-order: heroZ=1 (back), photoZ=3 (front), graphicZ=8 (top).
             Front/Back buttons override dynamically.
 
             Per user spec 2026-06-30: "to the Layer z-index (Front = on top)
@@ -786,7 +786,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             {([
               { key: "hero", label: "Hero", zVal: data.heroZ ?? 1, rot: data.heroStyle === 2 ? (data.heroStyle2Rotation ?? 0) : (data.heroOverlay.rotation ?? 0) },
               { key: "photo", label: "Photo", zVal: data.photoZ ?? 3, rot: data.speaker.photoRotation ?? 0 },
-              { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 4, rot: data.graphic.rotation ?? 0 },
+              { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 8, rot: data.graphic.rotation ?? 0 },
             ] as const).map((layer) => (
               <div key={layer.key}>
                 <div className="text-[0.6rem] text-black/60 mb-1">
@@ -800,7 +800,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                         const peers = [
                           d.heroZ ?? 1,
                           d.photoZ ?? 3,
-                          d.graphicZ ?? 4,
+                          d.graphicZ ?? 8,
                         ];
                         const max = Math.max(...peers);
                         if (layer.key === "hero") d.heroZ = max + 1;
@@ -820,7 +820,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                         const peers = [
                           d.heroZ ?? 1,
                           d.photoZ ?? 3,
-                          d.graphicZ ?? 4,
+                          d.graphicZ ?? 8,
                         ];
                         const min = Math.min(...peers);
                         if (layer.key === "hero") d.heroZ = min - 1;

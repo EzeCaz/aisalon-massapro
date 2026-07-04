@@ -70,11 +70,29 @@ export default async function EventDashboardPage() {
 
   // Fetch RSVPs (scoped for CO_HOST) — the client will filter by event
   // when an event is selected. Includes the linked user (with all the
-  // profile fields the charts care about: company, interestedIn, etc.).
+  // profile fields the charts care about: company, interestedIn, etc.)
+  // and the referring member (referredBy) so the dashboard can show
+  // "UTM UID" of the referrer as a column + filter (Item 2E).
   const rsvps = await db.eventRsvp.findMany({
     where: scopedEventIds === null ? undefined : { eventId: { in: scopedEventIds } },
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
-    include: {
+    select: {
+      id: true,
+      eventId: true,
+      email: true,
+      name: true,
+      status: true,
+      source: true,
+      createdAt: true,
+      updatedAt: true,
+      userId: true,
+      checkInCode: true,
+      checkedInAt: true,
+      doorCheckedAt: true,
+      doorCheckedBy: true,
+      approvedAt: true,
+      attendedAt: true,
+      noShow: true,
       event: {
         select: {
           id: true,
@@ -97,6 +115,20 @@ export default async function EventDashboardPage() {
           importSource: true,
           mobile: true,
           bio: true,
+          utmUid: true,
+        },
+      },
+      referredBy: {
+        // The referring member — surfaced so the Event Dashboard can show
+        // the referrer's UTM UID as a column + filter (Item 2E). The User
+        // model only has utmUid (no utmSource/utmMedium/etc.) — those raw
+        // UTMs live on ReferralVisit, not User. So this dashboard only
+        // exposes utmUid for now (documented in worklog impl-dashboard-unify).
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          utmUid: true,
         },
       },
     },

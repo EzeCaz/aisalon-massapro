@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { EventProfileData, SessionType } from "../event-profile/types";
 import { sessionTypeLabel, isAutoHiddenSessionType } from "../event-profile/types";
 import { GradientColorPicker } from "./gradient-color-picker";
+import { TextStyleRow } from "./text-style-row";
 
 /**
  * EventProfileFormView — structured form view of EventProfileData.
@@ -42,6 +43,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Event name — font size + color + align"
+          fontSize={data.textStyles?.eventName?.fontSize}
+          fontColor={data.textStyles?.eventName?.color}
+          align={data.textStyles?.eventName?.align}
+          defaultFontSize={72}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventName = {
+                ...(d.textStyles.eventName ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Date">
             <input
@@ -68,6 +87,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Header line: date · venue — font size + color + align"
+          fontSize={data.textStyles?.eventDateVenue?.fontSize}
+          fontColor={data.textStyles?.eventDateVenue?.color}
+          align={data.textStyles?.eventDateVenue?.align}
+          defaultFontSize={13}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventDateVenue = {
+                ...(d.textStyles.eventDateVenue ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Topic">
           <input
             type="text"
@@ -76,6 +113,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Topic — font size + color + align"
+          fontSize={data.textStyles?.eventTopic?.fontSize}
+          fontColor={data.textStyles?.eventTopic?.color}
+          align={data.textStyles?.eventTopic?.align}
+          defaultFontSize={22}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.eventTopic = {
+                ...(d.textStyles.eventTopic ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Event logo URL (optional — overrides 'ai salon' wordmark)">
           <input
             type="url"
@@ -123,6 +178,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        <TextStyleRow
+          label="Footer credit — font size + color + align"
+          fontSize={data.textStyles?.footerCredit?.fontSize}
+          fontColor={data.textStyles?.footerCredit?.color}
+          align={data.textStyles?.footerCredit?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.footerCredit = {
+                ...(d.textStyles.footerCredit ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
       </Section>
 
       {/* ===== HERO ===== */}
@@ -257,6 +330,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
             (Triangle controls apply only to event-profile mockups.)
           </p>
         </div>
+        <TextStyleRow
+          label="Location pin label (all pins) — font size + color + align"
+          fontSize={data.textStyles?.locationPinLabel?.fontSize}
+          fontColor={data.textStyles?.locationPinLabel?.color}
+          align={data.textStyles?.locationPinLabel?.align}
+          defaultFontSize={13}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.locationPinLabel = {
+                ...(d.textStyles.locationPinLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
       </Section>
 
       {/* ===== SESSIONS ===== */}
@@ -588,6 +679,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
 
       {/* ===== SPONSORS ===== */}
       <Section title={`Collaborators (${data.collaborators.length})`}>
+        <TextStyleRow
+          label="“In collaboration with” label — font size + color + align"
+          fontSize={data.textStyles?.collaboratorsLabel?.fontSize}
+          fontColor={data.textStyles?.collaboratorsLabel?.color}
+          align={data.textStyles?.collaboratorsLabel?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.collaboratorsLabel = {
+                ...(d.textStyles.collaboratorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.collaborators.map((s, idx) => (
           <SubCard
             key={`coll-${idx}`}
@@ -641,6 +750,24 @@ export function EventProfileFormView({ data, onChange }: Props) {
       </Section>
 
       <Section title={`Sponsors (${data.sponsors.length})`}>
+        <TextStyleRow
+          label="“Sponsored by” label — font size + color + align"
+          fontSize={data.textStyles?.sponsorsLabel?.fontSize}
+          fontColor={data.textStyles?.sponsorsLabel?.color}
+          align={data.textStyles?.sponsorsLabel?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.sponsorsLabel = {
+                ...(d.textStyles.sponsorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.sponsors.map((s, idx) => (
           <SubCard
             key={`spo-${idx}`}

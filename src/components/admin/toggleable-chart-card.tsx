@@ -73,6 +73,8 @@ export function ToggleableChartCard({
   orientation = "vertical",
   height = 240,
   useTagColors = false,
+  activeValue,
+  onSliceClick,
 }: {
   title: string;
   subtitle?: string;
@@ -83,6 +85,16 @@ export function ToggleableChartCard({
   orientation?: "horizontal" | "vertical";
   height?: number;
   useTagColors?: boolean;
+  /**
+   * Cross-filtering: the currently active slice value. When set, non-active
+   * slices/bars/rows render at opacity 0.4. Set to null/undefined to disable.
+   */
+  activeValue?: string | null;
+  /**
+   * Cross-filtering: when provided, slices/bars/rows become clickable —
+   * clicking sets the active selection to that label.
+   */
+  onSliceClick?: (label: string) => void;
 }) {
   const colorFor = (label: string, i: number) =>
     useTagColors
@@ -96,6 +108,11 @@ export function ToggleableChartCard({
     height,
     Math.min(height + 120, data.length * 32 + 40)
   );
+
+  // Cross-filter state for individual rows
+  const clickable = !!onSliceClick;
+  const isActiveRow = (label: string) => !activeValue || activeValue === label;
+  const cellOpacity = (label: string) => (isActiveRow(label) ? 1 : 0.4);
 
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
@@ -148,9 +165,19 @@ export function ToggleableChartCard({
                   fontSize: 12,
                 }}
               />
-              <Bar dataKey="count" name="Members" radius={[0, 4, 4, 0]}>
+              <Bar
+                dataKey="count"
+                name="Members"
+                radius={[0, 4, 4, 0]}
+                cursor={clickable ? "pointer" : undefined}
+                onClick={clickable ? (entry: { label?: string }) => entry?.label ? onSliceClick!(entry.label) : undefined : undefined}
+              >
                 {data.map((entry, i) => (
-                  <Cell key={i} fill={colorFor(entry.label, i)} />
+                  <Cell
+                    key={i}
+                    fill={colorFor(entry.label, i)}
+                    opacity={cellOpacity(entry.label)}
+                  />
                 ))}
               </Bar>
             </BarChart>
@@ -170,9 +197,19 @@ export function ToggleableChartCard({
                   fontSize: 12,
                 }}
               />
-              <Bar dataKey="count" name="Members" radius={[4, 4, 0, 0]}>
+              <Bar
+                dataKey="count"
+                name="Members"
+                radius={[4, 4, 0, 0]}
+                cursor={clickable ? "pointer" : undefined}
+                onClick={clickable ? (entry: { label?: string }) => entry?.label ? onSliceClick!(entry.label) : undefined : undefined}
+              >
                 {data.map((entry, i) => (
-                  <Cell key={i} fill={colorFor(entry.label, i)} />
+                  <Cell
+                    key={i}
+                    fill={colorFor(entry.label, i)}
+                    opacity={cellOpacity(entry.label)}
+                  />
                 ))}
               </Bar>
             </BarChart>
@@ -193,9 +230,15 @@ export function ToggleableChartCard({
               outerRadius={Math.min(80, (height - 40) / 2)}
               label={(entry) => `${entry.label} (${entry.count})`}
               labelLine={false}
+              cursor={clickable ? "pointer" : undefined}
+              onClick={clickable ? (entry: { label?: string }) => entry?.label ? onSliceClick!(entry.label) : undefined : undefined}
             >
               {data.map((entry, i) => (
-                <Cell key={i} fill={colorFor(entry.label, i)} />
+                <Cell
+                  key={i}
+                  fill={colorFor(entry.label, i)}
+                  opacity={cellOpacity(entry.label)}
+                />
               ))}
             </Pie>
             <Tooltip
@@ -239,7 +282,10 @@ export function ToggleableChartCard({
                   return (
                     <tr
                       key={`${entry.label}-${i}`}
-                      className="border-t border-black/5 hover:bg-black/[0.02]"
+                      className={`border-t border-black/5 ${clickable ? "cursor-pointer hover:bg-black/[0.02]" : "hover:bg-black/[0.02]"}`}
+                      onClick={() => clickable && onSliceClick!(entry.label)}
+                      style={{ opacity: cellOpacity(entry.label) }}
+                      title={clickable ? `Click to filter dashboard to "${entry.label}"` : undefined}
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2 min-w-0">

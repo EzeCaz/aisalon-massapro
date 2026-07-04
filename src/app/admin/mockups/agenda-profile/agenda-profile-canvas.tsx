@@ -71,6 +71,15 @@ type Props = {
   /** Called when the bottom-left branding asset is dragged to a free-form
    *  position on the canvas (user spec 2026-07-02: replaceable + draggable). */
   onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
+  /**
+   * Called when the hero image is dragged via its "⠿ Move hero" grip
+   * bar. Updates `data.heroOverlay.pos` (free-form {x, y} as % of canvas).
+   *
+   * Per user spec 2026-07-04: "make sure i am able to drag with my mouse
+   * the hero image along the entire canvas and not only by using the
+   * Photo position (X%, Y%)".
+   */
+  onHeroPosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -92,6 +101,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroScaleYChange,
       onSectionZChange,
       onBrandingAssetPosChange,
+      onHeroPosChange,
       previewScale = 1,
     },
     ref,
@@ -141,8 +151,35 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             sliders. Default = 100% width × 450px height. <1 = shrinks
             within the canvas, >1 = overflows (clipped by canvas
             overflow:hidden). The ONLY limitation is the canvas border —
-            no arbitrary 0.25–3 clamp. (User spec 2026-06-28.) */}
-        <div className="absolute" style={{ left: 0, top: 0, width: `${100 * Math.max(0.01, data.heroOverlay.imageScale ?? 1)}%`, height: `${450 * Math.max(0.01, data.heroOverlay.imageScaleY ?? 1)}px`, zIndex: heroZ }}>
+            no arbitrary 0.25–3 clamp. (User spec 2026-06-28.)
+
+            Wrapped in DraggablePhotoContainer so the user can drag the
+            hero anywhere on the canvas via the "⠿ Move hero" grip bar
+            (per user spec 2026-07-04). The container takes widthPct +
+            heightPct (% of 1200×1500 canvas); the hero's default 450px
+            height is converted to 30% (450/1500 × 100). */}
+        {(() => {
+          const scaleX = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
+          const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
+          // Default anchor: top-left (0, 0). When `data.heroOverlay.pos`
+          // is set (i.e. the user has dragged the grip bar), use those
+          // coordinates instead.
+          const pos = data.heroOverlay.pos;
+          const heroLeft = pos ? pos.x : 0;
+          const heroTop = pos ? pos.y : 0;
+          return (
+        <DraggablePhotoContainer
+          leftPct={heroLeft}
+          topPct={heroTop}
+          widthPct={100 * scaleX}
+          heightPct={30 * scaleY}
+          zIndex={heroZ}
+          rotation={0}
+          editable={editable}
+          previewScale={previewScale}
+          onPosChange={onHeroPosChange}
+          moveLabel="⠿ Move hero"
+        >
           {/* Background hero image */}
           <EditableImage
             slot={{ kind: "hero" }}
@@ -192,19 +229,38 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           >
             <p
               className="font-bold uppercase tracking-widest text-white/90 mb-3"
-              style={{ fontSize: "12px", letterSpacing: "0.25em" }}
+              style={{
+                fontSize: `${data.textStyles?.presentsLabel?.fontSize ?? 12}px`,
+                letterSpacing: "0.25em",
+                color: data.textStyles?.presentsLabel?.color,
+                textAlign: data.textStyles?.presentsLabel?.align,
+              }}
             >
               AI Salon Tel Aviv Presents
             </p>
             <h1
               className="font-extrabold text-white leading-[1.05] tracking-tight"
-              style={{ fontSize: "56px", maxWidth: "900px" }}
+              style={{
+                fontSize: `${data.textStyles?.eventName?.fontSize ?? 56}px`,
+                maxWidth: "900px",
+                color: data.textStyles?.eventName?.color,
+                textAlign: data.textStyles?.eventName?.align,
+              }}
             >
               {data.event.name}
             </h1>
             <div
               className="flex items-center gap-3 mt-5 text-white/95 font-semibold"
-              style={{ fontSize: "18px" }}
+              style={{
+                fontSize: `${data.textStyles?.eventDateVenue?.fontSize ?? 18}px`,
+                color: data.textStyles?.eventDateVenue?.color,
+                justifyContent:
+                  data.textStyles?.eventDateVenue?.align === "center"
+                    ? "center"
+                    : data.textStyles?.eventDateVenue?.align === "right"
+                      ? "flex-end"
+                      : "flex-start",
+              }}
             >
               <span>{data.event.date}</span>
               <span className="text-white/40">·</span>
@@ -245,14 +301,23 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
               <div>
                 <h2
                   className="font-extrabold text-white leading-tight"
-                  style={{ fontSize: "28px" }}
+                  style={{
+                    fontSize: `${data.textStyles?.eventTopic?.fontSize ?? 28}px`,
+                    color: data.textStyles?.eventTopic?.color,
+                    textAlign: data.textStyles?.eventTopic?.align,
+                  }}
                 >
                   {data.event.topic}
                 </h2>
                 {data.event.description && (
                   <p
                     className="text-white/85 leading-relaxed mt-2"
-                    style={{ fontSize: "14px", maxWidth: "780px" }}
+                    style={{
+                      fontSize: `${data.textStyles?.eventDescription?.fontSize ?? 14}px`,
+                      maxWidth: "780px",
+                      color: data.textStyles?.eventDescription?.color,
+                      textAlign: data.textStyles?.eventDescription?.align,
+                    }}
                   >
                     {data.event.description}
                   </p>
@@ -260,7 +325,9 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
               </div>
             </div>
           </SectionBox>
-        </div>
+        </DraggablePhotoContainer>
+          );
+        })()}
 
         {/* ===== AGENDA BLOCK (450-1000, but auto-sizes) ===== */}
         <SectionBox
@@ -285,7 +352,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           <div className="flex items-center gap-3 mb-5">
             <h2
               className="font-extrabold text-black uppercase tracking-wider"
-              style={{ fontSize: "22px", letterSpacing: "0.15em" }}
+              style={{
+                fontSize: `${data.textStyles?.agendaLabel?.fontSize ?? 22}px`,
+                letterSpacing: "0.15em",
+                color: data.textStyles?.agendaLabel?.color,
+                textAlign: data.textStyles?.agendaLabel?.align,
+              }}
             >
               Agenda
             </h2>
@@ -307,6 +379,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                   key={`session-${session.order}`}
                   session={session}
                   accentColor={data.event.brandColors[0]}
+                  textStyles={data.textStyles}
                 />
               ))
             )}
@@ -336,7 +409,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           <div className="flex items-center gap-3 mb-5">
             <h2
               className="font-extrabold text-black uppercase tracking-wider"
-              style={{ fontSize: "22px", letterSpacing: "0.15em" }}
+              style={{
+                fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 22}px`,
+                letterSpacing: "0.15em",
+                color: data.textStyles?.speakersLabel?.color,
+                textAlign: data.textStyles?.speakersLabel?.align,
+              }}
             >
               Speakers
             </h2>
@@ -359,6 +437,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
                 onSizeChange={onSizeChange}
+                textStyles={data.textStyles}
               />
             ))}
           </div>
@@ -390,7 +469,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
               <div className="flex flex-col items-end gap-1.5">
                 <span
                   className="text-black/60 font-semibold uppercase tracking-wider"
-                  style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                  style={{
+                    fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 10}px`,
+                    letterSpacing: "0.18em",
+                    color: data.textStyles?.collaboratorsLabel?.color,
+                    textAlign: data.textStyles?.collaboratorsLabel?.align,
+                  }}
                 >
                   In collaboration with
                 </span>
@@ -413,7 +497,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
               <div className="flex flex-col items-end gap-1.5">
                 <span
                   className="text-black/60 font-semibold uppercase tracking-wider"
-                  style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                  style={{
+                    fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 10}px`,
+                    letterSpacing: "0.18em",
+                    color: data.textStyles?.sponsorsLabel?.color,
+                    textAlign: data.textStyles?.sponsorsLabel?.align,
+                  }}
                 >
                   Sponsored by
                 </span>
@@ -466,11 +555,23 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             <div>
               <p
                 className="font-bold text-black uppercase tracking-wider"
-                style={{ fontSize: "11px", letterSpacing: "0.18em" }}
+                style={{
+                  fontSize: `${data.textStyles?.registerHere?.fontSize ?? 11}px`,
+                  letterSpacing: "0.18em",
+                  color: data.textStyles?.registerHere?.color,
+                  textAlign: data.textStyles?.registerHere?.align,
+                }}
               >
                 Register here
               </p>
-              <p className="text-black/50 text-[0.7rem] mt-0.5">
+              <p
+                className="text-black/50 mt-0.5"
+                style={{
+                  fontSize: `${data.textStyles?.registerHint?.fontSize ?? 11}px`,
+                  color: data.textStyles?.registerHint?.color,
+                  textAlign: data.textStyles?.registerHint?.align,
+                }}
+              >
                 Scan to RSVP on the event page
               </p>
             </div>
@@ -498,12 +599,24 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
             className="absolute"
-            style={{ left: "48px", bottom: "12px", fontSize: "10px", zIndex: sectionZFor("footer") }}
+            style={{
+              left: "48px",
+              bottom: "12px",
+              fontSize: `${data.textStyles?.footerCredit?.fontSize ?? 10}px`,
+              zIndex: sectionZFor("footer"),
+            }}
             accentColor="#FF005A"
             label="Footer"
             guideId="footer"
           >
-            <span className="text-black/40">
+            <span
+              className="text-black/40"
+              style={{
+                color: data.textStyles?.footerCredit?.color,
+                textAlign: data.textStyles?.footerCredit?.align,
+                display: "block",
+              }}
+            >
               {data.footerCredit}
             </span>
           </SectionBox>
@@ -601,9 +714,15 @@ function alpha(opacity: number): string {
 function AgendaRow({
   session,
   accentColor,
+  textStyles,
 }: {
   session: Session;
   accentColor: string;
+  /** Per-section text style overrides (sessionStartTime / sessionEndTime /
+   *  sessionTypePill / sessionTitle / sessionSpeakerName /
+   *  sessionDescription keys). Passed down from the parent canvas so
+   *  all agenda rows share one visual treatment. */
+  textStyles?: EventProfileData["textStyles"];
 }) {
   const typeLabel = sessionTypeLabel(session.type);
   const typeColor = typeColorFor(session.type, accentColor);
@@ -615,12 +734,23 @@ function AgendaRow({
       <div className="shrink-0 w-20 text-right">
         <p
           className="font-bold text-black font-mono"
-          style={{ fontSize: "14px" }}
+          style={{
+            fontSize: `${textStyles?.sessionStartTime?.fontSize ?? 14}px`,
+            color: textStyles?.sessionStartTime?.color,
+            textAlign: textStyles?.sessionStartTime?.align,
+          }}
         >
           {session.startTime ?? "--:--"}
         </p>
         {session.endTime && (
-          <p className="text-black/40 font-mono" style={{ fontSize: "11px" }}>
+          <p
+            className="text-black/40 font-mono"
+            style={{
+              fontSize: `${textStyles?.sessionEndTime?.fontSize ?? 11}px`,
+              color: textStyles?.sessionEndTime?.color,
+              textAlign: textStyles?.sessionEndTime?.align,
+            }}
+          >
             {session.endTime}
           </p>
         )}
@@ -630,9 +760,11 @@ function AgendaRow({
         <span
           className="inline-block rounded-full px-2 py-0.5 text-white font-bold uppercase tracking-wider"
           style={{
-            fontSize: "9px",
+            fontSize: `${textStyles?.sessionTypePill?.fontSize ?? 9}px`,
             letterSpacing: "0.1em",
             background: typeColor,
+            color: textStyles?.sessionTypePill?.color,
+            textAlign: textStyles?.sessionTypePill?.align,
           }}
         >
           {typeLabel}
@@ -642,17 +774,35 @@ function AgendaRow({
       <div className="flex-1 min-w-0">
         <p
           className="font-semibold text-black leading-snug"
-          style={{ fontSize: "15px" }}
+          style={{
+            fontSize: `${textStyles?.sessionTitle?.fontSize ?? 15}px`,
+            color: textStyles?.sessionTitle?.color,
+            textAlign: textStyles?.sessionTitle?.align,
+          }}
         >
           {session.title}
         </p>
         {session.speakerName && (
-          <p className="text-black/55 mt-0.5" style={{ fontSize: "12px" }}>
+          <p
+            className="text-black/55 mt-0.5"
+            style={{
+              fontSize: `${textStyles?.sessionSpeakerName?.fontSize ?? 12}px`,
+              color: textStyles?.sessionSpeakerName?.color,
+              textAlign: textStyles?.sessionSpeakerName?.align,
+            }}
+          >
             {session.speakerName}
           </p>
         )}
         {session.description && (
-          <p className="text-black/45 mt-1 leading-snug" style={{ fontSize: "11px" }}>
+          <p
+            className="text-black/45 mt-1 leading-snug"
+            style={{
+              fontSize: `${textStyles?.sessionDescription?.fontSize ?? 11}px`,
+              color: textStyles?.sessionDescription?.color,
+              textAlign: textStyles?.sessionDescription?.align,
+            }}
+          >
             {session.description}
           </p>
         )}
@@ -689,6 +839,7 @@ function SpeakerCard({
   onPickImage,
   onPlacementChange,
   onSizeChange,
+  textStyles,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -698,6 +849,11 @@ function SpeakerCard({
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, p: ImagePlacement) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
+  /** Per-section text style overrides (speakerSessionTime / speakerRole /
+   *  speakerName / speakerTitle / speakerSessionTitle / speakerBio keys).
+   *  Passed down from the parent canvas so all speaker cards share one
+   *  visual treatment. */
+  textStyles?: EventProfileData["textStyles"];
 }) {
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
   const photoPx = Math.round(96 * photoSize);
@@ -733,8 +889,10 @@ function SpeakerCard({
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold tracking-wider font-mono"
               style={{
-                fontSize: "9px",
+                fontSize: `${textStyles?.speakerSessionTime?.fontSize ?? 9}px`,
                 background: "#004F98",
+                color: textStyles?.speakerSessionTime?.color,
+                textAlign: textStyles?.speakerSessionTime?.align,
               }}
             >
               {speaker.sessionTime}
@@ -744,30 +902,60 @@ function SpeakerCard({
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold uppercase tracking-wider"
               style={{
-                fontSize: "8px",
+                fontSize: `${textStyles?.speakerRole?.fontSize ?? 8}px`,
                 letterSpacing: "0.1em",
                 background: accentColor,
+                color: textStyles?.speakerRole?.color,
+                textAlign: textStyles?.speakerRole?.align,
               }}
             >
               {speaker.role}
             </span>
           )}
         </div>
-        <p className="font-bold text-black leading-tight mt-1" style={{ fontSize: "14px" }}>
+        <p
+          className="font-bold text-black leading-tight mt-1"
+          style={{
+            fontSize: `${textStyles?.speakerName?.fontSize ?? 14}px`,
+            color: textStyles?.speakerName?.color,
+            textAlign: textStyles?.speakerName?.align,
+          }}
+        >
           {speaker.fullName}
         </p>
-        <p className="text-black/65 leading-snug mt-0.5" style={{ fontSize: "11px" }}>
+        <p
+          className="text-black/65 leading-snug mt-0.5"
+          style={{
+            fontSize: `${textStyles?.speakerTitle?.fontSize ?? 11}px`,
+            color: textStyles?.speakerTitle?.color,
+            textAlign: textStyles?.speakerTitle?.align,
+          }}
+        >
           {speaker.title}
           {speaker.title && speaker.company ? ", " : ""}
           <span className="font-semibold">{speaker.company}</span>
         </p>
         {speaker.sessionTitle && (
-          <p className="text-black/45 leading-snug mt-1 italic" style={{ fontSize: "10px" }}>
+          <p
+            className="text-black/45 leading-snug mt-1 italic"
+            style={{
+              fontSize: `${textStyles?.speakerSessionTitle?.fontSize ?? 10}px`,
+              color: textStyles?.speakerSessionTitle?.color,
+              textAlign: textStyles?.speakerSessionTitle?.align,
+            }}
+          >
             “{speaker.sessionTitle}”
           </p>
         )}
         {speaker.bio && (
-          <p className="text-black/50 leading-snug mt-1.5" style={{ fontSize: "10px" }}>
+          <p
+            className="text-black/50 leading-snug mt-1.5"
+            style={{
+              fontSize: `${textStyles?.speakerBio?.fontSize ?? 10}px`,
+              color: textStyles?.speakerBio?.color,
+              textAlign: textStyles?.speakerBio?.align,
+            }}
+          >
             {speaker.bio}
           </p>
         )}
