@@ -54,6 +54,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { AutoCrossfadeSlideshow } from "@/components/slideshow/auto-crossfade-slideshow";
 
 type SlimImage = {
   id: string;
@@ -132,14 +133,11 @@ const typeIcon: Record<string, React.ReactNode> = {
   PANEL: <Users className="h-4 w-4" />,
 };
 
-const typeColor: Record<string, string> = {
-  WELCOME: "bg-[#00E6FF]/10 text-[#007E72] border-[#00E6FF]/30",
-  TALK: "bg-[#FF005A]/10 text-[#FF005A] border-[#FF005A]/30",
-  BREAK: "bg-black/5 text-black/80 border-black/10",
-  NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
-  FAST_PITCH: "bg-[#FFAC30]/10 text-[#9A6800] border-[#FFAC30]/30",
-  PANEL: "bg-[#004F98]/10 text-[#004F98] border-[#004F98]/30",
-};
+// Note: per-session-type tint colors were removed in favor of a single
+// unified AIS RED (#FF005A) accent + the AIS GRADIENT bar on each card.
+// This matches the brand-book rule that the gradient must appear on at
+// least one face of every brand surface, and keeps the section visually
+// consistent with the Overview/Photos/Slideshow tabs.
 
 function fmtTime(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -1006,13 +1004,24 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
 
   return (
     <div className="grid lg:grid-cols-[1fr_360px] gap-8">
-      {/* Agenda timeline */}
+      {/* ─────────────────────────────────────────────────────────────────
+          AGENDA TIMELINE — Redesigned
+          • Modular two-column layout (info | slideshow)
+          • Intercalated: even-index sessions put info LEFT, slideshow RIGHT;
+            odd-index sessions reverse the order (slideshow LEFT, info RIGHT)
+          • All sessions use the same brand color (AIS RED #FF005A) — no rainbow
+          • AIS GRADIENT accent bar on each card (brand-book rule)
+          • Larger fonts (text-2xl title, text-base description)
+          • Pictures section is LARGER (aspect-[4/3], auto-crossfade slideshow)
+          • Action buttons (pictures / presentation / session URL / contact)
+            stay the same w-24 size, left-aligned under the session details
+          ───────────────────────────────────────────────────────────────── */}
       <div>
-        <h2 className="text-xs font-bold uppercase tracking-widest text-[#FF005A] mb-4">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-[#FF005A] mb-5">
           Event agenda
         </h2>
-        <div className="space-y-3">
-          {event.agenda.map((item) => {
+        <div className="space-y-5">
+          {event.agenda.map((item, idx) => {
             const end = item.endsAt ? new Date(item.endsAt) : null;
             const assets = agendaItemHasAssets(item);
             const showThumbnails =
@@ -1020,68 +1029,64 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
               assets.hasPresentation ||
               assets.hasUrl ||
               assets.hasContact;
-            const cardTint = typeColor[item.type] || "bg-white border-black/10";
-            const accentColor =
-              item.type === "PANEL" ? "#004F98" :
-              item.type === "NETWORKING" ? "#820A7D" :
-              item.type === "WELCOME" ? "#007E72" :
-              item.type === "FAST_PITCH" ? "#9A6800" :
-              item.type === "TALK" ? "#FF005A" :
-              "#000000";
+            const hasSlideshow = assets.hasPictures && !!item.speaker && (item.speaker.images ?? []).length > 0;
+            const sessionImages = item.speaker?.images ?? [];
+            // Alternate layout: even index → info LEFT | slideshow RIGHT
+            //                  odd index  → slideshow LEFT | info RIGHT
+            const infoLeft = idx % 2 === 0;
 
             return (
               <Card
                 key={item.id}
-                className={`overflow-hidden border ${cardTint}`}
+                className="relative overflow-hidden border border-black/10 bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="flex flex-col md:flex-row">
-                  {/* ──────────────────────────────────────────────────────
-                      LEFT — time + text + action buttons (the "info" column)
-                      Stacks vertically; on md+ screens takes the remaining
-                      width next to the picture on the right.
-                     ────────────────────────────────────────────────────── */}
-                  <div className="flex-1 flex flex-col gap-3 p-5">
+                {/* AIS GRADIENT accent bar — brand book rule: gradient must
+                    appear on at least one face of every brand surface */}
+                <div className="ais-gradient absolute top-0 left-0 right-0 h-1 z-10" />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
+                  {/* ════════════════════════════════════════════════════════
+                      INFO COLUMN — time + title + description + speaker +
+                      panelists + action buttons (pictures / presentation /
+                      session URL / contact). All left-aligned, larger fonts.
+                      ════════════════════════════════════════════════════════ */}
+                  <div
+                    className={`flex flex-col gap-4 p-6 lg:p-8 ${
+                      infoLeft ? "lg:order-1" : "lg:order-2"
+                    }`}
+                  >
                     {/* Time + type icon row */}
                     <div className="flex items-center gap-3">
-                      <div
-                        className="font-mono text-xl font-bold leading-none tabular-nums"
-                        style={{ color: accentColor }}
-                      >
+                      <div className="font-mono text-2xl font-extrabold leading-none tabular-nums text-[#FF005A]">
                         {fmtTime(item.startsAt)}
                       </div>
                       {end && (
-                        <div className="font-mono text-xs text-black/60 leading-none tabular-nums">
+                        <div className="font-mono text-sm text-black/55 leading-none tabular-nums">
                           → {fmtTime(item.endsAt!)}
                         </div>
                       )}
-                      <div
-                        className="ml-auto flex items-center justify-center h-8 w-8 rounded-full"
-                        style={{
-                          backgroundColor: `${accentColor}14`,
-                          color: accentColor,
-                        }}
-                      >
+                      <div className="ml-auto flex items-center justify-center h-9 w-9 rounded-full bg-[#FF005A]/10 text-[#FF005A]">
                         {typeIcon[item.type]}
                       </div>
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-lg font-bold text-black leading-tight">
+                    {/* Title — larger, per user request */}
+                    <h3 className="text-2xl font-bold tracking-tight text-black leading-tight">
                       {item.title}
                     </h3>
 
-                    {/* Description */}
+                    {/* Description — larger, per user request */}
                     {item.description && (
-                      <p className="text-sm text-black/75 leading-relaxed">
+                      <p className="text-base leading-relaxed text-black/75">
                         {item.description}
                       </p>
                     )}
 
                     {/* Speaker info */}
                     {item.speaker && (
-                      <div className="text-sm text-black/85">
+                      <div className="text-base text-black/85">
                         {item.type === "PANEL" && (
-                          <span className="font-bold" style={{ color: accentColor }}>
+                          <span className="font-bold text-[#FF005A]">
                             Moderator:{" "}
                           </span>
                         )}
@@ -1100,7 +1105,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     {item.type === "PANEL" &&
                       item.panelists &&
                       item.panelists.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-2">
                           {item.panelists.map((p) => {
                             const initials = p.name
                               .split(" ")
@@ -1114,30 +1119,13 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                                 key={p.id}
                                 type="button"
                                 onClick={() => setContactSpeaker(p)}
-                                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors"
-                                style={{
-                                  borderColor: `${accentColor}4D`,
-                                  backgroundColor: `${accentColor}0D`,
-                                  color: accentColor,
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = `${accentColor}1A`;
-                                  e.currentTarget.style.borderColor = `${accentColor}80`;
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.backgroundColor = `${accentColor}0D`;
-                                  e.currentTarget.style.borderColor = `${accentColor}4D`;
-                                }}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-[#FF005A]/30 bg-[#FF005A]/5 hover:bg-[#FF005A]/10 hover:border-[#FF005A]/50 px-2.5 py-1 text-xs font-semibold text-[#FF005A] transition-colors"
                                 title={`Contact ${p.name}`}
                               >
                                 <Avatar className="h-5 w-5">
                                   <AvatarImage src={p.photoUrl || undefined} alt={p.name} />
                                   <AvatarFallback
-                                    className="text-[0.6rem]"
-                                    style={{
-                                      backgroundColor: `${accentColor}26`,
-                                      color: accentColor,
-                                    }}
+                                    className="text-[0.6rem] bg-[#FF005A]/15 text-[#FF005A]"
                                   >
                                     {initials || "?"}
                                   </AvatarFallback>
@@ -1153,10 +1141,9 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                       )}
 
                     {/* Action buttons row — pictures / presentation / session URL / contact
-                        Same size as before (w-24 thumbnails) but now left-aligned
-                        under the text instead of centered. */}
+                        Same w-24 size as before, left-aligned under the session details */}
                     {showThumbnails && (
-                      <div className="mt-1 pt-3 border-t border-black/10 flex flex-wrap items-stretch gap-2">
+                      <div className="mt-2 pt-4 border-t border-black/10 flex flex-wrap items-stretch gap-2">
                         {/* Pictures */}
                         {assets.hasPictures && assets.firstImage && item.speaker && (
                           <button
@@ -1242,39 +1229,51 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     )}
                   </div>
 
-                  {/* ──────────────────────────────────────────────────────
-                      RIGHT — large picture preview.
-                      Only renders when the speaker has images. Larger than
-                      the old thumbnail — fills the right side of the card
-                      on md+ screens, or sits below on mobile.
-                     ────────────────────────────────────────────────────── */}
-                  {assets.hasPictures && assets.firstImage && item.speaker && (
-                    <div className="md:w-56 lg:w-72 shrink-0 relative bg-black/5 overflow-hidden border-t md:border-t-0 md:border-l border-black/10">
-                      <button
-                        onClick={() => setPicturesSpeaker(item.speaker!)}
-                        className="group block w-full h-full"
-                        title={`Pictures of ${item.speaker.name}'s session`}
-                      >
-                        <div className="relative w-full h-44 md:h-full min-h-[180px] overflow-hidden">
-                          <img
-                            src={assets.firstImage.fileUrl}
-                            alt={assets.firstImage.caption || assets.firstImage.fileName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
-                          />
-                          {/* Gradient overlay for legibility of the counter + label */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0 pointer-events-none" />
-                          {/* "1 of N" counter — top-right */}
-                          <div className="absolute top-2 right-2 bg-black/75 text-white text-[0.65rem] font-bold px-2 py-0.5 rounded leading-none tabular-nums shadow-sm">
-                            1/{(item.speaker.images ?? []).length}
-                          </div>
-                          {/* Label — bottom-left */}
-                          <div className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 text-white text-xs font-semibold">
-                            <ImageIcon className="h-3.5 w-3.5" />
-                            Pictures
-                          </div>
+                  {/* ════════════════════════════════════════════════════════
+                      SLIDESHOW COLUMN — larger picture area with automatic
+                      700ms crossfade slideshow. Only renders when the speaker
+                      has images. On mobile, stacks below the info column.
+                      ════════════════════════════════════════════════════════ */}
+                  {hasSlideshow ? (
+                    <div
+                      className={`relative bg-black/5 overflow-hidden ${
+                        infoLeft
+                          ? "lg:order-2 border-t lg:border-t-0 lg:border-l border-black/10"
+                          : "lg:order-1 border-t lg:border-t-0 lg:border-r border-black/10"
+                      }`}
+                    >
+                      <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px]">
+                        <AutoCrossfadeSlideshow
+                          images={sessionImages}
+                          intervalMs={2500}
+                          transitionMs={700}
+                          onClick={() => setPicturesSpeaker(item.speaker!)}
+                          ariaLabel={`Open ${item.speaker?.name ?? "speaker"}'s session pictures`}
+                          className="w-full h-full"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    /* When there's no slideshow, fill the right column with a
+                       subtle brand-patterned placeholder so the card stays
+                       balanced on desktop. Hidden on mobile. */
+                    <div
+                      className={`hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#FF005A]/5 via-white to-[#00E6FF]/5 ${
+                        infoLeft ? "lg:order-2 border-l border-black/10" : "lg:order-1 border-r border-black/10"
+                      }`}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3 text-black/30">
+                          {typeIcon[item.type] && (
+                            <div className="h-12 w-12 flex items-center justify-center rounded-full bg-white shadow-sm border border-black/5 text-[#FF005A]/40">
+                              {typeIcon[item.type]}
+                            </div>
+                          )}
+                          <span className="text-xs font-semibold uppercase tracking-widest">
+                            {item.type.replace("_", " ").toLowerCase()}
+                          </span>
                         </div>
-                      </button>
+                      </div>
                     </div>
                   )}
                 </div>
