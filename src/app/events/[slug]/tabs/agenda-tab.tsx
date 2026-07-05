@@ -1021,7 +1021,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
           Event agenda
         </h2>
         <div className="space-y-5">
-          {event.agenda.map((item, idx) => {
+          {event.agenda.map((item) => {
             const end = item.endsAt ? new Date(item.endsAt) : null;
             const assets = agendaItemHasAssets(item);
             const showThumbnails =
@@ -1031,9 +1031,9 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
               assets.hasContact;
             const hasSlideshow = assets.hasPictures && !!item.speaker && (item.speaker.images ?? []).length > 0;
             const sessionImages = item.speaker?.images ?? [];
-            // Alternate layout: even index → info LEFT | slideshow RIGHT
-            //                  odd index  → slideshow LEFT | info RIGHT
-            const infoLeft = idx % 2 === 0;
+            // Consistent layout: info LEFT | slideshow RIGHT for every session.
+            // (Previously alternated per index, but the user requested all
+            // slideshows on the right and large, matching the regular talks.)
             // Break / fast-pitch sessions have no speaker, no slideshow, no
             // action buttons — they're just a time + title strip. Skip the
             // slideshow column entirely and shrink the info column padding /
@@ -1062,7 +1062,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   <div
                     className={`flex flex-col ${
                       isBreak ? "gap-2 p-4 lg:p-5" : "gap-4 p-6 lg:p-8"
-                    } ${infoLeft ? "lg:order-1" : "lg:order-2"}`}
+                    } lg:order-1`}
                   >
                     {/* Time + type icon row */}
                     <div className="flex items-center gap-3">
@@ -1257,11 +1257,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   {!isBreak &&
                     (hasSlideshow ? (
                       <div
-                        className={`relative bg-black/5 overflow-hidden ${
-                          infoLeft
-                            ? "lg:order-2 border-t lg:border-t-0 lg:border-l border-black/10"
-                            : "lg:order-1 border-t lg:border-t-0 lg:border-r border-black/10"
-                        }`}
+                        className="relative bg-black/5 overflow-hidden lg:order-2 border-t lg:border-t-0 lg:border-l border-black/10"
                       >
                         <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px]">
                           <AutoCrossfadeSlideshow
@@ -1280,9 +1276,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                          balanced on desktop. Hidden on mobile. The placeholder
                          no longer shows an icon/label — just the brand wash. */
                       <div
-                        className={`hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#FF005A]/5 via-white to-[#00E6FF]/5 ${
-                          infoLeft ? "lg:order-2 border-l border-black/10" : "lg:order-1 border-r border-black/10"
-                        }`}
+                        className="hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#FF005A]/5 via-white to-[#00E6FF]/5 lg:order-2 border-l border-black/10"
                       />
                     ))}
                 </div>
