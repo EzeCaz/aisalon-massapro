@@ -17,10 +17,10 @@ import { randomBytes } from "crypto";
  *                                       window" — see isWithinCheckInWindow().
  *
  * The "event day window" is defined as:
- *   - opens 1 hour BEFORE the event startsAt
+ *   - opens 2 hours BEFORE the event startsAt
  *   - closes 6 hours AFTER the event endsAt
  *
- * This lets early arrivals check in starting 1 hour before the official
+ * This lets early arrivals check in starting 2 hours before the official
  * start, and lets stragglers check in shortly after the event ends.
  * Outside this window, the API returns 403 with a friendly message.
  *
@@ -66,14 +66,14 @@ function generateCode(): string {
  * to ms-since-epoch, so the comparison is correct regardless of the
  * server's local timezone.
  *
- * Window: [startsAt - 1h, endsAt + 6h]
- *   - opens 1 hour before the event starts (per user spec — early
- *     arrivals can check in starting 1h before doors open)
+ * Window: [startsAt - 2h, endsAt + 6h]
+ *   - opens 2 hours before the event starts (per user spec — early
+ *     arrivals can check in starting 2h before doors open)
  *   - closes 6 hours after the event ends (so late arrivals can still
  *     check in shortly after the event wraps up)
  */
 function isWithinCheckInWindow(startsAt: Date, endsAt: Date, now: Date = new Date()): boolean {
-  const open = startsAt.getTime() - 1 * 60 * 60 * 1000;
+  const open = startsAt.getTime() - 2 * 60 * 60 * 1000;
   const close = endsAt.getTime() + 6 * 60 * 60 * 1000;
   return now.getTime() >= open && now.getTime() <= close;
 }
@@ -130,7 +130,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     return NextResponse.json(
       {
         error:
-          "Check-in opens 1 hour before the event starts. " +
+          "Check-in opens 2 hours before the event starts. " +
           "The button will appear here on the day of the event.",
         windowOpen: false,
       },

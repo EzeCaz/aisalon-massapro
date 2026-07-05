@@ -49,11 +49,11 @@ type Props = {
 // ------------------------------------------------------------------
 
 /**
- * Check-in window: opens 1h before startsAt, closes 6h after endsAt.
+ * Check-in window: opens 2h before startsAt, closes 6h after endsAt.
  * Server enforces the same window; this is just for client-side UX.
  */
 function isWithinCheckInWindow(startsAt: string, endsAt: string, now: Date = new Date()): boolean {
-  const open = new Date(startsAt).getTime() - 1 * 60 * 60 * 1000;
+  const open = new Date(startsAt).getTime() - 2 * 60 * 60 * 1000;
   const close = new Date(endsAt).getTime() + 6 * 60 * 60 * 1000;
   return now.getTime() >= open && now.getTime() <= close;
 }
@@ -284,6 +284,10 @@ export function RsvpCheckInCard({
   }
 
   // ---------- State 1: Not yet registered ----------
+  // Members who haven't RSVPed see ONLY the Register button — no
+  // "I'm here — Check in" shortcut. They must register first, then
+  // (once registered + within the 2h window) the Check-in button
+  // appears in the registered state below.
   if (!hasRsvped) {
     return (
       <div className="rounded-xl border-2 border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-white p-5 space-y-3">
@@ -310,32 +314,6 @@ export function RsvpCheckInCard({
             </>
           )}
         </button>
-        {windowOpen && (
-          <div className="pt-2 border-t border-black/10 space-y-2">
-            <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
-              Event day is here
-            </p>
-            <p className="text-xs text-black/80 leading-relaxed">
-              Already registered? Click below to check in and get your entry code.
-            </p>
-            <button
-              type="button"
-              onClick={handleCheckIn}
-              disabled={checkingIn}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#007E72]/40 bg-white text-[#007E72] font-semibold px-4 py-2.5 text-sm hover:bg-[#007E72]/5 disabled:opacity-50"
-            >
-              {checkingIn ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Checking in…
-                </>
-              ) : (
-                <>
-                  <CalendarCheck className="h-4 w-4" /> I&apos;m here — Check in
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
     );
   }
@@ -399,7 +377,7 @@ export function RsvpCheckInCard({
       ) : (
         <div className="pt-2 border-t border-black/10 space-y-1.5">
           <p className="text-[0.65rem] text-black/80 leading-relaxed">
-            The check-in button will appear here <strong>1 hour before</strong> the event starts.
+            The check-in button will appear here <strong>2 hours before</strong> the event starts.
           </p>
           <div className="flex items-center gap-1.5 text-[0.65rem] text-black/50">
             <Calendar className="h-3 w-3" />

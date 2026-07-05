@@ -128,12 +128,12 @@ function fmtYear(d: Date): string {
  * Check whether the current time falls inside the event-day window.
  * MUST match the server-side check in /api/events/[slug]/check-in/route.ts.
  *
- * Window: [startsAt - 1h, endsAt + 6h]
- *   - opens 1 hour before the event starts (per user spec)
+ * Window: [startsAt - 2h, endsAt + 6h]
+ *   - opens 2 hours before the event starts (per user spec)
  *   - closes 6 hours after the event ends (for late arrivals)
  */
 function isWithinCheckInWindow(startsAt: string, endsAt: string, now: Date = new Date()): boolean {
-  const open = new Date(startsAt).getTime() - 1 * 60 * 60 * 1000;
+  const open = new Date(startsAt).getTime() - 2 * 60 * 60 * 1000;
   const close = new Date(endsAt).getTime() + 6 * 60 * 60 * 1000;
   return now.getTime() >= open && now.getTime() <= close;
 }
@@ -896,32 +896,6 @@ function CtaCard({
             New here? You'll be able to create an account on the next screen.
           </p>
         )}
-        {windowOpen && (
-          <div className="pt-2 border-t border-black/10 space-y-2">
-            <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
-              Event day is here
-            </p>
-            <p className="text-xs text-black/80 leading-relaxed">
-              Already registered? Click below to check in and get your entry code.
-            </p>
-            <button
-              type="button"
-              onClick={onCheckIn}
-              disabled={checkingIn}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-md border-2 border-[#007E72]/40 bg-white text-[#007E72] font-semibold px-4 py-2.5 text-sm hover:bg-[#007E72]/5 disabled:opacity-50"
-            >
-              {checkingIn ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Checking in…
-                </>
-              ) : (
-                <>
-                  <CalendarCheck className="h-4 w-4" /> I'm here — Check in
-                </>
-              )}
-            </button>
-          </div>
-        )}
       </div>
     );
   }
@@ -965,7 +939,7 @@ function CtaCard({
         </div>
       ) : (
         <p className="text-[0.65rem] text-black/80 leading-relaxed pt-2 border-t border-black/10">
-          The check-in button will appear here 1 hour before the event starts.
+          The check-in button will appear here 2 hours before the event starts.
         </p>
       )}
     </div>
