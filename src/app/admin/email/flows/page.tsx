@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { canAny } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
-import { FlowBuilderClient } from "./flow-builder-client";
+import { FlowsPageClient } from "./flows-page-client";
 import { runSeed } from "@/lib/email-orchestrator/seed";
 
 export const metadata = { title: "Email Flows — Admin — AI Salon Tel Aviv" };
@@ -36,9 +36,15 @@ export default async function FlowBuilderPage() {
   // Load templates + events + audiences for the dropdowns.
   const [templates, events, audiences] = await Promise.all([
     db.emailStageTemplate.findMany({
-      where: { isActive: true },
-      orderBy: { stage: "asc" },
-      select: { id: true, name: true, subject: true, stage: true },
+      orderBy: [{ stage: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        subject: true,
+        stage: true,
+        isDefault: true,
+        isActive: true,
+      },
     }),
     db.event.findMany({
       orderBy: { startsAt: "desc" },
@@ -52,16 +58,19 @@ export default async function FlowBuilderPage() {
         name: true,
         slug: true,
         emailsJson: true,
+        kind: true,
         isTest: true,
       },
     }),
   ]);
 
-  // Parse audience emails for the client.
+  // Parse audience emails for the client. For STATIC audiences, parse emailsJson.
+  // For DYNAMIC, the client should call /api/email-audiences/[id]/emails to resolve.
   const audiencesParsed = audiences.map((a) => ({
     id: a.id,
     name: a.name,
     slug: a.slug,
+    kind: a.kind as "STATIC" | "DYNAMIC",
     isTest: a.isTest,
     emails: safeParseEmails(a.emailsJson),
   }));
@@ -73,9 +82,9 @@ export default async function FlowBuilderPage() {
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Email Flows</h1>
+            <h1 className="text-2xl font-bold text-neutral-900">Email Automation</h1>
             <p className="text-sm text-neutral-500">
-              Build automated email sequences: pick an audience, a trigger, and an email template with A/B subject testing. Up to 8 steps per flow.
+              Build automated flows, manage reusable audiences, and edit email templates with A/B subject testing.
             </p>
           </div>
           <a
@@ -86,7 +95,7 @@ export default async function FlowBuilderPage() {
           </a>
         </div>
 
-        <FlowBuilderClient
+        <FlowsPageClient
           templates={templates}
           events={events.map((e) => ({ ...e, startsAt: e.startsAt.toISOString() }))}
           initialAudiences={audiencesParsed}

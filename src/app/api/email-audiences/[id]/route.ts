@@ -1,5 +1,6 @@
 /**
- * PATCH  /api/email-audiences/[id] — update audience name/description/emails.
+ * PATCH  /api/email-audiences/[id] — update audience (name, description,
+ *   emails for STATIC, or filters for DYNAMIC).
  * DELETE /api/email-audiences/[id] — delete audience (the built-in Test
  *   audience cannot be deleted, only edited).
  *
@@ -10,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { parseSpec, type AudienceFilterSpec } from "@/lib/email-orchestrator/audience-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,22 @@ async function checkAuth(req: NextRequest) {
   return { ok: true };
 }
 
+function safeParseEmails(json: string): string[] {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -35,7 +53,9 @@ export async function PATCH(
   let body: {
     name?: string;
     description?: string | null;
+    kind?: "STATIC" | "DYNAMIC";
     emails?: string[];
+    filters?: AudienceFilterSpec;
   };
   try {
     body = await req.json();
@@ -47,27 +67,49 @@ export async function PATCH(
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const updateData: Record<string, unknown> = {};
+
   if (body.name !== undefined) {
     const name = body.name.trim();
     if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
     updateData.name = name;
-    // Regenerate slug.
-    updateData.slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+    updateData.slug = slugify(name);
   }
+
   if (body.description !== undefined) {
     updateData.description = body.description || null;
   }
-  if (body.emails !== undefined) {
-    const emails = body.emails
-      .map((e) => e.trim().toLowerCase())
-      .filter((e) => e && e.includes("@"));
-    if (emails.length === 0) {
-      return NextResponse.json({ error: "at least one email required" }, { status: 400 });
+
+  // Allow switching kind. When switching to STATIC, must provide emails.
+  // When switching to DYNAMIC, must provide filters with at least one group.
+  const newKind = body.kind === "DYNAMIC" ? "DYNAMIC" : body.kind === "STATIC" ? "STATIC" : existing.kind;
+  updateData.kind = newKind;
+
+  if (newKind === "STATIC") {
+    if (body.emails !== undefined) {
+      const emails = body.emails
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e && e.includes("@"));
+      if (emails.length === 0) {
+        return NextResponse.json({ error: "at least one email required for STATIC audience" }, { status: 400 });
+      }
+      updateData.emailsJson = JSON.stringify(emails);
+      updateData.filtersJson = null;
+    } else if (existing.kind !== "STATIC") {
+      // Switching to STATIC without providing emails — error
+      return NextResponse.json({ error: "emails required when switching to STATIC" }, { status: 400 });
     }
-    updateData.emailsJson = JSON.stringify(emails);
+  } else {
+    // DYNAMIC
+    if (body.filters !== undefined) {
+      if (!body.filters.groups || body.filters.groups.length === 0) {
+        return NextResponse.json({ error: "at least one filter group required for DYNAMIC audience" }, { status: 400 });
+      }
+      updateData.filtersJson = JSON.stringify(body.filters);
+      updateData.emailsJson = "[]";
+    } else if (existing.kind !== "DYNAMIC") {
+      // Switching to DYNAMIC without providing filters — error
+      return NextResponse.json({ error: "filters required when switching to DYNAMIC" }, { status: 400 });
+    }
   }
 
   try {
@@ -79,7 +121,8 @@ export async function PATCH(
       ok: true,
       audience: {
         ...updated,
-        emails: safeParseEmails(updated.emailsJson),
+        emails: updated.kind === "STATIC" ? safeParseEmails(updated.emailsJson) : [],
+        filters: updated.kind === "DYNAMIC" && updated.filtersJson ? parseSpec(updated.filtersJson) : null,
       },
     });
   } catch (err) {
@@ -117,13 +160,4 @@ export async function DELETE(
   });
   await db.emailAudience.delete({ where: { id } });
   return NextResponse.json({ ok: true });
-}
-
-function safeParseEmails(json: string): string[] {
-  try {
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
-  } catch {
-    return [];
-  }
 }

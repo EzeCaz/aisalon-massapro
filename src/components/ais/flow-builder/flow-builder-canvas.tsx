@@ -29,13 +29,16 @@ export type FlowTemplate = {
   id: string;
   name: string;
   subject: string;
-  stage: number;
+  stage: number | null;
+  isDefault?: boolean;
+  isActive?: boolean;
 };
 
 export type FlowAudience = {
   id: string;
   name: string;
   isTest: boolean;
+  kind?: "STATIC" | "DYNAMIC";
   emails: string[];
 };
 
@@ -378,27 +381,43 @@ function StepEditorSheet({
               <h4 className="text-sm font-bold text-neutral-800">Audience — who receives this email</h4>
             </div>
             <label className="mb-1 block text-xs font-semibold text-neutral-700">Audience</label>
-            <select
-              value={step.audienceId ?? ""}
-              onChange={(e) => onChange({ ...step, audienceId: e.target.value || null })}
-              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Everyone (no audience filter)</option>
-              {audiences.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}{a.isTest ? " (Test)" : ""} — {a.emails.length} email{a.emails.length === 1 ? "" : "s"}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={step.audienceId ?? ""}
+                onChange={(e) => onChange({ ...step, audienceId: e.target.value || null })}
+                className="flex-1 rounded border border-neutral-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Everyone (no audience filter)</option>
+                {audiences.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}{a.isTest ? " (Test)" : ""}{a.kind === "DYNAMIC" ? " (dynamic)" : ""} — {a.emails.length} email{a.emails.length === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </select>
+              <a
+                href="/admin/email/flows"
+                onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent("navigate-to-audiences-tab")); }}
+                className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                title="Open the Audiences tab to create or manage audiences"
+              >
+                <Plus className="h-3 w-3" /> New
+              </a>
+            </div>
             <p className="mt-1 text-[10px] text-neutral-500">
-              Only recipients whose email is in this audience will receive this step. Pick &ldquo;Test&rdquo; to send only to your test emails.
+              Only recipients whose email is in this audience will receive this step. Click &ldquo;New&rdquo; to create a new audience (STATIC or DYNAMIC filter) — opens in the Audiences tab.
             </p>
             {step.audienceId && (() => {
               const a = audiences.find((x) => x.id === step.audienceId);
               return a ? (
                 <div className="mt-2 rounded bg-neutral-50 p-2 text-[10px] text-neutral-600">
-                  <div className="font-semibold mb-1">{a.emails.length} email(s) in this audience:</div>
-                  <div className="truncate">{a.emails.join(", ")}</div>
+                  <div className="font-semibold mb-1">
+                    {a.emails.length} email(s) in &ldquo;{a.name}&rdquo;{a.kind === "DYNAMIC" ? " (dynamic — resolved live)" : ""}
+                  </div>
+                  {a.emails.length > 0 ? (
+                    <div className="truncate">{a.emails.join(", ")}</div>
+                  ) : (
+                    <div className="italic text-neutral-400">No emails resolved yet — DYNAMIC audiences are evaluated when the flow fires.</div>
+                  )}
                 </div>
               ) : null;
             })()}
@@ -461,12 +480,12 @@ function StepEditorSheet({
               <option value="">— Wait-only step (no email) —</option>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
-                  Stage {t.stage}: {t.name} — {t.subject}
+                  {t.stage ? `Stage ${t.stage}: ` : ""}{t.name} — {t.subject}
                 </option>
               ))}
             </select>
             <p className="mt-1 text-[10px] text-neutral-500">
-              The template provides the HTML body. You can override the subject below.
+              The template provides the HTML body. You can override the subject below. Manage templates in the Templates tab.
             </p>
 
             {/* Subject A */}

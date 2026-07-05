@@ -73,6 +73,7 @@ export async function runSeed(): Promise<SeedResult> {
         htmlBody: def.html,
         stopIfNotOpenedHours: stageCfg.stopIfNotOpenedHours,
         isActive: true,
+        isDefault: true,
       },
     });
     result.templates.created++;

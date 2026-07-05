@@ -1,6 +1,9 @@
 /**
- * GET  /api/email-audiences — list all audiences.
- * POST /api/email-audiences — create a new audience.
+ * GET    /api/email-audiences — list all audiences (with resolved email count).
+ * POST   /api/email-audiences — create a new audience (STATIC or DYNAMIC).
+ * POST   /api/email-audiences/preview — evaluate a filter spec and return
+ *        the matching emails (does NOT persist anything). Used by the live
+ *        preview in the audience builder UI.
  *
  * Auth: admin session (SUPER_ADMIN or ADMIN).
  */
@@ -9,6 +12,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  parseSpec,
+  type AudienceFilterSpec,
+} from "@/lib/email-orchestrator/audience-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +30,26 @@ async function checkAuth(req: NextRequest) {
   return { ok: true, userId: me.id };
 }
 
+function safeParseEmails(json: string): string[] {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET — list all audiences
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function GET(req: NextRequest) {
   const auth = await checkAuth(req);
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -34,14 +61,28 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Parse emailsJson for the client.
+  // For STATIC audiences, parse emailsJson. For DYNAMIC, leave emails empty
+  // (the client can call /api/email-audiences/[id]/emails to resolve them).
   return NextResponse.json({
     audiences: audiences.map((a) => ({
-      ...a,
-      emails: safeParseEmails(a.emailsJson),
+      id: a.id,
+      name: a.name,
+      slug: a.slug,
+      description: a.description,
+      kind: a.kind,
+      isTest: a.isTest,
+      emails: a.kind === "STATIC" ? safeParseEmails(a.emailsJson) : [],
+      filters: a.kind === "DYNAMIC" && a.filtersJson ? parseSpec(a.filtersJson) : null,
+      flowStepsCount: a._count.flowSteps,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
     })),
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST — create a new audience
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const auth = await checkAuth(req);
@@ -50,7 +91,9 @@ export async function POST(req: NextRequest) {
   let body: {
     name?: string;
     description?: string;
+    kind?: "STATIC" | "DYNAMIC";
     emails?: string[];
+    filters?: AudienceFilterSpec;
     isTest?: boolean;
   };
   try {
@@ -62,33 +105,46 @@ export async function POST(req: NextRequest) {
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-  const emails = (body.emails ?? [])
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => e && e.includes("@"));
+  const kind = body.kind === "DYNAMIC" ? "DYNAMIC" : "STATIC";
 
-  if (emails.length === 0) {
-    return NextResponse.json({ error: "at least one email required" }, { status: 400 });
+  let emailsJson = "[]";
+  let filtersJson: string | null = null;
+
+  if (kind === "STATIC") {
+    const emails = (body.emails ?? [])
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e && e.includes("@"));
+    if (emails.length === 0) {
+      return NextResponse.json({ error: "at least one email required for STATIC audience" }, { status: 400 });
+    }
+    emailsJson = JSON.stringify(emails);
+  } else {
+    // DYNAMIC — must have a valid filter spec with at least one group
+    if (!body.filters || !body.filters.groups || body.filters.groups.length === 0) {
+      return NextResponse.json({ error: "at least one filter group required for DYNAMIC audience" }, { status: 400 });
+    }
+    filtersJson = JSON.stringify(body.filters);
   }
-
-  // Generate a slug from the name.
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 
   try {
     const audience = await db.emailAudience.create({
       data: {
         name,
-        slug,
+        slug: slugify(name),
         description: body.description || null,
-        emailsJson: JSON.stringify(emails),
+        kind,
+        emailsJson,
+        filtersJson,
         isTest: body.isTest === true,
       },
     });
     return NextResponse.json({
       ok: true,
-      audience: { ...audience, emails },
+      audience: {
+        ...audience,
+        emails: kind === "STATIC" ? safeParseEmails(audience.emailsJson) : [],
+        filters: kind === "DYNAMIC" ? parseSpec(audience.filtersJson) : null,
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -96,14 +152,5 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "An audience with this name already exists" }, { status: 409 });
     }
     return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-
-function safeParseEmails(json: string): string[] {
-  try {
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
-  } catch {
-    return [];
   }
 }

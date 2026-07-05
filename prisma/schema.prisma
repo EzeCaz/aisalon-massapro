@@ -864,24 +864,36 @@ model EmailQueue {
   @@index([audienceId])
 }
 
-/// Admin-editable per-stage copy for the 5-stage orchestrator.
-/// Each stage has a subject + HTML body template with {{eventTitle}},
+/// Admin-editable email templates. Originally tied 1:1 to the 5
+/// orchestrator stages (Awareness, Reminder, Final Prep, Day-Of, Recap),
+/// now also supports admin-created custom templates (stage = null) that
+/// can be picked in the flow step editor alongside the stage defaults.
+///
+/// Each template has a subject + HTML body with {{eventTitle}},
 /// {{firstName}}, etc. tokens. The stopIfNotOpenedHours rule lets the
 /// orchestrator halt the chain if a stage isn't opened in time.
 model EmailStageTemplate {
   id          String   @id @default(cuid())
-  stage       Int      @unique // 1..5
-  name        String   // "Awareness" | "Reminder" | "Final Prep" | "Day-Of" | "Recap"
+  /// 1..5 for the seeded stage defaults; null for admin-created custom templates.
+  stage       Int?     @unique
+  /// Display name — unique across all templates. For seeded defaults this is
+  /// "Awareness" | "Reminder" | "Final Prep" | "Day-Of" | "Recap". Custom
+  /// templates get a user-chosen name (e.g. "TLV promo — early bird").
+  name        String   @unique
   subject     String
   htmlBody    String   // HTML template with {{eventTitle}}, {{firstName}}, etc.
   stopIfNotOpenedHours Int?
   isActive    Boolean  @default(true)
+  /// Marks the 5 seeded defaults — they cannot be deleted (only edited or
+  /// deactivated). Set to false on duplicated / custom-created templates.
+  isDefault   Boolean  @default(false)
   updatedAt   DateTime @updatedAt
   updatedBy   String?
   // --- back-relations ---
   flowSteps   EmailFlowStep[] // flow steps that use this template
 
   @@index([stage])
+  @@index([isActive])
 }
 
 /// Per-event audit log for email opens + clicks. Also stores the
@@ -962,16 +974,36 @@ model EmailFlowStep {
   @@index([audienceId])
 }
 
-/// A reusable named audience — a list of email addresses that can be
-/// referenced by flow steps. The built-in "Test" audience contains
-/// the admin's test emails. Admins can create custom audiences.
+/// A reusable named audience — either a STATIC list of email addresses
+/// or a DYNAMIC filter spec that resolves to a list of emails at query
+/// time. The built-in "Test" audience is STATIC with the admin's test
+/// emails. Admins can create custom audiences of either kind.
+///
+/// STATIC audiences store `emailsJson` (JSON array of email strings).
+/// DYNAMIC audiences store `filtersJson` (filter spec resolved by
+/// `src/lib/email-orchestrator/audience-filter.ts`) — the resolved
+/// email list is recomputed on demand (so new RSVPs / users that match
+/// the filter are picked up automatically).
 model EmailAudience {
   id          String   @id @default(cuid())
   name        String   @unique // "Test" | "TLV members" | etc.
   slug        String?  @unique
   description String?
-  /// JSON array of email strings: ["eze@massapro.com", "ezeszna@gmail.com", ...]
+  /// "STATIC" = explicit list of emails; "DYNAMIC" = filter spec.
+  kind        String   @default("STATIC") // "STATIC" | "DYNAMIC"
+  /// JSON array of email strings (STATIC only): ["eze@massapro.com", ...]
   emailsJson  String   @default("[]")
+  /// Filter spec (DYNAMIC only). Shape:
+  ///   {
+  ///     source: "users" | "rsvps" | "users_and_rsvps",
+  ///     combinator: "AND" | "OR",           // how rule groups combine
+  ///     groups: [
+  ///       { combinator: "AND" | "OR", rules: [{ field, op, value }] }
+  ///     ]
+  ///   }
+  /// Stored as JSON string. Null for STATIC audiences. See
+  /// `audience-filter.ts` for the evaluator + available fields/ops.
+  filtersJson String?
   /// Marks the built-in test audience (created automatically on first load).
   isTest      Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -980,4 +1012,5 @@ model EmailAudience {
   flowSteps   EmailFlowStep[]
 
   @@index([isTest])
+  @@index([kind])
 }

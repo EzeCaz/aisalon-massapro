@@ -20,6 +20,7 @@
  */
 
 import { db } from "@/lib/db";
+import { resolveAudienceEmailsById } from "./audience-filter";
 
 export type TriggerKind =
   | "RSVP_GOING"
@@ -95,13 +96,21 @@ export async function triggerFlowsForRsvp(input: TriggerInput): Promise<TriggerR
   let created = 0;
   let skipped = 0;
 
+  // Cache resolved audience email sets per step.audienceId (avoids re-resolving
+  // the same DYNAMIC audience for every RSVP in a batch).
+  const audienceEmailCache = new Map<string, Set<string>>();
+
   for (const step of steps) {
     // Audience filter: if step.audienceId is set, the RSVP email must be in
     // the audience's email list.
     if (step.audienceId && step.audience) {
-      const audienceEmails = safeParseEmails(step.audience.emailsJson);
-      const lowerEmails = audienceEmails.map((e) => e.toLowerCase());
-      if (!lowerEmails.includes(rsvp.email.toLowerCase())) {
+      let emailSet = audienceEmailCache.get(step.audienceId);
+      if (!emailSet) {
+        const emails = await resolveAudienceEmailsById(step.audienceId);
+        emailSet = new Set(emails);
+        audienceEmailCache.set(step.audienceId, emailSet);
+      }
+      if (!emailSet.has(rsvp.email.toLowerCase())) {
         skipped++;
         continue;
       }
@@ -228,7 +237,7 @@ export async function manuallyTriggerStepForAudience(
     where: { id: stepId },
     include: {
       flow: { select: { id: true, name: true, status: true } },
-      audience: { select: { id: true, emailsJson: true, name: true } },
+      audience: { select: { id: true, name: true, kind: true } },
       template: { select: { id: true, subject: true } },
     },
   });
@@ -237,7 +246,8 @@ export async function manuallyTriggerStepForAudience(
   if (!step.templateId) return { ok: false, created: 0, skipped: 0, reason: "step has no template (wait-only)" };
   if (!step.audienceId || !step.audience) return { ok: false, created: 0, skipped: 0, reason: "step has no audience" };
 
-  const audienceEmails = safeParseEmails(step.audience.emailsJson);
+  // Resolve audience emails (supports both STATIC and DYNAMIC audiences).
+  const audienceEmails = await resolveAudienceEmailsById(step.audienceId);
   if (audienceEmails.length === 0) {
     return { ok: false, created: 0, skipped: 0, reason: "audience has no emails" };
   }
@@ -321,15 +331,6 @@ export async function manuallyTriggerStepForAudience(
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-function safeParseEmails(json: string): string[] {
-  try {
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 function delayToMs(value: number, unit: string): number {
   switch (unit) {

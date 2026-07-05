@@ -79,3 +79,64 @@ Stage Summary:
 - Migration SQL ready at prisma/migrations/20260705000000_email_flow_restructure/migration.sql
 - TO DEPLOY: run `npx prisma migrate deploy` (or `prisma db push` for dev), then the app
   auto-seeds the Test audience on first /admin/email/flows page load
+
+---
+Task ID: audiences-templates-tab
+Agent: main
+Task: Add 4 features to the email automation page:
+  1. Audiences tab with filter builder (members + registrations + users, AND/OR)
+  2. Step editor integration: select audiences + create new one inline
+  3. Templates tab: edit Stage 1-5 + duplicate/copy; selectable in flow step editor
+  4. Per-template metrics: sent/opened/clicked/failed across all campaigns
+
+Work Log:
+- Phase A — Prisma schema changes:
+  * EmailAudience: added kind ("STATIC"|"DYNAMIC"), filtersJson (filter spec)
+  * EmailStageTemplate: stage now nullable (Int? unique), name now unique, added isDefault
+  * Backfilled isDefault=true on the 5 seeded stage templates
+- Phase B — Audience filter evaluator + APIs:
+  * New src/lib/email-orchestrator/audience-filter.ts: types, field catalog (USER_FIELDS, RSVP_FIELDS), parseSpec, resolveAudienceEmails, resolveAudienceEmailsById
+  * Updated /api/email-audiences (GET/POST) + /[id] (PATCH/DELETE) to support kind=filters
+  * New /api/email-audiences/preview (POST) — evaluate filter spec, no persistence
+  * New /api/email-audiences/[id]/emails (GET) — resolve audience to current email list
+  * Updated flow-trigger.ts to use resolveAudienceEmailsById for both STATIC and DYNAMIC audiences (with per-trigger cache to avoid re-resolving per RSVP in batch)
+- Phase C — Audiences tab UI:
+  * New src/app/admin/email/flows/audiences-client.tsx (870 lines)
+  * List view: shows name, kind pill (STATIC/DYNAMIC), email count, flow step count
+  * Editor: name, description, kind toggle, STATIC editor (textarea), DYNAMIC filter builder
+  * Filter builder: source dropdown (users/rsvps/both), combinator (AND/OR), groups, rules
+  * Each rule: field dropdown (15+ fields), operator dropdown (12 ops), value (text/enum/date/boolean)
+  * Live preview button → opens dialog showing resolved email list + count
+  * Duplicate + Delete actions
+- Phase D — Flow step editor integration:
+  * Updated StepEditorSheet in flow-builder-canvas.tsx: audience dropdown shows kind + count
+  * "New" button dispatches window event → FlowsPageClient switches to Audiences tab
+  * Updated flows/page.tsx to load kind field on audiences + isDefault/isActive on templates
+  * Updated FlowAudience + FlowTemplate types to include kind + isDefault
+- Phase E — Templates tab (edit + duplicate):
+  * New /api/email-templates (GET list + POST create)
+  * New /api/email-templates/[id] (PATCH update + DELETE — defaults can't be deleted, only deactivated)
+  * New /api/email-templates/[id]/duplicate (POST — creates copy with stage=null, name="X (copy)")
+  * New src/app/admin/email/flows/templates-client.tsx (750 lines)
+  * Templates table: stage pill (Stage N / Custom), name, subject, flow step count, status, updated, actions
+  * Edit/Create dialog: name, subject, stopIfNotOpenedHours, HTML body with live preview (iframe srcDoc)
+  * Duplicate button on each template
+  * Toggle active/inactive without deleting
+- Phase F — Template metrics:
+  * New /api/email-templates/[id]/metrics (GET): overall metrics + byVariant A/B + byFlow + recentSends (25)
+  * Metrics dialog in templates-client.tsx: 5 summary cards, A/B variant table, per-flow table, recent sends table
+- Phase G — Build + DB:
+  * prisma db push applied (EmailAudience.kind/filtersJson added; EmailStageTemplate.stage nullable; isDefault added)
+  * Backfilled isDefault=true on 5 seeded templates
+  * Restarted dev server
+  * TypeScript: 0 new errors from changes (3 pre-existing errors in unrelated files: simulate/route.ts, meta-capi.ts, worker.ts)
+
+Stage Summary:
+- 4 new APIs: /api/email-templates (list/create), /api/email-templates/[id] (update/delete), /api/email-templates/[id]/duplicate, /api/email-templates/[id]/metrics, /api/email-audiences/preview, /api/email-audiences/[id]/emails
+- 3 new UI files: audiences-client.tsx, templates-client.tsx, flows-page-client.tsx (top-level tab container)
+- All 4 requirements implemented without manual DB migration (used prisma db push)
+- The /admin/email/flows page now has 3 tabs: Flows, Audiences, Templates
+- Audiences support STATIC (email list) + DYNAMIC (filter spec evaluated live)
+- Templates: edit any of the 5 stage defaults OR create custom templates (stage=null); duplicate any template
+- Per-template metrics: overall + by A/B variant + by flow + recent 25 sends
+- TO TEST: open /admin/email/flows → Audiences tab → click "New audience" → switch kind to DYNAMIC → build filter → Preview → Save. Then Templates tab → edit/duplicate/metrics.
