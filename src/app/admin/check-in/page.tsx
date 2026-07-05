@@ -13,12 +13,27 @@ import { DoorCheckInClient } from "./door-check-in-client";
  * Renders a single-input form where door staff type in (or scan) the
  * 8-char check-in code shown on the attendee's phone. The page then
  * queries /api/admin/check-in/lookup and shows the attendee's details
- * + which event they're registered for.
+ * + which event they're registered for, plus a non-transferrable-code
+ * warning. Door staff then press "Confirm check-in" which POSTs to
+ * /api/admin/check-in/confirm — the actual atomic write that sets
+ * doorCheckedAt + doorCheckedBy.
+ *
+ * TWO-STEP FLOW (no pre-approval gate):
+ *   1. LOOK UP  → GET  /api/admin/check-in/lookup?code=XXXX-XXXX
+ *                 Returns PENDING_CONFIRM (200) | ALREADY_USED (200) | MISS (404)
+ *   2. CONFIRM  → POST /api/admin/check-in/confirm  { code: "XXXX-XXXX" }
+ *                 Returns CONFIRMED (200) | ALREADY_USED (200)
+ *
+ * ANY Super Admin / Admin / Co-host of the event can confirm — there
+ * is no pre-approval gate. The confirmation itself IS the approval.
+ * The confirm write is race-safe (updateMany with `doorCheckedAt: null`
+ * guard) so two staffers confirming the same code simultaneously can't
+ * both succeed.
  *
  * Auth: requires events.edit (admin or super-admin) OR
- * eventdata.viewCoHosted (co-host). The lookup API enforces per-event
- * scope for CO_HOSTs — they can only look up codes for events they
- * co-host. Admins+ can look up any code globally.
+ * eventdata.viewCoHosted (co-host). The lookup + confirm APIs enforce
+ * per-event scope for CO_HOSTs — they can only act on codes for events
+ * they co-host. Admins+ can act on any code globally.
  *
  * Layout: full site chrome (AppHeader + AdminTabs) is rendered so door
  * staff have the same navigation as other admin pages, per user
