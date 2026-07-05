@@ -1034,6 +1034,11 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
             // Alternate layout: even index → info LEFT | slideshow RIGHT
             //                  odd index  → slideshow LEFT | info RIGHT
             const infoLeft = idx % 2 === 0;
+            // Break / fast-pitch sessions have no speaker, no slideshow, no
+            // action buttons — they're just a time + title strip. Skip the
+            // slideshow column entirely and shrink the info column padding /
+            // title font so these cards are ~60% shorter than regular talks.
+            const isBreak = item.type === "BREAK" || item.type === "FAST_PITCH";
 
             return (
               <Card
@@ -1044,20 +1049,28 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     appear on at least one face of every brand surface */}
                 <div className="ais-gradient absolute top-0 left-0 right-0 h-1 z-10" />
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
+                <div
+                  className={`grid grid-cols-1 items-stretch ${
+                    isBreak ? "" : "lg:grid-cols-2"
+                  }`
+                }>
                   {/* ════════════════════════════════════════════════════════
                       INFO COLUMN — time + title + description + speaker +
                       panelists + action buttons (pictures / presentation /
                       session URL / contact). All left-aligned, larger fonts.
                       ════════════════════════════════════════════════════════ */}
                   <div
-                    className={`flex flex-col gap-4 p-6 lg:p-8 ${
-                      infoLeft ? "lg:order-1" : "lg:order-2"
-                    }`}
+                    className={`flex flex-col ${
+                      isBreak ? "gap-2 p-4 lg:p-5" : "gap-4 p-6 lg:p-8"
+                    } ${infoLeft ? "lg:order-1" : "lg:order-2"}`}
                   >
                     {/* Time + type icon row */}
                     <div className="flex items-center gap-3">
-                      <div className="font-mono text-2xl font-extrabold leading-none tabular-nums text-[#FF005A]">
+                      <div
+                        className={`font-mono font-extrabold leading-none tabular-nums text-[#FF005A] ${
+                          isBreak ? "text-lg" : "text-2xl"
+                        }`}
+                      >
                         {fmtTime(item.startsAt)}
                       </div>
                       {end && (
@@ -1071,7 +1084,11 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     </div>
 
                     {/* Title — larger, per user request */}
-                    <h3 className="text-2xl font-bold tracking-tight text-black leading-tight">
+                    <h3
+                      className={`font-bold tracking-tight text-black leading-tight ${
+                        isBreak ? "text-lg" : "text-2xl"
+                      }`}
+                    >
                       {item.title}
                     </h3>
 
@@ -1233,49 +1250,41 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                       SLIDESHOW COLUMN — larger picture area with automatic
                       700ms crossfade slideshow. Only renders when the speaker
                       has images. On mobile, stacks below the info column.
+                      Break / fast-pitch sessions skip this column entirely so
+                      the card stays a compact single-column strip (~60% shorter
+                      than regular talks).
                       ════════════════════════════════════════════════════════ */}
-                  {hasSlideshow ? (
-                    <div
-                      className={`relative bg-black/5 overflow-hidden ${
-                        infoLeft
-                          ? "lg:order-2 border-t lg:border-t-0 lg:border-l border-black/10"
-                          : "lg:order-1 border-t lg:border-t-0 lg:border-r border-black/10"
-                      }`}
-                    >
-                      <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px]">
-                        <AutoCrossfadeSlideshow
-                          images={sessionImages}
-                          intervalMs={2500}
-                          transitionMs={700}
-                          onClick={() => setPicturesSpeaker(item.speaker!)}
-                          ariaLabel={`Open ${item.speaker?.name ?? "speaker"}'s session pictures`}
-                          className="w-full h-full"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    /* When there's no slideshow, fill the right column with a
-                       subtle brand-patterned placeholder so the card stays
-                       balanced on desktop. Hidden on mobile. */
-                    <div
-                      className={`hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#FF005A]/5 via-white to-[#00E6FF]/5 ${
-                        infoLeft ? "lg:order-2 border-l border-black/10" : "lg:order-1 border-r border-black/10"
-                      }`}
-                    >
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="flex flex-col items-center gap-3 text-black/30">
-                          {typeIcon[item.type] && (
-                            <div className="h-12 w-12 flex items-center justify-center rounded-full bg-white shadow-sm border border-black/5 text-[#FF005A]/40">
-                              {typeIcon[item.type]}
-                            </div>
-                          )}
-                          <span className="text-xs font-semibold uppercase tracking-widest">
-                            {item.type.replace("_", " ").toLowerCase()}
-                          </span>
+                  {!isBreak &&
+                    (hasSlideshow ? (
+                      <div
+                        className={`relative bg-black/5 overflow-hidden ${
+                          infoLeft
+                            ? "lg:order-2 border-t lg:border-t-0 lg:border-l border-black/10"
+                            : "lg:order-1 border-t lg:border-t-0 lg:border-r border-black/10"
+                        }`}
+                      >
+                        <div className="relative w-full aspect-[4/3] lg:aspect-auto lg:h-full min-h-[280px]">
+                          <AutoCrossfadeSlideshow
+                            images={sessionImages}
+                            intervalMs={2500}
+                            transitionMs={700}
+                            onClick={() => setPicturesSpeaker(item.speaker!)}
+                            ariaLabel={`Open ${item.speaker?.name ?? "speaker"}'s session pictures`}
+                            className="w-full h-full"
+                          />
                         </div>
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      /* When there's no slideshow, fill the right column with a
+                         subtle brand-patterned placeholder so the card stays
+                         balanced on desktop. Hidden on mobile. The placeholder
+                         no longer shows an icon/label — just the brand wash. */
+                      <div
+                        className={`hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#FF005A]/5 via-white to-[#00E6FF]/5 ${
+                          infoLeft ? "lg:order-2 border-l border-black/10" : "lg:order-1 border-r border-black/10"
+                        }`}
+                      />
+                    ))}
                 </div>
               </Card>
             );
