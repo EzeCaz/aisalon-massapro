@@ -270,7 +270,7 @@ export function LoginForm({ callbackUrl }: Props) {
 
       {isDev && (
         <details className="mt-2 group">
-          <summary className="text-xs text-black/40 cursor-pointer hover:text-black/60 select-none">
+          <summary className="text-xs text-black/80 cursor-pointer hover:text-black/80 select-none">
             Dev sign-in (any email, no password)
           </summary>
           <DevSignIn
@@ -297,7 +297,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={`px-3 py-2 text-xs font-semibold rounded-md transition-colors ${
-        active ? "bg-white text-black shadow-sm" : "text-black/60 hover:text-black"
+        active ? "bg-white text-black shadow-sm" : "text-black/80 hover:text-black"
       }`}
     >
       {children}
@@ -328,7 +328,7 @@ function Field({
     <label className="block">
       <span className="block text-xs font-semibold text-black/70 mb-1.5">{label}</span>
       <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40">{icon}</span>
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/80">{icon}</span>
         <input
           type={type}
           placeholder={placeholder}
@@ -392,7 +392,7 @@ function DevSignIn({
       >
         {busy ? "Signing in…" : "Sign in (dev)"}
       </button>
-      <p className="text-[10px] text-black/40">
+      <p className="text-[10px] text-black/80">
         Tip: sign in as <span className="font-mono">eze@massapro.com</span> to become admin.
       </p>
     </form>

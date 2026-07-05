@@ -125,38 +125,38 @@ export function OverviewTab({
         />
 
         <Card className="p-5 bg-white border border-black/10">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-4">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-black/80 mb-4">
             Event details
           </h3>
           <dl className="space-y-3 text-sm">
             <div className="flex items-start gap-2">
-              <Calendar className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+              <Calendar className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
               <div>
-                <dt className="text-black/40 text-xs">Date</dt>
+                <dt className="text-black/80 text-xs">Date</dt>
                 <dd className="font-semibold text-black">{new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", weekday: "long", month: "short", day: "numeric" }).format(start)}</dd>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <Clock className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+              <Clock className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
               <div>
-                <dt className="text-black/40 text-xs">Time</dt>
+                <dt className="text-black/80 text-xs">Time</dt>
                 <dd className="font-semibold text-black font-mono">
                   {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(start)} – {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(end)}
                 </dd>
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+              <MapPin className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
               <div>
-                <dt className="text-black/40 text-xs">Venue</dt>
+                <dt className="text-black/80 text-xs">Venue</dt>
                 <dd className="font-semibold text-black">{event.venue}</dd>
-                {event.address && <dd className="text-black/60 text-xs">{event.address}</dd>}
+                {event.address && <dd className="text-black/80 text-xs">{event.address}</dd>}
               </div>
             </div>
             <div className="flex items-start gap-2">
-              <Users className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+              <Users className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
               <div>
-                <dt className="text-black/40 text-xs">Speakers</dt>
+                <dt className="text-black/80 text-xs">Speakers</dt>
                 <dd className="font-semibold text-black">
                   {event.speakers.filter((s) => s.name !== "Ezequiel Sznaider").length} featured
                 </dd>
@@ -189,7 +189,7 @@ export function OverviewTab({
               href={event.rsvpUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 block w-full rounded-md border border-black/15 text-black/60 text-xs font-semibold py-2 text-center hover:bg-black/[0.03]"
+              className="mt-2 block w-full rounded-md border border-black/15 text-black/80 text-xs font-semibold py-2 text-center hover:bg-black/[0.03]"
             >
               External RSVP form ↗
             </a>
@@ -197,7 +197,7 @@ export function OverviewTab({
         </Card>
 
         <Card className="p-5 bg-[#00E6FF]/5 border border-[#00E6FF]/30">
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             <strong className="text-black">Members only.</strong> Photos and recordings from this
             event are shared exclusively with registered AI Salon Tel Aviv community members.
             Use the <strong>Photos</strong> tab to upload your shots, and the{" "}

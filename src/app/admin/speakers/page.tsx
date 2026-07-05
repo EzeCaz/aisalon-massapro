@@ -98,7 +98,7 @@ export default async function AdminSpeakersPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Speakers across all events
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Every speaker roster across every event. Add a new speaker to an
             event, edit their bio / topic / role, link them to a platform
             user account (enables two-way in-app chat), or remove them.

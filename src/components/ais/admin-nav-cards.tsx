@@ -93,7 +93,7 @@ export function AdminNavCards() {
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
                 active
                   ? "bg-[#FF005A] text-white"
-                  : "bg-black/[0.04] text-black/60 group-hover:bg-black/[0.08]",
+                  : "bg-black/[0.04] text-black/80 group-hover:bg-black/[0.08]",
               ].join(" ")}
             >
               <Icon className="h-4 w-4" />
@@ -103,7 +103,7 @@ export function AdminNavCards() {
                 {item.label}
               </span>
               {item.sublabel ? (
-                <span className="text-[0.65rem] font-medium uppercase tracking-widest text-black/40">
+                <span className="text-[0.65rem] font-medium uppercase tracking-widest text-black/80">
                   {item.sublabel}
                 </span>
               ) : null}

@@ -150,7 +150,7 @@ export default async function EventPrepPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Your <span className="ais-gradient-text">events</span>
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             {me.role === ROLES.SPEAKER
               ? "Events you are speaking at. Click an event to view the agenda, your speaker slot, and event details. This is a read-only view — to update your bio or topic, contact the event organizer."
               : me.role === ROLES.CO_HOST
@@ -167,7 +167,7 @@ export default async function EventPrepPage() {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>Platform by MassaPro</span>
         </div>

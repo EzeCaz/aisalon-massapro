@@ -884,7 +884,7 @@ export function LayerFrontBackButtons({
   return (
     <div className="inline-flex items-center gap-1">
       {label && (
-        <span className="text-[0.65rem] font-bold uppercase tracking-wider text-black/40 mr-1">
+        <span className="text-[0.65rem] font-bold uppercase tracking-wider text-black/80 mr-1">
           {label}
         </span>
       )}
@@ -1011,7 +1011,7 @@ export function HeroOverlayControl({
       )}
       {showScaleX && onScaleXChange && (
         <label className="inline-flex items-center gap-1">
-          <span className="text-[0.6rem] font-semibold text-black/60">X</span>
+          <span className="text-[0.6rem] font-semibold text-black/80">X</span>
           <input
             type="range"
             min={HERO_SCALE_SLIDER_MIN}
@@ -1034,12 +1034,12 @@ export function HeroOverlayControl({
             className="w-12 text-[0.6rem] font-mono text-black/70 border border-black/15 rounded px-1 py-0.5 bg-white"
             title="Exact X scale (no arbitrary limit — only the canvas border clips)"
           />
-          <span className="text-[0.6rem] font-mono text-black/40">×</span>
+          <span className="text-[0.6rem] font-mono text-black/80">×</span>
         </label>
       )}
       {showScaleY && onScaleYChange && (
         <label className="inline-flex items-center gap-1">
-          <span className="text-[0.6rem] font-semibold text-black/60">Y</span>
+          <span className="text-[0.6rem] font-semibold text-black/80">Y</span>
           <input
             type="range"
             min={HERO_SCALE_SLIDER_MIN}
@@ -1062,7 +1062,7 @@ export function HeroOverlayControl({
             className="w-12 text-[0.6rem] font-mono text-black/70 border border-black/15 rounded px-1 py-0.5 bg-white"
             title="Exact Y scale (no arbitrary limit — only the canvas border clips)"
           />
-          <span className="text-[0.6rem] font-mono text-black/40">×</span>
+          <span className="text-[0.6rem] font-mono text-black/80">×</span>
         </label>
       )}
       {showFrontBack && onZChange && (
@@ -1083,7 +1083,7 @@ export function HeroOverlayControl({
           >
             Back
           </button>
-          <span className="text-[0.6rem] font-mono text-black/40 ml-0.5">z={z ?? 0}</span>
+          <span className="text-[0.6rem] font-mono text-black/80 ml-0.5">z={z ?? 0}</span>
         </div>
       )}
     </div>
@@ -1276,12 +1276,12 @@ export function ObjectPropertiesPanel({
       <div className="px-2 py-2 flex flex-col gap-2">
         {/* Positioning: X / Y coordinate inputs */}
         <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40 mb-1">
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
             Position (% of canvas)
           </div>
           <div className="flex items-center gap-1.5">
             <label className="inline-flex items-center gap-1 flex-1">
-              <span className="text-[0.6rem] font-semibold text-black/60 w-3">X</span>
+              <span className="text-[0.6rem] font-semibold text-black/80 w-3">X</span>
               <input
                 type="number"
                 step="0.1"
@@ -1295,7 +1295,7 @@ export function ObjectPropertiesPanel({
               />
             </label>
             <label className="inline-flex items-center gap-1 flex-1">
-              <span className="text-[0.6rem] font-semibold text-black/60 w-3">Y</span>
+              <span className="text-[0.6rem] font-semibold text-black/80 w-3">Y</span>
               <input
                 type="number"
                 step="0.1"
@@ -1319,12 +1319,12 @@ export function ObjectPropertiesPanel({
          *  TEXT together with the box, use the Scale % input below. */}
         {showBoxSize && onBoxSizeChange && (
           <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40 mb-1">
+            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
               Size (canvas px) — box dimensions
             </div>
             <div className="flex items-center gap-1.5">
               <label className="inline-flex items-center gap-1 flex-1">
-                <span className="text-[0.6rem] font-semibold text-black/60 w-3">W</span>
+                <span className="text-[0.6rem] font-semibold text-black/80 w-3">W</span>
                 <input
                   type="number"
                   step="1"
@@ -1341,7 +1341,7 @@ export function ObjectPropertiesPanel({
                 />
               </label>
               <label className="inline-flex items-center gap-1 flex-1">
-                <span className="text-[0.6rem] font-semibold text-black/60 w-3">H</span>
+                <span className="text-[0.6rem] font-semibold text-black/80 w-3">H</span>
                 <input
                   type="number"
                   step="1"
@@ -1367,7 +1367,7 @@ export function ObjectPropertiesPanel({
          *  element 1.5× bigger, 50 to halve it. */}
         {onScaleChange && (
           <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40 mb-1">
+            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
               Scale % (box + text together)
             </div>
             <div className="flex items-center gap-1.5">
@@ -1384,7 +1384,7 @@ export function ObjectPropertiesPanel({
                 className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
                 title="Scale percentage — 100 = default size, 150 = 1.5× bigger, 50 = half size. Scales the entire element (box + text + images)."
               />
-              <span className="text-[0.6rem] font-semibold text-black/60">%</span>
+              <span className="text-[0.6rem] font-semibold text-black/80">%</span>
               <button
                 type="button"
                 onClick={() => onScaleChange(1)}
@@ -1400,7 +1400,7 @@ export function ObjectPropertiesPanel({
         {/* Layering: Front / Back toggles */}
         {onZChange && (
           <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40 mb-1">
+            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
               Layer (z-index: {z ?? 0})
             </div>
             <div className="flex items-center gap-1">

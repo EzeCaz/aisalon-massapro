@@ -416,16 +416,16 @@ export function MemberDashboard({ members }: Props) {
       {/* Filters — dashboard-report canonical style (Item 2F) */}
       <div className="rounded-lg border border-black/10 bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Filter className="h-4 w-4 text-black/40" />
+          <Filter className="h-4 w-4 text-black/80" />
           <h3 className="text-sm font-bold text-black">Filters</h3>
-          <span className="text-xs text-black/40 ml-auto">
+          <span className="text-xs text-black/80 ml-auto">
             {filtered.length} of {members.length} members
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Global search (Item 2C — searches across ALL columns) */}
           <div className="lg:col-span-2">
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Search className="inline h-3 w-3 mr-1" />
               Search all columns
             </label>
@@ -438,7 +438,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: Source */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Source
             </label>
             <select
@@ -453,7 +453,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: Applied for */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Applied for
             </label>
             <select
@@ -471,7 +471,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: Interested in (CSV token) */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Interested in
             </label>
             <select
@@ -489,7 +489,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: Profile categories (CSV token) */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Profile categories
             </label>
             <select
@@ -507,7 +507,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: Tag */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Tag
             </label>
             <select
@@ -525,7 +525,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Per-column dropdown: UTM UID (Item 2E) */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               UTM UID
             </label>
             <select
@@ -543,7 +543,7 @@ export function MemberDashboard({ members }: Props) {
           </div>
           {/* Date range */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Calendar className="inline h-3 w-3 mr-1" />
               From
             </label>
@@ -555,7 +555,7 @@ export function MemberDashboard({ members }: Props) {
             />
           </div>
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Calendar className="inline h-3 w-3 mr-1" />
               To
             </label>
@@ -587,7 +587,7 @@ export function MemberDashboard({ members }: Props) {
         {/* Active cross-filter selection chip (Item 2D) */}
         {active && (
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="font-bold uppercase tracking-widest text-black/40">
+            <span className="font-bold uppercase tracking-widest text-black/80">
               Selection:
             </span>
             <ActiveSelectionChip
@@ -739,7 +739,7 @@ export function MemberDashboard({ members }: Props) {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
+            <thead className="bg-black/[0.02] text-black/80 text-xs uppercase tracking-wider sticky top-0 z-10">
               <tr>
                 <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Company" field="company" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
@@ -850,17 +850,17 @@ export function MemberDashboard({ members }: Props) {
                       <span className="text-xs text-black/30 italic">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-xs text-black/60">
+                  <td className="px-4 py-2 text-xs text-black/80">
                     {m.createdAt ? formatDateTlv(m.createdAt) : "—"}
                   </td>
-                  <td className="px-4 py-2 text-xs text-black/60">
+                  <td className="px-4 py-2 text-xs text-black/80">
                     {m.importedAt ? formatDateTlv(m.importedAt) : "—"}
                   </td>
                 </tr>
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-black/40 text-sm">
+                  <td colSpan={10} className="px-4 py-8 text-center text-black/80 text-sm">
                     No members match your filters.
                   </td>
                 </tr>
@@ -886,7 +886,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </span>
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />

@@ -118,7 +118,7 @@ export function GradientColorPicker({ colors, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => removeAt(idx)}
-                className="ml-0.5 rounded p-0.5 text-black/40 hover:bg-red-50 hover:text-red-500"
+                className="ml-0.5 rounded p-0.5 text-black/80 hover:bg-red-50 hover:text-red-500"
                 title="Remove this color"
               >
                 <X className="h-3 w-3" />
@@ -134,7 +134,7 @@ export function GradientColorPicker({ colors, onChange }: Props) {
           <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
             AI Salon Colors
           </div>
-          <label className="flex items-center gap-1 text-[0.6rem] text-black/60 cursor-pointer select-none">
+          <label className="flex items-center gap-1 text-[0.6rem] text-black/80 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showAll}
@@ -187,7 +187,7 @@ export function GradientColorPicker({ colors, onChange }: Props) {
               onChange={(e) => setCustomColor(e.target.value.toUpperCase())}
               className="h-5 w-7 cursor-pointer rounded border border-black/15"
             />
-            <span className="text-[0.6rem] font-mono text-black/60">{customColor}</span>
+            <span className="text-[0.6rem] font-mono text-black/80">{customColor}</span>
             <button
               type="button"
               onClick={() => append(customColor)}
@@ -198,7 +198,7 @@ export function GradientColorPicker({ colors, onChange }: Props) {
             </button>
           </div>
         )}
-        <p className="text-[0.55rem] text-black/40 leading-tight">
+        <p className="text-[0.55rem] text-black/80 leading-tight">
           Click a swatch to append. Use the chips above to edit or remove.
         </p>
       </div>

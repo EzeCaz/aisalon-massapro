@@ -71,7 +71,7 @@ export default async function ArchivedMembersPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Archived <span className="ais-gradient-text">members</span>
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             {archived.length === 0
               ? "No archived members yet. When you archive a member, they will appear here and can be restored at any time."
               : `${archived.length} archived member${archived.length === 1 ? "" : "s"}. Archived members are hidden from the main list — their data is preserved for audit. Click Restore to return them to the active members list.`}
@@ -98,13 +98,13 @@ export default async function ArchivedMembersPage() {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >

@@ -74,7 +74,7 @@ export function LinkedInLinkEditor({
           LinkedIn group link
         </h2>
       </div>
-      <p className="text-xs text-black/60 mb-4 leading-relaxed">
+      <p className="text-xs text-black/80 mb-4 leading-relaxed">
         This link is shown as a blue &quot;Join us&quot; pill in the site
         header — visible to everyone (logged-in or not). Default is the AI
         Salon Tel Aviv LinkedIn showcase. You can change it to any https://

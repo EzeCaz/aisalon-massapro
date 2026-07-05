@@ -91,7 +91,7 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
             Current password
           </span>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/80">
               <Lock className="h-4 w-4" />
             </span>
             <input
@@ -106,14 +106,14 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
             <button
               type="button"
               onClick={() => setShowCurrent((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/70"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/80 hover:text-black/70"
               tabIndex={-1}
               aria-label={showCurrent ? "Hide" : "Show"}
             >
               {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          <p className="mt-1 text-[11px] text-black/40">
+          <p className="mt-1 text-[11px] text-black/80">
             This is the temporary password you just used to sign in as{" "}
             <span className="font-mono">{email}</span>.
           </p>
@@ -125,7 +125,7 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
           New password
         </span>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/80">
             <KeyRound className="h-4 w-4" />
           </span>
           <input
@@ -140,14 +140,14 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
           <button
             type="button"
             onClick={() => setShowNew((v) => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/70"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/80 hover:text-black/70"
             tabIndex={-1}
             aria-label={showNew ? "Hide" : "Show"}
           >
             {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        <p className="mt-1 text-[11px] text-black/40">
+        <p className="mt-1 text-[11px] text-black/80">
           {newPassword.length === 0
             ? "8–128 characters. Pick something memorable but unique."
             : newPassword.length < 8
@@ -161,7 +161,7 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
           Confirm new password
         </span>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/40">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-black/80">
             <Check className="h-4 w-4" />
           </span>
           <input
@@ -174,7 +174,7 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
             className="w-full rounded-md border border-black/15 bg-white pl-9 pr-3 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-colors"
           />
         </div>
-        <p className="mt-1 text-[11px] text-black/40">
+        <p className="mt-1 text-[11px] text-black/80">
           {confirmPassword.length === 0
             ? "Must match the new password."
             : confirmPassword === newPassword
@@ -199,7 +199,7 @@ export function SetPasswordForm({ hasPassword, email, name }: Props) {
         )}
       </button>
 
-      <p className="text-center text-[11px] text-black/40">
+      <p className="text-center text-[11px] text-black/80">
         Logged in as <span className="font-mono">{email}</span>
         {name ? ` (${name})` : ""}.
       </p>

@@ -95,7 +95,7 @@ export function AdminEventManager({ events, members }: Props) {
             <h2 className="text-xl font-extrabold text-black">
               Fill in the basics — you can finish the rest on the event page
             </h2>
-            <p className="text-xs text-black/60 mt-1">
+            <p className="text-xs text-black/80 mt-1">
               After creating the event you&apos;ll be taken to its page, where
               you can switch back to this tab and find it in the Manage event
               list to add speakers, agenda, co-hosts, etc.
@@ -143,7 +143,7 @@ function EventPicker({
       {/* Search + filter bar */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <input
             type="search"
             value={q}
@@ -161,7 +161,7 @@ function EventPicker({
               className={`px-3 py-2 text-xs font-semibold capitalize transition-colors ${
                 filter === f
                   ? "bg-[#FF005A] text-white"
-                  : "text-black/60 hover:bg-black/5"
+                  : "text-black/80 hover:bg-black/5"
               }`}
             >
               {f}
@@ -182,7 +182,7 @@ function EventPicker({
           <h3 className="font-bold text-black mb-1">
             {q || filter !== "all" ? "No matching events" : "No events yet"}
           </h3>
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             {q || filter !== "all"
               ? "Try clearing the search or switching the filter."
               : "Switch to the “Add new event” tab to create your first event."}

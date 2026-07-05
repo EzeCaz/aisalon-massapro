@@ -192,7 +192,7 @@ export function ProfileEditor({ initial }: { initial: ProfileUser }) {
               )}
             </div>
 
-            <p className="mt-2 text-[10px] text-black/40">
+            <p className="mt-2 text-[10px] text-black/80">
               JPG, PNG, WebP up to 8 MB · cropped to 512×512 square
             </p>
           </div>
@@ -270,10 +270,10 @@ export function ProfileEditor({ initial }: { initial: ProfileUser }) {
         </Card>
 
         <Card className="p-4 border border-black/10 bg-black/[0.02]">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-black/40 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-black/80 mb-1">
             Note
           </p>
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             Your email is your identity on the platform and cannot be changed. Tags are assigned
             by the admin (e.g. <span className="font-semibold">Speaker</span>,{" "}
             <span className="font-semibold">Builder</span>,{" "}
@@ -297,7 +297,7 @@ export function ProfileEditor({ initial }: { initial: ProfileUser }) {
               placeholder="Your full name"
               maxLength={100}
             />
-            <p className="text-[11px] text-black/40">Shown on your member card and photo credits.</p>
+            <p className="text-[11px] text-black/80">Shown on your member card and photo credits.</p>
           </div>
 
           {/* Email (read-only) */}
@@ -306,7 +306,7 @@ export function ProfileEditor({ initial }: { initial: ProfileUser }) {
               <AtSign className="h-3.5 w-3.5" /> Email
             </Label>
             <Input id="email" value={user.email} disabled className="bg-black/5 font-mono text-sm" />
-            <p className="text-[11px] text-black/40">Identity — cannot be changed.</p>
+            <p className="text-[11px] text-black/80">Identity — cannot be changed.</p>
           </div>
 
           {/* Bio */}
@@ -322,7 +322,7 @@ export function ProfileEditor({ initial }: { initial: ProfileUser }) {
               rows={4}
               maxLength={2000}
             />
-            <p className="text-[11px] text-black/40">
+            <p className="text-[11px] text-black/80">
               {(user.bio || "").length} / 2000 characters
             </p>
           </div>

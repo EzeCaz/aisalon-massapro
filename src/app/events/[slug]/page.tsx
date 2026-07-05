@@ -399,17 +399,17 @@ export default async function EventDetailPage({ params }: Params) {
                   {event.chapter}
                 </span>
                 {event.city && (
-                  <span className="text-black/60 font-semibold">{event.city}</span>
+                  <span className="text-black/80 font-semibold">{event.city}</span>
                 )}
-                <span className="text-black/40">
+                <span className="text-black/80">
                   {new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(event.startsAt)}
                 </span>
                 <span className="text-black/20">·</span>
-                <span className="text-black/60 font-mono">
+                <span className="text-black/80 font-mono">
                   {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.startsAt)} – {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.endsAt)}
                 </span>
                 {event.country && (
-                  <span className="text-black/40">· {event.country}</span>
+                  <span className="text-black/80">· {event.country}</span>
                 )}
                 {/* Going pill — black bg, white text. Matches the spec:
                     "Tel Aviv Monday, July 13, 2026 · 18:00 – 21:30 · ISR · 14 Going"
@@ -424,7 +424,7 @@ export default async function EventDetailPage({ params }: Params) {
                 {event.title}
               </h1>
               {event.subtitle && (
-                <p className="mt-2 text-lg text-black/60">{event.subtitle}</p>
+                <p className="mt-2 text-lg text-black/80">{event.subtitle}</p>
               )}
 
               {event.venue && (
@@ -469,12 +469,12 @@ export default async function EventDetailPage({ params }: Params) {
                   <div className="text-5xl font-extrabold text-black leading-none my-1">
                     {new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", day: "2-digit" }).format(event.startsAt)}
                   </div>
-                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-black/40">
+                  <div className="text-[0.9rem] font-semibold uppercase tracking-wider text-black/90">
                     {new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", year: "numeric" }).format(event.startsAt)}
                   </div>
                 </div>
               </div>
-              <div className="mt-2 text-[0.65rem] font-mono text-black/40">
+              <div className="mt-2 text-[0.85rem] font-mono text-black/90">
                 {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.startsAt)} – {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.endsAt)}
               </div>
             </div>
@@ -511,13 +511,13 @@ export default async function EventDetailPage({ params }: Params) {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >

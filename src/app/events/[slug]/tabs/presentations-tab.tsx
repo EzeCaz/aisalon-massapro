@@ -134,7 +134,7 @@ function iconColors(kind: ReturnType<typeof fileKind>): string {
     case "doc":
       return "bg-[#004F98]/10 text-[#004F98] border-[#004F98]/20";
     default:
-      return "bg-black/5 text-black/60 border-black/10";
+      return "bg-black/5 text-black/80 border-black/10";
   }
 }
 
@@ -369,7 +369,7 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
           </div>
         </div>
 
-        <div className="text-xs text-black/40">
+        <div className="text-xs text-black/80">
           {files.length} file{files.length === 1 ? "" : "s"}
         </div>
       </div>
@@ -379,7 +379,7 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
         <Card className="p-8 border-2 border-dashed border-black/15 bg-white text-center">
           <FileBox className="h-10 w-10 mx-auto text-black/30 mb-3" />
           <h3 className="font-bold text-black mb-1">No presentations uploaded yet</h3>
-          <p className="text-sm text-black/60 mb-4">
+          <p className="text-sm text-black/80 mb-4">
             Upload slide decks, PDFs, and handouts from <strong>{event.title}</strong>.
             Files can be tagged to specific sessions and presenters.
           </p>
@@ -413,7 +413,7 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
             if (sid === "__none__") {
               return (
                 <section key={sid}>
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2 flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2 flex items-center gap-2">
                     <FileBox className="h-3.5 w-3.5" /> General event files
                   </h3>
                   <div className="space-y-2">
@@ -436,8 +436,8 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
             return (
               <section key={sid}>
                 <div className="flex flex-wrap items-baseline gap-2 mb-2 pb-1.5 border-b border-black/10">
-                  <Clock className="h-3.5 w-3.5 text-black/40" />
-                  <span className="font-mono text-xs text-black/60">
+                  <Clock className="h-3.5 w-3.5 text-black/80" />
+                  <span className="font-mono text-xs text-black/80">
                     {formatTime(agItem.startsAt)}
                     {agItem.endsAt && ` – ${formatTime(agItem.endsAt)}`}
                   </span>
@@ -449,7 +449,7 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
                       <Mic className="h-3 w-3" /> {speaker.name}
                     </span>
                   )}
-                  <Badge variant="secondary" className="bg-black/5 text-black/60">
+                  <Badge variant="secondary" className="bg-black/5 text-black/80">
                     {group.length} file{group.length === 1 ? "" : "s"}
                   </Badge>
                 </div>
@@ -478,7 +478,7 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
             if (sid === "__none__") {
               return (
                 <section key={sid}>
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2 flex items-center gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2 flex items-center gap-2">
                     <FileBox className="h-3.5 w-3.5" /> Files not linked to a presenter
                   </h3>
                   <div className="space-y-2">
@@ -500,18 +500,18 @@ export function PresentationsTab({ event, me, isAdmin }: Props) {
             return (
               <section key={sid}>
                 <div className="flex flex-wrap items-baseline gap-2 mb-2 pb-1.5 border-b border-black/10">
-                  <User className="h-3.5 w-3.5 text-black/40" />
+                  <User className="h-3.5 w-3.5 text-black/80" />
                   <h3 className="text-sm font-bold text-black">{speaker.name}</h3>
                   {speaker.role && (
-                    <span className="text-xs text-black/60">
+                    <span className="text-xs text-black/80">
                       {speaker.role}
                       {speaker.company ? `, ${speaker.company}` : ""}
                     </span>
                   )}
                   {speaker.company && !speaker.role && (
-                    <span className="text-xs text-black/40">{speaker.company}</span>
+                    <span className="text-xs text-black/80">{speaker.company}</span>
                   )}
-                  <Badge variant="secondary" className="bg-black/5 text-black/60 ml-auto">
+                  <Badge variant="secondary" className="bg-black/5 text-black/80 ml-auto">
                     {group.length} file{group.length === 1 ? "" : "s"}
                   </Badge>
                 </div>
@@ -593,24 +593,24 @@ function FileRow({
               {displayName}
             </a>
             {file.title && (
-              <span className="text-[0.65rem] text-black/40 truncate font-mono">
+              <span className="text-[0.65rem] text-black/80 truncate font-mono">
                 ({file.fileName})
               </span>
             )}
           </div>
 
           {file.description && (
-            <p className="text-xs text-black/60 mt-0.5 line-clamp-2">{file.description}</p>
+            <p className="text-xs text-black/80 mt-0.5 line-clamp-2">{file.description}</p>
           )}
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-[0.65rem] text-black/40 inline-flex items-center gap-1">
+            <span className="text-[0.65rem] text-black/80 inline-flex items-center gap-1">
               <FileBox className="h-3 w-3" />
               {formatBytes(file.fileSize)}
             </span>
-            <span className="text-[0.65rem] text-black/40">·</span>
-            <span className="text-[0.65rem] text-black/40">
+            <span className="text-[0.65rem] text-black/80">·</span>
+            <span className="text-[0.65rem] text-black/80">
               Uploaded {formatDate(file.createdAt)} by {uploaderName}
             </span>
             {file.speakers.map((s) => (
@@ -777,13 +777,13 @@ function UploadDialog({
               className="hidden"
               onChange={(e) => setFiles(e.target.files)}
             />
-            <Upload className="h-8 w-8 mx-auto text-black/40 mb-2" />
+            <Upload className="h-8 w-8 mx-auto text-black/80 mb-2" />
             {files && files.length > 0 ? (
               <div>
                 <div className="font-semibold text-black">
                   {files.length} file{files.length === 1 ? "" : "s"} selected
                 </div>
-                <div className="text-xs text-black/60 mt-1 max-h-24 overflow-y-auto ais-scroll">
+                <div className="text-xs text-black/80 mt-1 max-h-24 overflow-y-auto ais-scroll">
                   {Array.from(files)
                     .map((f) => `${f.name} (${formatBytes(f.size)})`)
                     .join(", ")}
@@ -793,7 +793,7 @@ function UploadDialog({
             ) : (
               <div>
                 <div className="font-semibold text-black">Drop files here or click to browse</div>
-                <div className="text-xs text-black/60 mt-1">
+                <div className="text-xs text-black/80 mt-1">
                   PDF, PPT, PPTX, Keynote, DOC, images — up to 20 files
                 </div>
               </div>
@@ -854,12 +854,12 @@ function UploadDialog({
                     />
                     <div className="flex-1">
                       <div className="font-semibold text-sm">{s.name}</div>
-                      {s.role && <div className="text-xs text-black/60">{s.role}</div>}
+                      {s.role && <div className="text-xs text-black/80">{s.role}</div>}
                     </div>
                   </label>
                 ))}
               {event.speakers.filter((s) => s.name !== "Ezequiel Sznaider").length === 0 && (
-                <p className="text-xs text-black/40 italic p-2">No speakers configured.</p>
+                <p className="text-xs text-black/80 italic p-2">No speakers configured.</p>
               )}
             </div>
           </div>

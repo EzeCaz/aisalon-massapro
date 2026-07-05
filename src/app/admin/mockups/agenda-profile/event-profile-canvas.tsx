@@ -348,13 +348,13 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
               }}
             />
-            <span className="text-xs text-black/40">
+            <span className="text-xs text-black/80">
               {visibleSessions.length} of {data.sessions.length} sessions shown
             </span>
           </div>
           <div className="flex flex-col">
             {visibleSessions.length === 0 ? (
-              <p className="text-black/40 text-sm italic">
+              <p className="text-black/80 text-sm italic">
                 No sessions to show — toggle some back on in the sidebar.
               </p>
             ) : (
@@ -403,7 +403,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
               }}
             />
-            <span className="text-xs text-black/40">
+            <span className="text-xs text-black/80">
               {visibleSpeakers.length} of {data.speakers.length} shown
             </span>
           </div>
@@ -453,7 +453,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             {data.collaborators.length > 0 && (
               <div className="flex flex-col items-end gap-1.5">
                 <span
-                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  className="text-black/80 font-semibold uppercase tracking-wider"
                   style={{ fontSize: "10px", letterSpacing: "0.18em" }}
                 >
                   In partnership with
@@ -476,7 +476,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             {data.sponsors.length > 0 && (
               <div className="flex flex-col items-end gap-1.5">
                 <span
-                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  className="text-black/80 font-semibold uppercase tracking-wider"
                   style={{ fontSize: "10px", letterSpacing: "0.18em" }}
                 >
                   Sponsored by
@@ -600,7 +600,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             zIndex={72}
           >
             <span
-              className="text-black/40"
+              className="text-black/80"
               style={{ fontSize: "10px" }}
             >
               {data.footerCredit}
@@ -651,7 +651,7 @@ function AgendaRow({
           {session.startTime ?? "--:--"}
         </p>
         {session.endTime && (
-          <p className="text-black/40 font-mono" style={{ fontSize: "11px" }}>
+          <p className="text-black/80 font-mono" style={{ fontSize: "11px" }}>
             {session.endTime}
           </p>
         )}
@@ -1043,7 +1043,7 @@ function EditableImage({
           draggable={false}
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/5 text-black/40 text-[11px] font-mono pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/5 text-black/80 text-[11px] font-mono pointer-events-none">
           [no image]
         </div>
       )}

@@ -369,7 +369,7 @@ export function EventPrepTab({ event, me, isSpeaker = false }: { event: EventDat
                 />
               ))}
               {genericQs.length === 0 && (
-                <p className="text-xs text-black/40 italic py-4 text-center">No generic questions yet.</p>
+                <p className="text-xs text-black/80 italic py-4 text-center">No generic questions yet.</p>
               )}
             </div>
           </Card>
@@ -482,7 +482,7 @@ function SpeakerBox({
         )}
         <div className="flex-1 min-w-0">
           <h4 className="font-bold text-black text-base leading-tight">{speaker.name}</h4>
-          <p className="text-xs text-black/60 truncate">{roleCompany}</p>
+          <p className="text-xs text-black/80 truncate">{roleCompany}</p>
         </div>
         <div className="flex items-center gap-1.5">
           {!isSpeaker && (
@@ -504,7 +504,7 @@ function SpeakerBox({
       {expanded && (
         <div className="space-y-2">
           {questions.length === 0 && (
-            <p className="text-xs text-black/40 italic py-2 text-center">
+            <p className="text-xs text-black/80 italic py-2 text-center">
               {isSpeaker
                 ? "No personalized questions yet."
                 : isSuperAdmin
@@ -551,7 +551,7 @@ function QuestionCard({
   return (
     <div className="rounded-md border border-black/10 bg-white p-3 hover:border-black/20 transition">
       <div className="flex items-start gap-2">
-        <span className="text-[0.7rem] font-bold text-black/40 mt-0.5 min-w-[1.5rem]">{index}.</span>
+        <span className="text-[0.7rem] font-bold text-black/80 mt-0.5 min-w-[1.5rem]">{index}.</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-black/85 leading-snug">{question.text}</p>
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -640,7 +640,7 @@ function ReviewedHistory({ suggestions }: { suggestions: Suggestion[] }) {
     <Card className="p-3 bg-black/[0.02] border-black/10">
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between text-xs font-semibold text-black/60 hover:text-black/80"
+        className="w-full flex items-center justify-between text-xs font-semibold text-black/80 hover:text-black/80"
       >
         <span>Reviewed history ({suggestions.length})</span>
         {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -661,7 +661,7 @@ function ReviewedHistory({ suggestions }: { suggestions: Suggestion[] }) {
               </div>
               <p className="text-black/70 italic">“{s.proposedText}”</p>
               <p className="text-[0.6rem] text-black/50 mt-0.5">— {s.suggestedBy}</p>
-              {s.reviewerNote && <p className="text-[0.6rem] text-black/60 mt-0.5">Review note: {s.reviewerNote}</p>}
+              {s.reviewerNote && <p className="text-[0.6rem] text-black/80 mt-0.5">Review note: {s.reviewerNote}</p>}
             </div>
           ))}
         </div>
@@ -743,7 +743,7 @@ function SuggestDialog({
             <p className="text-[0.65rem] text-black/50 mt-1">A short label to help scan the list.</p>
           </div>
           {isEditExisting && (
-            <div className="rounded bg-black/[0.03] border border-black/10 p-2 text-xs text-black/60">
+            <div className="rounded bg-black/[0.03] border border-black/10 p-2 text-xs text-black/80">
               <span className="font-semibold">Current text:</span> {(target as Question).text}
             </div>
           )}
@@ -834,7 +834,7 @@ function ReviewDialog({
             <div>
               <span className="font-semibold text-black/70">Suggested by:</span>{" "}
               <span className="text-black/90">{suggestion.suggestedBy}</span>
-              <span className="text-black/40"> · {new Date(suggestion.createdAt).toLocaleString()}</span>
+              <span className="text-black/80"> · {new Date(suggestion.createdAt).toLocaleString()}</span>
             </div>
             {targetQuestion && (
               <div>

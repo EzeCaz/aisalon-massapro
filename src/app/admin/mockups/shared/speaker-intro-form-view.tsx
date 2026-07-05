@@ -187,7 +187,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               }
               className="form-input"
             />
-            <span className="text-[0.6rem] text-black/40 mt-0.5">
+            <span className="text-[0.6rem] text-black/80 mt-0.5">
               Base: 44px · current: {Math.round(44 * (data.event.nameFontScale ?? 1))}px
             </span>
           </Field>
@@ -205,7 +205,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               }
               className="form-input"
             />
-            <span className="text-[0.6rem] text-black/40 mt-0.5">
+            <span className="text-[0.6rem] text-black/80 mt-0.5">
               Base: 24px · current: {Math.round(24 * (data.event.topicFontScale ?? 1))}px
             </span>
           </Field>
@@ -777,7 +777,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <div className="text-[0.6rem] text-black/60 mb-1">Hero (z={data.heroZ ?? 2})</div>
+              <div className="text-[0.6rem] text-black/80 mb-1">Hero (z={data.heroZ ?? 2})</div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -808,7 +808,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               </div>
             </div>
             <div>
-              <div className="text-[0.6rem] text-black/60 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
+              <div className="text-[0.6rem] text-black/80 mb-1">Triangle (z={data.triangleZ ?? 1})</div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -839,7 +839,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               </div>
             </div>
           </div>
-          <p className="text-[0.55rem] text-black/40 leading-tight">
+          <p className="text-[0.55rem] text-black/80 leading-tight">
             Default: hero on top, triangle behind. Click Front/Back to override.
           </p>
         </div>
@@ -969,7 +969,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                   Back
                 </button>
               </div>
-              <p className="text-[0.55rem] text-black/40 leading-tight">
+              <p className="text-[0.55rem] text-black/80 leading-tight">
                 Default z=50 (in front of hero). Click Back to hide behind the hero image.
               </p>
             </div>
@@ -1239,7 +1239,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 })
               }
               disabled={!data.brandingAsset?.pos}
-              className="form-input text-left text-xs text-black/60 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="form-input text-left text-xs text-black/80 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Reset to the default bottom-left corner (2.7% left, 94% top)"
             >
               Reset to corner
@@ -1290,7 +1290,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <p className="text-[0.65rem] text-black/40">
+        <p className="text-[0.65rem] text-black/80">
           Defaults to bottom-left (X=2.7%, Y=94%). Drag the{" "}
           <strong>⠿ Move branding</strong> handle on the canvas in edit mode
           to position it freely.
@@ -1316,7 +1316,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-[0.7rem] font-semibold text-black/80 mb-1">{label}</span>
       {children}
     </label>
   );
@@ -1356,7 +1356,7 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/60 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
+      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/80 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
     >
       <Plus className="h-3.5 w-3.5" />
       {label}

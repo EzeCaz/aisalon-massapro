@@ -290,7 +290,7 @@ export function NonMemberDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-black/40">
+      <div className="flex items-center justify-center py-12 text-black/80">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
         Loading non-members…
       </div>
@@ -358,9 +358,9 @@ export function NonMemberDashboard() {
       {/* Filters + chart-mode toggle */}
       <div className="rounded-lg border border-black/10 bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Filter className="h-4 w-4 text-black/40" />
+          <Filter className="h-4 w-4 text-black/80" />
           <h3 className="text-sm font-bold text-black">Filters</h3>
-          <span className="text-xs text-black/40 ml-auto">
+          <span className="text-xs text-black/80 ml-auto">
             {filtered.length} of {allNonMembers.length} leads
           </span>
           <Button
@@ -376,7 +376,7 @@ export function NonMemberDashboard() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="lg:col-span-1">
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Search
             </label>
             <div className="relative">
@@ -390,7 +390,7 @@ export function NonMemberDashboard() {
             </div>
           </div>
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Calendar className="inline h-3 w-3 mr-1" />
               From
             </label>
@@ -402,7 +402,7 @@ export function NonMemberDashboard() {
             />
           </div>
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Calendar className="inline h-3 w-3 mr-1" />
               To
             </label>
@@ -414,7 +414,7 @@ export function NonMemberDashboard() {
             />
           </div>
           <div className="lg:col-span-1">
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Chart type
             </label>
             <div className="inline-flex h-9 rounded-md border border-black/15 overflow-hidden bg-white">
@@ -422,7 +422,7 @@ export function NonMemberDashboard() {
                 type="button"
                 onClick={() => setChartMode("pie")}
                 className={`px-3 inline-flex items-center gap-1 text-xs font-semibold transition-colors ${
-                  chartMode === "pie" ? "bg-[#FF005A] text-white" : "text-black/60 hover:bg-black/5"
+                  chartMode === "pie" ? "bg-[#FF005A] text-white" : "text-black/80 hover:bg-black/5"
                 }`}
               >
                 <PieIcon className="h-3.5 w-3.5" /> Pie
@@ -431,7 +431,7 @@ export function NonMemberDashboard() {
                 type="button"
                 onClick={() => setChartMode("bar")}
                 className={`px-3 inline-flex items-center gap-1 text-xs font-semibold transition-colors ${
-                  chartMode === "bar" ? "bg-[#FF005A] text-white" : "text-black/60 hover:bg-black/5"
+                  chartMode === "bar" ? "bg-[#FF005A] text-white" : "text-black/80 hover:bg-black/5"
                 }`}
               >
                 <BarChart3 className="h-3.5 w-3.5" /> Bar
@@ -462,7 +462,7 @@ export function NonMemberDashboard() {
 
         {active && (
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="font-bold uppercase tracking-widest text-black/40">Selection:</span>
+            <span className="font-bold uppercase tracking-widest text-black/80">Selection:</span>
             <button
               type="button"
               onClick={() => setActive(null)}
@@ -965,7 +965,7 @@ export function NonMemberDashboard() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider">
+            <thead className="bg-black/[0.02] text-black/80 text-xs uppercase tracking-wider">
               <tr>
                 <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
                 <SortHeader label="Company" field="company" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
@@ -981,7 +981,7 @@ export function NonMemberDashboard() {
                 <tr key={nm.id} className="border-t border-black/5 hover:bg-black/[0.02]">
                   <td className="px-4 py-2">
                     <div className="font-semibold text-black truncate max-w-[200px]">
-                      {nm.name || <span className="italic text-black/40">No name</span>}
+                      {nm.name || <span className="italic text-black/80">No name</span>}
                     </div>
                     <div className="text-xs text-black/50 truncate max-w-[200px]">{nm.email}</div>
                   </td>
@@ -1020,7 +1020,7 @@ export function NonMemberDashboard() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-xs text-black/60">
+                  <td className="px-4 py-2 text-xs text-black/80">
                     {new Date(nm.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -1075,7 +1075,7 @@ function StatCard({
       }`}
     >
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </span>
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
@@ -1087,7 +1087,7 @@ function StatCard({
         )}
       </div>
       {subtitle && (
-        <div className="mt-1 text-[0.65rem] text-black/40 leading-tight">{subtitle}</div>
+        <div className="mt-1 text-[0.65rem] text-black/80 leading-tight">{subtitle}</div>
       )}
     </button>
   );
@@ -1167,7 +1167,7 @@ function StatusBadge({ status }: { status: string }) {
       );
     case "ignored":
       return (
-        <span className="text-[0.55rem] uppercase font-bold rounded px-1.5 py-0.5 bg-black/10 text-black/60">
+        <span className="text-[0.55rem] uppercase font-bold rounded px-1.5 py-0.5 bg-black/10 text-black/80">
           Ignored
         </span>
       );

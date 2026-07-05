@@ -295,7 +295,7 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
           >
             <div className="p-2 border-b border-black/10">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
                 <Input
                   placeholder="Search conversations…"
                   value={search}
@@ -345,7 +345,7 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
                           <div className="font-semibold text-sm truncate">
                             {c.partner.name || c.partner.email.split("@")[0]}
                           </div>
-                          <div className="text-[10px] text-black/40 flex-shrink-0">
+                          <div className="text-[10px] text-black/80 flex-shrink-0">
                             {formatTime(c.lastMessage.createdAt)}
                           </div>
                         </div>
@@ -455,7 +455,7 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
                             <div>{m.body}</div>
                             <div
                               className={`mt-1 text-[10px] ${
-                                mine ? "text-white/70" : "text-black/40"
+                                mine ? "text-white/70" : "text-black/80"
                               } text-right`}
                             >
                               {formatTime(m.createdAt)}

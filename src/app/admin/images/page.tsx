@@ -80,7 +80,7 @@ export default async function AdminImagesPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Brand images
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Upload brand images and choose which one is used as the site&rsquo;s{" "}
             <strong>favicon</strong>, <strong>login hero</strong>, and{" "}
             <strong>login banner</strong>. Stock images from the{" "}
@@ -132,13 +132,13 @@ export default async function AdminImagesPage() {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >

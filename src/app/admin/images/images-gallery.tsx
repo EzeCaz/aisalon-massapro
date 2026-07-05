@@ -169,7 +169,7 @@ export function ImagesGallery() {
 
   if (data === null && error === null) {
     return (
-      <div className="flex items-center justify-center py-20 text-black/40">
+      <div className="flex items-center justify-center py-20 text-black/80">
         <Loader2 className="h-6 w-6 animate-spin mr-2" />
         Loading brand images…
       </div>
@@ -221,11 +221,11 @@ export function ImagesGallery() {
           dragOver ? "border-[#FF005A] bg-[#FF005A]/5" : "border-black/15 bg-black/[0.02]"
         }`}
       >
-        <Upload className="h-6 w-6 mx-auto text-black/40 mb-2" />
+        <Upload className="h-6 w-6 mx-auto text-black/80 mb-2" />
         <p className="text-sm text-black/70 mb-2">
           <span className="font-semibold">Click to upload</span> or drag & drop
         </p>
-        <p className="text-[0.7rem] text-black/40 mb-3">
+        <p className="text-[0.7rem] text-black/80 mb-3">
           JPG, PNG, WebP, GIF, AVIF — max 8 MB. Stored in Vercel Blob.
         </p>
         <button
@@ -272,7 +272,7 @@ export function ImagesGallery() {
             return (
               <div key={role} className="rounded-md bg-black/[0.03] px-3 py-2">
                 <p className="font-semibold text-black/70 mb-0.5">{ROLE_LABELS[role]}</p>
-                <p className="text-black/40 truncate" title={url}>
+                <p className="text-black/80 truncate" title={url}>
                   {isDefault ? "(default)" : url}
                 </p>
               </div>
@@ -283,15 +283,15 @@ export function ImagesGallery() {
 
       {/* Stats line */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-black/60">
+        <p className="text-sm text-black/80">
           <span className="font-semibold text-black">{images.length}</span> image
           {images.length === 1 ? "" : "s"}{" "}
-          <span className="text-black/40">
+          <span className="text-black/80">
             ({images.filter((i) => i.kind === "uploaded").length} uploaded,{" "}
             {images.filter((i) => i.kind === "stock").length} stock)
           </span>
         </p>
-        <p className="text-xs text-black/40">
+        <p className="text-xs text-black/80">
           Total: {formatBytes(images.reduce((sum, img) => sum + img.size, 0))}
         </p>
       </div>

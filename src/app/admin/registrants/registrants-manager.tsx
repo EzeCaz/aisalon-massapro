@@ -208,7 +208,7 @@ export function RegistrantsManager({ events }: Props) {
       {/* Search + status filter */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <Input
             placeholder="Search by name or email…"
             value={search}
@@ -229,7 +229,7 @@ export function RegistrantsManager({ events }: Props) {
           <option value="NOT_GOING">Not going</option>
           <option value="WAITLIST">Waitlist</option>
         </select>
-        <Badge variant="secondary" className="bg-black/5 text-black/60">
+        <Badge variant="secondary" className="bg-black/5 text-black/80">
           {filtered.length} of {rsvps.length}
         </Badge>
       </div>
@@ -237,13 +237,13 @@ export function RegistrantsManager({ events }: Props) {
       {/* List */}
       {loading ? (
         <Card className="p-8 text-center border border-black/10">
-          <Loader2 className="h-6 w-6 mx-auto animate-spin text-black/40" />
-          <p className="text-sm text-black/60 mt-2">Loading registrants…</p>
+          <Loader2 className="h-6 w-6 mx-auto animate-spin text-black/80" />
+          <p className="text-sm text-black/80 mt-2">Loading registrants…</p>
         </Card>
       ) : filtered.length === 0 ? (
         <Card className="p-8 text-center border border-black/10">
           <Users className="h-10 w-10 mx-auto text-black/30 mb-3" />
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             {rsvps.length === 0
               ? "No registrants yet for this event. Use the Upload button to add from a CSV / pasted list."
               : "No registrants match your filters."}
@@ -268,7 +268,7 @@ export function RegistrantsManager({ events }: Props) {
                 const Icon = meta.icon;
                 return (
                   <tr key={r.id} className="border-b border-black/5 hover:bg-black/[0.02]">
-                    <td className="p-3 font-semibold text-black">{r.name || <span className="text-black/40 italic">—</span>}</td>
+                    <td className="p-3 font-semibold text-black">{r.name || <span className="text-black/80 italic">—</span>}</td>
                     <td className="p-3 text-black/70">{r.email}</td>
                     <td className="p-3">
                       <Badge variant="outline" className={`text-[0.55rem] uppercase tracking-wider ${meta.color}`}>
@@ -283,7 +283,7 @@ export function RegistrantsManager({ events }: Props) {
                           Linked
                         </Badge>
                       ) : (
-                        <span className="text-[0.65rem] text-black/40 italic">external</span>
+                        <span className="text-[0.65rem] text-black/80 italic">external</span>
                       )}
                     </td>
                     <td className="p-3 text-[0.65rem] text-black/50">
@@ -352,7 +352,7 @@ function UploadDialog({
         <DialogHeader>
           <DialogTitle>Upload registrants — {eventName}</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60">
+        <p className="text-xs text-black/80">
           Paste a list of emails (one per line) or a CSV/TSV with columns
           like <code className="px-1 py-0.5 bg-black/5 rounded">email,name</code>.
           Lines starting with "email" or "name" are treated as headers and skipped.

@@ -182,7 +182,7 @@ export function TestimonialForm({
 
       {/* Scope selector — community / event / speaker / session */}
       <div className="mb-4">
-        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1.5">
+        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1.5">
           About
         </label>
         <div className="flex flex-wrap gap-1.5">
@@ -222,7 +222,7 @@ export function TestimonialForm({
           and only when scope is not "community". */}
       {!eventId && scope !== "community" && eventsCatalog.length > 0 && (
         <div className="mb-4">
-          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Which event?
           </label>
           <select
@@ -248,7 +248,7 @@ export function TestimonialForm({
       {/* Speaker picker */}
       {scope === "speaker" && activeSpeakers.length > 0 && (
         <div className="mb-4">
-          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Speaker
           </label>
           <select
@@ -269,7 +269,7 @@ export function TestimonialForm({
       {/* Agenda picker */}
       {scope === "session" && activeAgendaItems.length > 0 && (
         <div className="mb-4">
-          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Session
           </label>
           <select
@@ -289,7 +289,7 @@ export function TestimonialForm({
 
       {/* Rating */}
       <div className="mb-4">
-        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1.5">
+        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1.5">
           Rating
         </label>
         <div className="flex items-center gap-1">
@@ -324,7 +324,7 @@ export function TestimonialForm({
 
       {/* Event date */}
       <div className="mb-4">
-        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
           When did this happen?
         </label>
         <Input
@@ -338,7 +338,7 @@ export function TestimonialForm({
 
       {/* Body */}
       <div className="mb-4">
-        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
           Your quote
         </label>
         <Textarea
@@ -349,14 +349,14 @@ export function TestimonialForm({
           maxLength={2000}
           className="resize-y"
         />
-        <div className="mt-1 text-right text-[0.65rem] text-black/40">
+        <div className="mt-1 text-right text-[0.65rem] text-black/80">
           {charsLeft} characters left
         </div>
       </div>
 
       {/* Image */}
       <div className="mb-4">
-        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1.5">
+        <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1.5">
           Photo (optional)
         </label>
         {imagePreview ? (
@@ -437,7 +437,7 @@ function ScopeChip({
       className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-colors ${
         active
           ? "bg-[#FF005A] text-white"
-          : "bg-black/5 text-black/60 hover:bg-black/10"
+          : "bg-black/5 text-black/80 hover:bg-black/10"
       }`}
     >
       {label}

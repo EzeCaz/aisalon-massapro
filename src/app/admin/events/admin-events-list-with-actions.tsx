@@ -64,7 +64,7 @@ export function AdminEventsListWithActions({
   if (events.length === 0) {
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
-        <p className="text-sm text-black/60 mb-4">No events created yet.</p>
+        <p className="text-sm text-black/80 mb-4">No events created yet.</p>
         <Link
           href="/admin/events/new"
           className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] hover:bg-[#D8004D] text-white px-4 py-2 text-sm font-semibold transition-colors"
@@ -135,7 +135,7 @@ export function AdminEventsListWithActions({
                   </span>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[0.7rem] text-black/40">
+              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[0.7rem] text-black/80">
                 <span className="inline-flex items-center gap-1">
                   <Users className="h-3 w-3" />
                   {e._count.speakers} speakers

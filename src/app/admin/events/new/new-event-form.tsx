@@ -261,7 +261,7 @@ export function NewEventForm() {
           </button>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-black/60">
+            <p className="text-xs text-black/80">
               Paste the full event description (LinkedIn post, marketing copy, email —
               including speaker bios and agenda). The AI will extract title, dates, venue,
               description, takeaways, intended audience, RSVP link, and a list of speakers.
@@ -311,7 +311,7 @@ export function NewEventForm() {
 
             {extractedSpeakers.length > 0 && (
               <div className="rounded-md border border-black/10 bg-white p-3">
-                <div className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2">
+                <div className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2">
                   Extracted speakers ({extractedSpeakers.length}) — add them after event creation
                 </div>
                 <ul className="space-y-2">
@@ -319,8 +319,8 @@ export function NewEventForm() {
                     <li key={i} className="text-xs border-l-2 border-[#FF005A]/40 pl-2">
                       <div className="font-semibold text-black">
                         {s.name}
-                        {s.position && <span className="text-black/60"> · {s.position}</span>}
-                        {s.company && <span className="text-black/60"> · {s.company}</span>}
+                        {s.position && <span className="text-black/80"> · {s.position}</span>}
+                        {s.company && <span className="text-black/80"> · {s.company}</span>}
                       </div>
                       {s.topic && <div className="text-black/70 mt-0.5">Topic: {s.topic}</div>}
                       {s.bio && (
@@ -329,7 +329,7 @@ export function NewEventForm() {
                     </li>
                   ))}
                 </ul>
-                <p className="text-[0.65rem] text-black/40 mt-2">
+                <p className="text-[0.65rem] text-black/80 mt-2">
                   After creating the event, go to the event page → Speakers tab → add each
                   speaker manually (the extracted info above will be visible on this page
                   until you navigate away).
@@ -543,9 +543,9 @@ function Field({
 }) {
   return (
     <label className={`block ${full ? "sm:col-span-2" : ""}`}>
-      <span className="block text-xs font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-black/80 mb-1">{label}</span>
       {children}
-      {hint && <span className="block text-[0.65rem] text-black/40 mt-1">{hint}</span>}
+      {hint && <span className="block text-[0.65rem] text-black/80 mt-1">{hint}</span>}
     </label>
   );
 }

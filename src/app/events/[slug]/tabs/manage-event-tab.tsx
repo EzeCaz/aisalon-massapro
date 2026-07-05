@@ -118,7 +118,7 @@ export function ManageEventTab({
       </div>
 
       {/* Permission badge */}
-      <div className="flex flex-wrap items-center gap-2 text-xs text-black/60">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-black/80">
         <ShieldCheck className="h-3.5 w-3.5 text-[#007E72]" />
         <span>
           You can manage this event
@@ -173,7 +173,7 @@ function QuickActionCard({
           <span className="text-sm font-bold">{title}</span>
         </div>
         <p className="text-xs text-black/50">{desc}</p>
-        <div className="mt-2 text-[0.7rem] font-semibold text-black/40 group-hover:text-[#FF005A] transition-colors inline-flex items-center gap-1">
+        <div className="mt-2 text-[0.7rem] font-semibold text-black/80 group-hover:text-[#FF005A] transition-colors inline-flex items-center gap-1">
           Open <ArrowRight className="h-3 w-3" />
         </div>
       </Card>

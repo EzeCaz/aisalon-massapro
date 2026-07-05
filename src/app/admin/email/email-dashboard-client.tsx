@@ -124,7 +124,7 @@ export function EmailDashboardClient({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold tracking-tight">All campaigns</h2>
-          <p className="text-sm text-black/60 mt-1">
+          <p className="text-sm text-black/80 mt-1">
             Compose, schedule, and track email campaigns to your members, non-members,
             event RSVPs, or any custom list.
           </p>
@@ -193,7 +193,7 @@ export function EmailDashboardClient({
 
       {/* Campaign list */}
       <Card className="p-0 overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/10 text-xs font-semibold uppercase tracking-wide text-black/60">
+        <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/10 text-xs font-semibold uppercase tracking-wide text-black/80">
           <div className="col-span-4">Campaign</div>
           <div className="col-span-2">Status</div>
           <div className="col-span-1 text-center">Recipients</div>
@@ -205,7 +205,7 @@ export function EmailDashboardClient({
           <div className="p-12 text-center">
             <Mail className="h-10 w-10 mx-auto text-black/30 mb-3" />
             <h3 className="font-bold text-black mb-1">No campaigns yet</h3>
-            <p className="text-sm text-black/60 mb-4">
+            <p className="text-sm text-black/80 mb-4">
               Click "New campaign" to compose your first email.
             </p>
             <Button onClick={() => setView({ kind: "compose" })}>
@@ -243,7 +243,7 @@ function CampaignRow({
       ? "bg-[#FFAC30]/10 text-[#FFAC30]"
       : status === "FAILED"
       ? "bg-[#FF005A]/10 text-[#FF005A]"
-      : "bg-black/5 text-black/60";
+      : "bg-black/5 text-black/80";
 
   const dateLabel = campaign.completedAt
     ? new Date(campaign.completedAt).toLocaleString()
@@ -263,7 +263,7 @@ function CampaignRow({
       <div className="col-span-1 text-center text-xs">
         {campaign.recipientCount || campaign._count.recipients}
       </div>
-      <div className="col-span-2 text-xs text-black/60">{dateLabel}</div>
+      <div className="col-span-2 text-xs text-black/80">{dateLabel}</div>
       <div className="col-span-1 text-center text-xs">
         <code className="text-[0.65rem] bg-black/5 px-1 py-0.5 rounded">
           {campaign.listSource.replace("_", " ")}

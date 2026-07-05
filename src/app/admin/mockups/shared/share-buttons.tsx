@@ -226,7 +226,7 @@ export function ShareButtons({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-black/40 hover:text-black"
+              className="text-black/80 hover:text-black"
               aria-label="Close share menu"
             >
               ×

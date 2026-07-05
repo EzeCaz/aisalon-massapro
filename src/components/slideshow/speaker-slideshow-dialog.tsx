@@ -181,7 +181,7 @@ export function SpeakerSlideshowDialog({
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4 text-[#FF005A]" />
             Pictures of {speakerName}&apos;s session
-            <span className="text-xs font-normal text-black/40 ml-1">
+            <span className="text-xs font-normal text-black/80 ml-1">
               ({images.length} photo{images.length === 1 ? "" : "s"})
             </span>
           </DialogTitle>
@@ -361,7 +361,7 @@ function ReorderDialog({
         <DialogHeader>
           <DialogTitle>Reorder this speaker&apos;s slideshow</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Drag rows to reorder, or use the ↑ / ↓ arrows. Click <strong>Save order</strong> to apply
           — this updates the order for anyone viewing this speaker&apos;s slideshow from the agenda.
         </p>
@@ -436,12 +436,12 @@ function SortableRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-black/30 hover:text-black/60 p-1"
+        className="cursor-grab active:cursor-grabbing text-black/30 hover:text-black/80 p-1"
         aria-label="Drag to reorder"
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="text-xs font-mono text-black/40 w-6 text-center">{idx + 1}</div>
+      <div className="text-xs font-mono text-black/80 w-6 text-center">{idx + 1}</div>
       <div className="flex-shrink-0 w-14 h-10 rounded overflow-hidden bg-black/5">
         <img src={img.fileUrl} alt="" className="w-full h-full object-cover" />
       </div>
@@ -454,7 +454,7 @@ function SortableRow({
         <button
           onClick={() => onMove(-1)}
           disabled={idx === 0}
-          className="text-black/40 hover:text-black disabled:opacity-20 p-0.5"
+          className="text-black/80 hover:text-black disabled:opacity-20 p-0.5"
           aria-label="Move up"
         >
           <ArrowUp className="h-3.5 w-3.5" />
@@ -462,7 +462,7 @@ function SortableRow({
         <button
           onClick={() => onMove(1)}
           disabled={idx === total - 1}
-          className="text-black/40 hover:text-black disabled:opacity-20 p-0.5"
+          className="text-black/80 hover:text-black disabled:opacity-20 p-0.5"
           aria-label="Move down"
         >
           <ArrowDown className="h-3.5 w-3.5" />

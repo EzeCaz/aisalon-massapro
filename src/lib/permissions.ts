@@ -358,7 +358,7 @@ export function roleBadgeClass(role: string | null | undefined): string {
     case ROLES.SPEAKER:
       return "bg-[#FFB300]/20 text-[#8a5a00] border border-[#FFB300]/40";
     case ROLES.MEMBER:
-      return "bg-black/5 text-black/60 border border-black/10";
+      return "bg-black/5 text-black/80 border border-black/10";
   }
 }
 

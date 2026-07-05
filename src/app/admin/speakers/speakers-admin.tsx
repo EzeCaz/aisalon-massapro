@@ -428,7 +428,7 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -467,7 +467,7 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
       {visibleGroupEntries.length === 0 && (
         <Card className="p-8 text-center bg-white border border-black/10">
           <Mic2 className="h-8 w-8 mx-auto mb-2 text-black/30" />
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             No speakers match your filters. Try clearing the search or creating a new speaker.
           </p>
         </Card>
@@ -498,9 +498,9 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
               >
                 {hasMultiple ? (
                   expanded ? (
-                    <ChevronDown className="h-4 w-4 text-black/40 flex-shrink-0" />
+                    <ChevronDown className="h-4 w-4 text-black/80 flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-black/40 flex-shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-black/80 flex-shrink-0" />
                   )
                 ) : (
                   <span className="w-4 flex-shrink-0" />
@@ -544,9 +544,9 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
                     )}
                   </div>
                 </div>
-                <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-black/40 flex-shrink-0">
+                <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-black/80 flex-shrink-0">
                   <span>Most recent</span>
-                  <span className="font-semibold text-black/60">{fmtDate(head.event.startsAt)}</span>
+                  <span className="font-semibold text-black/80">{fmtDate(head.event.startsAt)}</span>
                 </div>
               </button>
 
@@ -623,7 +623,7 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
           <DialogHeader>
             <DialogTitle>Clone speaker to another event</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             Creates a new Speaker row on the target event with the same name, role, company, bio,
             topic, photo, contact email, and linked user. The original speaker remains unchanged.
           </p>
@@ -663,13 +663,13 @@ export function SpeakersAdmin({ initialSpeakers, initialEvents }: Props) {
           <DialogHeader>
             <DialogTitle>Link to a session</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             Pick an agenda item from <strong>{editing?.event.title}</strong>. Sessions already
             linked to other speakers can be reassigned to this speaker.
           </p>
           {linkAgendaLoading ? (
             <div className="py-6 flex items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-black/40" />
+              <Loader2 className="h-5 w-5 animate-spin text-black/80" />
             </div>
           ) : agendaItemsForEvent.length === 0 ? (
             <div className="py-6 text-center text-sm text-black/50">
@@ -768,7 +768,7 @@ function SpeakerRow({
   return (
     <div className="flex items-center gap-3 p-3 pl-12 hover:bg-black/[0.02]">
       <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-black/60">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-black/80">
           <Link
             href={`/events/${speaker.event.slug}`}
             className="inline-flex items-center gap-1 font-semibold text-[#004F98] hover:underline"
@@ -923,7 +923,7 @@ function SpeakerEditForm({
 
       {/* --- Linked platform user --- */}
       <div className="border-t border-black/10 pt-4">
-        <h4 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2">
+        <h4 className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2">
           Linked platform user
         </h4>
         {speaker.user ? (
@@ -952,7 +952,7 @@ function SpeakerEditForm({
       {/* --- Sessions (agenda items) --- */}
       <div className="border-t border-black/10 pt-4">
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-xs font-bold uppercase tracking-widest text-black/40">
+          <h4 className="text-xs font-bold uppercase tracking-widest text-black/80">
             Sessions at this event ({speaker.agendaItems.length})
           </h4>
           <Button size="sm" variant="outline" onClick={onLinkAgendaClick}>
@@ -1015,7 +1015,7 @@ function SpeakerEditForm({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <Label className="text-xs text-black/60 mb-1 block">{label}</Label>
+      <Label className="text-xs text-black/80 mb-1 block">{label}</Label>
       {children}
     </div>
   );
@@ -1024,7 +1024,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
   return (
     <div className="border border-black/10 rounded p-2 text-center">
-      <div className="flex items-center justify-center gap-1 text-[0.6rem] uppercase tracking-widest text-black/40">
+      <div className="flex items-center justify-center gap-1 text-[0.6rem] uppercase tracking-widest text-black/80">
         {icon} {label}
       </div>
       <div className="text-lg font-bold text-black mt-0.5">{value}</div>
@@ -1166,7 +1166,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </span>
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />

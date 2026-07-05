@@ -105,7 +105,7 @@ export function PhotoUploadField({
 
   return (
     <div className="rounded-md border border-black/10 p-3 space-y-3 bg-white">
-      <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+      <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
         Profile photo
       </div>
       <div className="flex items-start gap-4">
@@ -174,7 +174,7 @@ export function PhotoUploadField({
               <p className="text-[0.6rem] font-mono text-black/50 break-all">
                 {photoUrl}
               </p>
-              <p className="text-[0.6rem] text-black/40 mt-1">
+              <p className="text-[0.6rem] text-black/80 mt-1">
                 ↑ use this URL in mockup JSON to bind this member&apos;s photo
               </p>
             </div>

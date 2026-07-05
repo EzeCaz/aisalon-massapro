@@ -103,7 +103,7 @@ export function AnalyticsSettingsEditor({
           Analytics tracking IDs
         </h2>
       </div>
-      <p className="text-xs text-black/60 mb-4 leading-relaxed">
+      <p className="text-xs text-black/80 mb-4 leading-relaxed">
         Configure Google Analytics 4 and Meta (Facebook) Pixel. Scripts only
         load after a visitor accepts cookies on the consent banner — no
         tracking before opt-in. Leave blank to disable.
@@ -113,7 +113,7 @@ export function AnalyticsSettingsEditor({
         {/* GA4 */}
         <form onSubmit={saveGa4} className="space-y-2">
           <label className="block">
-            <span className="block text-[0.7rem] font-semibold uppercase tracking-wide text-black/60 mb-1">
+            <span className="block text-[0.7rem] font-semibold uppercase tracking-wide text-black/80 mb-1">
               GA4 Measurement ID
             </span>
             <input
@@ -138,7 +138,7 @@ export function AnalyticsSettingsEditor({
         {/* Meta Pixel */}
         <form onSubmit={savePixel} className="space-y-2">
           <label className="block">
-            <span className="block text-[0.7rem] font-semibold uppercase tracking-wide text-black/60 mb-1">
+            <span className="block text-[0.7rem] font-semibold uppercase tracking-wide text-black/80 mb-1">
               Meta Pixel ID
             </span>
             <input

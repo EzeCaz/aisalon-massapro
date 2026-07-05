@@ -41,6 +41,13 @@ export const K_LINKEDIN_URL = "linkedinUrl";
 export const K_GA4_MEASUREMENT_ID = "ga4MeasurementId";
 /** Canonical key for the Meta (Facebook) Pixel ID (e.g. "123456789012345"). */
 export const K_META_PIXEL_ID = "metaPixelId";
+/**
+ * Canonical key for the global email pause flag.
+ * Value "true"  → all email sends are blocked (queue still records attempts).
+ * Value "false" or absent → emails send normally.
+ * Used by the Email admin tab as a live kill switch — no redeploy needed.
+ */
+export const K_EMAIL_SEND_PAUSED = "emailSendPaused";
 
 /**
  * All keys that can be written via the admin API. This is the authoritative
@@ -55,6 +62,7 @@ export const ALL_KEYS: ReadonlySet<string> = new Set([
   K_LINKEDIN_URL,
   K_GA4_MEASUREMENT_ID,
   K_META_PIXEL_ID,
+  K_EMAIL_SEND_PAUSED,
 ]);
 
 /**
@@ -85,6 +93,10 @@ export const DEFAULTS: Record<string, string> = {
   // Empty string = Meta Pixel disabled. Admin sets a valid numeric ID
   // at /admin/images to enable.
   [K_META_PIXEL_ID]: "",
+  // Default: PAUSED on first deploy. The admin must explicitly click
+  // "Resume sending" in /admin/email before any real email goes out.
+  // This protects against accidental sends during setup/testing.
+  [K_EMAIL_SEND_PAUSED]: "true",
 };
 
 /** Public shape returned by getPublicSettings(). */
@@ -97,6 +109,8 @@ export type PublicSettings = {
   linkedinUrl: string;
   ga4MeasurementId: string;
   metaPixelId: string;
+  /** Whether the global email pause flag is on. True = emails blocked. */
+  emailSendPaused: boolean;
 };
 
 /**
@@ -120,7 +134,17 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     // Most likely "relation SiteSetting does not exist" on a fresh DB
     // that hasn't had the schema pushed yet. Log + fall back to defaults.
     console.warn("[site-settings] could not read SiteSetting table:", err);
-    return { ...DEFAULTS } as PublicSettings;
+    return {
+      favicon: DEFAULTS[K_FAVICON],
+      loginHero: DEFAULTS[K_LOGIN_HERO],
+      loginBanner: DEFAULTS[K_LOGIN_BANNER],
+      whatsappGroupUrl: DEFAULTS[K_WHATSAPP_GROUP_URL],
+      whatsappGroupText: DEFAULTS[K_WHATSAPP_GROUP_TEXT],
+      linkedinUrl: DEFAULTS[K_LINKEDIN_URL],
+      ga4MeasurementId: DEFAULTS[K_GA4_MEASUREMENT_ID],
+      metaPixelId: DEFAULTS[K_META_PIXEL_ID],
+      emailSendPaused: DEFAULTS[K_EMAIL_SEND_PAUSED] === "true",
+    };
   }
   const map = new Map(rows.map((r) => [r.key, r.value]));
   return {
@@ -132,6 +156,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     linkedinUrl: map.get(K_LINKEDIN_URL) ?? DEFAULTS[K_LINKEDIN_URL],
     ga4MeasurementId: map.get(K_GA4_MEASUREMENT_ID) ?? DEFAULTS[K_GA4_MEASUREMENT_ID],
     metaPixelId: map.get(K_META_PIXEL_ID) ?? DEFAULTS[K_META_PIXEL_ID],
+    emailSendPaused: (map.get(K_EMAIL_SEND_PAUSED) ?? DEFAULTS[K_EMAIL_SEND_PAUSED]) === "true",
   };
 }
 
@@ -155,6 +180,23 @@ export async function setSetting(
     update: { value, updatedBy },
   });
   return value;
+}
+
+/**
+ * Read only the global email-pause flag. Cheaper than getPublicSettings()
+ * when only this one value is needed (e.g. inside the email sender hot path).
+ * Returns false on any DB error so a DB outage never accidentally blocks sends.
+ */
+export async function isEmailSendPaused(): Promise<boolean> {
+  try {
+    const row = await db.siteSetting.findUnique({
+      where: { key: K_EMAIL_SEND_PAUSED },
+      select: { value: true },
+    });
+    return (row?.value ?? DEFAULTS[K_EMAIL_SEND_PAUSED]) === "true";
+  } catch {
+    return false;
+  }
 }
 
 /**

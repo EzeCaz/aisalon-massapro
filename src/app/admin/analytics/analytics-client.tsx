@@ -156,7 +156,7 @@ export function AdminAnalyticsClient() {
 
   if (loading && !data) {
     return (
-      <div className="flex items-center justify-center py-20 text-black/40">
+      <div className="flex items-center justify-center py-20 text-black/80">
         <Loader2 className="h-6 w-6 animate-spin mr-2" />
         Loading analytics…
       </div>
@@ -164,7 +164,7 @@ export function AdminAnalyticsClient() {
   }
   if (!data) {
     return (
-      <div className="text-center py-20 text-black/40">
+      <div className="text-center py-20 text-black/80">
         No analytics data available.
       </div>
     );
@@ -317,11 +317,11 @@ function TrendChart({
         <div className="flex items-center gap-3 text-xs">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-3 h-1 rounded-full bg-[#007E72]" />
-            <span className="text-black/60 font-semibold">Visits</span>
+            <span className="text-black/80 font-semibold">Visits</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="w-3 h-1 rounded-full bg-[#FF005A]" />
-            <span className="text-black/60 font-semibold">Signups</span>
+            <span className="text-black/80 font-semibold">Signups</span>
           </span>
         </div>
       </div>
@@ -485,7 +485,7 @@ function RecentVisitsPanel({ rows }: { rows: RecentVisit[] }) {
             New
           </span>
         ) : (
-          <span className="text-xs text-black/40">Returning</span>
+          <span className="text-xs text-black/80">Returning</span>
         ),
     },
   ];
@@ -739,7 +739,7 @@ function EventRegistrationsPanel({ rows }: { rows: EventRegistration[] }) {
       onViewModeChange={state.setViewMode}
       rightSlot={
         <div className="flex items-center gap-3 text-xs">
-          <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 font-semibold text-black/60">
+          <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 font-semibold text-black/80">
             <Ticket className="h-3 w-3" /> {totalRegistrations} registered
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-[#007E72]/10 px-2 py-0.5 font-semibold text-[#007E72]">

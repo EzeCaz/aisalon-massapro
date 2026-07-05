@@ -154,7 +154,7 @@ export function CoHostPicker({
   return (
     <div className="relative flex-1 min-w-[200px] max-w-md" ref={containerRef}>
       <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 pointer-events-none" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80 pointer-events-none" />
         <Input
           type="text"
           placeholder="Search by name, email, or company…"
@@ -173,7 +173,7 @@ export function CoHostPicker({
           role="combobox"
         />
         {loading && (
-          <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-black/40" />
+          <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-black/80" />
         )}
         {!loading && query && (
           <button
@@ -183,7 +183,7 @@ export function CoHostPicker({
               setResults([]);
               setOpen(false);
             }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 hover:text-black/70"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80 hover:text-black/70"
             aria-label="Clear search"
           >
             <X className="h-3.5 w-3.5" />
@@ -232,17 +232,17 @@ export function CoHostPicker({
                       </div>
                       <div className="text-xs text-black/50 truncate">{user.email}</div>
                       {user.company && (
-                        <div className="text-[0.65rem] text-black/40 truncate">{user.company}</div>
+                        <div className="text-[0.65rem] text-black/80 truncate">{user.company}</div>
                       )}
                     </div>
-                    <span className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40 px-1.5 py-0.5 rounded bg-black/5">
+                    <span className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 px-1.5 py-0.5 rounded bg-black/5">
                       {user.role.replace("_", " ").toLowerCase()}
                     </span>
                   </button>
                 </li>
               ))}
               {/* Footer hint */}
-              <li className="p-2 text-[0.65rem] text-black/40 border-t border-black/5 bg-black/[0.02]">
+              <li className="p-2 text-[0.65rem] text-black/80 border-t border-black/5 bg-black/[0.02]">
                 Press Enter to add the typed text as an email if no match above.
               </li>
             </ul>

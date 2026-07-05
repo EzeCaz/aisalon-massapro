@@ -621,7 +621,7 @@ export function SpeakerIntroEditor({ events }: Props) {
             Auto-filled from &ldquo;{data.event.name}&rdquo;
           </span>
         )}
-        <span className="text-xs text-black/40">
+        <span className="text-xs text-black/80">
           (you can still edit any field in the JSON below)
         </span>
       </div>
@@ -705,7 +705,7 @@ export function SpeakerIntroEditor({ events }: Props) {
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`speaker-intro-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
-        <span className="ml-auto text-xs text-black/40">
+        <span className="ml-auto text-xs text-black/80">
           1200 × 800 · auto-saved
         </span>
       </div>
@@ -740,7 +740,7 @@ export function SpeakerIntroEditor({ events }: Props) {
               Speakers ({data.speakers.filter((s) => s.visible !== false).length}/
               {data.speakers.length} visible)
             </h3>
-            <span className="text-[0.65rem] text-black/40">
+            <span className="text-[0.65rem] text-black/80">
               Ordered by session time · uncheck to hide on canvas
             </span>
           </div>
@@ -792,7 +792,7 @@ export function SpeakerIntroEditor({ events }: Props) {
             <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
               <div className="flex items-center gap-2">
                 <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/60">
+                <span className="text-[0.7rem] font-mono text-black/80">
                   speaker-intro.form
                 </span>
               </div>
@@ -884,7 +884,7 @@ export function SpeakerIntroEditor({ events }: Props) {
             {sectionsEditMode ? "Editing sections" : "Edit sections"}
           </button>
         </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/40 mb-3">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
             Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
           </div>
           <div

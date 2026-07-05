@@ -370,7 +370,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           </div>
           <div className="flex flex-col">
             {visibleSessions.length === 0 ? (
-              <p className="text-black/40 text-sm italic">
+              <p className="text-black/80 text-sm italic">
                 No sessions to show — toggle some back on in the sidebar.
               </p>
             ) : (
@@ -468,7 +468,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             {data.collaborators.length > 0 && (
               <div className="flex flex-col items-end gap-1.5">
                 <span
-                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  className="text-black/80 font-semibold uppercase tracking-wider"
                   style={{
                     fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 10}px`,
                     letterSpacing: "0.18em",
@@ -496,7 +496,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             {data.sponsors.length > 0 && (
               <div className="flex flex-col items-end gap-1.5">
                 <span
-                  className="text-black/60 font-semibold uppercase tracking-wider"
+                  className="text-black/80 font-semibold uppercase tracking-wider"
                   style={{
                     fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 10}px`,
                     letterSpacing: "0.18em",
@@ -610,7 +610,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             guideId="footer"
           >
             <span
-              className="text-black/40"
+              className="text-black/80"
               style={{
                 color: data.textStyles?.footerCredit?.color,
                 textAlign: data.textStyles?.footerCredit?.align,
@@ -744,7 +744,7 @@ function AgendaRow({
         </p>
         {session.endTime && (
           <p
-            className="text-black/40 font-mono"
+            className="text-black/80 font-mono"
             style={{
               fontSize: `${textStyles?.sessionEndTime?.fontSize ?? 11}px`,
               color: textStyles?.sessionEndTime?.color,

@@ -340,13 +340,13 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
             </>
           )}
           {images.length > 0 && selected.size === 0 && (
-            <Button size="sm" variant="ghost" onClick={selectAll} className="text-black/60">
+            <Button size="sm" variant="ghost" onClick={selectAll} className="text-black/80">
               Select all
             </Button>
           )}
         </div>
 
-        <div className="text-xs text-black/40">
+        <div className="text-xs text-black/80">
           {images.length} photo{images.length === 1 ? "" : "s"} · Click any photo to select it
         </div>
       </div>
@@ -356,7 +356,7 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
         <Card className="p-8 border-2 border-dashed border-black/15 bg-white text-center">
           <ImageIcon className="h-10 w-10 mx-auto text-black/30 mb-3" />
           <h3 className="font-bold text-black mb-1">No photos yet</h3>
-          <p className="text-sm text-black/60 mb-4">
+          <p className="text-sm text-black/80 mb-4">
             Be the first to upload photos from <strong>{event.title}</strong>. All community
             members can upload and view.
           </p>
@@ -535,7 +535,7 @@ function PhotoCard({
               <DialogHeader>
                 <DialogTitle>Link photo to speaker(s)</DialogTitle>
               </DialogHeader>
-              <p className="text-xs text-black/60">
+              <p className="text-xs text-black/80">
                 Tag which speaker(s) this photo is from. This helps organize the community gallery
                 by agenda.
               </p>
@@ -551,8 +551,8 @@ function PhotoCard({
                       />
                       <div className="flex-1">
                         <div className="font-semibold text-sm">{s.name}</div>
-                        {s.role && <div className="text-xs text-black/60">{s.role}</div>}
-                        {s.company && <div className="text-xs text-black/40">{s.company}</div>}
+                        {s.role && <div className="text-xs text-black/80">{s.role}</div>}
+                        {s.company && <div className="text-xs text-black/80">{s.company}</div>}
                       </div>
                     </label>
                   ))}
@@ -677,13 +677,13 @@ function UploadDialog({
               className="hidden"
               onChange={(e) => setFiles(e.target.files)}
             />
-            <Upload className="h-8 w-8 mx-auto text-black/40 mb-2" />
+            <Upload className="h-8 w-8 mx-auto text-black/80 mb-2" />
             {files && files.length > 0 ? (
               <div>
                 <div className="font-semibold text-black">
                   {files.length} file{files.length === 1 ? "" : "s"} selected
                 </div>
-                <div className="text-xs text-black/60 mt-1">
+                <div className="text-xs text-black/80 mt-1">
                   {Array.from(files)
                     .slice(0, 3)
                     .map((f) => f.name)
@@ -695,7 +695,7 @@ function UploadDialog({
             ) : (
               <div>
                 <div className="font-semibold text-black">Drop photos here or click to browse</div>
-                <div className="text-xs text-black/60 mt-1">
+                <div className="text-xs text-black/80 mt-1">
                   JPG, PNG, WebP, HEIC — each file uploaded separately so you can pick as many as you want.
                   Files over ~4 MB may fail to upload.
                 </div>
@@ -771,7 +771,7 @@ function BulkLinkDialog({
         <DialogHeader>
           <DialogTitle>Link selected photos to speaker(s)</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60">
+        <p className="text-xs text-black/80">
           Tag these photos with one or more speakers from the agenda. Existing speaker links on
           these photos will be replaced.
         </p>
@@ -784,8 +784,8 @@ function BulkLinkDialog({
                 <Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggle(s.id)} />
                 <div className="flex-1">
                   <div className="font-semibold text-sm">{s.name}</div>
-                  {s.role && <div className="text-xs text-black/60">{s.role}</div>}
-                  {s.company && <div className="text-xs text-black/40">{s.company}</div>}
+                  {s.role && <div className="text-xs text-black/80">{s.role}</div>}
+                  {s.company && <div className="text-xs text-black/80">{s.company}</div>}
                 </div>
               </label>
             ))}

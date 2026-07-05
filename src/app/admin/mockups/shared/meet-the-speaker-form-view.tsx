@@ -355,7 +355,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             </div>
           </Field>
         </div>
-        <p className="text-[0.55rem] text-black/40 leading-tight">
+        <p className="text-[0.55rem] text-black/80 leading-tight">
           Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
           &ldquo;⠿ Move&rdquo; handle on the photo to reposition it freely —
           the photo can move anywhere on the canvas. Use the X/Y inputs here
@@ -586,7 +586,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <p className="text-[0.55rem] text-black/40 leading-tight">
+        <p className="text-[0.55rem] text-black/80 leading-tight">
           Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
           &ldquo;⠿ Move graphic&rdquo; handle to reposition the meerkat anywhere
           on the canvas. Clear the X/Y inputs to restore the default
@@ -723,7 +723,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
                 </div>
               </div>
             ))}
-            <p className="text-[0.55rem] text-black/40 leading-tight">
+            <p className="text-[0.55rem] text-black/80 leading-tight">
               The 4 pins overlay the "Placeholder 1–4" labels baked into
               the Style 2 image. Edit the label to rename (e.g. "Sarona",
               "Yafo") or adjust X/Y % to reposition.
@@ -789,7 +789,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
               { key: "graphic", label: "Graphic", zVal: data.graphicZ ?? 8, rot: data.graphic.rotation ?? 0 },
             ] as const).map((layer) => (
               <div key={layer.key}>
-                <div className="text-[0.6rem] text-black/60 mb-1">
+                <div className="text-[0.6rem] text-black/80 mb-1">
                   {layer.label} (z={layer.zVal})
                 </div>
                 <div className="flex items-center gap-0.5">
@@ -858,7 +858,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
               </div>
             ))}
           </div>
-          <p className="text-[0.55rem] text-black/40 leading-tight">
+          <p className="text-[0.55rem] text-black/80 leading-tight">
             Default: hero (back) → photo → graphic (top). Click Front/Back to override.
             Rotate button cycles 0° → 90° → 180° → 270° → 0°.
             {data.heroStyle === 2
@@ -972,7 +972,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             >
               Reset position, size, rotation, zoom (restore defaults)
             </button>
-            <p className="text-[0.55rem] text-black/40 leading-tight">
+            <p className="text-[0.55rem] text-black/80 leading-tight">
               Tip: Toggle <strong>Edit images</strong> on the canvas to drag
               the &ldquo;⠿ Move hero&rdquo; handle (free position), drag the
               corner handles (resize), scroll the mouse wheel over the image
@@ -1059,7 +1059,7 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <p className="text-[0.55rem] text-black/40 leading-tight">
+        <p className="text-[0.55rem] text-black/80 leading-tight">
           Tip: Toggle <strong>Edit images</strong> on the canvas and drag the
           &ldquo;⠿ Move branding&rdquo; handle to reposition the brand image
           anywhere on the canvas. Click the <strong>Replace</strong> button
@@ -1249,7 +1249,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-[0.7rem] font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-[0.7rem] font-semibold text-black/80 mb-1">{label}</span>
       {children}
     </label>
   );
@@ -1291,12 +1291,12 @@ function TextStyleRow({
 }) {
   return (
     <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1.5">
-      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40">
+      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80">
         {label}
       </div>
       <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
         <label className="inline-flex items-center gap-1.5">
-          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Size</span>
+          <span className="text-[0.6rem] font-semibold text-black/80 w-8">Size</span>
           <input
             type="number"
             step="1"
@@ -1311,10 +1311,10 @@ function TextStyleRow({
             className="form-input w-20"
             title={`Font size in px (default: ${defaultFontSize}px). Empty = use default.`}
           />
-          <span className="text-[0.55rem] font-mono text-black/40">px</span>
+          <span className="text-[0.55rem] font-mono text-black/80">px</span>
         </label>
         <label className="inline-flex items-center gap-1.5">
-          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Color</span>
+          <span className="text-[0.6rem] font-semibold text-black/80 w-8">Color</span>
           <input
             type="color"
             value={fontColor ?? "#000000"}
@@ -1334,7 +1334,7 @@ function TextStyleRow({
       </div>
       {/* Align L / C / R — per user spec 2026-07-02. */}
       <div className="flex items-center gap-1">
-        <span className="text-[0.6rem] font-semibold text-black/60 w-8">Align</span>
+        <span className="text-[0.6rem] font-semibold text-black/80 w-8">Align</span>
         {(["left", "center", "right"] as const).map((a) => (
           <button
             key={a}
@@ -1345,7 +1345,7 @@ function TextStyleRow({
             className={`px-2 py-0.5 text-[0.55rem] font-semibold rounded border transition ${
               (align ?? "left") === a
                 ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                : "border-black/15 bg-white text-black/60 hover:bg-black/5"
+                : "border-black/15 bg-white text-black/80 hover:bg-black/5"
             }`}
             title={`Align ${a}`}
           >
@@ -1391,7 +1391,7 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/60 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
+      className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-dashed border-black/30 text-black/80 font-semibold px-3 py-2 text-xs hover:bg-black/5 hover:text-black"
     >
       <Plus className="h-3.5 w-3.5" />
       {label}

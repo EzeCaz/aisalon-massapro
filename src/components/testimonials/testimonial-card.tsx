@@ -243,7 +243,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
             </div>
           )}
         </div>
-        <div className="text-[0.65rem] text-black/40 text-right">
+        <div className="text-[0.65rem] text-black/80 text-right">
           <div className="flex items-center gap-0.5 justify-end">
             <Calendar className="h-2.5 w-2.5" />
             {new Date(t.eventDate).toLocaleDateString("en-US", {
@@ -296,7 +296,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-sm">
-                <ImageIcon className="h-4 w-4 text-black/40" />
+                <ImageIcon className="h-4 w-4 text-black/80" />
                 {authorName}'s photo
               </DialogTitle>
             </DialogHeader>
@@ -316,14 +316,14 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
             <Link
               key={i}
               href={a.href}
-              className="text-[0.65rem] font-medium bg-black/5 text-black/60 px-2 py-0.5 rounded-full hover:bg-black/10"
+              className="text-[0.65rem] font-medium bg-black/5 text-black/80 px-2 py-0.5 rounded-full hover:bg-black/10"
             >
               {a.label}
             </Link>
           ) : (
             <span
               key={i}
-              className="text-[0.65rem] font-medium bg-black/5 text-black/60 px-2 py-0.5 rounded-full"
+              className="text-[0.65rem] font-medium bg-black/5 text-black/80 px-2 py-0.5 rounded-full"
             >
               {a.label}
             </span>
@@ -340,7 +340,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
           onClick={toggleLike}
           disabled={busy}
           className={`h-8 px-2 text-xs gap-1.5 ${
-            liked ? "text-[#FF005A] hover:bg-[#FF005A]/10" : "text-black/60"
+            liked ? "text-[#FF005A] hover:bg-[#FF005A]/10" : "text-black/80"
           }`}
         >
           <Heart
@@ -353,7 +353,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
           variant="ghost"
           size="sm"
           onClick={handleShare}
-          className="h-8 px-2 text-xs gap-1.5 text-black/60"
+          className="h-8 px-2 text-xs gap-1.5 text-black/80"
         >
           <Share2 className="h-3.5 w-3.5" />
           {shareCount > 0 ? shareCount : "Share"}
@@ -366,7 +366,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
             size="sm"
             onClick={handleDelete}
             disabled={busy}
-            className="h-8 px-2 text-xs gap-1.5 text-black/40 hover:text-[#FF005A] hover:bg-[#FF005A]/10 ml-auto"
+            className="h-8 px-2 text-xs gap-1.5 text-black/80 hover:text-[#FF005A] hover:bg-[#FF005A]/10 ml-auto"
             title={isAdmin && t.author.id !== meId ? "Admin: delete anyone's testimonial" : "Delete your testimonial"}
           >
             <Trash2 className="h-3.5 w-3.5" />

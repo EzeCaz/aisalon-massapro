@@ -161,7 +161,7 @@ function fromLocalDatetimeInput(local: string): string {
 const typeColor: Record<string, string> = {
   WELCOME: "bg-[#00E6FF]/10 text-[#007E72] border-[#00E6FF]/30",
   TALK: "bg-[#FF005A]/10 text-[#FF005A] border-[#FF005A]/30",
-  BREAK: "bg-black/5 text-black/60 border-black/10",
+  BREAK: "bg-black/5 text-black/80 border-black/10",
   NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
   FAST_PITCH: "bg-[#FFAC30]/10 text-[#FFAC30] border-[#FFAC30]/30",
   PANEL: "bg-[#7C3AED]/10 text-[#7C3AED] border-[#7C3AED]/30",
@@ -271,7 +271,7 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
         <Card className="p-8 border-2 border-dashed border-black/15 bg-white text-center">
           <Rocket className="h-10 w-10 mx-auto text-black/30 mb-3" />
           <h3 className="font-bold text-black mb-1">No agenda items yet</h3>
-          <p className="text-sm text-black/60 mb-4">
+          <p className="text-sm text-black/80 mb-4">
             Add the first agenda item to get started — talks, fast pitch sessions, breaks, etc.
           </p>
         </Card>
@@ -363,7 +363,7 @@ function AgendaItemRow({
               ) : (
                 <>
                   {item.speaker.name}
-                  {item.speaker.role && <span className="text-black/40">· {item.speaker.role}</span>}
+                  {item.speaker.role && <span className="text-black/80">· {item.speaker.role}</span>}
                 </>
               )}
             </span>
@@ -697,7 +697,7 @@ function CreateAgendaItemDialog({
               />
             </div>
           </div>
-          <p className="text-[0.65rem] text-black/40 -mt-2">
+          <p className="text-[0.65rem] text-black/80 -mt-2">
             Times are in Tel Aviv (Asia/Jerusalem) timezone.
           </p>
 
@@ -868,7 +868,7 @@ function CreateAgendaItemDialog({
                 </div>
               ) : (
                 <div>
-                  <FileText className="h-6 w-6 mx-auto text-black/40 mb-1" />
+                  <FileText className="h-6 w-6 mx-auto text-black/80 mb-1" />
                   <div className="text-sm font-medium text-black">
                     Drop a file or click to browse
                   </div>
@@ -1321,7 +1321,7 @@ function PanelistsPicker({
             {pickedCount} picked
           </span>
         </div>
-        <p className="text-[0.7rem] text-black/60 leading-snug">
+        <p className="text-[0.7rem] text-black/80 leading-snug">
           Pick panelists from this event&apos;s roster or from other events (cross-event picks are
           auto-cloned into this event on save). You can also add brand-new panelists below. The
           moderator picked above is NOT auto-added here — if they&apos;re also a panelist, pick
@@ -1330,7 +1330,7 @@ function PanelistsPicker({
 
         {/* Search box (only meaningful for cross-event roster) */}
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/80" />
           <Input
             placeholder="Search speakers from other events by name, role, company, or event…"
             value={search}
@@ -1344,7 +1344,7 @@ function PanelistsPicker({
           {/* This event's speakers */}
           {existingSpeakers.length > 0 && (
             <div className="p-2">
-              <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/40 px-1 pb-1 sticky top-0 bg-white">
+              <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/80 px-1 pb-1 sticky top-0 bg-white">
                 This event&apos;s speakers ({existingSpeakers.length})
               </div>
               <div className="space-y-0.5">
@@ -1369,7 +1369,7 @@ function PanelistsPicker({
 
           {/* Cross-event speakers */}
           <div className="p-2">
-            <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/40 px-1 pb-1 sticky top-0 bg-white">
+            <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/80 px-1 pb-1 sticky top-0 bg-white">
               Speakers from other events ({loadingRoster ? "loading…" : filteredCrossEvent.length})
             </div>
             {loadingRoster ? (
@@ -1420,7 +1420,7 @@ function PanelistsPicker({
                 <button
                   type="button"
                   onClick={() => removeNewPanelist(idx)}
-                  className="absolute top-1.5 right-1.5 p-0.5 rounded text-black/40 hover:text-[#FF005A] hover:bg-[#FF005A]/10"
+                  className="absolute top-1.5 right-1.5 p-0.5 rounded text-black/80 hover:text-[#FF005A] hover:bg-[#FF005A]/10"
                   title="Remove"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -1530,7 +1530,7 @@ function PanelistRow({
             <span className="text-black/50 font-normal"> · {speaker.role}</span>
           )}
         </div>
-        <div className="text-[0.6rem] text-black/40 truncate">
+        <div className="text-[0.6rem] text-black/80 truncate">
           {speaker.company && <span>{speaker.company}</span>}
           {speaker.company && eventTitle && <span> · </span>}
           {eventTitle && <span className="italic">from &quot;{eventTitle}&quot;</span>}

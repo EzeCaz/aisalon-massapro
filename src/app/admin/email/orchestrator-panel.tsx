@@ -33,6 +33,8 @@ import {
   CheckCircle2,
   XCircle,
   Sparkles,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
 import { STAGES, statusLabel } from "@/lib/email-orchestrator/stages";
 
@@ -91,6 +93,8 @@ export function OrchestratorPanel() {
   const [running, setRunning] = React.useState(false);
   const [seeding, setSeeding] = useStateWithLabel(false);
   const [clearing, setClearing] = useStateWithLabel(false);
+  const [paused, setPaused] = React.useState<boolean | null>(null); // null = loading
+  const [togglingPause, setTogglingPause] = React.useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
@@ -128,7 +132,50 @@ export function OrchestratorPanel() {
     } finally {
       setLoading(false);
     }
+    // Fetch the global pause flag in parallel (best-effort — never blocks UI)
+    void (async () => {
+      try {
+        const r = await fetch("/api/admin/site-settings/email-pause", {
+          cache: "no-store",
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setPaused(Boolean(d.paused));
+        }
+      } catch {
+        /* leave paused as-is on error */
+      }
+    })();
   }, [statusFilter, stageFilter, eventFilter, search]);
+
+  // ── Toggle email pause ──
+  const handleTogglePause = async () => {
+    if (paused === null) return;
+    const next = !paused;
+    setTogglingPause(true);
+    try {
+      const res = await fetch("/api/admin/site-settings/email-pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused: next }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to toggle pause");
+        return;
+      }
+      setPaused(next);
+      toast.success(
+        next
+          ? "Email sends paused. Queue still records attempts for preview."
+          : "Email sends resumed.",
+      );
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to toggle pause");
+    } finally {
+      setTogglingPause(false);
+    }
+  };
 
   React.useEffect(() => {
     void refresh();
@@ -291,8 +338,47 @@ export function OrchestratorPanel() {
 
   return (
     <div className="space-y-6">
+      {/* ── Pause banner (only shown when paused) ── */}
+      {paused && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3">
+          <PauseCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <strong className="font-semibold">Email sending is paused.</strong>{" "}
+            New <em>Run worker</em> calls and scheduled cron sends will record
+            to the queue (so you can preview the HTML) but no real email will
+            go out. Click <em>Resume sending</em> below to undo.
+          </div>
+        </div>
+      )}
+
       {/* ── Top controls ── */}
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          onClick={handleTogglePause}
+          disabled={togglingPause || paused === null}
+          size="sm"
+          variant={paused ? "default" : "outline"}
+          className={
+            paused
+              ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600"
+              : "text-amber-700 border-amber-300 hover:border-amber-400 hover:bg-amber-50"
+          }
+          title={
+            paused
+              ? "Email sends are currently blocked. Click to resume."
+              : "Block all real email sends (queue still records attempts)"
+          }
+        >
+          {togglingPause ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : paused ? (
+            <PlayCircle className="h-4 w-4 mr-1.5" />
+          ) : (
+            <PauseCircle className="h-4 w-4 mr-1.5" />
+          )}
+          {paused ? "Resume sending" : "Pause sending"}
+        </Button>
+        <span className="h-5 w-px bg-black/10 mx-1" aria-hidden />
         <Button onClick={handleRun} disabled={running} size="sm">
           {running ? (
             <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
@@ -421,7 +507,7 @@ export function OrchestratorPanel() {
       <div className="rounded-lg border border-black/10 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 text-xs uppercase tracking-wider">
+            <thead className="bg-black/[0.03] text-black/80 text-xs uppercase tracking-wider">
               <tr>
                 <th className="text-left font-semibold px-3 py-2">Stage</th>
                 <th className="text-left font-semibold px-3 py-2">Recipient</th>
@@ -438,7 +524,7 @@ export function OrchestratorPanel() {
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-3 py-8 text-center text-black/40 text-sm"
+                    className="px-3 py-8 text-center text-black/80 text-sm"
                   >
                     No queue items. Click <strong>Seed demo data</strong> to
                     populate, then <strong>Run worker</strong> to send.
@@ -452,7 +538,7 @@ export function OrchestratorPanel() {
                     onClick={() => setSelected(item)}
                   >
                     <td className="px-3 py-2">
-                      <span className="font-mono text-xs text-black/60">
+                      <span className="font-mono text-xs text-black/80">
                         {item.stage}
                       </span>
                       <span className="ml-1.5 text-xs">
@@ -481,13 +567,13 @@ export function OrchestratorPanel() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-black/60">
+                    <td className="px-3 py-2 text-xs text-black/80">
                       {formatDate(item.scheduledFor)}
                     </td>
-                    <td className="px-3 py-2 text-xs text-black/60">
+                    <td className="px-3 py-2 text-xs text-black/80">
                       {item.sentAt ? formatDate(item.sentAt) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs text-black/60">
+                    <td className="px-3 py-2 text-xs text-black/80">
                       {item._count.trackingLogs}
                     </td>
                     <td
@@ -607,7 +693,7 @@ export function OrchestratorPanel() {
                   />
                 </div>
               ) : (
-                <div className="text-xs text-black/40 italic">
+                <div className="text-xs text-black/80 italic">
                   No email sent yet — once this stage fires, the rendered HTML
                   will appear here.
                 </div>

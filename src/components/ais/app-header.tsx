@@ -65,7 +65,7 @@ export async function AppHeader() {
           {/* Logo + tagline — Falafel Meerkat mark on the left, on every page */}
           <Link href="/events" className="flex items-center gap-2">
             <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
-            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/40 border-l border-black/15 pl-3">
+            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
               Tel Aviv Chapter
             </span>
           </Link>

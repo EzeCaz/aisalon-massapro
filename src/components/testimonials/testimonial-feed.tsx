@@ -96,7 +96,7 @@ export function TestimonialFeed({
 
       {/* Sort toggle */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-bold uppercase tracking-widest text-black/40">
+        <span className="text-xs font-bold uppercase tracking-widest text-black/80">
           {items.length} testimonial{items.length === 1 ? "" : "s"}
         </span>
         <div className="ml-auto inline-flex border border-black/15 rounded-md overflow-hidden text-xs">
@@ -108,7 +108,7 @@ export function TestimonialFeed({
               className={`px-2.5 py-1 font-semibold transition-colors ${
                 sort === s
                   ? "bg-black text-white"
-                  : "bg-white text-black/60 hover:bg-black/5"
+                  : "bg-white text-black/80 hover:bg-black/5"
               }`}
             >
               {s === "recent" ? "Recent" : s === "top" ? "Top" : "Oldest"}
@@ -119,7 +119,7 @@ export function TestimonialFeed({
 
       {/* Items */}
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-black/40">
+        <div className="flex items-center justify-center py-12 text-black/80">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           Loading testimonials…
         </div>
@@ -130,10 +130,10 @@ export function TestimonialFeed({
       ) : items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-black/15 p-8 text-center">
           <MessageSquareHeart className="h-8 w-8 mx-auto text-black/20 mb-2" />
-          <p className="text-sm font-semibold text-black/60">
+          <p className="text-sm font-semibold text-black/80">
             No testimonials yet
           </p>
-          <p className="text-xs text-black/40 mt-1">
+          <p className="text-xs text-black/80 mt-1">
             Be the first to share one{eventId ? " for this event" : ""}!
           </p>
         </div>

@@ -73,7 +73,7 @@ export function WhatsAppLinkEditor({
           WhatsApp group link
         </h2>
       </div>
-      <p className="text-xs text-black/60 mb-4 leading-relaxed">
+      <p className="text-xs text-black/80 mb-4 leading-relaxed">
         This link is shown as a green &quot;Join our group&quot; pill in the
         site header — visible to everyone (logged-in or not). Default is the
         AI Salon TLV community group. You can change it to any https:// URL

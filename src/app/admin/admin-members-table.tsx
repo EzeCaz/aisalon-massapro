@@ -562,7 +562,7 @@ export function AdminMembersTable({
         >
           <Upload className="h-3.5 w-3.5 mr-1.5" /> Import CSV/XLS
         </Button>
-        <span className="text-xs text-black/40 ml-auto">
+        <span className="text-xs text-black/80 ml-auto">
           {filtered.length} of {members.length} members
         </span>
         {/* View toggle — Cards vs Table */}
@@ -573,7 +573,7 @@ export function AdminMembersTable({
             className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-colors ${
               viewMode === "cards"
                 ? "bg-black text-white"
-                : "bg-white text-black/60 hover:bg-black/5"
+                : "bg-white text-black/80 hover:bg-black/5"
             }`}
             title="Cards view (expandable rows)"
           >
@@ -585,7 +585,7 @@ export function AdminMembersTable({
             className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-semibold transition-colors border-l border-black/10 ${
               viewMode === "table"
                 ? "bg-black text-white"
-                : "bg-white text-black/60 hover:bg-black/5"
+                : "bg-white text-black/80 hover:bg-black/5"
             }`}
             title="Table view (all fields, horizontal scroll)"
           >
@@ -641,7 +641,7 @@ export function AdminMembersTable({
                 ? "Select 2 or more members to merge"
                 : `Merge ${selected.size} selected members`
             }
-            className="border-[#820A7D] text-[#820A7D] h-7 disabled:opacity-40 disabled:cursor-not-allowed disabled:border-black/15 disabled:text-black/40"
+            className="border-[#820A7D] text-[#820A7D] h-7 disabled:opacity-40 disabled:cursor-not-allowed disabled:border-black/15 disabled:text-black/80"
           >
             <MergeIcon className="h-3.5 w-3.5 mr-1" /> Merge{" "}
             {selected.size >= 2 ? `(${selected.size})` : ""}
@@ -670,7 +670,7 @@ export function AdminMembersTable({
 
       {/* Tip showing how to merge when nothing is selected yet */}
       {selected.size === 0 && (
-        <div className="flex items-center gap-2 text-[0.7rem] text-black/40 px-1">
+        <div className="flex items-center gap-2 text-[0.7rem] text-black/80 px-1">
           <MergeIcon className="h-3 w-3 text-[#820A7D]" />
           Tip: tick 2+ checkboxes on the left to enable Merge, Bulk edit tags, and Bulk link speaker.
         </div>
@@ -819,7 +819,7 @@ function CardsView({
     <div className="border border-black/10 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/5 text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
+          <thead className="bg-black/5 text-black/80 text-xs uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <th className="text-left px-3 py-3 w-10">
                 <Checkbox
@@ -868,7 +868,7 @@ function CardsView({
                       />
                     </td>
                     <td
-                      className="px-2 py-3 text-black/40 cursor-pointer"
+                      className="px-2 py-3 text-black/80 cursor-pointer"
                       onClick={() => onToggleExpanded(m.id)}
                     >
                       {isOpen ? (
@@ -938,7 +938,7 @@ function CardsView({
                             )}
                           </div>
                           {m.company && (
-                            <div className="text-[10px] text-black/40 truncate mt-0.5">
+                            <div className="text-[10px] text-black/80 truncate mt-0.5">
                               {m.company}
                               {m.companyUrl && (
                                 <a
@@ -1082,7 +1082,7 @@ function CardsView({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-black/40 text-sm">
+                <td colSpan={7} className="px-4 py-8 text-center text-black/80 text-sm">
                   No members match your filters.
                 </td>
               </tr>
@@ -1128,7 +1128,7 @@ function TableView({
     <div className="border border-black/10 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-xs whitespace-nowrap">
-          <thead className="bg-black/5 text-black/60 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
+          <thead className="bg-black/5 text-black/80 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <th className="text-left px-3 py-3 w-10 sticky left-0 bg-black/5 z-10">
                 <Checkbox
@@ -1249,10 +1249,10 @@ function TableView({
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-black/80 font-medium">{m.email}</span>
-                      <span className="text-[0.6rem] text-black/40 uppercase font-bold">primary</span>
+                      <span className="text-[0.6rem] text-black/80 uppercase font-bold">primary</span>
                       {m.secondaryEmails && m.secondaryEmails.map((e) => (
                         <div key={e.id} className="flex items-center gap-1">
-                          <span className="text-black/60">{e.email}</span>
+                          <span className="text-black/80">{e.email}</span>
                           {e.label && (
                             <span className="text-[0.55rem] uppercase font-bold text-[#820A7D]">
                               {e.label}
@@ -1300,7 +1300,7 @@ function TableView({
                   </td>
                   <td className="px-3 py-2 max-w-[280px]">
                     {m.bio ? (
-                      <div className="truncate text-black/60" title={m.bio}>
+                      <div className="truncate text-black/80" title={m.bio}>
                         {m.bio.slice(0, 100)}
                         {m.bio.length > 100 ? "…" : ""}
                       </div>
@@ -1405,15 +1405,15 @@ function TableView({
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-black/60">{m._count.images}</td>
-                  <td className="px-3 py-2 text-black/60">{m.importSource || "—"}</td>
-                  <td className="px-3 py-2 text-black/60">
+                  <td className="px-3 py-2 text-black/80">{m._count.images}</td>
+                  <td className="px-3 py-2 text-black/80">{m.importSource || "—"}</td>
+                  <td className="px-3 py-2 text-black/80">
                     {m.importedAt ? formatDateTlv(m.importedAt) : "—"}
                   </td>
-                  <td className="px-3 py-2 text-black/60">
+                  <td className="px-3 py-2 text-black/80">
                     {m.onboardedAt ? formatDateTlv(m.onboardedAt) : "—"}
                   </td>
-                  <td className="px-3 py-2 text-black/60">
+                  <td className="px-3 py-2 text-black/80">
                     {m.createdAt ? formatDateTlv(m.createdAt) : "—"}
                   </td>
                   <td className="px-3 py-2">
@@ -1421,7 +1421,7 @@ function TableView({
                       className={`text-[0.65rem] font-bold uppercase px-1.5 py-0.5 rounded ${
                         m.role === "ADMIN"
                           ? "bg-[#FF005A] text-white"
-                          : "bg-black/5 text-black/60"
+                          : "bg-black/5 text-black/80"
                       }`}
                     >
                       {m.role}
@@ -1464,7 +1464,7 @@ function TableView({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={20} className="px-4 py-8 text-center text-black/40 text-sm">
+                <td colSpan={20} className="px-4 py-8 text-center text-black/80 text-sm">
                   No members match your filters.
                 </td>
               </tr>
@@ -1528,11 +1528,11 @@ function ManageEmailsDialog({
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-[#820A7D]" />
             Manage emails ·{" "}
-            <span className="text-black/60 truncate">{member.name || member.email}</span>
+            <span className="text-black/80 truncate">{member.name || member.email}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           The <strong>primary email</strong> is the account&rsquo;s identity and can&rsquo;t be
           changed here. <strong>Secondary emails</strong> allow the same person to sign in via
           a different inbox — useful when someone registered with Gmail but also wants to use
@@ -1541,11 +1541,11 @@ function ManageEmailsDialog({
 
         {/* Primary email (read-only) */}
         <div>
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Primary email
           </div>
           <div className="flex items-center gap-2 rounded-md border border-black/10 bg-black/[0.02] px-3 py-2">
-            <Mail className="h-3.5 w-3.5 text-black/40" />
+            <Mail className="h-3.5 w-3.5 text-black/80" />
             <span className="text-sm font-mono text-black/80">{primaryEmail}</span>
             <span className="ml-auto text-[0.55rem] font-bold uppercase bg-[#FF005A] text-white px-1.5 py-0.5 rounded">
               Primary
@@ -1556,7 +1556,7 @@ function ManageEmailsDialog({
         {/* Secondary emails list */}
         {secondaries.length > 0 && (
           <div>
-            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Secondary emails ({secondaries.length})
             </div>
             <div className="space-y-1">
@@ -1565,7 +1565,7 @@ function ManageEmailsDialog({
                   key={e.id}
                   className="flex items-center gap-2 rounded-md border border-black/10 bg-white px-3 py-2"
                 >
-                  <Mail className="h-3.5 w-3.5 text-black/40" />
+                  <Mail className="h-3.5 w-3.5 text-black/80" />
                   <span className="text-sm font-mono text-black/80 truncate">{e.email}</span>
                   {e.label && (
                     <span className="text-[0.55rem] font-bold uppercase bg-[#820A7D]/10 text-[#820A7D] px-1.5 py-0.5 rounded">
@@ -1588,7 +1588,7 @@ function ManageEmailsDialog({
 
         {/* Add new secondary email */}
         <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t border-black/10">
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
             Add a secondary email
           </div>
           <Input
@@ -1891,7 +1891,7 @@ function EditMemberDialog({
             <Edit3 className="h-4 w-4 text-[#FF005A]" />
             Edit member
           </DialogTitle>
-          <p className="text-xs text-black/60 -mt-1">
+          <p className="text-xs text-black/80 -mt-1">
             {member.email} · changes are saved instantly to the platform.
           </p>
         </DialogHeader>
@@ -1899,12 +1899,12 @@ function EditMemberDialog({
         <div className="space-y-4 py-2">
           {/* Profile section */}
           <div className="rounded-md border border-black/10 p-3 space-y-3">
-            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
               Profile
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Display name *
                 </label>
                 <input
@@ -1916,7 +1916,7 @@ function EditMemberDialog({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Mobile
                 </label>
                 <input
@@ -1930,7 +1930,7 @@ function EditMemberDialog({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-black/60 mb-1">
+              <label className="block text-xs font-semibold text-black/80 mb-1">
                 Bio
               </label>
               <textarea
@@ -1941,7 +1941,7 @@ function EditMemberDialog({
                 className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
                 placeholder="Short bio — shown on the public profile + admin table."
               />
-              <p className="text-[0.65rem] text-black/40 mt-0.5">
+              <p className="text-[0.65rem] text-black/80 mt-0.5">
                 {bio.length}/2000
               </p>
             </div>
@@ -1950,7 +1950,7 @@ function EditMemberDialog({
                 existing company OR type a new one. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Company
                 </label>
                 <input
@@ -1966,14 +1966,14 @@ function EditMemberDialog({
                     <option key={c} value={c} />
                   ))}
                 </datalist>
-                <p className="text-[0.65rem] text-black/40 mt-0.5">
+                <p className="text-[0.65rem] text-black/80 mt-0.5">
                   {existingCompanies.length === 0
                     ? "Loading existing companies…"
                     : `${existingCompanies.length} existing compan${existingCompanies.length === 1 ? "y" : "ies"} available — pick or type a new one.`}
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Company URL
                 </label>
                 <input
@@ -1988,7 +1988,7 @@ function EditMemberDialog({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   LinkedIn URL
                 </label>
                 <input
@@ -2000,7 +2000,7 @@ function EditMemberDialog({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Portfolio URL
                 </label>
                 <input
@@ -2040,7 +2040,7 @@ function EditMemberDialog({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Interested in
                 </label>
                 <input
@@ -2052,7 +2052,7 @@ function EditMemberDialog({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Profile categories
                 </label>
                 <input
@@ -2064,7 +2064,7 @@ function EditMemberDialog({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Applied for
                 </label>
                 <select
@@ -2078,7 +2078,7 @@ function EditMemberDialog({
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-black/60 mb-1">
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   Invited to speak
                 </label>
                 <select
@@ -2106,7 +2106,7 @@ function EditMemberDialog({
               checks all these conditions. */}
           <div className="rounded-md border border-black/10 p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+              <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
                 Role &amp; permissions
               </div>
               {isSuperAdminEmail(member.email) && (
@@ -2119,7 +2119,7 @@ function EditMemberDialog({
               )}
             </div>
             <div>
-              <label className="block text-xs font-semibold text-black/60 mb-1">
+              <label className="block text-xs font-semibold text-black/80 mb-1">
                 Member type
               </label>
               {isSuperAdminEmail(currentUserEmail) ? (
@@ -2155,7 +2155,7 @@ function EditMemberDialog({
                   >
                     {roleLabel(member.role)}
                   </span>
-                  <span className="text-[0.65rem] text-black/40">
+                  <span className="text-[0.65rem] text-black/80">
                     Only Super Admins can change roles.
                   </span>
                 </div>
@@ -2196,7 +2196,7 @@ function EditMemberDialog({
                   </span>
                 </div>
 
-                <p className="text-[0.7rem] text-black/60 leading-relaxed">
+                <p className="text-[0.7rem] text-black/80 leading-relaxed">
                   Change this member&apos;s sign-in email or set a new password.
                   The previous primary email is automatically kept as a
                   secondary (so they can still sign in via the old inbox).
@@ -2205,11 +2205,11 @@ function EditMemberDialog({
 
                 {/* Email field */}
                 <div>
-                  <label className="block text-xs font-semibold text-black/60 mb-1">
+                  <label className="block text-xs font-semibold text-black/80 mb-1">
                     Primary email
                   </label>
                   <div className="relative">
-                    <MailIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+                    <MailIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/80" />
                     <input
                       type="email"
                       value={credEmail}
@@ -2228,11 +2228,11 @@ function EditMemberDialog({
 
                 {/* Password field */}
                 <div>
-                  <label className="block text-xs font-semibold text-black/60 mb-1">
-                    New password <span className="text-black/40 font-normal">(leave blank to keep current)</span>
+                  <label className="block text-xs font-semibold text-black/80 mb-1">
+                    New password <span className="text-black/80 font-normal">(leave blank to keep current)</span>
                   </label>
                   <div className="relative">
-                    <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+                    <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/80" />
                     <input
                       type={credShowPassword ? "text" : "password"}
                       value={credPassword}
@@ -2244,7 +2244,7 @@ function EditMemberDialog({
                     <button
                       type="button"
                       onClick={() => setCredShowPassword(!credShowPassword)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/80 p-1"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-black/80 hover:text-black/80 p-1"
                       title={credShowPassword ? "Hide password" : "Show password"}
                       tabIndex={-1}
                     >
@@ -2361,7 +2361,7 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
       {/* Bio */}
       {member.bio && (
         <div className="md:col-span-2">
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Bio
           </div>
           <p className="text-black/70 whitespace-pre-line text-sm leading-relaxed">
@@ -2373,7 +2373,7 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
       {/* Interested in */}
       {member.interestedIn && (
         <div>
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Interested in
           </div>
           <div className="flex flex-wrap gap-1">
@@ -2396,7 +2396,7 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
       {/* Profile categories */}
       {member.profileCategories && (
         <div>
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Profile categories
           </div>
           <div className="flex flex-wrap gap-1">
@@ -2458,7 +2458,7 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
                   >
                     {e.email}
                     {e.label && (
-                      <span className="text-[0.6rem] uppercase font-bold text-black/40">
+                      <span className="text-[0.6rem] uppercase font-bold text-black/80">
                         {e.label}
                       </span>
                     )}
@@ -2529,9 +2529,9 @@ function DetailRow({
 }) {
   return (
     <div className="flex items-start gap-2">
-      <div className="text-black/40 mt-0.5">{icon}</div>
+      <div className="text-black/80 mt-0.5">{icon}</div>
       <div className="min-w-0">
-        <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+        <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </div>
         <div className="text-sm text-black/80 break-words">{value}</div>
@@ -2579,10 +2579,10 @@ function TagDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Manage tags · <span className="text-black/60">{member.name || member.email}</span>
+            Manage tags · <span className="text-black/80">{member.name || member.email}</span>
           </DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Select one or more tags to assign to this member. Existing tags will be replaced.
         </p>
         <div className="space-y-1.5 max-h-80 overflow-y-auto ais-scroll">
@@ -2609,7 +2609,7 @@ function TagDialog({
                   />
                 </div>
                 {t.description && (
-                  <div className="text-xs text-black/60">{t.description}</div>
+                  <div className="text-xs text-black/80">{t.description}</div>
                 )}
               </div>
             </label>
@@ -2667,10 +2667,10 @@ function LinkSpeakerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Link <span className="text-black/60">{member.name || member.email}</span> to a speaker
+            Link <span className="text-black/80">{member.name || member.email}</span> to a speaker
           </DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Selecting a speaker links this user account to that speaker profile. The user can then
           chat with community members via the in-app inbox, and the speaker will appear with the
           user&apos;s photo in the agenda.
@@ -2711,7 +2711,7 @@ function LinkSpeakerDialog({
 
         <div className="space-y-1 max-h-72 overflow-y-auto ais-scroll">
           {filtered.length === 0 ? (
-            <div className="text-center text-black/40 text-sm py-8">
+            <div className="text-center text-black/80 text-sm py-8">
               No speakers found. Try a different search or use &quot;Convert to speaker&quot; below.
             </div>
           ) : (
@@ -2732,7 +2732,7 @@ function LinkSpeakerDialog({
                         <CheckCircle2 className="h-3.5 w-3.5 text-[#007E72]" />
                       )}
                     </div>
-                    <div className="text-xs text-black/60 truncate">
+                    <div className="text-xs text-black/80 truncate">
                       {s.event.title}
                       {s.topic ? ` · ${s.topic}` : ""}
                     </div>
@@ -2808,10 +2808,10 @@ function ConvertToSpeakerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Convert <span className="text-black/60">{member.name || member.email}</span> to a speaker
+            Convert <span className="text-black/80">{member.name || member.email}</span> to a speaker
           </DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Creates a new speaker profile for this user on the chosen event. The user is automatically
           linked to the new speaker (so community members can chat with them in-platform). Their
           photo, name, company, and bio are copied from their user profile.
@@ -2819,7 +2819,7 @@ function ConvertToSpeakerDialog({
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-black/60 uppercase tracking-wide">
+            <label className="text-xs font-semibold text-black/80 uppercase tracking-wide">
               Event
             </label>
             <select
@@ -2837,7 +2837,7 @@ function ConvertToSpeakerDialog({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-black/60 uppercase tracking-wide">
+            <label className="text-xs font-semibold text-black/80 uppercase tracking-wide">
               Talk topic (optional)
             </label>
             <Input
@@ -2849,7 +2849,7 @@ function ConvertToSpeakerDialog({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-black/60 uppercase tracking-wide">
+            <label className="text-xs font-semibold text-black/80 uppercase tracking-wide">
               Role / title (optional)
             </label>
             <Input
@@ -2858,7 +2858,7 @@ function ConvertToSpeakerDialog({
               onChange={(e) => setRole(e.target.value)}
               className="mt-1"
             />
-            <p className="text-[0.7rem] text-black/40 mt-1">
+            <p className="text-[0.7rem] text-black/80 mt-1">
               Defaults to the user&apos;s company. Will appear under their name in the agenda.
             </p>
           </div>
@@ -2961,7 +2961,7 @@ function BulkTagDialog({
         <DialogHeader>
           <DialogTitle>Bulk edit tags</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Click each tag once to <strong className="text-[#007E72]">Add</strong> it to all selected
           members, click again to <strong className="text-[#FF005A]">Remove</strong> it from all
           selected members, click a third time to clear.
@@ -3004,7 +3004,7 @@ function BulkTagDialog({
                     />
                   </div>
                   {t.description && (
-                    <div className="text-xs text-black/60">{t.description}</div>
+                    <div className="text-xs text-black/80">{t.description}</div>
                   )}
                 </div>
                 <span
@@ -3013,7 +3013,7 @@ function BulkTagDialog({
                       ? "bg-[#007E72] text-white"
                       : isRemove
                       ? "bg-[#FF005A] text-white"
-                      : "bg-black/10 text-black/40"
+                      : "bg-black/10 text-black/80"
                   }`}
                 >
                   {isAdd ? "Add" : isRemove ? "Remove" : "—"}
@@ -3025,7 +3025,7 @@ function BulkTagDialog({
         <div className="text-xs text-black/50 bg-black/5 rounded-md px-3 py-2">
           <strong>Summary:</strong>{" "}
           {addTags.size === 0 && removeTags.size === 0 ? (
-            <span className="italic text-black/40">No changes selected</span>
+            <span className="italic text-black/80">No changes selected</span>
           ) : (
             <>
               {addTags.size > 0 && (
@@ -3120,7 +3120,7 @@ function BulkLinkSpeakerDialog({
             Link {count} member{count === 1 ? "" : "s"} to a speaker
           </DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Pick a speaker. Each selected member will be linked to that speaker profile (replacing any
           existing link to that speaker). Members can then chat with community members via the
           in-app inbox.
@@ -3138,7 +3138,7 @@ function BulkLinkSpeakerDialog({
 
         <div className="space-y-1 max-h-72 overflow-y-auto ais-scroll">
           {filtered.length === 0 ? (
-            <div className="text-center text-black/40 text-sm py-8">
+            <div className="text-center text-black/80 text-sm py-8">
               No speakers found. Try a different search.
             </div>
           ) : (
@@ -3158,12 +3158,12 @@ function BulkLinkSpeakerDialog({
                       {s.name}
                       {isPicked && <CheckCircle2 className="h-3.5 w-3.5 text-[#004F98]" />}
                     </div>
-                    <div className="text-xs text-black/60 truncate">
+                    <div className="text-xs text-black/80 truncate">
                       {s.event.title}
                       {s.topic ? ` · ${s.topic}` : ""}
                     </div>
                     {s.user && (
-                      <div className="text-[0.65rem] text-black/40">
+                      <div className="text-[0.65rem] text-black/80">
                         Currently linked to {s.user.email}
                       </div>
                     )}
@@ -3360,7 +3360,7 @@ function MergeMembersDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Pick the <strong>primary account</strong> to keep. All other selected
           accounts will be deleted, and <strong>all their information will be
           transferred to the primary member&apos;s account</strong> — tags,
@@ -3387,7 +3387,7 @@ function MergeMembersDialog({
                 want to merge?
               </div>
             </div>
-            <div className="text-xs text-black/60 pl-7">
+            <div className="text-xs text-black/80 pl-7">
               These name pairs don&apos;t look like the same person:
               <ul className="mt-1 space-y-0.5">
                 {nameCheck.mismatchedPairs.slice(0, 4).map((p, i) => (
@@ -3419,7 +3419,7 @@ function MergeMembersDialog({
 
         {/* Primary account picker */}
         <div>
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1.5">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1.5">
             Primary account (the one to keep)
           </div>
           <div className="space-y-1 max-h-56 overflow-y-auto ais-scroll border border-black/10 rounded-md p-1">
@@ -3483,13 +3483,13 @@ function MergeMembersDialog({
         {/* Merge preview */}
         {primary && (
           <div className="bg-black/[0.02] border border-black/10 rounded-md p-3 space-y-2 text-xs">
-            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
               Merge preview
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <div className="text-black/40">Tags (combined)</div>
+                <div className="text-black/80">Tags (combined)</div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {allTagLabels.length === 0 ? (
                     <span className="italic text-black/30">No tags</span>
@@ -3510,7 +3510,7 @@ function MergeMembersDialog({
                 </div>
               </div>
               <div>
-                <div className="text-black/40">Will be deleted</div>
+                <div className="text-black/80">Will be deleted</div>
                 <div className="mt-1 text-black/70">
                   {secondaryIds.length} account
                   {secondaryIds.length === 1 ? "" : "s"}:{" "}
@@ -3524,7 +3524,7 @@ function MergeMembersDialog({
 
             {combinedBio && (
               <div>
-                <div className="text-black/40">Bio (combined)</div>
+                <div className="text-black/80">Bio (combined)</div>
                 <div className="mt-1 max-h-32 overflow-y-auto ais-scroll text-black/70 whitespace-pre-line border-l-2 border-black/10 pl-2">
                   {combinedBio.length > 400
                     ? combinedBio.slice(0, 400) + "…"
@@ -3533,7 +3533,7 @@ function MergeMembersDialog({
               </div>
             )}
 
-            <div className="text-[0.65rem] text-black/40 pt-1 border-t border-black/10">
+            <div className="text-[0.65rem] text-black/80 pt-1 border-t border-black/10">
               Single-value fields (name, photo, LinkedIn, company, mobile,
               password) keep the primary&apos;s value when set, otherwise the
               first non-null value from the secondaries. Email always stays the
@@ -3699,7 +3699,7 @@ function ImportMembersDialog({
             </div>
 
             {file && (
-              <div className="text-xs text-black/60">
+              <div className="text-xs text-black/80">
                 Selected: <strong>{file.name}</strong> ({(file.size / 1024).toFixed(1)} KB)
               </div>
             )}
@@ -3762,7 +3762,7 @@ function ImportMembersDialog({
               </div>
             </div>
 
-            <div className="text-xs text-black/60">
+            <div className="text-xs text-black/80">
               File: <strong>{result.filename}</strong> · {result.totalRows} rows
               processed
             </div>

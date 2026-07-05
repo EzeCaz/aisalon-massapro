@@ -121,7 +121,7 @@ export function SpeakersManager({ speakers, events }: Props) {
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="flex flex-wrap gap-2 items-center flex-1">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
             <Input
               placeholder="Search by name, role, company, topic, email…"
               value={search}
@@ -141,7 +141,7 @@ export function SpeakersManager({ speakers, events }: Props) {
               </option>
             ))}
           </select>
-          <Badge variant="secondary" className="bg-black/5 text-black/60">
+          <Badge variant="secondary" className="bg-black/5 text-black/80">
             {filtered.length} of {list.length}
           </Badge>
         </div>
@@ -154,7 +154,7 @@ export function SpeakersManager({ speakers, events }: Props) {
       {filtered.length === 0 ? (
         <Card className="p-12 text-center border border-black/10">
           <UsersIcon className="h-10 w-10 mx-auto text-black/30 mb-3" />
-          <p className="text-sm text-black/60">No speakers match your filters.</p>
+          <p className="text-sm text-black/80">No speakers match your filters.</p>
         </Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -170,10 +170,10 @@ export function SpeakersManager({ speakers, events }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-black text-sm">{s.name}</div>
                   {s.role && (
-                    <div className="text-xs text-black/60">{s.role}</div>
+                    <div className="text-xs text-black/80">{s.role}</div>
                   )}
                   {s.company && (
-                    <div className="text-xs text-black/40">{s.company}</div>
+                    <div className="text-xs text-black/80">{s.company}</div>
                   )}
                 </div>
               </div>
@@ -301,7 +301,7 @@ function AddSpeakerDialog({
         <DialogHeader>
           <DialogTitle>Add a speaker</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60">
+        <p className="text-xs text-black/80">
           Add a speaker to an event. If the contact email matches a platform
           user, the speaker will be auto-linked (so members can chat with them
           in-platform). You can also link a user manually from the Members tab.

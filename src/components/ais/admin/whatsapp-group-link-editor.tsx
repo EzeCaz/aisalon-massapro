@@ -60,7 +60,7 @@ export function WhatsAppGroupLinkEditor({ initialUrl, initialText, canEdit }: Pr
         </div>
         <div className="min-w-0">
           <h2 className="text-base font-bold text-black">WhatsApp group link</h2>
-          <p className="text-xs text-black/60 mt-0.5 leading-relaxed">
+          <p className="text-xs text-black/80 mt-0.5 leading-relaxed">
             The invite URL + label shown in the site&rsquo;s top navigation
             (left of <em>Events</em>). Members see this as a clickable button
             that opens your WhatsApp community group in a new tab.
@@ -118,7 +118,7 @@ export function WhatsAppGroupLinkEditor({ initialUrl, initialText, canEdit }: Pr
           You need Admin or Super Admin permissions to edit this link.
         </p>
       )}
-      <p className="mt-3 text-[11px] text-black/40">
+      <p className="mt-3 text-[11px] text-black/80">
         Preview:{" "}
         <a
           href={url || "#"}

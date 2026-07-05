@@ -158,7 +158,7 @@ export function ViewModeToggle({
             className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
               value === o.v
                 ? "bg-black text-white"
-                : "text-black/60 hover:bg-black/5"
+                : "text-black/80 hover:bg-black/5"
             }`}
           >
             {o.icon}
@@ -209,16 +209,16 @@ export function AnalyticsFilterBar<T>({
   return (
     <div className="rounded-lg border border-black/10 bg-white p-4">
       <div className="flex items-center gap-2 mb-3">
-        <FilterIcon className="h-4 w-4 text-black/40" />
+        <FilterIcon className="h-4 w-4 text-black/80" />
         <h3 className="text-sm font-bold text-black">Filters</h3>
-        <span className="text-xs text-black/40 ml-auto">
+        <span className="text-xs text-black/80 ml-auto">
           {resultCount} of {totalCount} rows
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Global search */}
         <div className="lg:col-span-2">
-          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             <Search className="inline h-3 w-3 mr-1" />
             Search all columns
           </label>
@@ -236,7 +236,7 @@ export function AnalyticsFilterBar<T>({
           const current = filters[col.key] || "ALL";
           return (
             <div key={col.key}>
-              <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+              <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
                 {col.label}
               </label>
               <select
@@ -261,7 +261,7 @@ export function AnalyticsFilterBar<T>({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {activeCount > 0 && (
           <>
-            <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+            <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
               Active:
             </span>
             {globalSearch && (
@@ -344,7 +344,7 @@ export function AnalyticsDataTable<T>({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/40">
+      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/80">
         {emptyMessage}
       </div>
     );
@@ -438,7 +438,7 @@ export function AnalyticsBarChart({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/40">
+      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/80">
         No data for the current filters.
       </div>
     );
@@ -461,7 +461,7 @@ export function AnalyticsBarChart({
               style={{ opacity: isActive ? 1 : 0.4 }}
             >
               <div
-                className="text-xs font-semibold text-black/60 w-32 truncate flex-shrink-0"
+                className="text-xs font-semibold text-black/80 w-32 truncate flex-shrink-0"
                 title={r.label}
               >
                 {r.label}
@@ -498,7 +498,7 @@ export function AnalyticsPieChart({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/40">
+      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/80">
         No data for the current filters.
       </div>
     );
@@ -506,7 +506,7 @@ export function AnalyticsPieChart({
   const total = rows.reduce((s, r) => s + r.value, 0);
   if (total === 0) {
     return (
-      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/40">
+      <div className="rounded-lg border border-black/10 bg-white p-8 text-center text-sm text-black/80">
         Total is zero — nothing to plot.
       </div>
     );
@@ -563,7 +563,7 @@ export function AnalyticsPieChart({
                 {s.label}
               </span>
               <span className="font-mono text-black/50">{s.value.toLocaleString()}</span>
-              <span className="font-mono text-black/40 w-12 text-right">{pct}%</span>
+              <span className="font-mono text-black/80 w-12 text-right">{pct}%</span>
             </div>
           );
         })}
@@ -603,7 +603,7 @@ export function AnalyticsPanel({
           <h3 className="text-base font-extrabold text-black flex items-center gap-2">
             {title}
             {typeof count === "number" && (
-              <span className="inline-flex items-center rounded-full bg-black/5 text-black/60 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider">
+              <span className="inline-flex items-center rounded-full bg-black/5 text-black/80 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider">
                 {count}
               </span>
             )}

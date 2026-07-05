@@ -471,7 +471,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {/* Speaker company */}
           {data.speaker.company && (
             <p
-              className="mt-0.5 text-black/60 font-medium leading-snug"
+              className="mt-0.5 text-black/80 font-medium leading-snug"
               style={{
                 fontSize: `${data.textStyles?.company?.fontSize ?? 16}px`,
                 color: data.textStyles?.company?.color ?? "rgba(0,0,0,0.6)",
@@ -704,7 +704,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.collaborators.length > 0 && (
             <div className="flex flex-col items-start gap-1.5">
               <span
-                className="text-black/60 font-semibold uppercase tracking-wider"
+                className="text-black/80 font-semibold uppercase tracking-wider"
                 style={{ fontSize: "10px", letterSpacing: "0.18em" }}
               >
                 In collaboration with
@@ -727,7 +727,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           {data.sponsors.length > 0 && (
             <div className="flex flex-col items-start gap-1.5">
               <span
-                className="text-black/60 font-semibold uppercase tracking-wider"
+                className="text-black/80 font-semibold uppercase tracking-wider"
                 style={{ fontSize: "10px", letterSpacing: "0.18em" }}
               >
                 Sponsored by

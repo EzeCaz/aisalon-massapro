@@ -85,7 +85,7 @@ export function AdminTabsClient({ role }: { role: string }) {
                   className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-colors ${
                     active
                       ? "bg-[#FF005A] text-white"
-                      : "text-black/60 hover:bg-black/5 hover:text-black"
+                      : "text-black/80 hover:bg-black/5 hover:text-black"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />

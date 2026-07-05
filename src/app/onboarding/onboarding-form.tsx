@@ -148,9 +148,9 @@ export function OnboardingForm({
             value={email}
             readOnly
             disabled
-            className="w-full rounded-md border border-black/15 bg-black/[0.04] px-3 py-2.5 text-sm text-black/60 outline-none cursor-not-allowed"
+            className="w-full rounded-md border border-black/15 bg-black/[0.04] px-3 py-2.5 text-sm text-black/80 outline-none cursor-not-allowed"
           />
-          <p className="mt-1.5 text-xs text-black/40">
+          <p className="mt-1.5 text-xs text-black/80">
             This is the email you signed in with — it can&rsquo;t be changed.
           </p>
         </Field>
@@ -217,7 +217,7 @@ export function OnboardingForm({
             placeholder="Anything else you'd like the AI Salon team to know? Your background, what you're building, what you're looking for in the community…"
             className="w-full rounded-md border border-black/15 bg-white px-3 py-2.5 text-sm outline-none focus:border-black focus:ring-1 focus:ring-black/10 transition-colors resize-y"
           />
-          <p className="mt-1.5 text-xs text-black/40 text-right">{bio.length} / 2000</p>
+          <p className="mt-1.5 text-xs text-black/80 text-right">{bio.length} / 2000</p>
         </Field>
       </div>
 

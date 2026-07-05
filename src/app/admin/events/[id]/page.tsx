@@ -171,20 +171,20 @@ export default async function EditEventPage({ params }: Params) {
           backHref="/admin/events"
         />
         {!canManage && (
-          <p className="mt-4 text-xs text-black/40 italic">
+          <p className="mt-4 text-xs text-black/80 italic">
             You are a co-host of this event. Co-host management (adding/removing other
             co-hosts) is restricted to Admins and Super Admins.
           </p>
         )}
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >

@@ -92,7 +92,7 @@ export default async function AdminPage() {
             <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
               Manage community & events
             </h1>
-            <p className="mt-2 text-sm text-black/60 max-w-2xl">
+            <p className="mt-2 text-sm text-black/80 max-w-2xl">
               You are signed in as <strong className="font-mono">{me.email}</strong> with the{" "}
               <span className="inline-flex items-center gap-1 font-semibold text-[#FF005A]">
                 {roleLabel(me.role)}
@@ -154,7 +154,7 @@ export default async function AdminPage() {
         {/* Members section */}
         <section className="mb-12">
           <h2 className="text-lg font-bold text-black mb-1">Community members</h2>
-          <p className="text-sm text-black/60 mb-4">
+          <p className="text-sm text-black/80 mb-4">
             Assign tags to members — speakers, builders, investors, founders, etc. Tags appear on
             their profile and the user menu.
           </p>
@@ -178,7 +178,7 @@ export default async function AdminPage() {
               Manage all events →
             </Link>
           </div>
-          <p className="text-sm text-black/60 mb-4">
+          <p className="text-sm text-black/80 mb-4">
             Recent events in the platform. Click an event to edit details, manage co-hosts, and view RSVPs.
           </p>
           <AdminEventsList events={eventsJson} />
@@ -186,13 +186,13 @@ export default async function AdminPage() {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -209,7 +209,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </span>
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />

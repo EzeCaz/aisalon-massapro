@@ -310,14 +310,14 @@ export function PublicEventPage({ event, me }: Props) {
                   {event.chapter}
                 </span>
                 {event.city && (
-                  <span className="text-black/60 font-semibold">{event.city}</span>
+                  <span className="text-black/80 font-semibold">{event.city}</span>
                 )}
-                <span className="text-black/40">{fmtDate(start)}</span>
+                <span className="text-black/80">{fmtDate(start)}</span>
                 <span className="text-black/20">·</span>
-                <span className="text-black/60 font-mono">
+                <span className="text-black/80 font-mono">
                   {fmtTime(start)} – {fmtTime(end)}
                 </span>
-                {event.country && <span className="text-black/40">· {event.country}</span>}
+                {event.country && <span className="text-black/80">· {event.country}</span>}
                 {/* Going pill — black bg, white text. Matches the spec:
                     "Tel Aviv Monday, July 13, 2026 · 18:00 – 21:30 · ISR · 14 Going"
                     where "14 Going" is a black pill with white text. */}
@@ -330,7 +330,7 @@ export function PublicEventPage({ event, me }: Props) {
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
                 {event.title}
               </h1>
-              {event.subtitle && <p className="mt-2 text-lg text-black/60">{event.subtitle}</p>}
+              {event.subtitle && <p className="mt-2 text-lg text-black/80">{event.subtitle}</p>}
 
               {event.venue && (
                 <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-black/70">
@@ -374,7 +374,7 @@ export function PublicEventPage({ event, me }: Props) {
                 <button
                   type="button"
                   onClick={handleShare}
-                  className="inline-flex items-center gap-1 text-black/60 hover:text-black"
+                  className="inline-flex items-center gap-1 text-black/80 hover:text-black"
                 >
                   <Share2 className="h-3.5 w-3.5" /> Share
                 </button>
@@ -389,12 +389,12 @@ export function PublicEventPage({ event, me }: Props) {
                     {fmtMonth(start)}
                   </div>
                   <div className="text-5xl font-extrabold text-black leading-none my-1">{fmtDay(start)}</div>
-                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-black/40">
+                  <div className="text-[0.9rem] font-semibold uppercase tracking-wider text-black/90">
                     {fmtYear(start)}
                   </div>
                 </div>
               </div>
-              <div className="mt-2 text-[0.65rem] font-mono text-black/40">
+              <div className="mt-2 text-[0.85rem] font-mono text-black/90">
                 {fmtTime(start)} – {fmtTime(end)}
               </div>
             </div>
@@ -459,7 +459,7 @@ export function PublicEventPage({ event, me }: Props) {
                         <div className="flex flex-wrap items-baseline gap-2">
                           <span className="text-xs font-mono text-black/50">{fmtTime(aStart)}</span>
                           {a.endsAt && (
-                            <span className="text-xs font-mono text-black/40">
+                            <span className="text-xs font-mono text-black/80">
                               – {fmtTime(new Date(a.endsAt))}
                             </span>
                           )}
@@ -475,7 +475,7 @@ export function PublicEventPage({ event, me }: Props) {
                         {a.speaker && (
                           <p
                             className={`text-xs mt-0.5 ${
-                              a.type === "PANEL" ? "text-[#7C3AED]" : "text-black/60"
+                              a.type === "PANEL" ? "text-[#7C3AED]" : "text-black/80"
                             }`}
                           >
                             {a.type === "PANEL" && (
@@ -555,19 +555,19 @@ export function PublicEventPage({ event, me }: Props) {
             />
 
             <div className="rounded-xl border border-black/10 bg-white p-5">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-black/40 mb-4">Event details</h3>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-black/80 mb-4">Event details</h3>
               <dl className="space-y-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+                  <Calendar className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
                   <div>
-                    <dt className="text-black/40 text-xs">Date</dt>
+                    <dt className="text-black/80 text-xs">Date</dt>
                     <dd className="font-semibold text-black">{fmtDate(start)}</dd>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Clock className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+                  <Clock className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
                   <div>
-                    <dt className="text-black/40 text-xs">Time</dt>
+                    <dt className="text-black/80 text-xs">Time</dt>
                     <dd className="font-semibold text-black font-mono">
                       {fmtTime(start)} – {fmtTime(end)}
                     </dd>
@@ -575,11 +575,11 @@ export function PublicEventPage({ event, me }: Props) {
                 </div>
                 {event.venue && (
                   <div className="flex items-start gap-2">
-                    <MapPin className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+                    <MapPin className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
                     <div>
-                      <dt className="text-black/40 text-xs">Venue</dt>
+                      <dt className="text-black/80 text-xs">Venue</dt>
                       <dd className="font-semibold text-black">{event.venue}</dd>
-                      {event.address && <dd className="text-black/60 text-xs">{event.address}</dd>}
+                      {event.address && <dd className="text-black/80 text-xs">{event.address}</dd>}
                     </div>
                   </div>
                 )}
@@ -634,7 +634,7 @@ function PublicHeader({ me }: { me: Me }) {
         <div className="flex h-16 items-center justify-between">
           <Link href="/events" className="flex items-center gap-2">
             <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
-            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/40 border-l border-black/15 pl-3">
+            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
               Tel Aviv Chapter
             </span>
           </Link>
@@ -672,13 +672,13 @@ function PublicHeader({ me }: { me: Me }) {
 function PublicFooter() {
   return (
     <footer className="mt-auto border-t border-black/10 bg-white">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
         <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
         <span>
           Platform by{" "}
           <a
             href="https://massapro.com"
-            className="text-black/60 underline-offset-4 hover:underline"
+            className="text-black/80 underline-offset-4 hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -721,14 +721,14 @@ function SpeakerCard({ speaker }: { speaker: Speaker }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={speaker.photoUrl} alt={speaker.name} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-lg font-bold text-black/40">
+          <div className="w-full h-full flex items-center justify-center text-lg font-bold text-black/80">
             {initial}
           </div>
         )}
       </div>
       <div className="min-w-0">
         <div className="font-semibold text-black text-sm">{speaker.name}</div>
-        {speaker.role && <div className="text-xs text-black/60">{speaker.role}</div>}
+        {speaker.role && <div className="text-xs text-black/80">{speaker.role}</div>}
         {speaker.company && <div className="text-xs text-black/50">{speaker.company}</div>}
         {speaker.topic && (
           <div className="mt-1.5 text-xs text-[#820A7D] font-medium italic">"{speaker.topic}"</div>
@@ -787,18 +787,18 @@ function CtaCard({
           <CheckCircle2 className="h-5 w-5" />
           <span className="font-bold text-sm uppercase tracking-wider">You're checked in</span>
         </div>
-        <p className="text-xs text-black/60 leading-relaxed">
+        <p className="text-xs text-black/80 leading-relaxed">
           Show this code at the door to enter the venue. Keep it on your screen — door staff will scan it.
         </p>
         <div className="rounded-lg bg-white border-2 border-[#007E72]/40 p-4 text-center">
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Your entry code
           </div>
           <div className="text-3xl font-extrabold font-mono tracking-[0.15em] text-[#007E72]">
             {rsvp.checkInCode}
           </div>
           {rsvp.checkedInAt && (
-            <div className="mt-2 text-[0.6rem] text-black/40">
+            <div className="mt-2 text-[0.6rem] text-black/80">
               Checked in at{" "}
               {new Intl.DateTimeFormat("en-GB", {
                 timeZone: "Asia/Jerusalem",
@@ -835,16 +835,16 @@ function CtaCard({
   if (isPast) {
     return (
       <div className="rounded-xl border border-black/10 bg-black/[0.03] p-5 space-y-3">
-        <div className="flex items-center gap-2 text-black/60">
+        <div className="flex items-center gap-2 text-black/80">
           <AlertCircle className="h-5 w-5" />
           <span className="font-bold text-sm">This event has ended</span>
         </div>
         {me ? (
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             Visit the members-only event page to view the photo gallery, presentations, and recap.
           </p>
         ) : (
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             Sign in to access the photo gallery, presentations, and recap from this event.
           </p>
         )}
@@ -892,7 +892,7 @@ function CtaCard({
           )}
         </button>
         {!me && (
-          <p className="text-[0.65rem] text-black/40 text-center">
+          <p className="text-[0.65rem] text-black/80 text-center">
             New here? You'll be able to create an account on the next screen.
           </p>
         )}
@@ -901,7 +901,7 @@ function CtaCard({
             <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
               Event day is here
             </p>
-            <p className="text-xs text-black/60 leading-relaxed">
+            <p className="text-xs text-black/80 leading-relaxed">
               Already registered? Click below to check in and get your entry code.
             </p>
             <button
@@ -943,7 +943,7 @@ function CtaCard({
           <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
             Event day is here
           </p>
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             Click below to check in and get your unique entry code for the door.
           </p>
           <button
@@ -964,7 +964,7 @@ function CtaCard({
           </button>
         </div>
       ) : (
-        <p className="text-[0.65rem] text-black/40 leading-relaxed pt-2 border-t border-black/10">
+        <p className="text-[0.65rem] text-black/80 leading-relaxed pt-2 border-t border-black/10">
           The check-in button will appear here 1 hour before the event starts.
         </p>
       )}
@@ -1009,7 +1009,7 @@ function typeBadgeClass(type: string): string {
     case "PANEL":
       return "bg-[#7C3AED]/10 text-[#7C3AED]";
     default:
-      return "bg-black/5 text-black/60";
+      return "bg-black/5 text-black/80";
   }
 }
 function typeLabel(type: string): string {

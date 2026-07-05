@@ -112,7 +112,7 @@ export function AdminTestimonials({ meId }: Props) {
     <div className="space-y-6">
       {/* Admin toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        <span className="text-xs font-bold uppercase tracking-widest text-black/40">
+        <span className="text-xs font-bold uppercase tracking-widest text-black/80">
           {items.length} total
         </span>
         <Button
@@ -146,7 +146,7 @@ export function AdminTestimonials({ meId }: Props) {
 
       {/* Items */}
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-black/40">
+        <div className="flex items-center justify-center py-12 text-black/80">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           Loading…
         </div>
@@ -155,7 +155,7 @@ export function AdminTestimonials({ meId }: Props) {
           Couldn&apos;t load testimonials: {error}
         </div>
       ) : visible.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-black/15 p-8 text-center text-sm text-black/40">
+        <div className="rounded-lg border border-dashed border-black/15 p-8 text-center text-sm text-black/80">
           No testimonials match this filter.
         </div>
       ) : (

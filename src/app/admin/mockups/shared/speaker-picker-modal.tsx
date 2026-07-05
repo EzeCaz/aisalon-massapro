@@ -180,11 +180,11 @@ export function SpeakerPickerModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-black/10">
           <div className="flex items-center gap-2">
-            <UserCircle className="h-4 w-4 text-black/60" />
+            <UserCircle className="h-4 w-4 text-black/80" />
             <h2 className="text-base font-bold text-black">
               Pick a speaker from the database
             </h2>
-            <span className="text-xs text-black/40">
+            <span className="text-xs text-black/80">
               · {speakers.length} speakers · auto-fills photo + name + title + company + bio
             </span>
           </div>
@@ -201,20 +201,20 @@ export function SpeakerPickerModal({
         {/* Search */}
         <div className="px-5 py-3 border-b border-black/10 bg-black/[0.02]">
           <div className="flex items-center gap-1.5 rounded-md border border-black/15 bg-white px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-black/40" />
+            <Search className="h-3.5 w-3.5 text-black/80" />
             <input
               ref={searchInputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, company, role, or event…"
-              className="flex-1 bg-transparent outline-none text-sm text-black placeholder:text-black/40"
+              className="flex-1 bg-transparent outline-none text-sm text-black placeholder:text-black/80"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="text-[0.65rem] text-black/40 hover:text-black"
+                className="text-[0.65rem] text-black/80 hover:text-black"
               >
                 Clear
               </button>
@@ -230,11 +230,11 @@ export function SpeakerPickerModal({
             </div>
           )}
           {loading ? (
-            <div className="flex items-center justify-center h-32 text-black/40">
+            <div className="flex items-center justify-center h-32 text-black/80">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading speakers…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-center text-black/40">
+            <div className="flex flex-col items-center justify-center h-32 text-center text-black/80">
               <UserCircle className="h-8 w-8 mb-2 opacity-40" />
               <p className="text-sm">
                 {search
@@ -280,14 +280,14 @@ export function SpeakerPickerModal({
                           {s.name}
                         </p>
                         {(title || company) && (
-                          <p className="text-xs text-black/60 truncate">
+                          <p className="text-xs text-black/80 truncate">
                             {title}
                             {title && company ? " · " : ""}
                             {company}
                           </p>
                         )}
                         {s.eventTitle && (
-                          <p className="text-[0.65rem] text-black/40 truncate mt-0.5">
+                          <p className="text-[0.65rem] text-black/80 truncate mt-0.5">
                             Spoke at: {s.eventTitle}
                           </p>
                         )}
@@ -300,7 +300,7 @@ export function SpeakerPickerModal({
                               ? "bg-[#27C93F]/10 text-[#27C93F]"
                               : s.userPhotoUrl
                                 ? "bg-[#0066FF]/10 text-[#0066FF]"
-                                : "bg-black/5 text-black/40"
+                                : "bg-black/5 text-black/80"
                           }`}
                         >
                           {s.photoUrl

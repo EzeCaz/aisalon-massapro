@@ -62,7 +62,7 @@ export function TestimonialsTab({ event, me, isAdmin }: Props) {
         <h3 className="text-sm font-bold text-black">
           Testimonials for {event.title}
         </h3>
-        <p className="text-xs text-black/60 mt-1">
+        <p className="text-xs text-black/80 mt-1">
           Share what you took away from this event — a speaker&apos;s talk, a
           specific session, or the event as a whole. Photos welcome.
         </p>

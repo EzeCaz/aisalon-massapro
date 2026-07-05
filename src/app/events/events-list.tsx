@@ -73,7 +73,7 @@ export function EventsList({
   if (events.length === 0) {
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
-        <p className="text-black/60">
+        <p className="text-black/80">
           No events yet. Check back soon — the next AI Salon Tel Aviv gathering is being planned.
         </p>
       </Card>
@@ -131,7 +131,7 @@ function Section({
     <section>
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-lg font-bold text-black uppercase tracking-wide">{title}</h2>
-        <span className="text-xs text-black/40">{count} event{count === 1 ? "" : "s"}</span>
+        <span className="text-xs text-black/80">{count} event{count === 1 ? "" : "s"}</span>
       </div>
       {children}
     </section>
@@ -207,7 +207,7 @@ function EventCardItem({
                   <div className="text-2xl font-extrabold text-black leading-none">
                     {dayNum(start)}
                   </div>
-                  <div className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40 mt-0.5">
+                  <div className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/80 mt-0.5">
                     {dateInTLV(start, "weekday")}
                   </div>
                 </div>
@@ -219,7 +219,7 @@ function EventCardItem({
               <h3 className="font-bold text-black text-base leading-snug line-clamp-2 group-hover:text-[#FF005A] transition-colors">
                 {e.title}
               </h3>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-black/60">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-black/80">
                 <span className="inline-flex items-center gap-1">
                   <span className="font-mono">{timeInTLV(start)}</span>
                   <span className="text-black/30">–</span>
@@ -251,7 +251,7 @@ function EventCardItem({
               variant="outline"
               className={`text-[0.6rem] uppercase tracking-wider font-semibold ${
                 isPast
-                  ? "border-black/20 text-black/40"
+                  ? "border-black/20 text-black/80"
                   : "border-[#00E6FF] text-[#007E72] bg-[#00E6FF]/10"
               }`}
             >

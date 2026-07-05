@@ -210,9 +210,9 @@ function Field({
 }) {
   return (
     <label className={`block ${full ? "sm:col-span-2" : ""}`}>
-      <span className="block text-xs font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-black/80 mb-1">{label}</span>
       {children}
-      {hint && <span className="block text-[0.65rem] text-black/40 mt-1">{hint}</span>}
+      {hint && <span className="block text-[0.65rem] text-black/80 mt-1">{hint}</span>}
     </label>
   );
 }
@@ -485,7 +485,7 @@ function StatCard({
       : "text-black/70";
   return (
     <Card className="p-3 border border-black/10 bg-white">
-      <div className="flex items-center gap-1.5 text-[0.6rem] font-bold uppercase tracking-wider text-black/40">
+      <div className="flex items-center gap-1.5 text-[0.6rem] font-bold uppercase tracking-wider text-black/80">
         {icon}
         {label}
       </div>
@@ -643,7 +643,7 @@ function CoHostsManager({
                 </div>
                 <div className="text-xs text-black/50 truncate">{c.user.email}</div>
                 {c.user.company && (
-                  <div className="text-[0.65rem] text-black/40">{c.user.company}</div>
+                  <div className="text-[0.65rem] text-black/80">{c.user.company}</div>
                 )}
               </div>
               <Badge variant="outline" className="text-[0.6rem] uppercase tracking-wider">
@@ -885,7 +885,7 @@ function SpeakersManager({
                   {s.company ? `, ${s.company}` : ""}
                 </div>
                 {s.topic && (
-                  <div className="text-[0.65rem] text-black/40 truncate">Topic: {s.topic}</div>
+                  <div className="text-[0.65rem] text-black/80 truncate">Topic: {s.topic}</div>
                 )}
               </div>
               {s.user ? (
@@ -1065,7 +1065,7 @@ function SpeakerEditorDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block">
-              <span className="block text-xs font-semibold text-black/60 mb-1">Name *</span>
+              <span className="block text-xs font-semibold text-black/80 mb-1">Name *</span>
               <input
                 type="text"
                 value={name}
@@ -1075,7 +1075,7 @@ function SpeakerEditorDialog({
               />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-black/60 mb-1">
+              <span className="block text-xs font-semibold text-black/80 mb-1">
                 Contact email
               </span>
               <input
@@ -1085,12 +1085,12 @@ function SpeakerEditorDialog({
                 placeholder="speaker@example.com"
                 className={inputCls}
               />
-              <span className="block text-[0.65rem] text-black/40 mt-1">
+              <span className="block text-[0.65rem] text-black/80 mt-1">
                 Auto-links to a platform user with the same email.
               </span>
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-black/60 mb-1">Role / title</span>
+              <span className="block text-xs font-semibold text-black/80 mb-1">Role / title</span>
               <input
                 type="text"
                 value={role}
@@ -1100,7 +1100,7 @@ function SpeakerEditorDialog({
               />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-black/60 mb-1">Company</span>
+              <span className="block text-xs font-semibold text-black/80 mb-1">Company</span>
               <input
                 type="text"
                 value={company}
@@ -1110,7 +1110,7 @@ function SpeakerEditorDialog({
               />
             </label>
             <label className="block sm:col-span-2">
-              <span className="block text-xs font-semibold text-black/60 mb-1">
+              <span className="block text-xs font-semibold text-black/80 mb-1">
                 Topic / talk title
               </span>
               <input
@@ -1122,7 +1122,7 @@ function SpeakerEditorDialog({
               />
             </label>
             <label className="block sm:col-span-2">
-              <span className="block text-xs font-semibold text-black/60 mb-1">Photo URL</span>
+              <span className="block text-xs font-semibold text-black/80 mb-1">Photo URL</span>
               <input
                 type="url"
                 value={photoUrl}
@@ -1132,7 +1132,7 @@ function SpeakerEditorDialog({
               />
             </label>
             <label className="block sm:col-span-2">
-              <span className="block text-xs font-semibold text-black/60 mb-1">Bio</span>
+              <span className="block text-xs font-semibold text-black/80 mb-1">Bio</span>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}

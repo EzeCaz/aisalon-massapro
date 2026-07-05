@@ -66,14 +66,14 @@ export default function GlobalError({
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-black/60 hover:text-black"
+                className="inline-flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-black/80 hover:text-black"
               >
                 Sign in
               </Link>
             </div>
           </div>
 
-          <p className="mt-6 text-xs text-black/40">
+          <p className="mt-6 text-xs text-black/80">
             © {new Date().getFullYear()} AI Salon Tel Aviv
           </p>
         </main>

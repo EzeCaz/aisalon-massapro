@@ -30,7 +30,7 @@ export default function TermsPage() {
             We may update these terms from time to time; continued use of the platform constitutes
             acceptance of the latest version.
           </p>
-          <p className="text-xs text-black/40">Last updated: June 2026</p>
+          <p className="text-xs text-black/80">Last updated: June 2026</p>
         </div>
         <a href="/login" className="inline-block mt-8 text-sm font-semibold text-black underline">
           ← Back to login

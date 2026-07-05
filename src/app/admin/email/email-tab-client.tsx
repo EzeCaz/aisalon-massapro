@@ -257,7 +257,7 @@ export function EmailTabClient({
         <div className="flex items-end justify-between mb-3">
           <div>
             <h2 className="text-lg font-bold text-black">Templates</h2>
-            <p className="text-sm text-black/60">
+            <p className="text-sm text-black/80">
               Reusable subject + body pairs. Pick from the composer's template dropdown.
             </p>
           </div>
@@ -283,7 +283,7 @@ export function EmailTabClient({
         <div className="flex items-end justify-between mb-3">
           <div>
             <h2 className="text-lg font-bold text-black">Campaigns</h2>
-            <p className="text-sm text-black/60">
+            <p className="text-sm text-black/80">
               Draft, scheduled, and sent email campaigns. {membersCount} members in the
               community.
             </p>
@@ -505,7 +505,7 @@ function TemplatesTable({
     return (
       <div className="rounded-lg border border-dashed border-black/15 p-8 text-center">
         <FileText className="h-8 w-8 mx-auto text-black/30 mb-2" />
-        <p className="text-sm text-black/60">
+        <p className="text-sm text-black/80">
           No templates yet. Click <strong>Create template</strong> above, or use{" "}
           <strong>Save as template</strong> on a sent campaign to create one.
         </p>
@@ -515,7 +515,7 @@ function TemplatesTable({
   return (
     <div className="rounded-lg border border-black/10 overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
+        <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
           <tr>
             <th className="text-left font-medium px-3 py-2.5">Name</th>
             <th className="text-left font-medium px-3 py-2.5">Category</th>
@@ -537,10 +537,10 @@ function TemplatesTable({
               <td className="px-3 py-2.5 text-black/70 max-w-md truncate">
                 {t.subject}
               </td>
-              <td className="px-3 py-2.5 text-right text-black/60">
+              <td className="px-3 py-2.5 text-right text-black/80">
                 {t._count.campaigns}
               </td>
-              <td className="px-3 py-2.5 text-black/60 text-xs">
+              <td className="px-3 py-2.5 text-black/80 text-xs">
                 {new Date(t.createdAt).toLocaleDateString()}
               </td>
               <td className="px-3 py-2.5 text-right">
@@ -624,7 +624,7 @@ function CampaignsTable({
     return (
       <div className="rounded-lg border border-dashed border-black/15 p-8 text-center">
         <Mail className="h-8 w-8 mx-auto text-black/30 mb-2" />
-        <p className="text-sm text-black/60">
+        <p className="text-sm text-black/80">
           No campaigns yet. Click <strong>New campaign</strong> above to compose your
           first email.
         </p>
@@ -635,7 +635,7 @@ function CampaignsTable({
   return (
     <div className="space-y-3">
       <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/40" />
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/80" />
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -645,7 +645,7 @@ function CampaignsTable({
       </div>
       <div className="rounded-lg border border-black/10 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
+          <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
             <tr>
               <th className="text-left font-medium px-3 py-2.5">Name</th>
               <th className="text-left font-medium px-3 py-2.5">Status</th>
@@ -668,7 +668,7 @@ function CampaignsTable({
                 <td className="px-3 py-2.5 text-black/70 max-w-md truncate">
                   {c.subjectSnapshot}
                 </td>
-                <td className="px-3 py-2.5 text-black/60 text-xs">
+                <td className="px-3 py-2.5 text-black/80 text-xs">
                   {c.template ? (
                     <Badge variant="outline" className="font-normal text-xs">
                       {c.template.name}
@@ -677,10 +677,10 @@ function CampaignsTable({
                     <span className="text-black/30">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2.5 text-right text-black/60">
+                <td className="px-3 py-2.5 text-right text-black/80">
                   {c._count.recipients > 0 ? c._count.recipients : "—"}
                 </td>
-                <td className="px-3 py-2.5 text-black/60 text-xs">
+                <td className="px-3 py-2.5 text-black/80 text-xs">
                   {new Date(c.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
@@ -713,7 +713,7 @@ function CampaignsTable({
                         size="sm"
                         variant="ghost"
                         onClick={() => onDelete(c)}
-                        className="h-7 px-2 text-black/40 hover:text-red-600"
+                        className="h-7 px-2 text-black/80 hover:text-red-600"
                         title="Delete draft"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -758,14 +758,14 @@ function CampaignsTable({
 function StatusBadge({ status }: { status: string }) {
   const color =
     status === "DRAFT"
-      ? "bg-black/10 text-black/60"
+      ? "bg-black/10 text-black/80"
       : status === "SENT"
       ? "bg-[#007E72]/15 text-[#007E72]"
       : status === "SENDING"
       ? "bg-[#FF005A]/15 text-[#FF005A]"
       : status === "FAILED"
       ? "bg-red-100 text-red-700"
-      : "bg-black/10 text-black/60";
+      : "bg-black/10 text-black/80";
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-semibold ${color}`}
@@ -935,7 +935,7 @@ function CampaignComposer({
             <SelectContent>
               {templates.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
-                  {t.name} <span className="text-black/40 ml-1">({t.category})</span>
+                  {t.name} <span className="text-black/80 ml-1">({t.category})</span>
                 </SelectItem>
               ))}
             </SelectContent>

@@ -355,7 +355,7 @@ export function EventCreator({ members }: Props) {
               Paste structured event brief
             </DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-black/60">
+          <p className="text-xs text-black/80">
             Paste the entire event description copied from your Word doc,
             email, or shared file. The parser looks for labeled lines like
             <code className="mx-1 px-1 py-0.5 bg-black/5 rounded">Title:</code>
@@ -405,7 +405,7 @@ RSVP URL: https://lu.ma/...`}
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-[#FF005A]" />
             <h3 className="font-bold text-black text-sm">Co-hosts (collaborators)</h3>
-            <span className="text-[0.65rem] font-bold uppercase tracking-wider text-black/40">
+            <span className="text-[0.65rem] font-bold uppercase tracking-wider text-black/80">
               {coHostIds.length} selected
             </span>
           </div>
@@ -418,13 +418,13 @@ RSVP URL: https://lu.ma/...`}
             <Plus className="h-4 w-4 mr-1.5" /> Add co-host
           </Button>
         </div>
-        <p className="text-xs text-black/60 mb-3">
+        <p className="text-xs text-black/80 mb-3">
           Co-hosts are members who can edit this event's details, manage the
           agenda, upload and star photos, and add other co-hosts. They'll see
           an "Edit Event" tab when they open the event page after creation.
         </p>
         {coHostMembers.length === 0 ? (
-          <p className="text-xs text-black/40 italic">
+          <p className="text-xs text-black/80 italic">
             No co-hosts selected. You can add them now or after creation.
           </p>
         ) : (
@@ -445,7 +445,7 @@ RSVP URL: https://lu.ma/...`}
                 </span>
                 <button
                   onClick={() => setCoHostIds((prev) => prev.filter((id) => id !== m.id))}
-                  className="ml-1 rounded-full hover:bg-black/10 p-0.5 text-black/40 hover:text-[#FF005A]"
+                  className="ml-1 rounded-full hover:bg-black/10 p-0.5 text-black/80 hover:text-[#FF005A]"
                   title="Remove"
                 >
                   <X className="h-3 w-3" />
@@ -460,7 +460,7 @@ RSVP URL: https://lu.ma/...`}
             <DialogHeader>
               <DialogTitle>Pick co-hosts</DialogTitle>
             </DialogHeader>
-            <p className="text-xs text-black/60">
+            <p className="text-xs text-black/80">
               Click any member to add them as a co-host. They'll be notified
               the next time they sign in (and will see the "Edit Event" tab).
             </p>

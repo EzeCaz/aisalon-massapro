@@ -112,7 +112,7 @@ export function EventPrepListClient({ events, mySpeakerRows, userRole }: Props) 
                 <CalendarDays className="h-3 w-3" />
                 {dateStr}
               </div>
-              <span className="text-[0.7rem] font-semibold text-black/40 uppercase tracking-wider">
+              <span className="text-[0.7rem] font-semibold text-black/80 uppercase tracking-wider">
                 {event.chapter}
               </span>
             </div>
@@ -123,21 +123,21 @@ export function EventPrepListClient({ events, mySpeakerRows, userRole }: Props) 
                 {event.title}
               </h3>
               {event.subtitle && (
-                <p className="mt-1 text-sm text-black/60 line-clamp-2">
+                <p className="mt-1 text-sm text-black/80 line-clamp-2">
                   {event.subtitle}
                 </p>
               )}
             </div>
 
             {/* Time + venue */}
-            <div className="space-y-1.5 text-xs text-black/60">
+            <div className="space-y-1.5 text-xs text-black/80">
               <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-black/40" />
+                <Clock className="h-3.5 w-3.5 text-black/80" />
                 <span>{timeStr}</span>
               </div>
               {event.venue && (
                 <div className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-black/40" />
+                  <MapPin className="h-3.5 w-3.5 text-black/80" />
                   <span className="line-clamp-1">
                     {event.venue}
                     {event.city ? ` · ${event.city}` : ""}
@@ -214,7 +214,7 @@ function Stat({
     <div className="flex flex-col items-center text-center">
       <div className="flex items-center gap-0.5 text-black/50">{icon}</div>
       <span className="text-sm font-bold text-black/80 leading-tight">{value}</span>
-      <span className="text-[0.6rem] uppercase tracking-wider text-black/40">{label}</span>
+      <span className="text-[0.6rem] uppercase tracking-wider text-black/80">{label}</span>
     </div>
   );
 }

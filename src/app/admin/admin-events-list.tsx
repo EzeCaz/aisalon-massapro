@@ -21,7 +21,7 @@ export function AdminEventsList({ events }: { events: EventRow[] }) {
   if (events.length === 0) {
     return (
       <Card className="p-8 text-center bg-white border border-black/10">
-        <p className="text-sm text-black/60">No events created yet.</p>
+        <p className="text-sm text-black/80">No events created yet.</p>
       </Card>
     );
   }
@@ -73,7 +73,7 @@ export function AdminEventsList({ events }: { events: EventRow[] }) {
               <Badge variant="outline" className="hidden sm:inline-flex text-[0.6rem] uppercase tracking-wider">
                 {e.chapter} · {e.country}
               </Badge>
-              <ArrowRight className="h-4 w-4 text-black/30 group-hover:text-black/60 transition-colors flex-shrink-0" />
+              <ArrowRight className="h-4 w-4 text-black/30 group-hover:text-black/80 transition-colors flex-shrink-0" />
             </Card>
           </Link>
         );

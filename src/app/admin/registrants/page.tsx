@@ -78,7 +78,7 @@ export default async function AdminRegistrantsPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Event registrants (RSVPs)
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Every RSVP across every event — manual additions, paper RSVPs
             imported after the fact, and self-service RSVPs from the event
             pages. The check-in code column shows each attendee&apos;s

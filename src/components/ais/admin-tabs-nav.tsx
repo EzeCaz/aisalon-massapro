@@ -70,7 +70,7 @@ export function AdminTabsNav({
                 ? "bg-black text-white"
                 : tab.highlight
                   ? "bg-[#FF005A]/10 text-[#FF005A] hover:bg-[#FF005A]/20"
-                  : "text-black/60 hover:text-black hover:bg-black/5"
+                  : "text-black/80 hover:text-black hover:bg-black/5"
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -78,7 +78,7 @@ export function AdminTabsNav({
             {tab.key === "members" && typeof membersCount === "number" && (
               <span
                 className={`ml-1 text-[0.6rem] font-bold px-1.5 py-0.5 rounded-full ${
-                  isActive ? "bg-white/20 text-white" : "bg-black/10 text-black/60"
+                  isActive ? "bg-white/20 text-white" : "bg-black/10 text-black/80"
                 }`}
               >
                 {membersCount}

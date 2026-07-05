@@ -229,7 +229,7 @@ function AssetCardItem({ asset }: { asset: AssetCard }) {
           </span>
         </div>
         {asset.description && (
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             {asset.description}
           </p>
         )}
@@ -363,7 +363,7 @@ function BrandLibraryUploader() {
           >
             Brand Library — Upload & Copy URLs
           </h2>
-          <p className="mt-2 text-sm text-black/60 leading-relaxed max-w-3xl">
+          <p className="mt-2 text-sm text-black/80 leading-relaxed max-w-3xl">
             Upload a new brand image (logo, hero, photo, meerkat variant — anything).
             Once uploaded, click any thumbnail to copy its URL to your clipboard,
             then paste it into any image field in the JSON editor of any mockup
@@ -412,7 +412,7 @@ function BrandLibraryUploader() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
           Refresh
         </button>
-        <span className="text-xs text-black/40">
+        <span className="text-xs text-black/80">
           {images.length} image{images.length === 1 ? "" : "s"} in library · click any thumbnail to copy URL
         </span>
       </div>
@@ -425,11 +425,11 @@ function BrandLibraryUploader() {
 
       {/* Grid */}
       {loading ? (
-        <div className="flex items-center justify-center h-48 text-black/40">
+        <div className="flex items-center justify-center h-48 text-black/80">
           <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading brand library…
         </div>
       ) : images.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-center text-black/40">
+        <div className="flex flex-col items-center justify-center h-48 text-center text-black/80">
           <ImageIcon className="h-8 w-8 mb-2 opacity-40" />
           <p className="text-sm">No images yet. Upload one to get started.</p>
         </div>
@@ -531,7 +531,7 @@ export function MockupsClient() {
             >
               Mockup Templates
             </h2>
-            <p className="mt-2 text-sm text-black/60 leading-relaxed max-w-3xl">
+            <p className="mt-2 text-sm text-black/80 leading-relaxed max-w-3xl">
               The four canonical AI Salon event mockup templates. Use these as
               visual references when feeding the system prompt below into Grok
               Imagine / Flux / Midjourney to generate new event visuals that
@@ -565,7 +565,7 @@ export function MockupsClient() {
             >
               Brand Assets
             </h2>
-            <p className="mt-2 text-sm text-black/60 leading-relaxed max-w-3xl">
+            <p className="mt-2 text-sm text-black/80 leading-relaxed max-w-3xl">
               The core brand image library for the Tel Aviv chapter. Click any
               thumbnail to open the full-resolution asset in a new tab. Speaker
               overlays live in the hidden{" "}
@@ -597,7 +597,7 @@ export function MockupsClient() {
             >
               AI Event Mockup Template Generator — System Prompt
             </h2>
-            <p className="mt-2 text-sm text-black/60 leading-relaxed max-w-3xl">
+            <p className="mt-2 text-sm text-black/80 leading-relaxed max-w-3xl">
               Copy this entire prompt into your AI image generation tool
               (Grok Imagine, Flux, Midjourney) along with the structured JSON
               for your event to produce on-brand mockups for any of the four
@@ -657,7 +657,7 @@ export function MockupsClient() {
           </pre>
         </div>
 
-        <p className="mt-3 text-xs text-black/40 leading-relaxed">
+        <p className="mt-3 text-xs text-black/80 leading-relaxed">
           Tip: pass the structured JSON from the prompt as a separate user
           message after pasting the system prompt, so the model knows the
           specific event, speakers, and agenda to populate the mockup with.

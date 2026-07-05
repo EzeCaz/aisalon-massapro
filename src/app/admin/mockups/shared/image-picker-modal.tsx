@@ -188,9 +188,9 @@ export function ImagePickerModalShared({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-black/10">
           <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-black/60" />
+            <ImageIcon className="h-4 w-4 text-black/80" />
             <h2 className="text-base font-bold text-black">Pick an image</h2>
-            <span className="text-xs text-black/40">
+            <span className="text-xs text-black/80">
               · {accept === "logo" ? "logos" : accept === "photo" ? "photos" : "all"}
             </span>
           </div>
@@ -234,13 +234,13 @@ export function ImagePickerModalShared({
           </div>
 
           <div className="flex items-center gap-1.5 flex-1 max-w-xs rounded-md border border-black/15 bg-white px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-black/40" />
+            <Search className="h-3.5 w-3.5 text-black/80" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name…"
-              className="flex-1 bg-transparent outline-none text-xs text-black placeholder:text-black/40"
+              className="flex-1 bg-transparent outline-none text-xs text-black placeholder:text-black/80"
             />
           </div>
 
@@ -283,7 +283,7 @@ export function ImagePickerModalShared({
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center h-48 text-black/40">
+            <div className="flex items-center justify-center h-48 text-black/80">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading images…
             </div>
           ) : tab === "brand" ? (
@@ -392,7 +392,7 @@ function ImageGrid({
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center h-48 text-center text-black/40">
+    <div className="flex flex-col items-center justify-center h-48 text-center text-black/80">
       <ImageIcon className="h-8 w-8 mb-2 opacity-40" />
       <p className="text-sm">{label}</p>
     </div>

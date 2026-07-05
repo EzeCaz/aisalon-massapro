@@ -129,20 +129,20 @@ export default async function LoginPage() {
               between the logo tagline and the subtitle). */}
           <div className="md:hidden mb-8 flex flex-col items-center text-center">
             <AiSalonLogoServer variant="horizontal" color="black" className="text-[1.6rem]" markSrc={markUrl} />
-            <div className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/60">
+            <div className="mt-2 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-black/80">
               Empowering AI Connections in Tel Aviv
             </div>
           </div>
 
           <h2 className="text-2xl font-extrabold text-black mb-1">Welcome</h2>
-          <p className="text-sm text-black/60 mb-8">
+          <p className="text-sm text-black/80 mb-8">
             Sign in with Google, or use your email and password to access the AI
             Salon Tel Aviv community.
           </p>
 
           <LoginForm callbackUrl={callbackUrl ?? undefined} />
 
-          <p className="mt-8 text-xs text-black/40 leading-relaxed">
+          <p className="mt-8 text-xs text-black/80 leading-relaxed">
             By logging in you agree to the AI Salon community guidelines. Only registered
             members can attend events.
           </p>

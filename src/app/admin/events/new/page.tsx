@@ -30,7 +30,7 @@ export default async function AdminNewEventPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             Create a new event
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Fill in the basics and you'll be taken to the new event's page
             where you can add speakers, agenda, and images. Title, start time,
             and end time are required — everything else is optional and

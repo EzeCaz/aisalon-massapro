@@ -34,11 +34,36 @@ function getProvider(): "gmail" | "mock" {
 }
 
 export async function sendEmail(args: SendArgs): Promise<SendResult> {
+  // Global kill switch — two layers:
+  //   1. DB flag (set by admin in /admin/email tab, takes effect immediately,
+  //      no redeploy needed). Always checked at runtime.
+  //   2. Hard env var EMAIL_SEND_ENABLED="false" (escape hatch for ops).
+  // When paused, the queue still records the attempt so the admin can preview
+  // the rendered HTML in the Email Queue panel.
+  if (process.env.EMAIL_SEND_ENABLED === "false") {
+    return pausedResult(args);
+  }
+  const { isEmailSendPaused } = await import("@/lib/site-settings");
+  if (await isEmailSendPaused()) {
+    return pausedResult(args);
+  }
+
   const provider = getProvider();
   if (provider === "gmail") {
     return sendViaGmail(args);
   }
   return sendViaMock(args);
+}
+
+function pausedResult(args: SendArgs): SendResult {
+  console.log(
+    `[email-paused] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}`,
+  );
+  return {
+    ok: true,
+    provider: "mock",
+    messageId: `paused_${Date.now()}`,
+  };
 }
 
 // ----------------------------------------------------------------------------

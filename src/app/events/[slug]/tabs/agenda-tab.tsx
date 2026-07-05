@@ -135,7 +135,7 @@ const typeIcon: Record<string, React.ReactNode> = {
 const typeColor: Record<string, string> = {
   WELCOME: "bg-[#00E6FF]/10 text-[#007E72] border-[#00E6FF]/30",
   TALK: "bg-[#FF005A]/10 text-[#FF005A] border-[#FF005A]/30",
-  BREAK: "bg-black/5 text-black/60 border-black/10",
+  BREAK: "bg-black/5 text-black/80 border-black/10",
   NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
   FAST_PITCH: "bg-[#FFAC30]/10 text-[#FFAC30] border-[#FFAC30]/30",
   PANEL: "bg-[#7C3AED]/10 text-[#7C3AED] border-[#7C3AED]/30",
@@ -434,7 +434,7 @@ function ContactSpeakerDialog({
               {speakerDisplayName}
             </div>
             {speaker.role && (
-              <div className="text-xs text-black/60 truncate">
+              <div className="text-xs text-black/80 truncate">
                 {speaker.role}
                 {speaker.company ? `, ${speaker.company}` : ""}
               </div>
@@ -454,14 +454,14 @@ function ContactSpeakerDialog({
         {/* Message thread */}
         <div className="max-h-64 overflow-y-auto ais-scroll space-y-2">
           {loading ? (
-            <div className="text-center py-6 text-xs text-black/40">
+            <div className="text-center py-6 text-xs text-black/80">
               <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
               Loading conversation…
             </div>
           ) : isLinked ? (
             // ---- Two-way chat bubbles (ConversationMessage mode) ----
             dmMessages.length === 0 ? (
-              <div className="text-center py-6 text-xs text-black/40">
+              <div className="text-center py-6 text-xs text-black/80">
                 No messages yet. Start the conversation below.
               </div>
             ) : (
@@ -484,7 +484,7 @@ function ContactSpeakerDialog({
                       </div>
                       <div
                         className={`mt-1 text-[0.6rem] text-right ${
-                          mine ? "text-white/70" : "text-black/40"
+                          mine ? "text-white/70" : "text-black/80"
                         }`}
                       >
                         {fmtDateTime(m.createdAt)}
@@ -502,7 +502,7 @@ function ContactSpeakerDialog({
           ) : (
             // ---- One-way legacy bubbles (SpeakerMessage mode) ----
             legacyMessages.length === 0 ? (
-              <div className="text-center py-6 text-xs text-black/40">
+              <div className="text-center py-6 text-xs text-black/80">
                 No messages yet. Start the conversation below.
               </div>
             ) : (
@@ -513,7 +513,7 @@ function ContactSpeakerDialog({
                       {m.body}
                     </div>
                   </div>
-                  <div className="text-[0.6rem] text-black/40 mt-0.5 pr-1">
+                  <div className="text-[0.6rem] text-black/80 mt-0.5 pr-1">
                     {fmtDateTime(m.createdAt)}
                   </div>
                 </div>
@@ -534,7 +534,7 @@ function ContactSpeakerDialog({
             maxLength={4000}
           />
           <div className="flex items-center justify-between">
-            <div className="text-[0.65rem] text-black/40">
+            <div className="text-[0.65rem] text-black/80">
               {isLinked ? (
                 <>
                   From: <strong>{me.name || me.email}</strong> · replies will
@@ -883,7 +883,7 @@ function SpeakerReorderDialog({
         <DialogHeader>
           <DialogTitle>Reorder pictures</DialogTitle>
         </DialogHeader>
-        <p className="text-xs text-black/60 -mt-2">
+        <p className="text-xs text-black/80 -mt-2">
           Drag rows to reorder, or use the ↑ / ↓ arrows. Click <strong>Save order</strong> to
           apply changes — this updates the order for everyone viewing this speaker&apos;s
           slideshow.
@@ -959,12 +959,12 @@ function SpeakerSortableRow({
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing text-black/30 hover:text-black/60 p-1"
+        className="cursor-grab active:cursor-grabbing text-black/30 hover:text-black/80 p-1"
         aria-label="Drag to reorder"
       >
         <GripVertical className="h-4 w-4" />
       </button>
-      <div className="text-xs font-mono text-black/40 w-6 text-center">{idx + 1}</div>
+      <div className="text-xs font-mono text-black/80 w-6 text-center">{idx + 1}</div>
       <div className="flex-shrink-0 w-14 h-10 rounded overflow-hidden bg-black/5">
         <img src={img.fileUrl} alt="" className="w-full h-full object-cover" />
       </div>
@@ -977,7 +977,7 @@ function SpeakerSortableRow({
         <button
           onClick={() => onMove(-1)}
           disabled={idx === 0}
-          className="text-black/40 hover:text-black disabled:opacity-20 p-0.5"
+          className="text-black/80 hover:text-black disabled:opacity-20 p-0.5"
           aria-label="Move up"
         >
           <ArrowUp className="h-3.5 w-3.5" />
@@ -985,7 +985,7 @@ function SpeakerSortableRow({
         <button
           onClick={() => onMove(1)}
           disabled={idx === total - 1}
-          className="text-black/40 hover:text-black disabled:opacity-20 p-0.5"
+          className="text-black/80 hover:text-black disabled:opacity-20 p-0.5"
           aria-label="Move down"
         >
           <ArrowDown className="h-3.5 w-3.5" />
@@ -1029,18 +1029,18 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
               >
                 {/* Top row: time · icon · title · description · speaker (all centered) */}
                 <div className="flex flex-col items-center text-center gap-1.5">
-                  <div className="flex items-center gap-3 text-black/60">
+                  <div className="flex items-center gap-3 text-black/80">
                     <span className="font-mono text-sm font-bold text-black">
                       {fmtTime(item.startsAt)}
                     </span>
                     {end && (
-                      <span className="font-mono text-[0.65rem] text-black/40">
+                      <span className="font-mono text-[0.65rem] text-black/80">
                         → {fmtTime(item.endsAt!)}
                       </span>
                     )}
                   </div>
 
-                  <div className={typeColor[item.type] ? "" : "text-black/40"}>
+                  <div className={typeColor[item.type] ? "" : "text-black/80"}>
                     {typeIcon[item.type]}
                   </div>
 
@@ -1049,7 +1049,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   </div>
 
                   {item.description && (
-                    <p className="text-xs text-black/60 leading-relaxed max-w-prose">
+                    <p className="text-xs text-black/80 leading-relaxed max-w-prose">
                       {item.description}
                     </p>
                   )}
@@ -1057,7 +1057,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   {item.speaker && (
                     <div
                       className={`text-xs ${
-                        item.type === "PANEL" ? "text-[#7C3AED]" : "text-black/60"
+                        item.type === "PANEL" ? "text-[#7C3AED]" : "text-black/80"
                       }`}
                     >
                       {item.type === "PANEL" && (
@@ -1233,7 +1233,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm text-black">{s.name}</div>
                     {s.role && (
-                      <div className="text-xs text-black/60">
+                      <div className="text-xs text-black/80">
                         {s.role}
                         {s.company ? `, ${s.company}` : ""}
                       </div>

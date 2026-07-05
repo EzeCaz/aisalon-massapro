@@ -500,17 +500,17 @@ export function CampaignComposer({
                 {preview.sample.map((r, i) => (
                   <div key={i} className="flex justify-between">
                     <span>{r.email}</span>
-                    {r.name && <span className="text-black/40">{r.name}</span>}
+                    {r.name && <span className="text-black/80">{r.name}</span>}
                   </div>
                 ))}
                 {preview.total > preview.sample.length && (
-                  <div className="text-black/40 pt-1">
+                  <div className="text-black/80 pt-1">
                     + {preview.total - preview.sample.length} more
                   </div>
                 )}
               </div>
             ) : preview ? (
-              <p className="text-xs text-black/40">No recipients match this list.</p>
+              <p className="text-xs text-black/80">No recipients match this list.</p>
             ) : null}
           </div>
         </Card>
@@ -531,7 +531,7 @@ export function CampaignComposer({
               Skip <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
-          <p className="text-sm text-black/60">
+          <p className="text-sm text-black/80">
             Start from a saved template to reuse the subject, body, and signature.
             You'll be able to edit everything in the next step.
           </p>
@@ -553,10 +553,10 @@ export function CampaignComposer({
                   }`}
                 >
                   <div className="font-semibold text-sm">{t.name}</div>
-                  <div className="text-xs text-black/60 mt-1 line-clamp-2">{t.subject}</div>
+                  <div className="text-xs text-black/80 mt-1 line-clamp-2">{t.subject}</div>
                   <div className="flex items-center gap-2 mt-2">
-                    <Badge className="bg-black/5 text-black/60 text-[0.6rem]">{t.category}</Badge>
-                    <span className="text-[0.6rem] text-black/40">
+                    <Badge className="bg-black/5 text-black/80 text-[0.6rem]">{t.category}</Badge>
+                    <span className="text-[0.6rem] text-black/80">
                       {t._count.campaigns} campaign{t._count.campaigns === 1 ? "" : "s"}
                     </span>
                   </div>
@@ -777,7 +777,7 @@ function ListSourceCard({
     >
       <Icon className="h-5 w-5 mb-2" />
       <div className="font-semibold text-sm">{title}</div>
-      <div className="text-xs text-black/60 mt-1">{description}</div>
+      <div className="text-xs text-black/80 mt-1">{description}</div>
     </button>
   );
 }

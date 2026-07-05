@@ -52,12 +52,12 @@ export function TextStyleRow({
 }) {
   return (
     <div className="rounded-md border border-black/10 bg-black/[0.02] p-2 space-y-1.5">
-      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/40">
+      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80">
         {label}
       </div>
       <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
         <label className="inline-flex items-center gap-1.5">
-          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Size</span>
+          <span className="text-[0.6rem] font-semibold text-black/80 w-8">Size</span>
           <input
             type="number"
             step="1"
@@ -72,10 +72,10 @@ export function TextStyleRow({
             className="form-input w-20"
             title={`Font size in px (default: ${defaultFontSize}px). Empty = use default.`}
           />
-          <span className="text-[0.55rem] font-mono text-black/40">px</span>
+          <span className="text-[0.55rem] font-mono text-black/80">px</span>
         </label>
         <label className="inline-flex items-center gap-1.5">
-          <span className="text-[0.6rem] font-semibold text-black/60 w-8">Color</span>
+          <span className="text-[0.6rem] font-semibold text-black/80 w-8">Color</span>
           <input
             type="color"
             value={fontColor ?? "#000000"}
@@ -95,7 +95,7 @@ export function TextStyleRow({
       </div>
       {/* Align L / C / R — per user spec 2026-07-02. */}
       <div className="flex items-center gap-1">
-        <span className="text-[0.6rem] font-semibold text-black/60 w-8">Align</span>
+        <span className="text-[0.6rem] font-semibold text-black/80 w-8">Align</span>
         {(["left", "center", "right"] as const).map((a) => (
           <button
             key={a}
@@ -106,7 +106,7 @@ export function TextStyleRow({
             className={`px-2 py-0.5 text-[0.55rem] font-semibold rounded border transition ${
               (align ?? "left") === a
                 ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                : "border-black/15 bg-white text-black/60 hover:bg-black/5"
+                : "border-black/15 bg-white text-black/80 hover:bg-black/5"
             }`}
             title={`Align ${a}`}
           >

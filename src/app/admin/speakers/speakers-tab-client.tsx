@@ -142,7 +142,7 @@ export function SpeakersTabClient({
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <input
             type="text"
             value={search}
@@ -192,7 +192,7 @@ export function SpeakersTabClient({
       ) : (
         <div className="rounded-md border border-black/10 bg-white overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
+            <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
               <tr>
                 <th className="text-left px-4 py-3 font-bold">Speaker</th>
                 <th className="text-left px-4 py-3 font-bold">Topic / Role</th>
@@ -270,7 +270,7 @@ export function SpeakersTabClient({
                         {s.user.email}
                       </span>
                     ) : (
-                      <span className="text-xs text-black/40">not linked</span>
+                      <span className="text-xs text-black/80">not linked</span>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell align-top text-xs">
@@ -291,7 +291,7 @@ export function SpeakersTabClient({
                         type="button"
                         onClick={() => setEditing(s)}
                         title="Edit"
-                        className="rounded p-1.5 text-black/60 hover:bg-black/5 hover:text-black"
+                        className="rounded p-1.5 text-black/80 hover:bg-black/5 hover:text-black"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -603,7 +603,7 @@ function Field({
 }) {
   return (
     <label className={`block ${full ? "sm:col-span-2" : ""}`}>
-      <span className="block text-xs font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-black/80 mb-1">{label}</span>
       {children}
     </label>
   );

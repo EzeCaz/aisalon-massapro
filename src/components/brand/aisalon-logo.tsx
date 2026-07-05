@@ -30,7 +30,7 @@ export function AiSalonLogo({
 }: LogoProps) {
   const tagline = taglineProp ?? variant.includes("tagline");
   const text = color === "white" ? "text-white" : "text-black";
-  const sub = color === "white" ? "text-white/70" : "text-black/60";
+  const sub = color === "white" ? "text-white/70" : "text-black/80";
 
   if (variant === "monogram") {
     return (

@@ -59,7 +59,7 @@ export default async function AdminAnalyticsPage() {
             <BarChart3 className="h-8 w-8 text-[#FF005A]" />
             Referral <span className="ais-gradient-text">Analytics</span>
           </h1>
-          <p className="mt-2 text-sm text-black/60 max-w-3xl">
+          <p className="mt-2 text-sm text-black/80 max-w-3xl">
             Track how members are driving traffic and signups via their unique share links.
             Each member has a unique <code className="text-xs font-mono bg-black/5 px-1 py-0.5 rounded">utm_uid</code>{" "}
             (12-char hex) — every visit, signup, and event RSVP attributed to a share link
@@ -70,13 +70,13 @@ export default async function AdminAnalyticsPage() {
         <AdminAnalyticsClient />
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a
               href="https://massapro.com"
-              className="text-black/60 underline-offset-4 hover:underline"
+              className="text-black/80 underline-offset-4 hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >

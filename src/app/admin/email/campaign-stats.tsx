@@ -189,7 +189,7 @@ export function CampaignStats({
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{campaign.name}</h1>
-          <p className="text-sm text-black/60">{campaign.subjectSnapshot}</p>
+          <p className="text-sm text-black/80">{campaign.subjectSnapshot}</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchStats}>
           <RefreshCw className="h-3 w-3 mr-1" /> Refresh
@@ -242,7 +242,7 @@ export function CampaignStats({
           <Card className="p-4">
             <h3 className="font-bold text-sm mb-3">Top clicked links</h3>
             {clickMap.length === 0 ? (
-              <p className="text-xs text-black/40">No clicks yet.</p>
+              <p className="text-xs text-black/80">No clicks yet.</p>
             ) : (
               <div className="space-y-2">
                 {clickMap.map((c, i) => (
@@ -293,7 +293,7 @@ export function CampaignStats({
             <div className="col-span-1">Sent at</div>
           </div>
           {recipients.length === 0 ? (
-            <div className="p-8 text-center text-sm text-black/40">No recipients found.</div>
+            <div className="p-8 text-center text-sm text-black/80">No recipients found.</div>
           ) : (
             recipients.map((r) => (
               <div
@@ -312,7 +312,7 @@ export function CampaignStats({
                         : r.status === "FAILED" || r.status === "BOUNCED"
                         ? "bg-[#FF005A]/10 text-[#FF005A]"
                         : r.status === "UNSUBSCRIBED"
-                        ? "bg-black/10 text-black/60"
+                        ? "bg-black/10 text-black/80"
                         : "bg-black/5 text-black/50"
                     }
                   >
@@ -330,7 +330,7 @@ export function CampaignStats({
                     "—"
                   )}
                 </div>
-                <div className="col-span-1 text-black/60">
+                <div className="col-span-1 text-black/80">
                   {r.sentAt ? new Date(r.sentAt).toLocaleString() : "—"}
                 </div>
               </div>
@@ -372,19 +372,19 @@ export function CampaignStats({
             <div>Details</div>
           </div>
           {recentEvents.length === 0 ? (
-            <div className="p-8 text-center text-sm text-black/40">No events yet.</div>
+            <div className="p-8 text-center text-sm text-black/80">No events yet.</div>
           ) : (
             recentEvents.map((e) => (
               <div
                 key={e.id}
                 className="grid grid-cols-4 gap-2 px-3 py-2 border-b border-black/5 hover:bg-black/[0.02] text-xs items-center"
               >
-                <div className="text-black/60">{new Date(e.createdAt).toLocaleString()}</div>
+                <div className="text-black/80">{new Date(e.createdAt).toLocaleString()}</div>
                 <div>
                   <Badge className={eventBadgeColor(e.type)}>{e.type}</Badge>
                 </div>
                 <div className="truncate">{e.email}</div>
-                <div className="truncate text-black/60">{e.details || "—"}</div>
+                <div className="truncate text-black/80">{e.details || "—"}</div>
               </div>
             ))
           )}
@@ -450,7 +450,7 @@ function TimelineChart({
   timeline: { hour: number; opens: number; clicks: number; replies: number }[];
 }) {
   if (timeline.length === 0) {
-    return <p className="text-xs text-black/40">No data yet.</p>;
+    return <p className="text-xs text-black/80">No data yet.</p>;
   }
   const maxVal = Math.max(
     ...timeline.map((t) => Math.max(t.opens, t.clicks, t.replies, 1))
@@ -477,7 +477,7 @@ function TimelineChart({
               title={`${t.replies} replies`}
             />
           </div>
-          <div className="col-span-4 text-black/60 text-[0.65rem]">
+          <div className="col-span-4 text-black/80 text-[0.65rem]">
             {t.opens}o / {t.clicks}c / {t.replies}r
           </div>
         </div>
@@ -504,7 +504,7 @@ function eventBadgeColor(type: string): string {
     case "BOUNCE":
       return "bg-[#FF005A]/10 text-[#FF005A]";
     case "UNSUBSCRIBE":
-      return "bg-black/10 text-black/60";
+      return "bg-black/10 text-black/80";
     default:
       return "bg-black/5 text-black/50";
   }

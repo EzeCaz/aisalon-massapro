@@ -222,19 +222,19 @@ export function RsvpCheckInCard({
           <CheckCircle2 className="h-5 w-5" />
           <span className="font-bold text-sm uppercase tracking-wider">You&apos;re checked in</span>
         </div>
-        <p className="text-xs text-black/60 leading-relaxed">
+        <p className="text-xs text-black/80 leading-relaxed">
           Show this code at the door to enter the venue. Keep it on your screen — door staff will scan it.
           This code is unique to you and tracks your attendance across all AI Salon events.
         </p>
         <div className="rounded-lg bg-white border-2 border-[#007E72]/40 p-4 text-center">
-          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+          <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
             Your entry code
           </div>
           <div className="text-3xl font-extrabold font-mono tracking-[0.15em] text-[#007E72]">
             {rsvp.checkInCode}
           </div>
           {rsvp.checkedInAt && (
-            <div className="mt-2 text-[0.6rem] text-black/40">
+            <div className="mt-2 text-[0.6rem] text-black/80">
               Checked in at{" "}
               {new Intl.DateTimeFormat("en-GB", {
                 timeZone: "Asia/Jerusalem",
@@ -271,11 +271,11 @@ export function RsvpCheckInCard({
   if (isPast) {
     return (
       <div className="rounded-xl border border-black/10 bg-black/[0.03] p-5 space-y-3">
-        <div className="flex items-center gap-2 text-black/60">
+        <div className="flex items-center gap-2 text-black/80">
           <AlertCircle className="h-5 w-5" />
           <span className="font-bold text-sm">This event has ended</span>
         </div>
-        <p className="text-xs text-black/60 leading-relaxed">
+        <p className="text-xs text-black/80 leading-relaxed">
           Registration and check-in are closed. Browse the Photos, Slideshow, and Presentations tabs
           to revisit the event.
         </p>
@@ -315,7 +315,7 @@ export function RsvpCheckInCard({
             <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
               Event day is here
             </p>
-            <p className="text-xs text-black/60 leading-relaxed">
+            <p className="text-xs text-black/80 leading-relaxed">
               Already registered? Click below to check in and get your entry code.
             </p>
             <button
@@ -376,7 +376,7 @@ export function RsvpCheckInCard({
           <p className="text-[0.65rem] text-[#007E72] font-semibold uppercase tracking-wider">
             Event day is here
           </p>
-          <p className="text-xs text-black/60 leading-relaxed">
+          <p className="text-xs text-black/80 leading-relaxed">
             Click below to check in and get your unique entry code for the door.
           </p>
           <button
@@ -398,7 +398,7 @@ export function RsvpCheckInCard({
         </div>
       ) : (
         <div className="pt-2 border-t border-black/10 space-y-1.5">
-          <p className="text-[0.65rem] text-black/40 leading-relaxed">
+          <p className="text-[0.65rem] text-black/80 leading-relaxed">
             The check-in button will appear here <strong>1 hour before</strong> the event starts.
           </p>
           <div className="flex items-center gap-1.5 text-[0.65rem] text-black/50">

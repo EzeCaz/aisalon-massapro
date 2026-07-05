@@ -112,7 +112,7 @@ export function CookieConsentBanner() {
           </div>
           <div>
             <p className="text-sm font-bold text-black">We use cookies</p>
-            <p className="text-xs text-black/60 mt-0.5 leading-relaxed">
+            <p className="text-xs text-black/80 mt-0.5 leading-relaxed">
               We use essential cookies to make the site work, plus analytics cookies
               (Google Analytics 4 + Meta Pixel) to understand how members use the
               platform. You can choose which to allow.

@@ -534,7 +534,7 @@ function Field({
 }) {
   return (
     <label className={`block ${full ? "sm:col-span-2" : ""}`}>
-      <span className="block text-xs font-semibold text-black/60 mb-1">{label}</span>
+      <span className="block text-xs font-semibold text-black/80 mb-1">{label}</span>
       {children}
     </label>
   );
@@ -672,7 +672,7 @@ function SpeakersSection({ event }: { event: AdminEventRow }) {
           ))}
         </div>
       ) : speakers.length === 0 ? (
-        <div className="text-center py-8 text-sm text-black/60">
+        <div className="text-center py-8 text-sm text-black/80">
           <Mic2 className="h-8 w-8 mx-auto text-black/30 mb-2" />
           No speakers attached to this event yet. Click &ldquo;Add speaker&rdquo; to add the first one.
         </div>
@@ -1172,7 +1172,7 @@ function PresentationsSection({ event }: { event: AdminEventRow }) {
           ))}
         </div>
       ) : files.length === 0 ? (
-        <div className="text-center py-8 text-sm text-black/60">
+        <div className="text-center py-8 text-sm text-black/80">
           <FileText className="h-8 w-8 mx-auto text-black/30 mb-2" />
           No presentation files uploaded yet. Click &ldquo;Upload&rdquo; to add the first one.
         </div>
@@ -1376,7 +1376,7 @@ function CoHostsSection({
           ))}
         </div>
       ) : cohosts.length === 0 ? (
-        <div className="text-center py-8 text-sm text-black/60">
+        <div className="text-center py-8 text-sm text-black/80">
           <Users className="h-8 w-8 mx-auto text-black/30 mb-2" />
           No co-hosts assigned yet. Click &ldquo;Add co-host&rdquo; to grant a member admin-style access to this event.
         </div>
@@ -1399,7 +1399,7 @@ function CoHostsSection({
                 </div>
                 <div className="text-xs text-black/50">{c.user.email}</div>
                 {c.adder && (
-                  <div className="text-[0.7rem] text-black/40 mt-0.5">
+                  <div className="text-[0.7rem] text-black/80 mt-0.5">
                     Added by {c.adder.name || c.adder.email}
                   </div>
                 )}
@@ -1502,7 +1502,7 @@ function CoHostPicker({
         </div>
         <div className="p-4 border-b border-black/10">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
             <input
               type="search"
               value={search}
@@ -1551,7 +1551,7 @@ function CoHostPicker({
                 </button>
               ))}
               {members.length > 100 && (
-                <p className="text-center text-xs text-black/40 py-3">
+                <p className="text-center text-xs text-black/80 py-3">
                   Showing first 100 matches — narrow your search to see more.
                 </p>
               )}
@@ -1704,7 +1704,7 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
               type="button"
               onClick={() => setFilter(f)}
               className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
-                filter === f ? "bg-white text-black shadow-sm" : "text-black/60 hover:text-black"
+                filter === f ? "bg-white text-black shadow-sm" : "text-black/80 hover:text-black"
               }`}
             >
               {f === "all" ? "All" : f === "checkedIn" ? "Checked in" : "Pending"}
@@ -1712,7 +1712,7 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
           ))}
         </div>
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/40" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-black/80" />
           <input
             type="search"
             placeholder="Search by name, email, code…"
@@ -1725,11 +1725,11 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
 
       {/* List */}
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-black/40">
+        <div className="flex items-center justify-center py-12 text-black/80">
           <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-black/40">
+        <div className="text-center py-12 text-black/80">
           <Ticket className="h-8 w-8 mx-auto mb-2 opacity-50" />
           <p className="text-sm">
             {rsvps.length === 0
@@ -1751,7 +1751,7 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
       ) : (
         <div className="border border-black/10 rounded-md overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 text-xs uppercase tracking-wider">
+            <thead className="bg-black/[0.03] text-black/80 text-xs uppercase tracking-wider">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">Attendee</th>
                 <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Email</th>
@@ -1786,7 +1786,7 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-black/60 hidden sm:table-cell font-mono">
+                  <td className="px-3 py-2.5 text-xs text-black/80 hidden sm:table-cell font-mono">
                     {r.email}
                   </td>
                   <td className="px-3 py-2.5">
@@ -1826,7 +1826,7 @@ function RegistrationsSection({ event }: { event: AdminEventRow }) {
         <ExternalLink className="h-4 w-4 text-[#007E72] flex-shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-black mb-1">Public event page</div>
-          <p className="text-xs text-black/60 mb-2">
+          <p className="text-xs text-black/80 mb-2">
             Share this link with your community. Anyone who visits can register; on the day of the event,
             they&apos;ll see a second button to check in and get their unique entry code.
           </p>

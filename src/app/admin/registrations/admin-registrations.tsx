@@ -233,7 +233,7 @@ export function AdminRegistrations({
   if (events.length === 0) {
     return (
       <Card className="p-8 text-center bg-white border border-black/10">
-        <p className="text-sm text-black/60">No events created yet. Create an event first.</p>
+        <p className="text-sm text-black/80">No events created yet. Create an event first.</p>
       </Card>
     );
   }
@@ -242,7 +242,7 @@ export function AdminRegistrations({
     <div className="space-y-6">
       {/* Event picker */}
       <div>
-        <label className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2 block">
+        <label className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2 block">
           Select event
         </label>
         <div className="flex flex-wrap gap-2">
@@ -278,7 +278,7 @@ export function AdminRegistrations({
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <h3 className="font-bold text-black text-sm">Upload RSVP spreadsheet</h3>
-            <p className="text-xs text-black/60 mt-1">
+            <p className="text-xs text-black/80 mt-1">
               xlsx / xls / csv / tsv. The parser auto-detects columns: email, name (or first+last), timestamp,
               mobile, company, linkedin, bio. Other columns are preserved as raw data.
             </p>
@@ -307,7 +307,7 @@ export function AdminRegistrations({
             onChange={onFileInput}
             className="hidden"
           />
-          <FileSpreadsheet className="h-8 w-8 mx-auto text-black/40 mb-2" />
+          <FileSpreadsheet className="h-8 w-8 mx-auto text-black/80 mb-2" />
           <p className="text-sm text-black/70">
             Drag &amp; drop the spreadsheet here, or
           </p>
@@ -330,7 +330,7 @@ export function AdminRegistrations({
               </>
             )}
           </Button>
-          <p className="text-[0.65rem] text-black/40 mt-2">
+          <p className="text-[0.65rem] text-black/80 mt-2">
             We&apos;ll cross-reference by email. Existing members get registered; new emails become non-member
             leads; same-name-different-email rows get flagged for your review.
           </p>
@@ -478,7 +478,7 @@ export function AdminRegistrations({
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="font-semibold text-black">{d.name ?? d.email}</div>
-                            <div className="text-black/60 mt-0.5">
+                            <div className="text-black/80 mt-0.5">
                               <Mail className="inline h-3 w-3 mr-1" />
                               {d.email}
                             </div>
@@ -490,7 +490,7 @@ export function AdminRegistrations({
                         <div className="mt-2 pt-2 border-t border-black/5 text-black/70">
                           ↔ Possibly same as:{" "}
                           <strong className="text-black">{d.matchedUserName ?? d.matchedUserEmail}</strong>{" "}
-                          <span className="text-black/40">({d.matchedUserEmail})</span>
+                          <span className="text-black/80">({d.matchedUserEmail})</span>
                         </div>
                       </div>
                     ))}
@@ -502,7 +502,7 @@ export function AdminRegistrations({
               )}
 
               {uploadResult.skipped > 0 && (
-                <p className="text-xs text-black/60">
+                <p className="text-xs text-black/80">
                   {uploadResult.skipped} row(s) skipped (no email address).
                 </p>
               )}
@@ -544,7 +544,7 @@ function StatCard({
       }`}
     >
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/40 inline-flex items-center gap-1">
+        <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/80 inline-flex items-center gap-1">
           {icon}
           {label}
         </span>
@@ -651,7 +651,7 @@ function RegistrationsTable({
                       )}
                       <div>
                         <div className="font-semibold text-black text-xs">
-                          {u.name ?? <span className="italic text-black/40">No name</span>}
+                          {u.name ?? <span className="italic text-black/80">No name</span>}
                         </div>
                         {u.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-0.5">
@@ -671,7 +671,7 @@ function RegistrationsTable({
                   </td>
                   <td className="px-3 py-2 text-xs text-black/70 font-mono">{u.email}</td>
                   <td className="px-3 py-2 text-xs text-black/70">{u.company ?? "—"}</td>
-                  <td className="px-3 py-2 text-xs text-black/60">
+                  <td className="px-3 py-2 text-xs text-black/80">
                     {new Date(r.registeredAt).toLocaleString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -680,7 +680,7 @@ function RegistrationsTable({
                       minute: "2-digit",
                     })}
                   </td>
-                  <td className="px-3 py-2 text-xs text-black/60">
+                  <td className="px-3 py-2 text-xs text-black/80">
                     <Badge variant="outline" className="text-[0.55rem] uppercase">
                       {r.source}
                     </Badge>
@@ -689,7 +689,7 @@ function RegistrationsTable({
                     <div className="inline-flex items-center gap-1">
                       <Link
                         href={`/events?u=${u.id}`}
-                        className="text-xs text-black/60 hover:text-[#FF005A] inline-flex items-center gap-0.5"
+                        className="text-xs text-black/80 hover:text-[#FF005A] inline-flex items-center gap-0.5"
                         title="View member"
                       >
                         <ChevronRight className="h-3 w-3" />
@@ -773,9 +773,9 @@ function NonMembersTable({
                   <tr key={r.registrationId} className="border-b border-black/5 hover:bg-black/[0.01]">
                     <td className="px-3 py-2">
                       <div className="font-semibold text-black text-xs">
-                        {nm.name ?? <span className="italic text-black/40">No name</span>}
+                        {nm.name ?? <span className="italic text-black/80">No name</span>}
                       </div>
-                      <div className="text-[0.7rem] text-black/60 font-mono">{nm.email}</div>
+                      <div className="text-[0.7rem] text-black/80 font-mono">{nm.email}</div>
                     </td>
                     <td className="px-3 py-2 text-xs text-black/70">{nm.company ?? "—"}</td>
                     <td className="px-3 py-2 text-xs text-black/70">{nm.mobile ?? "—"}</td>
@@ -794,7 +794,7 @@ function NonMembersTable({
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-2 text-xs text-black/60">
+                    <td className="px-3 py-2 text-xs text-black/80">
                       {new Date(r.registeredAt).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
@@ -879,7 +879,7 @@ function StatusBadge({ status }: { status: string }) {
       );
     default:
       return (
-        <Badge variant="outline" className="text-[0.55rem] uppercase text-black/60">
+        <Badge variant="outline" className="text-[0.55rem] uppercase text-black/80">
           New lead
         </Badge>
       );
@@ -914,7 +914,7 @@ function DuplicatesQueue({
             <AlertTriangle className="h-4 w-4 text-[#FF005A]" />
             Potential duplicates queue
           </h3>
-          <p className="text-xs text-black/60 mt-1">
+          <p className="text-xs text-black/80 mt-1">
             Reviewing {index + 1} of {items.length}. Compare side-by-side, then merge or dismiss.
           </p>
         </div>
@@ -976,13 +976,13 @@ function DuplicatesQueue({
                 tags={current.nonMember.duplicateOf.tags}
               />
             ) : (
-              <p className="text-xs text-black/40 italic">No candidate match.</p>
+              <p className="text-xs text-black/80 italic">No candidate match.</p>
             )}
           </div>
         </div>
 
         {current.nonMember.duplicateReason && (
-          <p className="text-[0.7rem] text-black/60 mt-2 pt-2 border-t border-black/5">
+          <p className="text-[0.7rem] text-black/80 mt-2 pt-2 border-t border-black/5">
             <strong>Reason:</strong> {current.nonMember.duplicateReason}
           </p>
         )}
@@ -1016,7 +1016,7 @@ function DuplicatesQueue({
             <X className="h-3.5 w-3.5 mr-1" />
             Not the same person
           </Button>
-          <span className="text-[0.7rem] text-black/40 ml-auto">
+          <span className="text-[0.7rem] text-black/80 ml-auto">
             ({items.length - index - 1} more in queue)
           </span>
         </div>
@@ -1057,26 +1057,26 @@ function SideBySideRow({
 }) {
   return (
     <div className="space-y-1.5 text-xs">
-      <div className="font-semibold text-black text-sm">{name ?? <span className="italic text-black/40">No name</span>}</div>
+      <div className="font-semibold text-black text-sm">{name ?? <span className="italic text-black/80">No name</span>}</div>
       <div className="flex items-start gap-1.5 text-black/70">
-        <Mail className="h-3 w-3 mt-0.5 text-black/40" />
+        <Mail className="h-3 w-3 mt-0.5 text-black/80" />
         <span className="font-mono break-all">{email}</span>
       </div>
       {company && (
         <div className="flex items-start gap-1.5 text-black/70">
-          <Building2 className="h-3 w-3 mt-0.5 text-black/40" />
+          <Building2 className="h-3 w-3 mt-0.5 text-black/80" />
           {company}
         </div>
       )}
       {mobile && (
         <div className="flex items-start gap-1.5 text-black/70">
-          <Phone className="h-3 w-3 mt-0.5 text-black/40" />
+          <Phone className="h-3 w-3 mt-0.5 text-black/80" />
           {mobile}
         </div>
       )}
       {linkedinUrl && (
         <div className="flex items-start gap-1.5 text-black/70">
-          <Linkedin className="h-3 w-3 mt-0.5 text-black/40" />
+          <Linkedin className="h-3 w-3 mt-0.5 text-black/80" />
           <a
             href={linkedinUrl}
             target="_blank"
@@ -1207,7 +1207,7 @@ function MergeDialog({
                 tags={existing.tags}
               />
             ) : (
-              <p className="text-xs text-black/40 italic">No candidate match.</p>
+              <p className="text-xs text-black/80 italic">No candidate match.</p>
             )}
           </div>
         </div>

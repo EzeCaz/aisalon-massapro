@@ -120,10 +120,10 @@ export function SaveToCalendar({
             role="menuitem"
             className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-black/80 hover:bg-black/5 transition-colors"
           >
-            <Apple className="h-4 w-4 text-black/60" />
+            <Apple className="h-4 w-4 text-black/80" />
             <div className="flex-1">
               <div className="font-semibold">iCal / Apple Calendar</div>
-              <div className="text-[0.65rem] text-black/40">Downloads .ics file</div>
+              <div className="text-[0.65rem] text-black/80">Downloads .ics file</div>
             </div>
           </a>
 
@@ -139,7 +139,7 @@ export function SaveToCalendar({
             <Globe className="h-4 w-4 text-[#4285F4]" />
             <div className="flex-1">
               <div className="font-semibold">Google Calendar</div>
-              <div className="text-[0.65rem] text-black/40">Opens in new tab</div>
+              <div className="text-[0.65rem] text-black/80">Opens in new tab</div>
             </div>
           </a>
 
@@ -155,7 +155,7 @@ export function SaveToCalendar({
             <Globe className="h-4 w-4 text-[#0078D4]" />
             <div className="flex-1">
               <div className="font-semibold">Outlook</div>
-              <div className="text-[0.65rem] text-black/40">Opens in new tab</div>
+              <div className="text-[0.65rem] text-black/80">Opens in new tab</div>
             </div>
           </a>
 
@@ -171,7 +171,7 @@ export function SaveToCalendar({
             <Globe className="h-4 w-4 text-[#6001D2]" />
             <div className="flex-1">
               <div className="font-semibold">Yahoo Calendar</div>
-              <div className="text-[0.65rem] text-black/40">Opens in new tab</div>
+              <div className="text-[0.65rem] text-black/80">Opens in new tab</div>
             </div>
           </a>
         </div>

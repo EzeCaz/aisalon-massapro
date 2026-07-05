@@ -206,7 +206,7 @@ export default async function KnowledgeBasePage() {
           <h2 className="mt-4 text-xl font-bold text-black/80">
             Chapter Resources
           </h2>
-          <p className="mt-2 text-sm text-black/60 max-w-2xl leading-relaxed">
+          <p className="mt-2 text-sm text-black/80 max-w-2xl leading-relaxed">
             Useful templates, guides, and shared materials from the AI Salon
             Global team. We&rsquo;ll keep adding more resources here over time.
           </p>
@@ -234,7 +234,7 @@ export default async function KnowledgeBasePage() {
                   >
                     {section.title}
                   </h3>
-                  <p className="mt-2 text-sm text-black/60 leading-relaxed max-w-3xl">
+                  <p className="mt-2 text-sm text-black/80 leading-relaxed max-w-3xl">
                     {section.intro}
                   </p>
                 </div>
@@ -254,14 +254,14 @@ export default async function KnowledgeBasePage() {
                         <h4 className="font-bold text-black text-base leading-snug">
                           {resource.title}
                         </h4>
-                        <p className="mt-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-black/40">
+                        <p className="mt-0.5 text-[0.65rem] font-semibold uppercase tracking-wider text-black/80">
                           {resourceKindLabel(resource.kind)}
                         </p>
                       </div>
                     </div>
 
                     {resource.description && (
-                      <p className="text-sm text-black/60 leading-relaxed mb-4 flex-1">
+                      <p className="text-sm text-black/80 leading-relaxed mb-4 flex-1">
                         {resource.description}
                       </p>
                     )}
@@ -294,7 +294,7 @@ export default async function KnowledgeBasePage() {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>Platform by MassaPro</span>
         </div>

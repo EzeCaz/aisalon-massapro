@@ -31,7 +31,7 @@ export default function PrivacyPage() {
             You can request deletion of your account and associated data at any time by contacting
             the admin at <a href="mailto:eze@massapro.com" className="text-black underline">eze@massapro.com</a>.
           </p>
-          <p className="text-xs text-black/40">Last updated: June 2026</p>
+          <p className="text-xs text-black/80">Last updated: June 2026</p>
         </div>
         <a href="/login" className="inline-block mt-8 text-sm font-semibold text-black underline">
           ← Back to login

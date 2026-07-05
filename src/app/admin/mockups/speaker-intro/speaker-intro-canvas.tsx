@@ -431,7 +431,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             )}
           </p>
           <p
-            className="mt-1 text-black/60"
+            className="mt-1 text-black/80"
             style={{
               fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 14}px`,
               color: data.textStyles?.eventVenue?.color,
@@ -688,7 +688,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           {data.collaborators.length > 0 && (
             <div className="flex flex-col items-end gap-1.5">
               <span
-                className="text-black/60 font-semibold uppercase tracking-wider"
+                className="text-black/80 font-semibold uppercase tracking-wider"
                 style={{
                   fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 10}px`,
                   letterSpacing: "0.18em",
@@ -716,7 +716,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           {data.sponsors.length > 0 && (
             <div className="flex flex-col items-end gap-1.5">
               <span
-                className="text-black/60 font-semibold uppercase tracking-wider"
+                className="text-black/80 font-semibold uppercase tracking-wider"
                 style={{
                   fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 10}px`,
                   letterSpacing: "0.18em",
@@ -776,7 +776,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             guideId="footer"
           >
             <span
-              className="text-black/40"
+              className="text-black/80"
               style={{
                 color: data.textStyles?.footerCredit?.color,
                 textAlign: data.textStyles?.footerCredit?.align,
@@ -1573,7 +1573,7 @@ export function PlacementControls({
       <button
         type="button"
         onClick={onReset}
-        className="rounded border border-black/15 px-1.5 py-0.5 text-[0.65rem] font-semibold text-black/60 hover:bg-black/5"
+        className="rounded border border-black/15 px-1.5 py-0.5 text-[0.65rem] font-semibold text-black/80 hover:bg-black/5"
       >
         Reset
       </button>

@@ -438,16 +438,16 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
       {/* Filters — dashboard-report canonical style (Item 2F) */}
       <div className="rounded-lg border border-black/10 bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Filter className="h-4 w-4 text-black/40" />
+          <Filter className="h-4 w-4 text-black/80" />
           <h3 className="text-sm font-bold text-black">Filters</h3>
-          <span className="text-xs text-black/40 ml-auto">
+          <span className="text-xs text-black/80 ml-auto">
             {filtered.length} of {rsvps.length} registrants
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Global search (Item 2C — searches across ALL columns) */}
           <div className="lg:col-span-2">
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <Search className="inline h-3 w-3 mr-1" />
               Search all columns
             </label>
@@ -460,7 +460,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Event */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               <CalendarDays className="inline h-3 w-3 mr-1" />
               Event
             </label>
@@ -482,7 +482,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Status */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Status
             </label>
             <select
@@ -498,7 +498,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Source */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Source
             </label>
             <select
@@ -516,7 +516,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Company */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Company
             </label>
             <select
@@ -534,7 +534,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Interested in */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Interested in
             </label>
             <select
@@ -552,7 +552,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Profile categories */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Profile categories
             </label>
             <select
@@ -570,7 +570,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Applied for */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Applied for
             </label>
             <select
@@ -588,7 +588,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Role */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Member role
             </label>
             <select
@@ -606,7 +606,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
           </div>
           {/* Per-column dropdown: Referrer UTM UID (Item 2E) */}
           <div>
-            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Referrer UTM UID
             </label>
             <select
@@ -643,7 +643,7 @@ export function EventDashboardClient({ events, rsvps, isSuperAdmin }: Props) {
         {/* Active cross-filter selection chip (Item 2D) */}
         {active && (
           <div className="mt-3 flex items-center gap-2 text-xs">
-            <span className="font-bold uppercase tracking-widest text-black/40">
+            <span className="font-bold uppercase tracking-widest text-black/80">
               Selection:
             </span>
             <ActiveSelectionChip
@@ -848,7 +848,7 @@ function StatCard({
   return (
     <div className="border border-black/10 rounded-lg p-4 bg-white">
       <div className="flex items-baseline justify-between">
-        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 inline-flex items-center gap-1">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 inline-flex items-center gap-1">
           {icon}
           {label}
         </span>
@@ -955,7 +955,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/[0.02] text-black/60 text-xs uppercase tracking-wider sticky top-0 z-10">
+          <thead className="bg-black/[0.02] text-black/80 text-xs uppercase tracking-wider sticky top-0 z-10">
             <tr>
               <SortHeader label="Name" field="name" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
               <SortHeader label="Event" field="event" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
@@ -1023,7 +1023,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                     <span className="text-xs text-black/30 italic">—</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-black/60">
+                <td className="px-4 py-2 text-xs text-black/80">
                   {r.doorCheckedAt ? (
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
                       <DoorOpen className="h-3 w-3" />
@@ -1033,7 +1033,7 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                     <span className="text-black/30 italic">—</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-black/60">
+                <td className="px-4 py-2 text-xs text-black/80">
                   {r.attendedAt ? (
                     <span className="inline-flex items-center gap-1 text-[#004F98] font-semibold">
                       <CheckCircle2 className="h-3 w-3" />
@@ -1054,14 +1054,14 @@ function RegistrantsTable({ rsvps }: { rsvps: Rsvp[] }) {
                     <span className="text-xs text-black/30 italic">—</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-black/60">
+                <td className="px-4 py-2 text-xs text-black/80">
                   {r.createdAt ? formatDateTlv(r.createdAt) : "—"}
                 </td>
               </tr>
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-black/40 text-sm">
+                <td colSpan={10} className="px-4 py-8 text-center text-black/80 text-sm">
                   No registrants match your filters.
                 </td>
               </tr>

@@ -146,7 +146,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
       {/* Archived members table */}
       <div className="rounded-md border border-black/10 bg-white overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
+          <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
             <tr>
               <th className="text-left px-4 py-3 font-bold">Member</th>
               <th className="text-left px-4 py-3 font-bold hidden md:table-cell">
@@ -195,7 +195,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
                         {m.email}
                       </div>
                       {m.mobile && (
-                        <div className="text-[0.65rem] text-black/40 mt-0.5">
+                        <div className="text-[0.65rem] text-black/80 mt-0.5">
                           {m.mobile}
                         </div>
                       )}
@@ -205,7 +205,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
                 <td className="px-4 py-3 hidden md:table-cell align-top text-black/70">
                   {m.company || <span className="text-black/30 italic">—</span>}
                 </td>
-                <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/60">
+                <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/80">
                   {m.archivedAt ? (
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
@@ -215,7 +215,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
                     <span className="text-black/30 italic">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/60">
+                <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/80">
                   {m.archiver ? (
                     <div className="flex items-center gap-1">
                       <Shield className="h-3 w-3 text-[#820A7D]" />
@@ -254,7 +254,7 @@ export function ArchiveListClient({ members }: { members: ArchivedMember[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-black/40 text-sm">
+                <td colSpan={6} className="px-4 py-8 text-center text-black/80 text-sm">
                   No archived members match your search.
                 </td>
               </tr>
@@ -278,7 +278,7 @@ function SummaryCard({
   return (
     <div className="rounded-md border border-black/10 bg-white p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/40">
+        <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/80">
           {label}
         </span>
         <span

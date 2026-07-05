@@ -237,7 +237,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
             {event.title}
           </h1>
           {event.subtitle && (
-            <p className="mt-2 text-base text-black/60">{event.subtitle}</p>
+            <p className="mt-2 text-base text-black/80">{event.subtitle}</p>
           )}
         </div>
 
@@ -270,7 +270,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
             />
           </div>
           {event.address && (
-            <div className="mt-3 pt-3 border-t border-black/10 flex items-center gap-2 text-xs text-black/60">
+            <div className="mt-3 pt-3 border-t border-black/10 flex items-center gap-2 text-xs text-black/80">
               <MapPin className="h-3 w-3" />
               {event.address}
               {event.country ? `, ${event.country}` : ""}
@@ -305,7 +305,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
                       {s.role ? ` · ${s.role}` : ""}
                       {s.company ? ` · ${s.company}` : ""}
                       {s.topic && (
-                        <span className="block italic text-black/60 mt-0.5">
+                        <span className="block italic text-black/80 mt-0.5">
                           &ldquo;{s.topic}&rdquo;
                         </span>
                       )}
@@ -387,7 +387,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
                           {itemTime}
                         </div>
                         {itemEnd && (
-                          <div className="text-[0.65rem] text-black/40">
+                          <div className="text-[0.65rem] text-black/80">
                             {itemEnd}
                           </div>
                         )}
@@ -405,12 +405,12 @@ export default async function EventPrepDetailPage({ params }: Params) {
                           )}
                         </div>
                         {item.description && (
-                          <p className="mt-1 text-xs text-black/60">
+                          <p className="mt-1 text-xs text-black/80">
                             {item.description}
                           </p>
                         )}
                         {item.speaker && (
-                          <p className="mt-1.5 text-xs text-black/60">
+                          <p className="mt-1.5 text-xs text-black/80">
                             <span className="font-medium text-black/80">
                               {item.speaker.name}
                             </span>
@@ -422,10 +422,10 @@ export default async function EventPrepDetailPage({ params }: Params) {
                         )}
                         {item.panelists.length > 0 && (
                           <div className="mt-1.5">
-                            <p className="text-[0.65rem] uppercase tracking-wider text-black/40 font-semibold mb-0.5">
+                            <p className="text-[0.65rem] uppercase tracking-wider text-black/80 font-semibold mb-0.5">
                               Panelists
                             </p>
-                            <p className="text-xs text-black/60">
+                            <p className="text-xs text-black/80">
                               {item.panelists
                                 .map(
                                   (p) =>
@@ -486,7 +486,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
                           className="h-14 w-14 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="h-14 w-14 rounded-full bg-black/5 flex items-center justify-center text-black/40 text-lg font-bold">
+                        <div className="h-14 w-14 rounded-full bg-black/5 flex items-center justify-center text-black/80 text-lg font-bold">
                           {s.name.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -503,7 +503,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
                         )}
                       </div>
                       {(s.role || s.company) && (
-                        <p className="text-xs text-black/60">
+                        <p className="text-xs text-black/80">
                           {[s.role, s.company].filter(Boolean).join(" · ")}
                         </p>
                       )}
@@ -552,7 +552,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
         {/* Public event link */}
         <div className="mt-8 rounded-xl bg-black/[0.02] border border-black/10 p-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-black/40 mb-0.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-black/80 mb-0.5">
               Public event page
             </p>
             <p className="text-sm text-black/70">
@@ -570,7 +570,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/40 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
           <span>Platform by MassaPro</span>
         </div>
@@ -616,7 +616,7 @@ function Vital({
     <div className="flex items-start gap-2.5">
       <div className="flex-shrink-0 mt-0.5 text-[#FF005A]">{icon}</div>
       <div>
-        <p className="text-[0.65rem] uppercase tracking-wider text-black/40 font-semibold">
+        <p className="text-[0.65rem] uppercase tracking-wider text-black/80 font-semibold">
           {label}
         </p>
         <p className="text-sm font-medium text-black/80">{value}</p>
@@ -636,11 +636,11 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-black/10 bg-white p-3 text-center">
-      <div className="inline-flex items-center justify-center text-black/40 mb-1">
+      <div className="inline-flex items-center justify-center text-black/80 mb-1">
         {icon}
       </div>
       <div className="text-xl font-extrabold text-black">{value}</div>
-      <div className="text-[0.65rem] uppercase tracking-wider text-black/40 font-semibold">
+      <div className="text-[0.65rem] uppercase tracking-wider text-black/80 font-semibold">
         {label}
       </div>
     </div>
@@ -660,7 +660,7 @@ function TypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
     TALK: "bg-[#FF005A]/10 text-[#FF005A]",
     PANEL: "bg-[#820A7D]/10 text-[#820A7D]",
-    BREAK: "bg-black/5 text-black/60",
+    BREAK: "bg-black/5 text-black/80",
     NETWORKING: "bg-[#00E6FF]/15 text-[#007E72]",
     FAST_PITCH: "bg-[#FFB300]/15 text-[#8a5a00]",
     WELCOME: "bg-[#FF005A]/10 text-[#FF005A]",
@@ -673,7 +673,7 @@ function TypeBadge({ type }: { type: string }) {
     FAST_PITCH: "Fast pitch",
     WELCOME: "Welcome",
   };
-  const colorClass = colors[type] || "bg-black/5 text-black/60";
+  const colorClass = colors[type] || "bg-black/5 text-black/80";
   const label = labels[type] || type;
   return (
     <span

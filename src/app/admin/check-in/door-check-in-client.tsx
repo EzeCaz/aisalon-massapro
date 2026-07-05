@@ -153,7 +153,7 @@ export function DoorCheckInClient({ adminName }: { adminName: string }) {
 
       {/* Lookup form */}
       <form onSubmit={handleLookup} className="mb-6">
-        <label htmlFor="code" className="block text-xs font-bold uppercase tracking-widest text-black/40 mb-2">
+        <label htmlFor="code" className="block text-xs font-bold uppercase tracking-widest text-black/80 mb-2">
           Attendee entry code
         </label>
         <div className="flex gap-2">
@@ -190,7 +190,7 @@ export function DoorCheckInClient({ adminName }: { adminName: string }) {
             )}
           </button>
         </div>
-        <p className="mt-2 text-xs text-black/40">
+        <p className="mt-2 text-xs text-black/80">
           Codes are 8 characters in Crockford base32 (no I/L/O/U), formatted as XXXX-XXXX.
           The lookup is case-insensitive and accepts the code with or without the dash.
         </p>
@@ -341,7 +341,7 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt={rsvp.name || "attendee"} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-black/40">
+            <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-black/80">
               {(rsvp.name || rsvp.email || "?").charAt(0).toUpperCase()}
             </div>
           )}
@@ -350,7 +350,7 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
         {/* Name + email */}
         <div className="min-w-0 flex-1">
           <div className="text-xl font-bold text-black">{rsvp.name || "(no name)"}</div>
-          <div className="text-sm text-black/60 break-all">{rsvp.email}</div>
+          <div className="text-sm text-black/80 break-all">{rsvp.email}</div>
           {user?.company && (
             <div className="text-xs text-black/50 mt-0.5">{user.company}</div>
           )}
@@ -362,13 +362,13 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
 
       {/* Event details */}
       <div className="rounded-lg bg-white border border-black/10 p-4 space-y-2">
-        <div className="text-xs font-bold uppercase tracking-widest text-black/40 mb-1">
+        <div className="text-xs font-bold uppercase tracking-widest text-black/80 mb-1">
           Registered for
         </div>
         <div className="font-bold text-black text-lg">{event.title}</div>
         <div className="space-y-1.5 text-sm text-black/70">
           <div className="flex items-start gap-2">
-            <Calendar className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+            <Calendar className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
             <span>
               {new Intl.DateTimeFormat("en-US", {
                 timeZone: "Asia/Jerusalem",
@@ -380,7 +380,7 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
             </span>
           </div>
           <div className="flex items-start gap-2">
-            <Clock className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+            <Clock className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
             <span className="font-mono">
               {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(eventStart)}
               {" – "}
@@ -390,7 +390,7 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
           </div>
           {event.venue && (
             <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 mt-0.5 text-black/40 flex-shrink-0" />
+              <MapPin className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
               <span>
                 {event.venue}
                 {event.address && <span className="text-black/50"> · {event.address}</span>}
@@ -401,13 +401,13 @@ function HitPanel({ result, onReset }: { result: LookupResult; onReset: () => vo
       </div>
 
       {/* Meta */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.7rem] text-black/40">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[0.7rem] text-black/80">
         <span>
-          RSVP source: <strong className="text-black/60">{rsvp.source}</strong>
+          RSVP source: <strong className="text-black/80">{rsvp.source}</strong>
         </span>
         <span>
           Registered:{" "}
-          <strong className="text-black/60">
+          <strong className="text-black/80">
             {new Intl.DateTimeFormat("en-GB", {
               timeZone: "Asia/Jerusalem",
               day: "2-digit",
@@ -456,7 +456,7 @@ function MissPanel({ result, onReset }: { result: LookupResult; onReset: () => v
         {result.message || `No attendee found with code "${result.normalized || "?"}".`}
       </p>
       <div className="rounded-lg bg-white border border-black/10 p-4">
-        <div className="text-xs font-bold uppercase tracking-widest text-black/40 mb-2">
+        <div className="text-xs font-bold uppercase tracking-widest text-black/80 mb-2">
           Possible reasons
         </div>
         <ul className="space-y-1 text-sm text-black/70">

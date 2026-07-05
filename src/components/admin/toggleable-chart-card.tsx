@@ -259,7 +259,7 @@ export function ToggleableChartCard({
           style={{ maxHeight: tableMaxHeight }}
         >
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
+            <thead className="bg-black/[0.03] text-black/80 text-[0.65rem] uppercase tracking-wider sticky top-0 z-10">
               <tr>
                 <th className="text-left px-3 py-2 font-bold">Label</th>
                 <th className="text-right px-3 py-2 font-bold w-20">Count</th>
@@ -271,7 +271,7 @@ export function ToggleableChartCard({
                 <tr>
                   <td
                     colSpan={3}
-                    className="px-3 py-6 text-center text-black/40"
+                    className="px-3 py-6 text-center text-black/80"
                   >
                     No data
                   </td>
@@ -312,7 +312,7 @@ export function ToggleableChartCard({
             {data.length > 0 && (
               <tfoot className="sticky bottom-0 bg-black/[0.03] border-t border-black/10">
                 <tr>
-                  <td className="px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-black/60">
+                  <td className="px-3 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-black/80">
                     Total
                   </td>
                   <td className="px-3 py-2 text-right font-bold tabular-nums text-black">

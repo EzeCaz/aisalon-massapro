@@ -580,7 +580,7 @@ export function RegistrantsTabClient({
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <input
             type="text"
             value={search}
@@ -699,7 +699,7 @@ export function RegistrantsTabClient({
       ) : (
         <div className="rounded-md border border-black/10 bg-white overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-black/[0.03] text-black/60 sticky top-0 z-10">
+            <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
               <tr>
                 <th className="text-left px-3 py-3 font-bold w-10">
                   <input
@@ -787,11 +787,11 @@ export function RegistrantsTabClient({
                       </select>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell align-top text-xs">
-                      <span className="rounded-md bg-black/5 px-2 py-0.5 font-mono text-black/60">
+                      <span className="rounded-md bg-black/5 px-2 py-0.5 font-mono text-black/80">
                         {r.source}
                       </span>
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/60">
+                    <td className="px-4 py-3 hidden lg:table-cell align-top text-xs text-black/80">
                       {formatDateTimeTlv(r.createdAt)}
                     </td>
                     {/* Check-in code cell — shows the 8-char code if generated,
@@ -857,7 +857,7 @@ export function RegistrantsTabClient({
                           <span className="text-[0.65rem] text-black/50">
                             by {r.approvedByCoHost.name || r.approvedByCoHost.email}
                           </span>
-                          <span className="text-[0.65rem] text-black/40">
+                          <span className="text-[0.65rem] text-black/80">
                             {new Intl.DateTimeFormat("en-GB", {
                               timeZone: "Asia/Jerusalem",
                               hour: "2-digit",
@@ -901,7 +901,7 @@ export function RegistrantsTabClient({
                           Approve
                         </button>
                       ) : r.checkInCode ? (
-                        <span className="text-[0.65rem] text-black/40 italic">
+                        <span className="text-[0.65rem] text-black/80 italic">
                           Not approved
                         </span>
                       ) : (
@@ -1147,7 +1147,7 @@ function AddRegistrantDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">Event *</span>
+            <span className="block text-xs font-semibold text-black/80 mb-1">Event *</span>
             <select
               value={eventId}
               onChange={(e) => setEventId(e.target.value)}
@@ -1162,7 +1162,7 @@ function AddRegistrantDialog({
             </select>
           </label>
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">Email *</span>
+            <span className="block text-xs font-semibold text-black/80 mb-1">Email *</span>
             <input
               type="email"
               value={email}
@@ -1173,7 +1173,7 @@ function AddRegistrantDialog({
             />
           </label>
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">Name (optional)</span>
+            <span className="block text-xs font-semibold text-black/80 mb-1">Name (optional)</span>
             <input
               type="text"
               value={name}
@@ -1182,7 +1182,7 @@ function AddRegistrantDialog({
             />
           </label>
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">Status</span>
+            <span className="block text-xs font-semibold text-black/80 mb-1">Status</span>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
@@ -1360,7 +1360,7 @@ function EditRegistrantDialog({
             </div>
           )}
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">
+            <span className="block text-xs font-semibold text-black/80 mb-1">
               Name (optional)
             </span>
             <input
@@ -1372,7 +1372,7 @@ function EditRegistrantDialog({
             />
           </label>
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">
+            <span className="block text-xs font-semibold text-black/80 mb-1">
               Email *
             </span>
             <input
@@ -1384,7 +1384,7 @@ function EditRegistrantDialog({
             />
           </label>
           <label className="block">
-            <span className="block text-xs font-semibold text-black/60 mb-1">
+            <span className="block text-xs font-semibold text-black/80 mb-1">
               Status
             </span>
             <select
@@ -1571,7 +1571,7 @@ function ImportRegistrantsDialog({
             </div>
 
             {file && (
-              <div className="text-xs text-black/60">
+              <div className="text-xs text-black/80">
                 Selected: <strong>{file.name}</strong> ({(file.size / 1024).toFixed(1)} KB)
               </div>
             )}
@@ -1581,7 +1581,7 @@ function ImportRegistrantsDialog({
                 type="button"
                 onClick={() => handleClose(false)}
                 disabled={uploading}
-                className="rounded-md px-3 py-2 text-sm font-semibold text-black/60 hover:bg-black/5"
+                className="rounded-md px-3 py-2 text-sm font-semibold text-black/80 hover:bg-black/5"
               >
                 Cancel
               </button>
@@ -1634,7 +1634,7 @@ function ImportRegistrantsDialog({
               </div>
             </div>
 
-            <div className="text-xs text-black/60">
+            <div className="text-xs text-black/80">
               File: <strong>{result.filename}</strong> · Event:{" "}
               <strong>{result.eventTitle}</strong> · {result.totalRows} rows
               processed
@@ -1811,11 +1811,11 @@ function LinkToMemberDialog({
 
         {rsvp && (
           <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 text-sm">
-            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 mb-1">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
               Registrant
             </div>
             <div className="font-semibold text-black">{rsvp.name || rsvp.email}</div>
-            <div className="text-xs text-black/60">{rsvp.email}</div>
+            <div className="text-xs text-black/80">{rsvp.email}</div>
             <div className="text-xs text-black/50 mt-0.5">
               RSVP for <strong>{rsvp.event.title}</strong>
             </div>
@@ -1823,7 +1823,7 @@ function LinkToMemberDialog({
         )}
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
           <input
             type="text"
             value={query}
@@ -1860,7 +1860,7 @@ function LinkToMemberDialog({
                 />
               ))}
               {otherMembers.length > 0 && (
-                <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 pt-3 pb-1 px-1">
+                <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 pt-3 pb-1 px-1">
                   All members ({otherMembers.length})
                 </div>
               )}
@@ -1875,7 +1875,7 @@ function LinkToMemberDialog({
                 />
               ))}
               {otherMembers.length > 200 && (
-                <div className="text-center py-3 text-xs text-black/40">
+                <div className="text-center py-3 text-xs text-black/80">
                   Showing first 200 — refine your search to see more.
                 </div>
               )}
@@ -1916,7 +1916,7 @@ function MemberPickerRow({
           <div className="font-semibold text-black text-sm truncate">
             {member.name || member.email}
           </div>
-          <div className="text-xs text-black/60 truncate">{member.email}</div>
+          <div className="text-xs text-black/80 truncate">{member.email}</div>
           {member.company && (
             <div className="text-[0.65rem] text-black/50 truncate mt-0.5">{member.company}</div>
           )}
@@ -1942,7 +1942,7 @@ function MemberPickerRow({
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin text-[#820A7D]" />
           ) : (
-            <Link2 className="h-4 w-4 text-black/40" />
+            <Link2 className="h-4 w-4 text-black/80" />
           )}
         </div>
       </div>
@@ -2027,7 +2027,7 @@ function FindMembersDialog({
                       <div className="font-semibold text-black text-sm">
                         {r.rsvpName || r.rsvpEmail}
                       </div>
-                      <div className="text-xs text-black/60 truncate">{r.rsvpEmail}</div>
+                      <div className="text-xs text-black/80 truncate">{r.rsvpEmail}</div>
                       <div className="text-[0.65rem] text-black/50 mt-0.5">
                         RSVP for <strong>{r.rsvpEventTitle}</strong>
                       </div>
@@ -2061,7 +2061,7 @@ function FindMembersDialog({
                                 {s.score}% match
                               </span>
                             </div>
-                            <div className="text-xs text-black/60 truncate">{s.email}</div>
+                            <div className="text-xs text-black/80 truncate">{s.email}</div>
                             {s.company && (
                               <div className="text-[0.65rem] text-black/50 truncate">
                                 {s.company}
@@ -2097,10 +2097,10 @@ function FindMembersDialog({
 
               {noSuggestions.length > 0 && (
                 <>
-                  <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/40 pt-3 px-1">
+                  <div className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80 pt-3 px-1">
                     No likely matches found ({noSuggestions.length})
                   </div>
-                  <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 text-xs text-black/60">
+                  <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 text-xs text-black/80">
                     {noSuggestions.length} registrant
                     {noSuggestions.length === 1 ? "" : "s"} had no member
                     matches above the similarity threshold. You can still
@@ -2114,7 +2114,7 @@ function FindMembersDialog({
                         {noSuggestions.map((r) => (
                           <li key={r.rsvpId}>
                             {r.rsvpName || r.rsvpEmail}{" "}
-                            <span className="text-black/40">({r.rsvpEmail})</span>
+                            <span className="text-black/80">({r.rsvpEmail})</span>
                           </li>
                         ))}
                       </ul>
@@ -2125,7 +2125,7 @@ function FindMembersDialog({
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-3 border-t border-black/10">
-              <div className="text-xs text-black/60">
+              <div className="text-xs text-black/80">
                 <strong className="text-[#820A7D]">{pickedCount}</strong> of{" "}
                 {withSuggestions.length} registrant
                 {withSuggestions.length === 1 ? "" : "s"} selected for linking

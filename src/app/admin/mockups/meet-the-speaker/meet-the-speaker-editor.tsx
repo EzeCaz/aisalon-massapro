@@ -650,7 +650,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
               Auto-filled from &ldquo;{data.event.name.slice(0, 40)}{data.event.name.length > 40 ? "…" : ""}&rdquo;
             </span>
           )}
-          <span className="text-xs text-black/40">
+          <span className="text-xs text-black/80">
             (you can still edit any field in the JSON below)
           </span>
         </div>
@@ -735,7 +735,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           title={`${data.speaker.fullName} — ${data.speaker.topic}`}
           filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
-        <span className="ml-auto text-xs text-black/40">
+        <span className="ml-auto text-xs text-black/80">
           Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
         </span>
       </div>
@@ -790,7 +790,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
             <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
               <div className="flex items-center gap-2">
                 <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/60">
+                <span className="text-[0.7rem] font-mono text-black/80">
                   meet-the-speaker.form
                 </span>
               </div>
@@ -882,7 +882,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
             {sectionsEditMode ? "Editing sections" : "Edit sections"}
           </button>
         </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/40 mb-3">
+          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
             Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
           </div>
           <div
