@@ -1,44 +1,58 @@
 /**
- * Idempotent seed for the email orchestrator.
+ * Seed for the email orchestrator.
  *
- * Creates (if missing):
+ * Creates (idempotently):
  *   - 5 EmailStageTemplate rows (one per stage) with default subjects + HTML
- *   - 6 mock Users (3 active RSVPs + 3 already-checked-in for stop-awareness demo)
- *   - 1 Event (in the near future so stage 1 fires immediately)
- *   - 6 EventRsvp rows (3 GOING + 3 GOING with doorCheckedAt set)
+ *   - 1 built-in "Test" EmailAudience with the admin test emails
+ *
+ * The old demo seed (6 mock users + 1 demo event + 6 RSVPs) has been
+ * REMOVED. The orchestrator now shows only real data + test data.
  *
  * Run via `POST /api/email-orchestrator/seed`. Safe to call multiple times —
  * existing rows are reused, not duplicated.
+ *
+ * clearSeed() deletes ALL orchestrator demo/test artifacts: EmailQueue rows
+ * tied to flow steps, TrackingLog rows, EmailFlowStep, EmailFlow, and
+ * EmailStageTemplate rows. It preserves real users, events, and RSVPs.
  */
 
 import { db } from "@/lib/db";
 import { DEFAULT_TEMPLATES } from "./templates";
 import { STAGES } from "./stages";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Built-in Test audience
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The admin's test emails — used by the built-in "Test" audience. */
+export const TEST_AUDIENCE_EMAILS = [
+  "eze@massapro.com",
+  "ezeszna@gmail.com",
+  "eze@hi4.ai",
+] as const;
+
+/** The slug of the built-in test audience (stable for lookups). */
+export const TEST_AUDIENCE_SLUG = "test";
+
+/** The stable ID of the built-in test audience (for foreign-key seeding). */
+export const TEST_AUDIENCE_ID = "test-audience-built-in";
+
 export type SeedResult = {
   templates: { created: number; existing: number };
-  users: { created: number; existing: number };
-  event: { id: string; title: string; slug: string };
-  rsvps: { created: number; existing: number; checkedIn: number; active: number };
+  audience: { created: boolean; id: string; emailCount: number };
 };
 
-const SEED_EVENT_SLUG = "email-orchestrator-demo";
-
-const SEED_USERS = [
-  { email: "rachel.demo+active@aisalon.test", name: "Rachel Cohen" },
-  { email: "daniel.demo+active@aisalon.test", name: "Daniel Levy" },
-  { email: "maya.demo+active@aisalon.test", name: "Maya Shapiro" },
-  { email: "yossi.demo+checked@aisalon.test", name: "Yossi Friedman" },
-  { email: "noa.demo+checked@aisalon.test", name: "Noa Mizrahi" },
-  { email: "avi.demo+checked@aisalon.test", name: "Avi Goldberg" },
-];
-
+/**
+ * Idempotent seed.
+ *
+ * Creates the 5 stage templates (if missing) and the built-in Test audience
+ * (if missing). Does NOT create demo users, events, or RSVPs anymore — the
+ * orchestrator shows only real data + the test audience.
+ */
 export async function runSeed(): Promise<SeedResult> {
   const result: SeedResult = {
     templates: { created: 0, existing: 0 },
-    users: { created: 0, existing: 0 },
-    event: { id: "", title: "", slug: SEED_EVENT_SLUG },
-    rsvps: { created: 0, existing: 0, checkedIn: 0, active: 0 },
+    audience: { created: false, id: TEST_AUDIENCE_ID, emailCount: TEST_AUDIENCE_EMAILS.length },
   };
 
   // ── Templates ──────────────────────────────────────────────────────────
@@ -64,171 +78,95 @@ export async function runSeed(): Promise<SeedResult> {
     result.templates.created++;
   }
 
-  // ── Users ──────────────────────────────────────────────────────────────
-  const userIds: { id: string; email: string; name: string | null }[] = [];
-  for (const u of SEED_USERS) {
-    let row = await db.user.findUnique({ where: { email: u.email } });
-    if (row) {
-      result.users.existing++;
-    } else {
-      row = await db.user.create({
-        data: {
-          email: u.email,
-          name: u.name,
-          role: "MEMBER",
-          onboardedAt: new Date(),
-        },
-      });
-      result.users.created++;
-    }
-    userIds.push({ id: row.id, email: row.email, name: row.name });
-  }
-
-  // ── Event ──────────────────────────────────────────────────────────────
-  // Schedule the event 9 days from now → stage 1 (offset -240h = -10d) is
-  // already in the past → worker will fire stage 1 immediately on the
-  // first run after seed.
-  const startsAt = new Date(Date.now() + 9 * 24 * 60 * 60 * 1000);
-  const endsAt = new Date(startsAt.getTime() + 3 * 60 * 60 * 1000);
-
-  let event = await db.event.findUnique({
-    where: { slug: SEED_EVENT_SLUG },
+  // ── Built-in Test audience ──────────────────────────────────────────────
+  const existingAudience = await db.emailAudience.findUnique({
+    where: { id: TEST_AUDIENCE_ID },
   });
-  if (!event) {
-    event = await db.event.create({
+  if (!existingAudience) {
+    await db.emailAudience.create({
       data: {
-        slug: SEED_EVENT_SLUG,
-        title: "AI Salon Tel Aviv — Email Orchestrator Demo",
-        subtitle: "A live preview of the 5-stage email sequence",
-        chapter: "Tel Aviv",
-        venue: "MassaPro Studio",
-        address: "Rothschild Blvd 1, Tel Aviv",
-        city: "Tel Aviv",
-        country: "ISR",
-        mapUrl: "https://maps.google.com/?q=Rothschild+Tel+Aviv",
-        startsAt,
-        endsAt,
+        id: TEST_AUDIENCE_ID,
+        name: "Test",
+        slug: TEST_AUDIENCE_SLUG,
         description:
-          "This is a mock event used to demonstrate the email orchestrator. It will trigger the 5-stage sequence: awareness → reminder → final-prep → day-of → recap.",
-        takeaways:
-          "See how the orchestrator schedules, sends, and tracks emails at each stage.",
-        intendedFor: "Admins previewing the email system.",
+          "Built-in test audience for flow preview. Sending is paused by default — no real email goes out until you resume.",
+        emailsJson: JSON.stringify([...TEST_AUDIENCE_EMAILS]),
+        isTest: true,
       },
     });
+    result.audience.created = true;
   } else {
-    // Refresh dates so the demo is always live.
-    event = await db.event.update({
-      where: { id: event.id },
-      data: { startsAt, endsAt },
+    // Keep the email list in sync with the code in case it changed.
+    await db.emailAudience.update({
+      where: { id: TEST_AUDIENCE_ID },
+      data: { emailsJson: JSON.stringify([...TEST_AUDIENCE_EMAILS]) },
     });
-  }
-  result.event.id = event.id;
-  result.event.title = event.title;
-
-  // ── RSVPs ──────────────────────────────────────────────────────────────
-  // First 3 users = active (no check-in). Last 3 = already checked in
-  // (stop-awareness demo — worker should skip their stages).
-  const checkInCodeChars = "ABCDEFGHJKMNPQRSTVWXYZ23456789";
-  for (let i = 0; i < userIds.length; i++) {
-    const u = userIds[i];
-    const isCheckedIn = i >= 3;
-    const email = `${u.email}`; // RSVP email may differ from user email;
-    // for the demo we use the same.
-
-    const existing = await db.eventRsvp.findUnique({
-      where: { eventId_email: { eventId: event.id, email: u.email } },
-    });
-    if (existing) {
-      result.rsvps.existing++;
-      if (existing.doorCheckedAt) result.rsvps.checkedIn++;
-      else result.rsvps.active++;
-      continue;
-    }
-
-    const checkInCode = isCheckedIn
-      ? Array.from({ length: 8 })
-          .map(() => checkInCodeChars[Math.floor(Math.random() * checkInCodeChars.length)])
-          .join("")
-          .replace(/^(.{4})(.{4})$/, "$1-$2")
-      : null;
-
-    await db.eventRsvp.create({
-      data: {
-        eventId: event.id,
-        userId: u.id,
-        email: u.email,
-        name: u.name || undefined,
-        status: "GOING",
-        source: "IMPORT",
-        checkInCode,
-        checkedInAt: isCheckedIn ? new Date() : null,
-        doorCheckedAt: isCheckedIn ? new Date() : null,
-        doorCheckedBy: isCheckedIn ? "seed" : null,
-      },
-    });
-    result.rsvps.created++;
-    if (isCheckedIn) result.rsvps.checkedIn++;
-    else result.rsvps.active++;
   }
 
   return result;
 }
 
 /**
- * Tear down the seed (for development reset). Deletes EmailQueue,
- * TrackingLog, RSVPs, Event, Users, and Templates created by runSeed.
- * Identifies seed rows by email/slug patterns.
+ * Tear down ALL orchestrator demo/test data.
+ *
+ * Deletes (in dependency order):
+ *   - TrackingLog rows tied to flow queue items
+ *   - EmailQueue rows tied to flow steps
+ *   - EmailFlowStep rows
+ *   - EmailFlow rows
+ *   - EmailStageTemplate rows
+ *
+ * PRESERVES:
+ *   - Real Users, Events, EventRsvp rows
+ *   - EmailCampaign + EmailRecipient + EmailEvent (campaign system)
+ *   - The built-in Test EmailAudience (so you can re-seed + test immediately)
+ *
+ * Identifies flow-related rows by flowStepId IS NOT NULL (EmailQueue) or by
+ * being in the EmailFlow / EmailFlowStep / EmailStageTemplate tables.
  */
 export async function clearSeed(): Promise<{
-  deleted: { queue: number; logs: number; rsvps: number; event: number; users: number; templates: number };
+  deleted: {
+    queue: number;
+    logs: number;
+    flowSteps: number;
+    flows: number;
+    templates: number;
+  };
 }> {
   // Delete in dependency order (children first).
-  const seedUsers = await db.user.findMany({
-    where: { email: { contains: "@aisalon.test" } },
+
+  // 1. TrackingLog rows whose queue item is a flow queue item.
+  const flowQueueIds = await db.emailQueue.findMany({
+    where: { flowStepId: { not: null } },
     select: { id: true },
   });
-  const userIds = seedUsers.map((u) => u.id);
-  const event = await db.event.findUnique({
-    where: { slug: SEED_EVENT_SLUG },
-    select: { id: true },
-  });
+  const flowQueueIdList = flowQueueIds.map((q) => q.id);
 
-  let queue = 0,
-    logs = 0,
-    rsvps = 0,
-    events = 0,
-    users = 0,
-    templates = 0;
-
-  if (event) {
-    const eventRsvps = await db.eventRsvp.findMany({
-      where: { eventId: event.id },
-      select: { id: true },
-    });
-    const rsvpIds = eventRsvps.map((r) => r.id);
-    if (rsvpIds.length) {
-      queue = await db.emailQueue.deleteMany({
-        where: { rsvpId: { in: rsvpIds } },
-      }).then((r) => r.count);
-      logs = await db.trackingLog.deleteMany({
-        where: { queue: { rsvpId: { in: rsvpIds } } },
-      }).then((r) => r.count);
-      rsvps = await db.eventRsvp.deleteMany({
-        where: { id: { in: rsvpIds } },
-      }).then((r) => r.count);
-    }
-    events = await db.event.deleteMany({
-      where: { id: event.id },
-    }).then((r) => r.count);
+  let logs = 0;
+  let queue = 0;
+  if (flowQueueIdList.length) {
+    logs = await db.trackingLog
+      .deleteMany({ where: { queueId: { in: flowQueueIdList } } })
+      .then((r) => r.count);
+    queue = await db.emailQueue
+      .deleteMany({ where: { id: { in: flowQueueIdList } } })
+      .then((r) => r.count);
   }
 
-  if (userIds.length) {
-    users = await db.user.deleteMany({
-      where: { id: { in: userIds } },
-    }).then((r) => r.count);
-  }
+  // 2. EmailFlowStep (children of EmailFlow — cascade deletes them, but be explicit).
+  const flowSteps = await db.emailFlowStep
+    .deleteMany({})
+    .then((r) => r.count);
 
-  templates = await db.emailStageTemplate.deleteMany({}).then((r) => r.count);
+  // 3. EmailFlow
+  const flows = await db.emailFlow.deleteMany({}).then((r) => r.count);
 
-  return { deleted: { queue, logs, rsvps, event: events, users, templates } };
+  // 4. EmailStageTemplate (the 5 stage templates — re-seed to restore).
+  const templates = await db.emailStageTemplate
+    .deleteMany({})
+    .then((r) => r.count);
+
+  return {
+    deleted: { queue, logs, flowSteps, flows, templates },
+  };
 }

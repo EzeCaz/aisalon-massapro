@@ -443,8 +443,9 @@ export function EmailTabClient({
             <div>
               <h2 className="text-lg font-bold text-neutral-900">Email Flow Builder</h2>
               <p className="text-sm text-neutral-500">
-                Build automated email sequences with conditional branches (if opened → halt, if not opened → step 2),
-                audience filters (company, role, interestedIn, etc.), and 5-email max per flow.
+                Build automated email sequences: pick an audience, a trigger, and an email template
+                with A/B subject testing. Up to 8 independent steps per flow. Includes a per-step
+                report broken down by template + subject variant.
               </p>
             </div>
             <a

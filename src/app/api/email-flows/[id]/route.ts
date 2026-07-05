@@ -1,7 +1,9 @@
 /**
- * GET    /api/email-flows/[id] — get one flow (with steps + recent runs).
+ * GET    /api/email-flows/[id] — get one flow (with steps + recent queue items).
  * PATCH  /api/email-flows/[id] — update flow fields + replace all steps.
  * DELETE /api/email-flows/[id] — archive (soft delete) the flow.
+ *
+ * Auth: CRON_SECRET bearer OR admin session.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -36,15 +38,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const flow = await db.emailFlow.findUnique({
     where: { id },
     include: {
-      steps: { orderBy: { position: "asc" } },
-      triggerEvent: { select: { id: true, title: true, slug: true } },
-      runs: {
-        orderBy: { createdAt: "desc" },
-        take: 20,
+      steps: {
+        orderBy: { position: "asc" },
         include: {
-          rsvp: { select: { id: true, email: true, name: true } },
+          audience: { select: { id: true, name: true, isTest: true } },
+          template: { select: { id: true, name: true, subject: true, stage: true } },
         },
       },
+      // Recent queue items for this flow's steps (for the report + history).
+      // We can't directly query by flowId on EmailQueue, so we load queue
+      // items whose flowStepId is in this flow's steps. Done client-side via
+      // the dedicated /api/email-flows/[id]/report endpoint.
     },
   });
   if (!flow) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -60,18 +64,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   let body: {
     name?: string;
     description?: string;
-    triggerKind?: string;
-    triggerEventId?: string | null;
     status?: string;
-    branchEvaluationDelayHours?: number;
     steps?: Array<{
       position: number;
+      audienceId?: string | null;
+      triggerKind?: string | null;
+      triggerEventId?: string | null;
       templateId?: string | null;
-      subjectOverride?: string | null;
+      subjectVariantA?: string | null;
+      subjectVariantB?: string | null;
       delayValue?: number;
       delayUnit?: string;
-      branchRulesJson?: string | null;
-      filterJson?: string | null;
     }>;
   };
   try {
@@ -84,13 +87,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
   if (body.description !== undefined) updateData.description = body.description;
-  if (body.triggerKind !== undefined) updateData.triggerKind = body.triggerKind;
-  if (body.triggerEventId !== undefined) updateData.triggerEventId = body.triggerEventId || null;
   if (body.status !== undefined) updateData.status = body.status;
-  if (body.branchEvaluationDelayHours !== undefined) updateData.branchEvaluationDelayHours = body.branchEvaluationDelayHours;
+
+  // Cap steps at 8.
+  const steps = body.steps !== undefined ? body.steps.slice(0, 8) : undefined;
 
   // Replace steps if provided (transactional delete + recreate).
-  if (body.steps !== undefined) {
+  if (steps !== undefined) {
     await db.$transaction([
       db.emailFlowStep.deleteMany({ where: { flowId: id } }),
       db.emailFlow.update({
@@ -98,14 +101,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data: {
           ...updateData,
           steps: {
-            create: body.steps.map((s) => ({
+            create: steps.map((s) => ({
               position: s.position,
+              audienceId: s.audienceId || null,
+              triggerKind: s.triggerKind || null,
+              triggerEventId: s.triggerEventId || null,
               templateId: s.templateId || null,
-              subjectOverride: s.subjectOverride || null,
+              subjectVariantA: s.subjectVariantA || null,
+              subjectVariantB: s.subjectVariantB || null,
               delayValue: s.delayValue ?? 0,
-              delayUnit: s.delayUnit ?? "HOURS",
-              branchRulesJson: s.branchRulesJson || null,
-              filterJson: s.filterJson || null,
+              delayUnit: s.delayUnit ?? "MINUTES",
             })),
           },
         },
@@ -117,7 +122,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const updated = await db.emailFlow.findUnique({
     where: { id },
-    include: { steps: { orderBy: { position: "asc" } } },
+    include: {
+      steps: {
+        orderBy: { position: "asc" },
+        include: {
+          audience: { select: { id: true, name: true, isTest: true } },
+          template: { select: { id: true, name: true, subject: true, stage: true } },
+        },
+      },
+    },
   });
   return NextResponse.json({ ok: true, flow: updated });
 }
@@ -127,8 +140,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  // Soft-delete: set status=ARCHIVED. Don't actually delete — runs may
-  // still be in flight and we want to keep the audit trail.
+  // Soft-delete: set status=ARCHIVED. Don't actually delete — queue items
+  // may still exist and we want to keep the audit trail.
   await db.emailFlow.update({
     where: { id },
     data: { status: "ARCHIVED" },

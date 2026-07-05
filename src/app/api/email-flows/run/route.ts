@@ -4,6 +4,8 @@
  * Auth: CRON_SECRET bearer OR admin session.
  *
  * Response: { ok: true, result: WorkerResult }
+ *
+ * GET — health check + flow queue summary.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -42,16 +44,17 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, result });
 }
 
-/** GET — health check + last run summary. */
+/** GET — health check + flow queue summary (replaces old EmailFlowRun stats). */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const isCron = bearerToken && CRON_SECRET && bearerToken === CRON_SECRET;
 
-  // Count runs by status.
-  const stats = await db.emailFlowRun.groupBy({
+  // Count flow queue items by status (replaces the old EmailFlowRun groupBy).
+  const stats = await db.emailQueue.groupBy({
     by: ["status"],
     _count: true,
+    where: { flowStepId: { not: null } },
   });
   const statsMap: Record<string, number> = {};
   for (const s of stats) statsMap[s.status] = s._count;
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     auth: isCron ? "cron" : "anonymous",
-    runStats: statsMap,
+    queueStats: statsMap,
     totalFlows: await db.emailFlow.count(),
     activeFlows: await db.emailFlow.count({ where: { status: "ACTIVE" } }),
   });

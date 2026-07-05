@@ -56,6 +56,9 @@ type QueueItem = {
   clickedAt: string | null;
   subject: string | null;
   htmlBody: string | null;
+  subjectVariant: string | null;
+  audienceId: string | null;
+  flowStepId: string | null;
   errorMessage: string | null;
   attemptCount: number;
   createdAt: string;
@@ -193,9 +196,12 @@ export function OrchestratorPanel() {
         return;
       }
       const data = await res.json();
-      const r = data.result;
+      const legacy = data.result;
+      const flow = data.flowResult;
+      const totalSent = (legacy?.sent ?? 0) + (flow?.sent ?? 0);
+      const totalFailed = (legacy?.failed ?? 0) + (flow?.failed ?? 0);
       toast.success(
-        `Worker: ${r.sent} sent · ${r.skipped} skipped · ${r.failed} failed · ${r.created} new`,
+        `Worker: ${totalSent} sent · ${totalFailed} failed · ${flow?.processed ?? 0} flow rows processed`,
       );
       await refresh();
     } catch (e) {
@@ -206,11 +212,11 @@ export function OrchestratorPanel() {
     }
   };
 
-  // ── Seed ──
+  // ── Seed (now only seeds templates + the built-in Test audience) ──
   const handleSeed = async () => {
     if (
       !confirm(
-        "This will create 6 demo users + 1 demo event + 6 RSVPs + 5 templates. Continue?",
+        "This will ensure the 5 stage templates + the built-in Test audience exist. No demo users or events are created. Continue?",
       )
     )
       return;
@@ -227,7 +233,7 @@ export function OrchestratorPanel() {
       }
       const data = await res.json();
       toast.success(
-        `Seeded: ${data.result.templates.created} templates, ${data.result.users.created} users, ${data.result.rsvps.created} RSVPs`,
+        `Seeded: ${data.result.templates.created} templates created (${data.result.templates.existing} existing) · Test audience ${data.result.audience.created ? "created" : "exists"} (${data.result.audience.emailCount} emails)`,
       );
       await refresh();
     } catch (e) {
@@ -238,11 +244,11 @@ export function OrchestratorPanel() {
     }
   };
 
-  // ── Clear ──
+  // ── Clear demo/test data ──
   const handleClear = async () => {
     if (
       !confirm(
-        "This will DELETE all demo data (templates, users, RSVPs, events, queue, logs). Continue?",
+        "This will DELETE all flow queue items, flow steps, flows, and stage templates. Real users, events, and RSVPs are preserved. The built-in Test audience is preserved. Continue?",
       )
     )
       return;
@@ -411,7 +417,7 @@ export function OrchestratorPanel() {
           ) : (
             <FlaskConical className="h-4 w-4 mr-1.5" />
           )}
-          Seed demo data
+          Seed templates + Test audience
         </Button>
         <Button
           onClick={handleClear}
@@ -425,7 +431,7 @@ export function OrchestratorPanel() {
           ) : (
             <Trash2 className="h-4 w-4 mr-1.5" />
           )}
-          Clear demo data
+          Clear flow data
         </Button>
       </div>
 
@@ -509,9 +515,10 @@ export function OrchestratorPanel() {
           <table className="w-full text-sm">
             <thead className="bg-black/[0.03] text-black/80 text-xs uppercase tracking-wider">
               <tr>
-                <th className="text-left font-semibold px-3 py-2">Stage</th>
+                <th className="text-left font-semibold px-3 py-2">Stage/Step</th>
                 <th className="text-left font-semibold px-3 py-2">Recipient</th>
                 <th className="text-left font-semibold px-3 py-2">Event</th>
+                <th className="text-left font-semibold px-3 py-2">Var</th>
                 <th className="text-left font-semibold px-3 py-2">Status</th>
                 <th className="text-left font-semibold px-3 py-2">Scheduled</th>
                 <th className="text-left font-semibold px-3 py-2">Sent</th>
@@ -523,11 +530,11 @@ export function OrchestratorPanel() {
               {items.length === 0 && !loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-black/80 text-sm"
                   >
-                    No queue items. Click <strong>Seed demo data</strong> to
-                    populate, then <strong>Run worker</strong> to send.
+                    No queue items. Create a flow in the <a href="/admin/email/flows" className="text-[#FF005A] underline">Flow Builder</a>,
+                    trigger it (e.g. RSVP to an event), then <strong>Run worker</strong> to send.
                   </td>
                 </tr>
               ) : (
@@ -555,6 +562,22 @@ export function OrchestratorPanel() {
                     </td>
                     <td className="px-3 py-2 text-xs text-black/70">
                       {item.event.title}
+                    </td>
+                    <td className="px-3 py-2">
+                      {item.subjectVariant ? (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[0.6rem] font-bold ${
+                            item.subjectVariant === "B"
+                              ? "bg-[#FF005A]/10 text-[#FF005A]"
+                              : "bg-[#00E6FF]/10 text-black"
+                          }`}
+                          title={`Subject variant ${item.subjectVariant}`}
+                        >
+                          {item.subjectVariant}
+                        </span>
+                      ) : (
+                        <span className="text-[0.65rem] text-black/30">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <StatusBadge status={item.status} />
@@ -678,6 +701,28 @@ export function OrchestratorPanel() {
                     {selected.subject}
                   </DetailRow>
                 )}
+                <DetailRow label="Subject variant">
+                  {selected.subjectVariant ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[0.65rem] font-bold ${
+                        selected.subjectVariant === "B"
+                          ? "bg-[#FF005A]/10 text-[#FF005A]"
+                          : "bg-[#00E6FF]/10 text-black"
+                      }`}
+                    >
+                      {selected.subjectVariant}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </DetailRow>
+                <DetailRow label="Audience">
+                  {selected.audienceId ? (
+                    <span className="font-mono text-[0.65rem]">{selected.audienceId}</span>
+                  ) : (
+                    "—"
+                  )}
+                </DetailRow>
               </div>
 
               {selected.htmlBody ? (

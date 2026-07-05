@@ -1,12 +1,17 @@
 /**
  * POST /api/email-orchestrator/run
  *
- * Triggers the email orchestrator worker. Auth:
+ * Triggers the email orchestrator workers. Auth:
  *   - Bearer CRON_SECRET (for Vercel Cron)
  *   - OR an authenticated admin session (for manual triggers from the UI)
  *
+ * Runs BOTH workers:
+ *   - Legacy stage-based orchestrator (5 hardcoded stages — only fires on
+ *     real RSVPs without any flow queue rows)
+ *   - New flow worker (per-step triggered sends)
+ *
  * Response:
- *   { result: { created, sent, skipped, failed, processed, errors[] } }
+ *   { result: LegacyResult, flowResult: FlowWorkerResult }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -47,16 +52,22 @@ export async function POST(req: NextRequest) {
   try {
     // Run BOTH workers in parallel:
     //   - Legacy stage-based orchestrator (5 hardcoded stages)
-    //   - New rule-based flow worker
+    //   - New flow worker (per-step triggered sends)
     const [legacyResult, flowResult] = await Promise.all([
       runWorker().catch((err) => ({
         error: err instanceof Error ? err.message : String(err),
-        created: 0, sent: 0, skipped: 0, failed: 0, processed: 0, errors: [String(err)],
+        created: 0,
+        sent: 0,
+        skipped: 0,
+        failed: 0,
+        processed: 0,
+        errors: [String(err)],
       })),
       runFlowWorker().catch((err) => ({
-        error: err instanceof Error ? err.message : String(err),
-        sent: 0, branchEvaluated: 0, halted: 0, completed: 0, errors: 1, processed: 0,
-        errorDetails: [{ runId: "", error: String(err) }],
+        sent: 0,
+        failed: 0,
+        processed: 0,
+        errorDetails: [{ queueId: "", error: String(err) }],
       })),
     ]);
     return NextResponse.json({ result: legacyResult, flowResult });

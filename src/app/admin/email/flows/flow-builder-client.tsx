@@ -6,30 +6,30 @@
  * Layout:
  *   - Left sidebar (280px): list of flows, "New flow" button.
  *   - Right: FlowBuilderCanvas for the selected flow.
+ *   - "Report" button opens the per-flow report dialog.
  *
  * Loads flows via /api/email-flows, saves via PATCH /api/email-flows/[id].
+ * Loads audiences via /api/email-audiences.
  */
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Loader2, Workflow, AlertCircle, Copy } from "lucide-react";
-import { FlowBuilderCanvas, type FlowData, type FlowTemplate } from "@/components/ais/flow-builder/flow-builder-canvas";
+import { Plus, Loader2, Workflow, AlertCircle, Copy, BarChart3 } from "lucide-react";
+import {
+  FlowBuilderCanvas,
+  type FlowData,
+  type FlowTemplate,
+  type FlowAudience,
+  type FlowStep,
+} from "@/components/ais/flow-builder/flow-builder-canvas";
+import { FlowReportDialog } from "./flow-report-dialog";
 
 type FlowListItem = {
   id: string;
   name: string;
   status: string;
-  triggerKind: string;
-  triggerEvent?: { title: string } | null;
+  steps?: Array<{ id: string; position: number; triggerKind: string | null }>;
   runStats?: Record<string, number>;
-  _count?: { runs: number; steps: number };
-};
-
-const TRIGGER_LABELS: Record<string, string> = {
-  RSVP_GOING: "RSVP registered",
-  DOOR_CHECKED_IN: "Door checked-in",
-  MARKED_ATTENDED: "Marked attended",
-  MARKED_NO_SHOW: "Marked no-show",
-  MANUAL: "Manual",
+  _count?: { steps: number };
 };
 
 const STATUSES = [
@@ -42,17 +42,21 @@ const STATUSES = [
 export function FlowBuilderClient({
   templates,
   events,
+  initialAudiences,
 }: {
   templates: FlowTemplate[];
   events: { id: string; title: string; slug: string; startsAt: string }[];
+  initialAudiences: FlowAudience[];
 }) {
   const [flows, setFlows] = useState<FlowListItem[]>([]);
+  const [audiences, setAudiences] = useState<FlowAudience[]>(initialAudiences);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingFlow, setLoadingFlow] = useState(false);
   const [saving, setSaving] = useState(false);
   const [flow, setFlow] = useState<FlowData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reportFlowId, setReportFlowId] = useState<string | null>(null);
 
   // Load flow list.
   const loadFlows = useCallback(async () => {
@@ -71,6 +75,19 @@ export function FlowBuilderClient({
       setLoadingList(false);
     }
   }, [selectedId]);
+
+  // Refresh audiences (after creating/editing audiences elsewhere).
+  const refreshAudiences = useCallback(async () => {
+    try {
+      const r = await fetch("/api/email-audiences");
+      if (r.ok) {
+        const data = await r.json();
+        setAudiences(data.audiences || []);
+      }
+    } catch (e) {
+      console.error("Failed to load audiences", e);
+    }
+  }, []);
 
   useEffect(() => {
     loadFlows();
@@ -91,19 +108,18 @@ export function FlowBuilderClient({
             id: data.flow.id,
             name: data.flow.name,
             description: data.flow.description,
-            triggerKind: data.flow.triggerKind,
-            triggerEventId: data.flow.triggerEventId,
             status: data.flow.status,
-            branchEvaluationDelayHours: data.flow.branchEvaluationDelayHours,
             steps: (data.flow.steps || []).map((s: Record<string, unknown>) => ({
               id: s.id as string,
               position: s.position as number,
-              templateId: s.templateId as string | null,
-              subjectOverride: s.subjectOverride as string | null,
-              delayValue: s.delayValue as number,
-              delayUnit: s.delayUnit as "MINUTES" | "HOURS" | "DAYS",
-              branchRulesJson: s.branchRulesJson as string | null,
-              filterJson: s.filterJson as string | null,
+              audienceId: (s.audienceId as string | null) ?? null,
+              triggerKind: (s.triggerKind as string | null) ?? null,
+              triggerEventId: (s.triggerEventId as string | null) ?? null,
+              templateId: (s.templateId as string | null) ?? null,
+              subjectVariantA: (s.subjectVariantA as string | null) ?? null,
+              subjectVariantB: (s.subjectVariantB as string | null) ?? null,
+              delayValue: (s.delayValue as number) ?? 0,
+              delayUnit: (s.delayUnit as "MINUTES" | "HOURS" | "DAYS") ?? "MINUTES",
             })),
           });
         }
@@ -124,18 +140,17 @@ export function FlowBuilderClient({
         body: JSON.stringify({
           name: flow.name,
           description: flow.description,
-          triggerKind: flow.triggerKind,
-          triggerEventId: flow.triggerEventId,
           status: flow.status,
-          branchEvaluationDelayHours: flow.branchEvaluationDelayHours,
           steps: flow.steps.map((s) => ({
             position: s.position,
+            audienceId: s.audienceId,
+            triggerKind: s.triggerKind,
+            triggerEventId: s.triggerEventId,
             templateId: s.templateId,
-            subjectOverride: s.subjectOverride,
+            subjectVariantA: s.subjectVariantA,
+            subjectVariantB: s.subjectVariantB,
             delayValue: s.delayValue,
             delayUnit: s.delayUnit,
-            branchRulesJson: s.branchRulesJson,
-            filterJson: s.filterJson,
           })),
         }),
       });
@@ -161,10 +176,19 @@ export function FlowBuilderClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Untitled flow",
-          triggerKind: "RSVP_GOING",
-          branchEvaluationDelayHours: 5,
+          status: "DRAFT",
           steps: [
-            { position: 1, delayValue: 0, delayUnit: "MINUTES", templateId: null },
+            {
+              position: 1,
+              audienceId: null,
+              triggerKind: "RSVP_GOING",
+              triggerEventId: null,
+              templateId: null,
+              subjectVariantA: null,
+              subjectVariantB: null,
+              delayValue: 0,
+              delayUnit: "MINUTES",
+            },
           ],
         }),
       });
@@ -185,7 +209,6 @@ export function FlowBuilderClient({
     if (!f) return;
     setSaving(true);
     try {
-      // Load the source flow, then create a copy with "(copy)" suffix.
       const r = await fetch(`/api/email-flows/${id}`);
       const data = await r.json();
       const source = data.flow;
@@ -195,17 +218,17 @@ export function FlowBuilderClient({
         body: JSON.stringify({
           name: `${source.name} (copy)`,
           description: source.description,
-          triggerKind: source.triggerKind,
-          triggerEventId: source.triggerEventId,
-          branchEvaluationDelayHours: source.branchEvaluationDelayHours,
+          status: "DRAFT",
           steps: source.steps.map((s: Record<string, unknown>) => ({
             position: s.position as number,
-            templateId: s.templateId as string | null,
-            subjectOverride: s.subjectOverride as string | null,
-            delayValue: s.delayValue as number,
-            delayUnit: s.delayUnit as string,
-            branchRulesJson: s.branchRulesJson as string | null,
-            filterJson: s.filterJson as string | null,
+            audienceId: (s.audienceId as string | null) ?? null,
+            triggerKind: (s.triggerKind as string | null) ?? null,
+            triggerEventId: (s.triggerEventId as string | null) ?? null,
+            templateId: (s.templateId as string | null) ?? null,
+            subjectVariantA: (s.subjectVariantA as string | null) ?? null,
+            subjectVariantB: (s.subjectVariantB as string | null) ?? null,
+            delayValue: (s.delayValue as number) ?? 0,
+            delayUnit: (s.delayUnit as string) ?? "MINUTES",
           })),
         }),
       });
@@ -245,38 +268,44 @@ export function FlowBuilderClient({
             </div>
           ) : (
             <ul className="divide-y divide-neutral-100">
-              {flows.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onClick={() => setSelectedId(f.id)}
-                    className={`flex w-full flex-col items-start gap-1 px-3 py-3 text-left hover:bg-neutral-50 ${
-                      selectedId === f.id ? "border-l-2 border-[#FF005A] bg-[#FF005A]/[0.04]" : "border-l-2 border-transparent"
-                    }`}
-                  >
-                    <div className="flex w-full items-center gap-2">
-                      <span className="flex-1 truncate text-sm font-semibold text-neutral-900">{f.name}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUSES.find((s) => s.value === f.status)?.color ?? "bg-neutral-100"}`}>
-                        {STATUSES.find((s) => s.value === f.status)?.label ?? f.status}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-neutral-500">
-                      {TRIGGER_LABELS[f.triggerKind] ?? f.triggerKind}
-                      {f.triggerEvent ? ` · ${f.triggerEvent.title}` : " · all events"}
-                    </div>
-                    <div className="text-[10px] text-neutral-400">
-                      {f._count?.steps ?? 0} steps · {f._count?.runs ?? 0} runs
-                    </div>
-                  </button>
-                  <div className="flex justify-end gap-2 px-3 pb-2">
+              {flows.map((f) => {
+                const stepCount = f._count?.steps ?? f.steps?.length ?? 0;
+                const totalSends = f.runStats?.total ?? 0;
+                return (
+                  <li key={f.id}>
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDuplicate(f.id); }}
-                      className="inline-flex items-center gap-1 text-[10px] text-neutral-500 hover:text-[#FF005A]"
+                      onClick={() => setSelectedId(f.id)}
+                      className={`flex w-full flex-col items-start gap-1 px-3 py-3 text-left hover:bg-neutral-50 ${
+                        selectedId === f.id ? "border-l-2 border-[#FF005A] bg-[#FF005A]/[0.04]" : "border-l-2 border-transparent"
+                      }`}
                     >
-                      <Copy className="h-3 w-3" /> Duplicate
+                      <div className="flex w-full items-center gap-2">
+                        <span className="flex-1 truncate text-sm font-semibold text-neutral-900">{f.name}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUSES.find((s) => s.value === f.status)?.color ?? "bg-neutral-100"}`}>
+                          {STATUSES.find((s) => s.value === f.status)?.label ?? f.status}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-neutral-500">
+                        {stepCount} step{stepCount === 1 ? "" : "s"} · {totalSends} send{totalSends === 1 ? "" : "s"}
+                      </div>
                     </button>
-                  </div>
-                </li>
-              ))}
+                    <div className="flex justify-end gap-2 px-3 pb-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setReportFlowId(f.id); }}
+                        className="inline-flex items-center gap-1 text-[10px] text-neutral-500 hover:text-[#FF005A]"
+                      >
+                        <BarChart3 className="h-3 w-3" /> Report
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDuplicate(f.id); }}
+                        className="inline-flex items-center gap-1 text-[10px] text-neutral-500 hover:text-[#FF005A]"
+                      >
+                        <Copy className="h-3 w-3" /> Duplicate
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -297,6 +326,7 @@ export function FlowBuilderClient({
           <FlowBuilderCanvas
             flow={flow}
             templates={templates}
+            audiences={audiences}
             events={events}
             onChange={setFlow}
             onSave={handleSave}
@@ -310,6 +340,14 @@ export function FlowBuilderClient({
           </div>
         )}
       </div>
+
+      {/* Report dialog */}
+      {reportFlowId && (
+        <FlowReportDialog
+          flowId={reportFlowId}
+          onClose={() => setReportFlowId(null)}
+        />
+      )}
     </div>
   );
 }

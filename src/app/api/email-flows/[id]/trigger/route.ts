@@ -1,17 +1,25 @@
 /**
- * POST /api/email-flows/[id]/trigger — manually trigger a flow for a RSVP.
+ * POST /api/email-flows/[id]/trigger — manually trigger a flow's steps for
+ * a specific RSVP, OR send to the flow's test audience.
  *
- * Body: { rsvpId: string }
+ * Body options:
+ *   { rsvpId: string }                  — trigger all steps for one RSVP
+ *   { stepId: string, rsvpId: string }  — trigger one step for one RSVP
+ *   { stepId: string, eventId: string } — trigger one step for ALL members
+ *                                          of its audience (the "send to
+ *                                          test audience" action)
  *
- * Creates an EmailFlowRun with status=ACTIVE + nextRunAt=now. The
- * worker picks it up on the next cron tick.
+ * Auth: CRON_SECRET bearer OR admin session.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { manuallyTriggerFlow } from "@/lib/email-orchestrator/flow-trigger";
+import {
+  manuallyTriggerStep,
+  manuallyTriggerStepForAudience,
+} from "@/lib/email-orchestrator/flow-trigger";
 
 export const dynamic = "force-dynamic";
 
@@ -39,20 +47,84 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id: flowId } = await params;
-  let body: { rsvpId?: string };
+  let body: { stepId?: string; rsvpId?: string; eventId?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  if (!body.rsvpId) {
-    return NextResponse.json({ error: "rsvpId required" }, { status: 400 });
+  // Mode 1: send one step to its entire audience (the "send to test
+  // audience" action). Requires stepId + eventId.
+  if (body.stepId && body.eventId && !body.rsvpId) {
+    // Verify the step belongs to this flow.
+    const step = await db.emailFlowStep.findUnique({
+      where: { id: body.stepId },
+      select: { flowId: true },
+    });
+    if (!step || step.flowId !== flowId) {
+      return NextResponse.json({ error: "step not found in this flow" }, { status: 404 });
+    }
+
+    const result = await manuallyTriggerStepForAudience(
+      body.stepId,
+      body.eventId,
+      adminUserId || "cron",
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.reason }, { status: 400 });
+    }
+    return NextResponse.json({
+      ok: true,
+      created: result.created,
+      skipped: result.skipped,
+    });
   }
 
-  const result = await manuallyTriggerFlow(flowId, body.rsvpId, adminUserId || "cron");
-  if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: 400 });
+  // Mode 2: trigger one step for a specific RSVP.
+  if (body.stepId && body.rsvpId) {
+    const step = await db.emailFlowStep.findUnique({
+      where: { id: body.stepId },
+      select: { flowId: true },
+    });
+    if (!step || step.flowId !== flowId) {
+      return NextResponse.json({ error: "step not found in this flow" }, { status: 404 });
+    }
+
+    const result = await manuallyTriggerStep(
+      body.stepId,
+      body.rsvpId,
+      adminUserId || "cron",
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.reason }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, queueId: result.queueId });
   }
-  return NextResponse.json({ ok: true, runId: result.runId });
+
+  // Mode 3: trigger ALL steps in the flow for a specific RSVP (one-off).
+  // Each step with a template + matching audience gets a queue row.
+  if (body.rsvpId && !body.stepId) {
+    const steps = await db.emailFlowStep.findMany({
+      where: { flowId, templateId: { not: null } },
+      include: {
+        audience: { select: { id: true, emailsJson: true } },
+        flow: { select: { status: true } },
+      },
+    });
+
+    let created = 0;
+    let skipped = 0;
+    for (const step of steps) {
+      const r = await manuallyTriggerStep(step.id, body.rsvpId, adminUserId || "cron");
+      if (r.ok) created++;
+      else skipped++;
+    }
+    return NextResponse.json({ ok: true, created, skipped });
+  }
+
+  return NextResponse.json(
+    { error: "Provide { stepId, eventId } for audience send, or { rsvpId } for single-RSVP trigger, or { stepId, rsvpId } for single step+RSVP" },
+    { status: 400 },
+  );
 }

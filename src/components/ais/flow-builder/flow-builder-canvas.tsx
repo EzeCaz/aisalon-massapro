@@ -3,27 +3,27 @@
 /**
  * FlowBuilderCanvas — the main visual editor for an EmailFlow.
  *
- * Layout:
- *   - Top: flow name (editable), trigger selector, status pill, Save/Publish buttons.
- *   - Middle: horizontal scrollable row of step cards connected by arrows.
- *     Each step card shows: position badge, name, template thumbnail,
- *     delay chip, branch chips.
- *   - Right side: Sheet (480px) opens when a step is clicked, with the
- *     StepEditor inside.
+ * NEW MODEL (per-step audience + trigger + email):
+ *   Each step is a self-contained email send:
+ *     A. Audience — who receives this email (reusable EmailAudience)
+ *     B. Trigger — entry event that fires this step (RSVP_GOING, etc.)
+ *     C. Email content — template + subject A (+ optional subject B for A/B test)
+ *     D. Delay — optional wait after trigger before sending
  *
- * The component is a controlled component — the parent owns the flow
- * state and passes it down via `flow` + `onChange`. Save is the parent's
- * responsibility.
+ *   Up to 8 steps per flow. Steps are independent (not chained).
+ *
+ * Layout:
+ *   - Top: flow name (editable), status pill, Save button.
+ *   - Middle: horizontal scrollable row of step cards.
+ *   - Right side: Sheet (520px) opens when a step is clicked, with the
+ *     StepEditor inside (A/B/C/D sections).
  */
 
 import { useState } from "react";
 import {
-  Plus, X, ArrowRight, Clock, Ban, SkipForward, Mail, Pencil, Loader2,
+  Plus, X, ArrowRight, Clock, Mail, Pencil, Loader2, Users, Zap,
+  Copy, Trash2, FlaskConical,
 } from "lucide-react";
-import type { BranchRuleEntry } from "@/lib/email-orchestrator/flow-branches";
-import type { Filter } from "@/lib/email-orchestrator/flow-filter";
-import { BranchRulesEditor } from "./branch-rules-editor";
-import { FilterBuilder } from "./filter-builder";
 
 export type FlowTemplate = {
   id: string;
@@ -32,34 +32,40 @@ export type FlowTemplate = {
   stage: number;
 };
 
+export type FlowAudience = {
+  id: string;
+  name: string;
+  isTest: boolean;
+  emails: string[];
+};
+
 export type FlowStep = {
   id?: string;
   position: number;
+  audienceId: string | null;
+  triggerKind: string | null;
+  triggerEventId: string | null;
   templateId: string | null;
-  subjectOverride: string | null;
+  subjectVariantA: string | null;
+  subjectVariantB: string | null;
   delayValue: number;
   delayUnit: "MINUTES" | "HOURS" | "DAYS";
-  branchRulesJson: string | null;
-  filterJson: string | null;
 };
 
 export type FlowData = {
   id?: string;
   name: string;
   description?: string | null;
-  triggerKind: string;
-  triggerEventId?: string | null;
   status: string;
-  branchEvaluationDelayHours: number;
   steps: FlowStep[];
 };
 
 const TRIGGER_KINDS = [
-  { value: "RSVP_GOING", label: "RSVP created (registered)" },
-  { value: "DOOR_CHECKED_IN", label: "Door checked-in" },
-  { value: "MARKED_ATTENDED", label: "Marked as attended" },
-  { value: "MARKED_NO_SHOW", label: "Marked as no-show" },
-  { value: "MANUAL", label: "Manual (admin adds)" },
+  { value: "RSVP_GOING", label: "RSVP created (registered)", hint: "Fires when someone RSVPs 'Going' to an event" },
+  { value: "DOOR_CHECKED_IN", label: "Door checked-in", hint: "Fires when attendee checks in at the door" },
+  { value: "MARKED_ATTENDED", label: "Marked as attended", hint: "Fires when admin marks attendee as attended" },
+  { value: "MARKED_NO_SHOW", label: "Marked as no-show", hint: "Fires when admin marks attendee as no-show" },
+  { value: "MANUAL", label: "Manual (admin sends)", hint: "Only fires when admin clicks 'Send to audience'" },
 ];
 
 const STATUSES = [
@@ -69,9 +75,12 @@ const STATUSES = [
   { value: "ARCHIVED", label: "Archived", color: "bg-neutral-100 text-neutral-500 line-through" },
 ];
 
+const MAX_STEPS = 8;
+
 export function FlowBuilderCanvas({
   flow,
   templates,
+  audiences,
   events,
   onChange,
   onSave,
@@ -79,6 +88,7 @@ export function FlowBuilderCanvas({
 }: {
   flow: FlowData;
   templates: FlowTemplate[];
+  audiences: FlowAudience[];
   events: { id: string; title: string; slug: string; startsAt: string }[];
   onChange: (f: FlowData) => void;
   onSave: () => void;
@@ -100,9 +110,15 @@ export function FlowBuilderCanvas({
             placeholder="Flow name"
             className="flex-1 rounded border border-neutral-300 px-3 py-1.5 text-lg font-bold"
           />
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUSES.find((s) => s.value === flow.status)?.color}`}>
-            {STATUSES.find((s) => s.value === flow.status)?.label}
-          </span>
+          <select
+            value={flow.status}
+            onChange={(e) => onChange({ ...flow, status: e.target.value })}
+            className={`rounded-full px-3 py-1 text-xs font-semibold border ${STATUSES.find((s) => s.value === flow.status)?.color ?? "bg-neutral-100"}`}
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
           <button
             onClick={onSave}
             disabled={saving}
@@ -112,46 +128,15 @@ export function FlowBuilderCanvas({
             Save
           </button>
         </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <label className="text-xs">
-            <span className="mb-1 block font-semibold text-neutral-700">Trigger</span>
-            <select
-              value={flow.triggerKind}
-              onChange={(e) => onChange({ ...flow, triggerKind: e.target.value })}
-              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-            >
-              {TRIGGER_KINDS.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-xs">
-            <span className="mb-1 block font-semibold text-neutral-700">Event</span>
-            <select
-              value={flow.triggerEventId ?? ""}
-              onChange={(e) => onChange({ ...flow, triggerEventId: e.target.value || null })}
-              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">All events</option>
-              {events.map((ev) => (
-                <option key={ev.id} value={ev.id}>{ev.title}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-xs">
-            <span className="mb-1 block font-semibold text-neutral-700">Branch eval delay (hours)</span>
-            <input
-              type="number"
-              min={0}
-              value={flow.branchEvaluationDelayHours}
-              onChange={(e) => onChange({ ...flow, branchEvaluationDelayHours: parseInt(e.target.value) || 0 })}
-              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-            />
-          </label>
-        </div>
+        {flow.description !== undefined && (
+          <input
+            type="text"
+            value={flow.description ?? ""}
+            onChange={(e) => onChange({ ...flow, description: e.target.value || null })}
+            placeholder="Description (optional)"
+            className="mt-2 w-full rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-600"
+          />
+        )}
       </div>
 
       {/* Canvas — step cards */}
@@ -162,7 +147,16 @@ export function FlowBuilderCanvas({
               <StepCard
                 step={step}
                 template={templates.find((t) => t.id === step.templateId)}
+                audience={audiences.find((a) => a.id === step.audienceId)}
                 onClick={() => setEditingStep(step.position)}
+                onDelete={() => {
+                  onChange({
+                    ...flow,
+                    steps: flow.steps
+                      .filter((s) => s.position !== step.position)
+                      .map((s, idx) => ({ ...s, position: idx + 1 })),
+                  });
+                }}
               />
               {i < flow.steps.length - 1 && (
                 <ArrowRight className="h-5 w-5 shrink-0 text-neutral-400" />
@@ -170,7 +164,7 @@ export function FlowBuilderCanvas({
             </div>
           ))}
 
-          {flow.steps.length < 5 && (
+          {flow.steps.length < MAX_STEPS && (
             <button
               onClick={() => {
                 const newPosition = flow.steps.length + 1;
@@ -180,12 +174,14 @@ export function FlowBuilderCanvas({
                     ...flow.steps,
                     {
                       position: newPosition,
+                      audienceId: null,
+                      triggerKind: "RSVP_GOING",
+                      triggerEventId: null,
                       templateId: null,
-                      subjectOverride: null,
+                      subjectVariantA: null,
+                      subjectVariantB: null,
                       delayValue: 0,
-                      delayUnit: "HOURS",
-                      branchRulesJson: null,
-                      filterJson: null,
+                      delayUnit: "MINUTES",
                     },
                   ],
                 });
@@ -195,7 +191,7 @@ export function FlowBuilderCanvas({
               <div className="text-center">
                 <Plus className="mx-auto mb-2 h-8 w-8" />
                 <div className="text-sm font-semibold">Add step</div>
-                <div className="text-xs">Max 5</div>
+                <div className="text-xs">Max {MAX_STEPS}</div>
               </div>
             </button>
           )}
@@ -207,7 +203,8 @@ export function FlowBuilderCanvas({
         <StepEditorSheet
           step={editingStepData}
           templates={templates}
-          maxStepPosition={flow.steps.length}
+          audiences={audiences}
+          events={events}
           onChange={(s) => {
             onChange({
               ...flow,
@@ -221,31 +218,31 @@ export function FlowBuilderCanvas({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Step Card (canvas)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function StepCard({
   step,
   template,
+  audience,
   onClick,
+  onDelete,
 }: {
   step: FlowStep;
   template?: FlowTemplate;
+  audience?: FlowAudience;
   onClick: () => void;
+  onDelete: () => void;
 }) {
-  const branches: BranchRuleEntry[] = step.branchRulesJson
-    ? (() => {
-        try {
-          return JSON.parse(step.branchRulesJson) as BranchRuleEntry[];
-        } catch {
-          return [];
-        }
-      })()
-    : [];
+  const triggerLabel = TRIGGER_KINDS.find((t) => t.value === step.triggerKind)?.label ?? step.triggerKind ?? "—";
 
   return (
     <div
       onClick={onClick}
-      className="flex h-[280px] w-[220px] cursor-pointer flex-col rounded-lg border border-neutral-200 bg-white p-3 shadow-sm hover:border-[#FF005A] hover:shadow-md"
+      className="relative flex h-[280px] w-[260px] cursor-pointer flex-col rounded-lg border border-neutral-200 bg-white p-3 shadow-sm hover:border-[#FF005A] hover:shadow-md"
     >
-      {/* Header: position + edit */}
+      {/* Header: position + edit + delete */}
       <div className="mb-2 flex items-center">
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF005A] text-xs font-bold text-white">
           {step.position}
@@ -253,94 +250,119 @@ function StepCard({
         <button className="ml-auto text-neutral-400 hover:text-[#FF005A]">
           <Pencil className="h-3.5 w-3.5" />
         </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="ml-1 text-neutral-400 hover:text-red-500"
+          title="Delete step"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      {/* Template name or "wait-only" */}
+      {/* A. Audience */}
+      <div className="mb-2">
+        <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <Users className="h-3 w-3" /> A · Audience
+        </div>
+        <div className="text-xs font-medium text-neutral-800 truncate">
+          {audience ? (
+            <span className="inline-flex items-center gap-1">
+              {audience.name}
+              {audience.isTest && (
+                <span className="rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-700">TEST</span>
+              )}
+            </span>
+          ) : (
+            <span className="italic text-neutral-400">Everyone (no filter)</span>
+          )}
+        </div>
+        {audience && (
+          <div className="text-[10px] text-neutral-500 truncate">
+            {audience.emails.length} email{audience.emails.length === 1 ? "" : "s"}
+          </div>
+        )}
+      </div>
+
+      {/* B. Trigger */}
+      <div className="mb-2">
+        <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <Zap className="h-3 w-3" /> B · Trigger
+        </div>
+        <div className="text-xs font-medium text-neutral-800 truncate">
+          {triggerLabel}
+        </div>
+      </div>
+
+      {/* C. Email */}
       <div className="mb-2 flex-1 overflow-hidden">
+        <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+          <Mail className="h-3 w-3" /> C · Email
+        </div>
         {template ? (
           <>
-            <div className="mb-1 flex items-center gap-1 text-xs font-semibold text-neutral-700">
-              <Mail className="h-3 w-3" /> {template.name}
+            <div className="text-xs font-semibold text-neutral-700 truncate">{template.name}</div>
+            <div className="text-[10px] leading-tight text-neutral-500 line-clamp-2">
+              <span className="font-semibold text-neutral-600">A:</span> {step.subjectVariantA || template.subject}
             </div>
-            <div className="text-[10px] leading-tight text-neutral-500 line-clamp-3">
-              {step.subjectOverride || template.subject}
-            </div>
+            {step.subjectVariantB && (
+              <div className="text-[10px] leading-tight text-neutral-500 line-clamp-2">
+                <span className="font-semibold text-neutral-600">B:</span> {step.subjectVariantB}
+              </div>
+            )}
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-center text-xs text-neutral-400">
-            <Clock className="mb-1 h-6 w-6" />
-            Wait-only step
+            <Clock className="mb-1 h-5 w-5" />
+            Wait-only
             <div className="text-[10px]">No email sent</div>
           </div>
         )}
       </div>
 
-      {/* Delay chip */}
-      <div className="mb-2 inline-flex items-center gap-1 self-start rounded bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-600">
+      {/* D. Delay chip */}
+      <div className="inline-flex items-center gap-1 self-start rounded bg-neutral-100 px-2 py-0.5 text-[10px] text-neutral-600">
         <Clock className="h-3 w-3" />
-        {step.delayValue > 0 ? `${step.delayValue}${step.delayUnit[0].toLowerCase()} after prev` : "Immediate"}
+        {step.delayValue > 0
+          ? `${step.delayValue}${step.delayUnit[0].toLowerCase()} after trigger`
+          : "Immediate"}
       </div>
 
-      {/* Branch chips */}
-      <div className="space-y-1">
-        {branches.length === 0 ? (
-          <div className="text-[10px] italic text-neutral-400">No branches</div>
-        ) : (
-          branches.map((b, i) => (
-            <div key={i} className="flex items-center gap-1 text-[10px] text-neutral-700">
-              {b.action === "HALT" ? <Ban className="h-3 w-3 text-red-500" /> : b.action === "GOTO" ? <ArrowRight className="h-3 w-3 text-blue-500" /> : <SkipForward className="h-3 w-3 text-green-500" />}
-              <span>
-                {b.rule.replace(/_/g, " ").toLowerCase()} →{" "}
-                {b.action === "GOTO" ? `step ${b.targetStepPosition}` : b.action.toLowerCase()}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+      {/* A/B badge */}
+      {step.subjectVariantB && (
+        <div className="absolute right-2 top-2 rounded bg-[#00E6FF] px-1.5 py-0.5 text-[9px] font-bold text-black">
+          A/B
+        </div>
+      )}
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Step Editor Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
 function StepEditorSheet({
   step,
   templates,
-  maxStepPosition,
+  audiences,
+  events,
   onChange,
   onClose,
 }: {
   step: FlowStep;
   templates: FlowTemplate[];
-  maxStepPosition: number;
+  audiences: FlowAudience[];
+  events: { id: string; title: string; slug: string; startsAt: string }[];
   onChange: (s: FlowStep) => void;
   onClose: () => void;
 }) {
-  const branches: BranchRuleEntry[] = step.branchRulesJson
-    ? (() => {
-        try {
-          return JSON.parse(step.branchRulesJson) as BranchRuleEntry[];
-        } catch {
-          return [];
-        }
-      })()
-    : [];
-
-  const filter: Filter | null = step.filterJson
-    ? (() => {
-        try {
-          return JSON.parse(step.filterJson) as Filter;
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
   return (
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
 
       {/* Sheet */}
-      <div className="fixed right-0 top-0 z-50 h-full w-[480px] overflow-y-auto bg-white shadow-2xl">
+      <div className="fixed right-0 top-0 z-50 h-full w-[520px] overflow-y-auto bg-white shadow-2xl">
         <div className="sticky top-0 flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-4">
           <h3 className="text-lg font-bold">Step {step.position} editor</h3>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
@@ -349,8 +371,87 @@ function StepEditorSheet({
         </div>
 
         <div className="space-y-6 p-6">
-          {/* Template */}
-          <div>
+          {/* ── A. Audience ── */}
+          <section className="rounded-lg border border-neutral-200 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF005A] text-xs font-bold text-white">A</span>
+              <h4 className="text-sm font-bold text-neutral-800">Audience — who receives this email</h4>
+            </div>
+            <label className="mb-1 block text-xs font-semibold text-neutral-700">Audience</label>
+            <select
+              value={step.audienceId ?? ""}
+              onChange={(e) => onChange({ ...step, audienceId: e.target.value || null })}
+              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Everyone (no audience filter)</option>
+              {audiences.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}{a.isTest ? " (Test)" : ""} — {a.emails.length} email{a.emails.length === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-neutral-500">
+              Only recipients whose email is in this audience will receive this step. Pick &ldquo;Test&rdquo; to send only to your test emails.
+            </p>
+            {step.audienceId && (() => {
+              const a = audiences.find((x) => x.id === step.audienceId);
+              return a ? (
+                <div className="mt-2 rounded bg-neutral-50 p-2 text-[10px] text-neutral-600">
+                  <div className="font-semibold mb-1">{a.emails.length} email(s) in this audience:</div>
+                  <div className="truncate">{a.emails.join(", ")}</div>
+                </div>
+              ) : null;
+            })()}
+          </section>
+
+          {/* ── B. Trigger ── */}
+          <section className="rounded-lg border border-neutral-200 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF005A] text-xs font-bold text-white">B</span>
+              <h4 className="text-sm font-bold text-neutral-800">Trigger — when this step fires</h4>
+            </div>
+            <label className="mb-1 block text-xs font-semibold text-neutral-700">Trigger event</label>
+            <select
+              value={step.triggerKind ?? ""}
+              onChange={(e) => onChange({ ...step, triggerKind: e.target.value || null })}
+              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">— No trigger (manual only) —</option>
+              {TRIGGER_KINDS.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            {step.triggerKind && (
+              <p className="mt-1 text-[10px] text-neutral-500">
+                {TRIGGER_KINDS.find((t) => t.value === step.triggerKind)?.hint}
+              </p>
+            )}
+
+            <label className="mb-1 mt-3 block text-xs font-semibold text-neutral-700">
+              Event filter (optional)
+            </label>
+            <select
+              value={step.triggerEventId ?? ""}
+              onChange={(e) => onChange({ ...step, triggerEventId: e.target.value || null })}
+              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">All events</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>{ev.title}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-neutral-500">
+              Limit this step to fire only for a specific event. Leave on &ldquo;All events&rdquo; for general flows.
+            </p>
+          </section>
+
+          {/* ── C. Email content ── */}
+          <section className="rounded-lg border border-neutral-200 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF005A] text-xs font-bold text-white">C</span>
+              <h4 className="text-sm font-bold text-neutral-800">Email content — template + subject</h4>
+            </div>
+
             <label className="mb-1 block text-xs font-semibold text-neutral-700">Email template</label>
             <select
               value={step.templateId ?? ""}
@@ -365,27 +466,74 @@ function StepEditorSheet({
               ))}
             </select>
             <p className="mt-1 text-[10px] text-neutral-500">
-              Wait-only steps don't send an email — they're useful for delays between sends.
+              The template provides the HTML body. You can override the subject below.
             </p>
-          </div>
 
-          {/* Subject override */}
-          {step.templateId && (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-neutral-700">Subject override (optional)</label>
-              <input
-                type="text"
-                value={step.subjectOverride ?? ""}
-                onChange={(e) => onChange({ ...step, subjectOverride: e.target.value || null })}
-                placeholder="Use template's default subject"
-                className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
+            {/* Subject A */}
+            {step.templateId && (
+              <>
+                <div className="mt-4 rounded border border-[#00E6FF]/40 bg-[#00E6FF]/[0.04] p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-xs font-semibold text-neutral-700">
+                      Subject A <span className="text-neutral-400">(default)</span>
+                    </label>
+                    <span className="rounded bg-[#00E6FF] px-1.5 py-0.5 text-[9px] font-bold text-black">A</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={step.subjectVariantA ?? ""}
+                    onChange={(e) => onChange({ ...step, subjectVariantA: e.target.value || null })}
+                    placeholder="Use template's default subject"
+                    className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+
+                {/* Subject B (A/B test) */}
+                <div className="mt-2 rounded border border-[#FF005A]/30 bg-[#FF005A]/[0.04] p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-xs font-semibold text-neutral-700">
+                      Subject B <span className="text-neutral-400">(A/B test variant)</span>
+                    </label>
+                    <span className="rounded bg-[#FF005A] px-1.5 py-0.5 text-[9px] font-bold text-white">B</span>
+                  </div>
+                  {step.subjectVariantB ? (
+                    <input
+                      type="text"
+                      value={step.subjectVariantB}
+                      onChange={(e) => onChange({ ...step, subjectVariantB: e.target.value || null })}
+                      placeholder="Subject B variant"
+                      className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => {
+                        // Auto-create variant B from A (or template default)
+                        const template = templates.find((t) => t.id === step.templateId);
+                        const baseSubject = step.subjectVariantA || template?.subject || "";
+                        onChange({ ...step, subjectVariantB: baseSubject });
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded border border-dashed border-[#FF005A]/50 px-3 py-1.5 text-xs font-semibold text-[#FF005A] hover:bg-[#FF005A]/[0.06]"
+                    >
+                      <FlaskConical className="h-3 w-3" />
+                      Auto-create variant B
+                    </button>
+                  )}
+                  {step.subjectVariantB && (
+                    <p className="mt-1 text-[10px] text-neutral-500">
+                      Recipients are split 50/50 between A and B. The report shows metrics per variant.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* ── D. Delay ── */}
+          <section className="rounded-lg border border-neutral-200 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#FF005A] text-xs font-bold text-white">D</span>
+              <h4 className="text-sm font-bold text-neutral-800">Delay — wait before sending</h4>
             </div>
-          )}
-
-          {/* Delay */}
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-neutral-700">Delay before this step fires</label>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -403,40 +551,12 @@ function StepEditorSheet({
                 <option value="HOURS">hours</option>
                 <option value="DAYS">days</option>
               </select>
-              <span className="self-center text-xs text-neutral-500">
-                {step.position === 1 ? "after trigger" : "after previous step sends"}
-              </span>
+              <span className="self-center text-xs text-neutral-500">after trigger fires</span>
             </div>
-          </div>
-
-          {/* Branch rules */}
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-neutral-700">
-              Branch rules — what happens after this step fires
-            </label>
-            <p className="mb-2 text-[10px] text-neutral-500">
-              Evaluated {`{branchEvaluationDelayHours}h`} after the email is sent. First matching rule wins.
+            <p className="mt-1 text-[10px] text-neutral-500">
+              Use 0 for immediate send. Delay is measured from when the trigger event occurs.
             </p>
-            <BranchRulesEditor
-              value={branches}
-              maxStepPosition={maxStepPosition}
-              onChange={(rules) => onChange({ ...step, branchRulesJson: JSON.stringify(rules) })}
-            />
-          </div>
-
-          {/* Audience filter */}
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-neutral-700">
-              Audience filter — who receives this step
-            </label>
-            <p className="mb-2 text-[10px] text-neutral-500">
-              Re-evaluated at send time. If a recipient no longer matches, they're skipped.
-            </p>
-            <FilterBuilder
-              value={filter}
-              onChange={(f) => onChange({ ...step, filterJson: f ? JSON.stringify(f) : null })}
-            />
-          </div>
+          </section>
         </div>
       </div>
     </>

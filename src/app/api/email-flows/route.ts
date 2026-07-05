@@ -3,6 +3,19 @@
  * POST /api/email-flows — create a new flow.
  *
  * Auth: CRON_SECRET bearer OR admin session.
+ *
+ * Step body shape (new model):
+ *   {
+ *     position: number,           // 1..8
+ *     audienceId?: string | null, // reusable EmailAudience id
+ *     triggerKind?: string | null,// RSVP_GOING | DOOR_CHECKED_IN | MARKED_ATTENDED | MARKED_NO_SHOW | MANUAL
+ *     triggerEventId?: string | null, // null = all events
+ *     templateId?: string | null, // EmailStageTemplate id (null = wait-only)
+ *     subjectVariantA?: string | null, // Subject A (null = use template.subject)
+ *     subjectVariantB?: string | null, // Subject B (null = no A/B test)
+ *     delayValue?: number,        // default 0
+ *     delayUnit?: string,         // MINUTES | HOURS | DAYS (default MINUTES)
+ *   }
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -35,22 +48,43 @@ export async function GET(req: NextRequest) {
 
   const flows = await db.emailFlow.findMany({
     include: {
-      _count: { select: { runs: true, steps: true } },
-      triggerEvent: { select: { id: true, title: true, slug: true } },
+      _count: { select: { steps: true } },
+      steps: {
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          position: true,
+          audienceId: true,
+          triggerKind: true,
+          triggerEventId: true,
+          templateId: true,
+          subjectVariantA: true,
+          subjectVariantB: true,
+          delayValue: true,
+          delayUnit: true,
+        },
+      },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  // Summary counts of run statuses per flow.
-  const runStats = await db.emailFlowRun.groupBy({
-    by: ["flowId", "status"],
-    _count: true,
+  // Summary counts of queue items per flow (by status) — replaces the old
+  // EmailFlowRun-based stats. We group EmailQueue rows by their step's flowId.
+  const queueStats = await db.emailQueue.findMany({
+    where: { flowStepId: { not: null } },
+    select: {
+      status: true,
+      flowStep: { select: { flowId: true } },
+    },
   });
   const statsByFlow = new Map<string, Record<string, number>>();
-  for (const r of runStats) {
-    const f = statsByFlow.get(r.flowId) ?? {};
-    f[r.status] = r._count;
-    statsByFlow.set(r.flowId, f);
+  for (const q of queueStats) {
+    const fid = q.flowStep?.flowId;
+    if (!fid) continue;
+    const f = statsByFlow.get(fid) ?? {};
+    f[q.status] = (f[q.status] ?? 0) + 1;
+    f.total = (f.total ?? 0) + 1;
+    statsByFlow.set(fid, f);
   }
 
   return NextResponse.json({
@@ -68,17 +102,17 @@ export async function POST(req: NextRequest) {
   let body: {
     name?: string;
     description?: string;
-    triggerKind?: string;
-    triggerEventId?: string | null;
-    branchEvaluationDelayHours?: number;
+    status?: string;
     steps?: Array<{
       position: number;
+      audienceId?: string | null;
+      triggerKind?: string | null;
+      triggerEventId?: string | null;
       templateId?: string | null;
-      subjectOverride?: string | null;
+      subjectVariantA?: string | null;
+      subjectVariantB?: string | null;
       delayValue?: number;
       delayUnit?: string;
-      branchRulesJson?: string | null;
-      filterJson?: string | null;
     }>;
   };
   try {
@@ -88,31 +122,33 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-  if (!body.triggerKind) return NextResponse.json({ error: "triggerKind required" }, { status: 400 });
+
+  // Cap steps at 8.
+  const steps = (body.steps ?? []).slice(0, 8);
 
   const flow = await db.emailFlow.create({
     data: {
       name: body.name,
       description: body.description || null,
-      triggerKind: body.triggerKind,
-      triggerEventId: body.triggerEventId || null,
-      branchEvaluationDelayHours: body.branchEvaluationDelayHours ?? 5,
+      status: body.status || "DRAFT",
       createdBy: auth.mode === "admin" ? auth.userId : null,
-      steps: body.steps?.length
+      steps: steps.length
         ? {
-            create: body.steps.map((s) => ({
+            create: steps.map((s) => ({
               position: s.position,
+              audienceId: s.audienceId || null,
+              triggerKind: s.triggerKind || null,
+              triggerEventId: s.triggerEventId || null,
               templateId: s.templateId || null,
-              subjectOverride: s.subjectOverride || null,
+              subjectVariantA: s.subjectVariantA || null,
+              subjectVariantB: s.subjectVariantB || null,
               delayValue: s.delayValue ?? 0,
-              delayUnit: s.delayUnit ?? "HOURS",
-              branchRulesJson: s.branchRulesJson || null,
-              filterJson: s.filterJson || null,
+              delayUnit: s.delayUnit ?? "MINUTES",
             })),
           }
         : undefined,
     },
-    include: { steps: true },
+    include: { steps: { orderBy: { position: "asc" } } },
   });
 
   return NextResponse.json({ ok: true, flow });

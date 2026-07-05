@@ -166,6 +166,21 @@ export async function POST(_req: NextRequest, { params }: Params) {
     }
   }
 
+  // --- Trigger any flows that fire on RSVP_GOING ---
+  // (best-effort — flow worker will pick up on next cron tick. Only trigger
+  // for NEW registrations, not re-registrations, to avoid duplicate sends.)
+  if (!wasAlreadyRegistered) {
+    try {
+      const { triggerFlowsForRsvp } = await import("@/lib/email-orchestrator/flow-trigger");
+      await triggerFlowsForRsvp({
+        rsvpId: rsvp.id,
+        triggerKind: "RSVP_GOING",
+      });
+    } catch (err) {
+      console.error("[rsvp] flow trigger failed:", err);
+    }
+  }
+
   return NextResponse.json({ rsvp });
 }
 
