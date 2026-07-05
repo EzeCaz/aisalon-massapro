@@ -126,7 +126,7 @@ export function EventTabs({
   /** Full speaker roster for the EventEditor (managers only). Empty for non-managers. */
   speakersForEditor?: EventSpeaker[];
 }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("agenda");
   // Force re-mount of agenda tabs when the admin edits agenda so the
   // public agenda view stays in sync.
   const [agendaVersion, setAgendaVersion] = useState(0);
@@ -146,11 +146,11 @@ export function EventTabs({
   return (
     <Tabs value={tab} onValueChange={setTab} className="w-full">
       <TabsList className="bg-black/5 h-auto p-1 flex-wrap">
-        <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:text-black">
-          Overview
-        </TabsTrigger>
         <TabsTrigger value="agenda" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Speakers &amp; Agenda
+        </TabsTrigger>
+        <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:text-black">
+          Overview
         </TabsTrigger>
         <TabsTrigger value="photos" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Photos ({event._count.images})
@@ -187,11 +187,11 @@ export function EventTabs({
         )}
       </TabsList>
 
-      <TabsContent value="overview" className="mt-6">
-        <OverviewTab event={event} initialRsvp={initialRsvp} />
-      </TabsContent>
       <TabsContent value="agenda" className="mt-6">
         <AgendaTab key={`agenda-${agendaVersion}`} event={event} me={me} />
+      </TabsContent>
+      <TabsContent value="overview" className="mt-6">
+        <OverviewTab event={event} initialRsvp={initialRsvp} />
       </TabsContent>
       <TabsContent value="photos" className="mt-6">
         <PhotosTab event={event} me={me} isAdmin={isAdmin} />
