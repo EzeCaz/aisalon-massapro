@@ -30,6 +30,7 @@ export async function GET() {
       companyUrl: user.companyUrl,
       linkedinUrl: user.linkedinUrl,
       portfolioUrl: user.portfolioUrl,
+      title: user.title,
       role: user.role,
       tags: user.tags,
     },
@@ -39,7 +40,7 @@ export async function GET() {
 /**
  * PATCH /api/profile
  * Body: {
- *   name?, bio?, linkedinUrl?, company?, companyUrl?, portfolioUrl?
+ *   name?, bio?, linkedinUrl?, company?, companyUrl?, portfolioUrl?, title?
  * }
  * Email is not editable (it's the identity).
  * Photo is uploaded separately via POST /api/profile/photo.
@@ -59,6 +60,7 @@ export async function PATCH(req: NextRequest) {
     company?: string | null;
     companyUrl?: string | null;
     portfolioUrl?: string | null;
+    title?: string | null;
   };
 
   // Build the update payload — only allow profile-related fields (not role/email/id).
@@ -88,6 +90,10 @@ export async function PATCH(req: NextRequest) {
     const trimmed = (body.portfolioUrl || "").trim();
     data.portfolioUrl = trimmed.length > 0 ? sanitizeUrl(trimmed) : null;
   }
+  if (body.title !== undefined) {
+    const trimmed = (body.title || "").trim();
+    data.title = trimmed.length > 0 ? trimmed.slice(0, 120) : null;
+  }
 
   const updated = await db.user.update({
     where: { id: me.id },
@@ -107,6 +113,7 @@ export async function PATCH(req: NextRequest) {
       companyUrl: updated.companyUrl,
       linkedinUrl: updated.linkedinUrl,
       portfolioUrl: updated.portfolioUrl,
+      title: updated.title,
       role: updated.role,
       tags: updated.tags,
     },

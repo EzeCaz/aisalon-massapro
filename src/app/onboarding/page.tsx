@@ -47,6 +47,7 @@ export default async function OnboardingPage() {
     mobile: me.mobile || "",
     linkedinUrl: me.linkedinUrl || "",
     bio: me.bio || "",
+    title: me.title || "",
   };
 
   return (

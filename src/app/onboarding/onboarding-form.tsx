@@ -13,6 +13,7 @@ type Props = {
     mobile: string;
     linkedinUrl: string;
     bio: string;
+    title?: string;
   };
   interestedInOptions: string[];
   profileCategoriesOptions: string[];
@@ -21,15 +22,17 @@ type Props = {
 /**
  * OnboardingForm — the AI Salon TLV intake form.
  *
- * Eight questions, mirroring the original Google Form / Excel intake:
+ * Ten questions, mirroring the original Google Form / Excel intake:
  *   1. Full Name *            [short text]
  *   2. Company name *         [short text]
- *   3. email *                [email, read-only — bound to session email]
- *   4. Mobile *               [phone, with helper text]
- *   5. Linkedin profile *     [URL]
- *   6. I am interested in... * [multi-checkbox + "Other: ___"]
- *   7. Tell us more about yourself * [multi-checkbox]
- *   8. Tell us more about yourself :) [long text — optional]
+ *   3. Title / Role *         [short text — e.g. "CEO", "Engineer"]
+ *   4. email *                [email, read-only — bound to session email]
+ *   5. Mobile *               [phone, with helper text]
+ *   6. Linkedin profile *     [URL]
+ *   7. I am interested in... * [multi-checkbox + "Other: ___"]
+ *   8. Tell us more about yourself * [multi-checkbox]
+ *   9. I would like to apply for * [single-select: Fast pitch / Presentation/Lecture / None]
+ *  10. Tell us more about yourself :) [long text — optional]
  *
  * Submits to POST /api/user/onboarding, which validates, persists to
  * the User row, and sets `onboardedAt`. On success we push the user
@@ -44,6 +47,7 @@ export function OnboardingForm({
 
   const [name, setName] = useState(initial.name);
   const [company, setCompany] = useState(initial.company);
+  const [title, setTitle] = useState(initial.title || "");
   // email is read-only (it's the identity), but we keep it in state
   // for the submit payload.
   const [email] = useState(initial.email);
@@ -52,6 +56,7 @@ export function OnboardingForm({
   const [interestedIn, setInterestedIn] = useState<Set<string>>(new Set());
   const [interestedInOther, setInterestedInOther] = useState("");
   const [profileCategories, setProfileCategories] = useState<Set<string>>(new Set());
+  const [appliedFor, setAppliedFor] = useState<string>("");
   const [bio, setBio] = useState(initial.bio);
   const [submitting, setSubmitting] = useState(false);
 
@@ -75,12 +80,14 @@ export function OnboardingForm({
         body: JSON.stringify({
           name,
           company,
+          title,
           email,
           mobile,
           linkedinUrl,
           interestedIn: Array.from(interestedIn),
           interestedInOther,
           profileCategories: Array.from(profileCategories),
+          appliedFor,
           bio,
         }),
       });
@@ -141,8 +148,19 @@ export function OnboardingForm({
           autoComplete="organization"
         />
 
-        {/* 3. email (read-only) */}
-        <Field n={3} label="email" required>
+        {/* 3. Title / Role */}
+        <ShortText
+          n={3}
+          label="Title / Role"
+          required
+          value={title}
+          onChange={setTitle}
+          placeholder="e.g. CEO, Engineer, Designer, Investor"
+          autoComplete="organization-title"
+        />
+
+        {/* 4. email (read-only) */}
+        <Field n={4} label="email" required>
           <input
             type="email"
             value={email}
@@ -155,8 +173,8 @@ export function OnboardingForm({
           </p>
         </Field>
 
-        {/* 4. Mobile */}
-        <Field n={4} label="Mobile" required>
+        {/* 5. Mobile */}
+        <Field n={5} label="Mobile" required>
           <input
             type="tel"
             value={mobile}
@@ -171,8 +189,8 @@ export function OnboardingForm({
           </p>
         </Field>
 
-        {/* 5. Linkedin profile */}
-        <Field n={5} label="Linkedin profile" required>
+        {/* 6. Linkedin profile */}
+        <Field n={6} label="Linkedin profile" required>
           <input
             type="url"
             value={linkedinUrl}
@@ -183,9 +201,9 @@ export function OnboardingForm({
           />
         </Field>
 
-        {/* 6. I am interested in... */}
+        {/* 7. I am interested in... */}
         <CheckboxGroup
-          n={6}
+          n={7}
           label="I am interested in…"
           required
           options={interestedInOptions}
@@ -197,9 +215,9 @@ export function OnboardingForm({
           otherPlaceholder="Tell us what you have in mind"
         />
 
-        {/* 7. Tell us more about yourself (checkboxes) */}
+        {/* 8. Tell us more about yourself (checkboxes) */}
         <CheckboxGroup
-          n={7}
+          n={8}
           label="Tell us more about yourself"
           required
           options={profileCategoriesOptions}
@@ -207,8 +225,50 @@ export function OnboardingForm({
           onToggle={(v) => toggle(profileCategories, v, setProfileCategories)}
         />
 
-        {/* 8. Tell us more about yourself :) (long text — optional) */}
-        <Field n={8} label="Tell us more about yourself :)">
+        {/* 9. I would like to apply for (single-select) */}
+        <Field n={9} label="I would like to apply for" required>
+          <div className="space-y-2">
+            {[
+              { value: "", label: "Nothing — I'm here as a member" },
+              { value: "Fast pitch", label: "Fast pitch (3-min startup pitch on stage)" },
+              { value: "Presentation/Lecture", label: "Presentation / Lecture (20-30 min talk)" },
+            ].map((opt) => {
+              const checked = appliedFor === opt.value;
+              return (
+                <label
+                  key={opt.value || "none"}
+                  className={`flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm cursor-pointer transition-colors ${
+                    checked
+                      ? "border-[#FF005A] bg-[#FF005A]/5 text-black"
+                      : "border-black/10 bg-white text-black/80 hover:border-black/30 hover:bg-black/[0.02]"
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${
+                      checked
+                        ? "border-[#FF005A] bg-[#FF005A] text-white"
+                        : "border-black/25 bg-white"
+                    }`}
+                  >
+                    {checked && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+                  </span>
+                  <input
+                    type="radio"
+                    name="appliedFor"
+                    value={opt.value}
+                    checked={checked}
+                    onChange={() => setAppliedFor(opt.value)}
+                    className="sr-only"
+                  />
+                  <span className="flex-1">{opt.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </Field>
+
+        {/* 10. Tell us more about yourself :) (long text — optional) */}
+        <Field n={10} label="Tell us more about yourself :)">
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}

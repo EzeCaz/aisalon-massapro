@@ -39,6 +39,7 @@ model User {
   companyUrl    String?  // https://...
   portfolioUrl  String?  // personal site / portfolio
   photoUrl      String?  // user-uploaded photo (overrides Google `image` when set)
+  title         String?  // job title / role, e.g. "CEO", "Engineer", "Designer"
   // ----------------------------------------------------------------
   // Email/password login: bcrypt-hashed password. Null when the user
   // signed in via Google only. Set on first email sign-up, and on

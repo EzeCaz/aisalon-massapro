@@ -6,12 +6,15 @@ import { can } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { EmailTabClient } from "./email-tab-client";
-import Link from "next/link";
-import { ArrowLeft, Mail } from "lucide-react";
+import { runSeed } from "@/lib/email-orchestrator/seed";
 
 export const metadata = { title: "Email Campaigns — AI Salon Tel Aviv Admin" };
 
-export default async function EmailTabPage() {
+export default async function EmailTabPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/email");
 
@@ -22,9 +25,23 @@ export default async function EmailTabPage() {
   if (!me) redirect("/login");
   if (!can(me.role, "members.view")) redirect("/events");
 
+  // Resolve the active top-level tab from the URL. Defaults to "campaigns".
+  const sp = await searchParams;
+  const tabParam = (sp.tab || "campaigns").toLowerCase();
+  const activeTab: "campaigns" | "orchestrator" | "flows" =
+    tabParam === "orchestrator" ? "orchestrator" : tabParam === "flows" ? "flows" : "campaigns";
+
+  // Ensure the test audience + stage templates exist (idempotent). Same
+  // seed that runs on /admin/email/flows — both pages share the same DB.
+  try {
+    await runSeed();
+  } catch (e) {
+    console.error("[admin/email/page] seed failed:", e);
+  }
+
   // Pre-fetch initial lists for the client. The client can re-fetch via
   // API when it needs fresh data (after creating/sending a campaign).
-  const [campaigns, templates, membersCount, tags] = await Promise.all([
+  const [campaigns, templates, membersCount, tags, flows, audiences, stageTemplates] = await Promise.all([
     db.emailCampaign.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -46,46 +63,76 @@ export default async function EmailTabPage() {
       distinct: ["label"],
       orderBy: { label: "asc" },
     }),
+    db.emailFlow.findMany({
+      orderBy: { updatedAt: "desc" },
+      include: {
+        _count: { select: { steps: true } },
+      },
+    }),
+    db.emailAudience.findMany({
+      orderBy: [{ isTest: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        kind: true,
+        isTest: true,
+        emailsJson: true,
+        _count: { select: { flowSteps: true } },
+      },
+    }),
+    db.emailStageTemplate.findMany({
+      orderBy: [{ stage: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        subject: true,
+        stage: true,
+        isDefault: true,
+        isActive: true,
+        _count: { select: { flowSteps: true } },
+      },
+    }),
   ]);
 
   // Serialize (Date -> ISO string) for the client
   const campaignsJson = JSON.parse(JSON.stringify(campaigns));
   const templatesJson = JSON.parse(JSON.stringify(templates));
+  const flowsJson = JSON.parse(JSON.stringify(flows));
+  const audiencesJson = audiences.map((a) => ({
+    id: a.id,
+    name: a.name,
+    slug: a.slug,
+    kind: a.kind,
+    isTest: a.isTest,
+    flowStepsCount: a._count.flowSteps,
+    emailsCount: safeParseEmails(a.emailsJson).length,
+  }));
+  const stageTemplatesJson = stageTemplates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    subject: t.subject,
+    stage: t.stage,
+    isDefault: t.isDefault,
+    isActive: t.isActive,
+    flowStepsCount: t._count.flowSteps,
+  }));
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <AdminTabs />
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div>
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-1.5 text-xs text-black/50 hover:text-black mb-3"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to admin
-            </Link>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2 flex items-center gap-2">
-              <Mail className="h-3 w-3" />
-              Admin Panel
-            </p>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
-              Email campaigns
-            </h1>
-            <p className="mt-2 text-sm text-black/80 max-w-2xl">
-              Compose, send, and track email campaigns to community members. Save sent
-              campaigns as reusable templates, or create templates from scratch.
-            </p>
-          </div>
-        </div>
-
         <EmailTabClient
           initialCampaigns={campaignsJson}
           initialTemplates={templatesJson}
           membersCount={membersCount}
           tags={tags.map((t) => ({ label: t.label, color: t.color }))}
           adminEmail={me.email || ""}
+          activeTab={activeTab}
+          flows={flowsJson}
+          audiences={audiencesJson}
+          stageTemplates={stageTemplatesJson}
         />
       </main>
 
@@ -107,4 +154,13 @@ export default async function EmailTabPage() {
       </footer>
     </div>
   );
+}
+
+function safeParseEmails(json: string): string[] {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr.filter((e) => typeof e === "string") : [];
+  } catch {
+    return [];
+  }
 }

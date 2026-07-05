@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { FlowsPageClient } from "./flows-page-client";
 import { runSeed } from "@/lib/email-orchestrator/seed";
+import { EmailAdminNav } from "@/components/ais/email-admin-nav";
 
 export const metadata = { title: "Email Flows — Admin — AI Salon Tel Aviv" };
 
@@ -79,22 +80,8 @@ export default async function FlowBuilderPage() {
     <div className="min-h-screen bg-neutral-50">
       <AppHeader />
       <AdminTabs />
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Email Automation</h1>
-            <p className="text-sm text-neutral-500">
-              Build automated flows, manage reusable audiences, and edit email templates with A/B subject testing.
-            </p>
-          </div>
-          <a
-            href="/admin/email"
-            className="text-sm text-[#FF005A] hover:underline"
-          >
-            ← Back to email
-          </a>
-        </div>
-
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        <EmailAdminNav active="flows" />
         <FlowsPageClient
           templates={templates}
           events={events.map((e) => ({ ...e, startsAt: e.startsAt.toISOString() }))}

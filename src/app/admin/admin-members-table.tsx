@@ -91,6 +91,7 @@ type Member = {
   companyUrl?: string | null;
   linkedinUrl?: string | null;
   portfolioUrl?: string | null;
+  title?: string | null;
   // Imported-only fields (admin-only)
   mobile?: string | null;
   interestedIn?: string | null;
@@ -937,9 +938,11 @@ function CardsView({
                               </span>
                             )}
                           </div>
-                          {m.company && (
+                          {(m.company || m.title) && (
                             <div className="text-[10px] text-black/80 truncate mt-0.5">
-                              {m.company}
+                              {m.title && <span className="font-semibold">{m.title}</span>}
+                              {m.title && m.company && <span className="mx-1 text-black/30">·</span>}
+                              {m.company && <span>{m.company}</span>}
                               {m.companyUrl && (
                                 <a
                                   href={m.companyUrl}
@@ -1665,6 +1668,7 @@ function EditMemberDialog({
   const [companyUrl, setCompanyUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [title, setTitle] = useState("");
   const [mobile, setMobile] = useState("");
   const [interestedIn, setInterestedIn] = useState("");
   const [profileCategories, setProfileCategories] = useState("");
@@ -1706,6 +1710,7 @@ function EditMemberDialog({
       setCompanyUrl(member.companyUrl || "");
       setLinkedinUrl(member.linkedinUrl || "");
       setPortfolioUrl(member.portfolioUrl || "");
+      setTitle(member.title || "");
       setMobile(member.mobile || "");
       setInterestedIn(member.interestedIn || "");
       setProfileCategories(member.profileCategories || "");
@@ -1777,6 +1782,7 @@ function EditMemberDialog({
         companyUrl,
         linkedinUrl,
         portfolioUrl,
+        title,
         mobile,
         interestedIn,
         profileCategories,
@@ -1917,14 +1923,14 @@ function EditMemberDialog({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-black/80 mb-1">
-                  Mobile
+                  Title / Role
                 </label>
                 <input
                   type="text"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
-                  placeholder="+972 …"
+                  placeholder="e.g. CEO, Engineer, Designer, Investor"
                 />
               </div>
             </div>
@@ -1989,6 +1995,18 @@ function EditMemberDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-black/80 mb-1">
+                  Mobile
+                </label>
+                <input
+                  type="text"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                  placeholder="+972 …"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-black/80 mb-1">
                   LinkedIn URL
                 </label>
                 <input
@@ -1999,6 +2017,9 @@ function EditMemberDialog({
                   placeholder="https://www.linkedin.com/in/…"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-black/80 mb-1">
                   Portfolio URL
@@ -2011,6 +2032,7 @@ function EditMemberDialog({
                   placeholder="https://your-portfolio.com"
                 />
               </div>
+              <div />
             </div>
           </div>
 
@@ -2490,6 +2512,13 @@ function MemberDetail({ member, onOpenEmailDialog }: { member: Member; onOpenEma
             icon={<Briefcase className="h-3.5 w-3.5" />}
             label="Company"
             value={member.company}
+          />
+        )}
+        {member.title && (
+          <DetailRow
+            icon={<Briefcase className="h-3.5 w-3.5" />}
+            label="Title / Role"
+            value={member.title}
           />
         )}
         {member.appliedFor && (

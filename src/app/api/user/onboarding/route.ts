@@ -16,12 +16,14 @@ import { needsOnboarding } from "@/lib/onboarding";
  *   {
  *     name: string,                    // Full Name *
  *     company: string,                 // Company name *
+ *     title?: string,                  // Title / Role *  (job title)
  *     email: string,                   // email *  (must match session email)
  *     mobile: string,                  // Mobile *
  *     linkedinUrl: string,             // Linkedin profile *
  *     interestedIn: string[],          // I am interested in... (checkboxes)
  *     interestedInOther?: string,      //   "Other: ___" free text
  *     profileCategories: string[],     // Tell us more about yourself (checkboxes)
+ *     appliedFor?: string,             // I would like to apply for (single-select)
  *     bio?: string,                    // Tell us more about yourself :) (long text)
  *   }
  *
@@ -52,12 +54,14 @@ export async function POST(req: NextRequest) {
   let body: {
     name?: string;
     company?: string;
+    title?: string;
     email?: string;
     mobile?: string;
     linkedinUrl?: string;
     interestedIn?: string[];
     interestedInOther?: string;
     profileCategories?: string[];
+    appliedFor?: string;
     bio?: string;
   };
   try {
@@ -74,6 +78,9 @@ export async function POST(req: NextRequest) {
 
   const company = (body.company || "").trim();
   if (company.length < 1) errors.push("Please tell us your company name.");
+
+  const title = (body.title || "").trim();
+  if (title.length < 1) errors.push("Please tell us your title / role (e.g. CEO, Engineer).");
 
   const email = (body.email || "").trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -109,6 +116,11 @@ export async function POST(req: NextRequest) {
     errors.push('Please pick at least one option under "Tell us more about yourself".');
   }
 
+  // appliedFor: optional single-select. Valid values: "" | "Fast pitch" | "Presentation/Lecture"
+  const appliedForRaw = (body.appliedFor || "").trim();
+  const validAppliedFor = ["", "Fast pitch", "Presentation/Lecture"];
+  const appliedFor = validAppliedFor.includes(appliedForRaw) ? appliedForRaw : "";
+
   if (errors.length > 0) {
     return NextResponse.json(
       { error: errors.join(" "), fieldErrors: errors },
@@ -137,11 +149,13 @@ export async function POST(req: NextRequest) {
     data: {
       name,
       company: company.slice(0, 120),
+      title: title.slice(0, 120),
       // email is intentionally NOT updated — it's the identity.
       mobile: mobile.slice(0, 60),
       linkedinUrl,
       interestedIn: interestedInStr,
       profileCategories: profileCategoriesStr,
+      appliedFor: appliedFor || null,
       bio,
       onboardedAt: new Date(),
     },
@@ -179,6 +193,7 @@ export async function GET() {
       name: true,
       mobile: true,
       company: true,
+      title: true,
       linkedinUrl: true,
       interestedIn: true,
       profileCategories: true,

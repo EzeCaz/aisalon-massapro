@@ -19,7 +19,7 @@ import { getCurrentUser } from "@/lib/auth-guards";
  * table — clickable name + Edit button on each row.
  *
  * Body: {
- *   name?, bio?, company?, companyUrl?, linkedinUrl?, portfolioUrl?,
+ *   name?, bio?, company?, companyUrl?, linkedinUrl?, portfolioUrl?, title?,
  *   mobile?, interestedIn?, profileCategories?, appliedFor?, invitedToSpeak?,
  *   role?  // ONLY Super Admin can change role; value must be one of
  *          // ASSIGNABLE_ROLES (ADMIN, CO_HOST, MEMBER). SUPER_ADMIN
@@ -87,6 +87,7 @@ export async function PATCH(
     companyUrl?: string | null;
     linkedinUrl?: string | null;
     portfolioUrl?: string | null;
+    title?: string | null;
     mobile?: string | null;
     interestedIn?: string | null;
     profileCategories?: string | null;
@@ -161,6 +162,10 @@ export async function PATCH(
     const trimmed = (body.portfolioUrl || "").trim();
     data.portfolioUrl = trimmed.length > 0 ? sanitizeUrl(trimmed) : null;
   }
+  if (body.title !== undefined) {
+    const trimmed = (body.title || "").trim();
+    data.title = trimmed.length > 0 ? trimmed.slice(0, 120) : null;
+  }
   if (body.mobile !== undefined) {
     const trimmed = (body.mobile || "").trim();
     data.mobile = trimmed.length > 0 ? trimmed.slice(0, 60) : null;
@@ -203,6 +208,7 @@ export async function PATCH(
       companyUrl: updated.companyUrl,
       linkedinUrl: updated.linkedinUrl,
       portfolioUrl: updated.portfolioUrl,
+      title: updated.title,
       mobile: updated.mobile,
       interestedIn: updated.interestedIn,
       profileCategories: updated.profileCategories,

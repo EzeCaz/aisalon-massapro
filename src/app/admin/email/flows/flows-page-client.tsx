@@ -3,21 +3,23 @@
 /**
  * FlowsPageClient — top-level client for /admin/email/flows.
  *
- * Three tabs:
- *   - Flows: the flow builder (existing)
- *   - Audiences: audience management (new)
- *   - Templates: stage template editing + duplicate + metrics (new)
+ * Three sub-views (driven by the parent EmailAdminNav submenu):
+ *   - Flows: the flow builder
+ *   - Audiences: audience management
+ *   - Templates: stage template editing + duplicate + metrics
  *
- * All three tabs share the same data sources (templates, audiences, events)
- * fetched on the server and passed in as props.
+ * The submenu is rendered by <EmailAdminNav> (in the server page). This
+ * component just listens for the active sub-tab via window events so the
+ * nav and the body stay in sync. The nav dispatches:
+ *   window.dispatchEvent(new CustomEvent("flow-subtab-change", { detail: "flows" | "audiences" | "templates" }))
  */
 
 import * as React from "react";
-import { Workflow, Users, FileText } from "lucide-react";
 import { FlowBuilderClient } from "./flow-builder-client";
 import { AudiencesClient } from "./audiences-client";
 import { TemplatesClient } from "./templates-client";
 import type { FlowTemplate, FlowAudience } from "@/components/ais/flow-builder/flow-builder-canvas";
+import type { FlowSubtab } from "@/components/ais/email-admin-nav";
 
 type Props = {
   templates: FlowTemplate[];
@@ -25,14 +27,12 @@ type Props = {
   initialAudiences: FlowAudience[];
 };
 
-type Tab = "flows" | "audiences" | "templates";
-
 export function FlowsPageClient({
   templates,
   events,
   initialAudiences,
 }: Props) {
-  const [tab, setTab] = React.useState<Tab>("flows");
+  const [tab, setTab] = React.useState<FlowSubtab>("flows");
   // Lifted audience + template state so changes in one tab reflect in another.
   const [audiences, setAudiences] = React.useState<FlowAudience[]>(initialAudiences);
   const [templatesState, setTemplatesState] = React.useState<FlowTemplate[]>(templates);
@@ -45,15 +45,18 @@ export function FlowsPageClient({
     return () => window.removeEventListener("navigate-to-audiences-tab", handler);
   }, []);
 
+  // Listen for sub-tab changes dispatched by EmailAdminNav (parent).
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<FlowSubtab>).detail;
+      if (detail) setTab(detail);
+    };
+    window.addEventListener("flow-subtab-change", handler);
+    return () => window.removeEventListener("flow-subtab-change", handler);
+  }, []);
+
   return (
     <div>
-      {/* Tab switcher */}
-      <div className="mb-4 flex gap-1 border-b border-neutral-200">
-        <TabButton active={tab === "flows"} onClick={() => setTab("flows")} icon={<Workflow className="h-3.5 w-3.5" />} label="Flows" />
-        <TabButton active={tab === "audiences"} onClick={() => setTab("audiences")} icon={<Users className="h-3.5 w-3.5" />} label="Audiences" />
-        <TabButton active={tab === "templates"} onClick={() => setTab("templates")} icon={<FileText className="h-3.5 w-3.5" />} label="Templates" />
-      </div>
-
       {tab === "flows" && (
         <FlowBuilderClient
           templates={templatesState}
@@ -65,10 +68,6 @@ export function FlowsPageClient({
         <AudiencesClient
           initialAudiences={audiences as never /* AudiencesClient uses its own Audience type */}
           onAudiencesChange={(next) => {
-            // Map back to FlowAudience shape (id, name, isTest, emails).
-            // For DYNAMIC audiences, emails may be empty here — that's fine,
-            // the flow step editor will call /api/email-audiences/[id]/emails
-            // to resolve them when needed.
             setAudiences(
               next.map((a: { id: string; name: string; isTest: boolean; emails: string[]; kind: string }) => ({
                 id: a.id,
@@ -84,7 +83,6 @@ export function FlowsPageClient({
         <TemplatesClient
           templates={[]}
           onTemplatesChange={(next) => {
-            // Update FlowBuilderClient's templates prop (minimal shape).
             setTemplatesState(next.map((t) => ({
               id: t.id,
               name: t.name,
@@ -97,31 +95,5 @@ export function FlowsPageClient({
         />
       )}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${
-        active
-          ? "border-b-2 border-[#FF005A] text-[#FF005A]"
-          : "border-b-2 border-transparent text-neutral-500 hover:text-neutral-800"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }

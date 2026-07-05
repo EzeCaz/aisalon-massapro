@@ -16,12 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -42,8 +36,13 @@ import {
   Mail,
   FilePlus2,
   Workflow,
+  Users,
+  ExternalLink,
 } from "lucide-react";
 import { OrchestratorPanel } from "./orchestrator-panel";
+import { EmailAdminNav, type EmailAdminTab } from "@/components/ais/email-admin-nav";
+import { TemplatesClient } from "./flows/templates-client";
+import Link from "next/link";
 
 // ----------------------------------------------------------------------------
 // Types — mirror the Prisma models we serialized in the server page.
@@ -92,12 +91,48 @@ type Campaign = {
   _count: { recipients: number; events: number };
 };
 
+type FlowSummary = {
+  id: string;
+  name: string;
+  status: string;
+  updatedAt: string;
+  _count: { steps: number };
+};
+
+type AudienceSummary = {
+  id: string;
+  name: string;
+  slug: string | null;
+  kind: string;
+  isTest: boolean;
+  flowStepsCount: number;
+  emailsCount: number;
+};
+
+type StageTemplateSummary = {
+  id: string;
+  name: string;
+  subject: string;
+  stage: number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  flowStepsCount: number;
+};
+
 type Props = {
   initialCampaigns: Campaign[];
   initialTemplates: Template[];
   membersCount: number;
   tags: { label: string; color: string | null }[];
   adminEmail: string;
+  /** Active top-level nav tab (from ?tab= query). */
+  activeTab: EmailAdminTab;
+  /** All flows in the DB (same source as /admin/email/flows). */
+  flows: FlowSummary[];
+  /** All audiences in the DB (same source as /admin/email/flows). */
+  audiences: AudienceSummary[];
+  /** All EmailStageTemplate rows (same source as /admin/email/flows). */
+  stageTemplates: StageTemplateSummary[];
 };
 
 // ----------------------------------------------------------------------------
@@ -110,6 +145,10 @@ export function EmailTabClient({
   membersCount,
   tags,
   adminEmail,
+  activeTab,
+  flows,
+  audiences,
+  stageTemplates,
 }: Props) {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
   const [templates, setTemplates] = React.useState<Template[]>(initialTemplates);
@@ -127,6 +166,9 @@ export function EmailTabClient({
     campaignName: string;
     defaultName: string;
   } | null>(null);
+
+  // Local copy of stage templates so the TemplatesClient can update it.
+  const [stageTemplatesState, setStageTemplatesState] = React.useState<StageTemplateSummary[]>(stageTemplates);
 
   // Refresh helpers
   const refreshCampaigns = React.useCallback(async () => {
@@ -213,231 +255,12 @@ export function EmailTabClient({
   };
 
   return (
-    <Tabs defaultValue="campaigns" className="space-y-6">
-      <TabsList className="bg-black/[0.04] p-1 h-auto">
-        <TabsTrigger
-          value="campaigns"
-          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5"
-        >
-          <Mail className="h-3.5 w-3.5 mr-1.5" />
-          Campaigns
-        </TabsTrigger>
-        <TabsTrigger
-          value="orchestrator"
-          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 relative"
-        >
-          <Workflow className="h-3.5 w-3.5 mr-1.5" />
-          Orchestrator
-          <Badge
-            className="ml-1.5 h-4 px-1 text-[0.55rem] font-bold uppercase tracking-wider bg-[#FF005A] text-white border-0"
-            variant="default"
-          >
-            New
-          </Badge>
-        </TabsTrigger>
-        <TabsTrigger
-          value="flows"
-          className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-1.5 relative"
-        >
-          <Workflow className="h-3.5 w-3.5 mr-1.5" />
-          Flows
-          <Badge
-            className="ml-1.5 h-4 px-1 text-[0.55rem] font-bold uppercase tracking-wider bg-[#00E6FF] text-black border-0"
-            variant="default"
-          >
-            New
-          </Badge>
-        </TabsTrigger>
-      </TabsList>
+    <div className="space-y-6">
+      <EmailAdminNav active={activeTab} />
 
-      <TabsContent value="campaigns" className="space-y-10 m-0">
-    <div className="space-y-10">
-      {/* Templates section (shown at top — small, so admins see them first) */}
-      <section>
-        <div className="flex items-end justify-between mb-3">
-          <div>
-            <h2 className="text-lg font-bold text-black">Templates</h2>
-            <p className="text-sm text-black/80">
-              Reusable subject + body pairs. Pick from the composer's template dropdown.
-            </p>
-          </div>
-          <Button
-            onClick={handleCreateTemplate}
-            className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white"
-          >
-            <FilePlus2 className="h-4 w-4 mr-1.5" />
-            Create template
-          </Button>
-        </div>
-        <TemplatesTable
-          templates={templates}
-          onEdit={(t) => {
-            setEditingTemplate(t);
-            setTemplateEditorOpen(true);
-          }}
-        />
-      </section>
+      {activeTab === "orchestrator" && <OrchestratorPanel />}
 
-      {/* Campaigns section */}
-      <section>
-        <div className="flex items-end justify-between mb-3">
-          <div>
-            <h2 className="text-lg font-bold text-black">Campaigns</h2>
-            <p className="text-sm text-black/80">
-              Draft, scheduled, and sent email campaigns. {membersCount} members in the
-              community.
-            </p>
-          </div>
-          <Button onClick={handleNewCampaign} className="bg-black hover:bg-black/90 text-white">
-            <Plus className="h-4 w-4 mr-1.5" />
-            New campaign
-          </Button>
-        </div>
-        <CampaignsTable
-          campaigns={campaigns}
-          onEdit={handleEditCampaign}
-          onDelete={handleDeleteCampaign}
-          onSaveAsTemplate={handleSaveAsTemplateFromRow}
-          onRefresh={refreshCampaigns}
-        />
-      </section>
-
-      {/* Composer modal */}
-      <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingCampaign ? "Edit campaign" : "New campaign"}
-            </DialogTitle>
-            <DialogDescription>
-              Compose your email below. Save a draft, save it as a reusable template,
-              or send it now to the selected recipient list.
-            </DialogDescription>
-          </DialogHeader>
-          <CampaignComposer
-            key={editingCampaign?.id || "new"}
-            campaign={editingCampaign}
-            templates={templates}
-            tags={tags}
-            membersCount={membersCount}
-            adminEmail={adminEmail}
-            onSaved={handleComposerSaved}
-            onCancel={() => {
-              setComposerOpen(false);
-              setEditingCampaign(null);
-            }}
-            onRequestSaveAsTemplate={async (subject, bodyHtml, suggestedName) => {
-              // For the in-composer flow: create a draft campaign first (if not
-              // already), then call save-as-template on it. If we're editing an
-              // existing draft, use its ID directly.
-              try {
-                let campaignId = editingCampaign?.id;
-                let campaignName = editingCampaign?.name || suggestedName || "Draft";
-
-                if (!campaignId) {
-                  // Create a draft so we can clone it
-                  const createRes = await fetch("/api/admin/email/campaigns", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      name: campaignName,
-                      subject,
-                      bodyHtml,
-                      listSource: "ALL_MEMBERS",
-                      listConfigJson: "{}",
-                    }),
-                  });
-                  if (!createRes.ok) {
-                    const d = await createRes.json().catch(() => ({}));
-                    toast.error(d.error || "Failed to create draft for template");
-                    return;
-                  }
-                  const d = await createRes.json();
-                  campaignId = d.campaign.id;
-                } else {
-                  // Update the existing draft with the latest composer content
-                  await fetch(`/api/admin/email/campaigns/${campaignId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      subject,
-                      bodyHtml,
-                      name: suggestedName || campaignName,
-                    }),
-                  });
-                }
-
-                setSaveAsTemplateSource({
-                  campaignId: campaignId!,
-                  campaignName: suggestedName || campaignName,
-                  defaultName: `${suggestedName || campaignName} (template)`,
-                });
-                setSaveAsTemplateOpen(true);
-              } catch (e) {
-                toast.error("Failed to prepare template");
-                console.error(e);
-              }
-            }}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Template editor modal */}
-      <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingTemplate ? "Edit template" : "Create template"}
-            </DialogTitle>
-            <DialogDescription>
-              Templates store a reusable subject + body pair. They don't send — pick
-              one from the composer's dropdown to use it as a starting point.
-            </DialogDescription>
-          </DialogHeader>
-          <TemplateEditor
-            key={editingTemplate?.id || "new"}
-            template={editingTemplate}
-            onSaved={handleTemplateSaved}
-            onCancel={() => {
-              setTemplateEditorOpen(false);
-              setEditingTemplate(null);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Save-as-template modal (used by both row button + in-composer button) */}
-      <Dialog open={saveAsTemplateOpen} onOpenChange={setSaveAsTemplateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Save as template</DialogTitle>
-            <DialogDescription>
-              Save this email's subject + body as a reusable template. You can pick it
-              from the composer's template dropdown in future campaigns.
-            </DialogDescription>
-          </DialogHeader>
-          {saveAsTemplateSource && (
-            <SaveAsTemplateForm
-              campaignId={saveAsTemplateSource.campaignId}
-              defaultName={saveAsTemplateSource.defaultName}
-              campaignName={saveAsTemplateSource.campaignName}
-              onSaved={handleSaveAsTemplateSaved}
-              onCancel={() => {
-                setSaveAsTemplateOpen(false);
-                setSaveAsTemplateSource(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-      </TabsContent>
-
-      <TabsContent value="orchestrator" className="m-0">
-        <OrchestratorPanel />
-      </TabsContent>
-
-      <TabsContent value="flows" className="m-0">
+      {activeTab === "flows" && (
         <div className="rounded-lg border border-neutral-200 bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -455,39 +278,302 @@ export function EmailTabClient({
               <Workflow className="h-4 w-4" /> Open Flow Builder
             </a>
           </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-neutral-200 p-4">
-              <div className="mb-2 text-2xl">🎯</div>
-              <h3 className="text-sm font-bold text-neutral-900">Trigger</h3>
-              <p className="mt-1 text-xs text-neutral-600">
-                Start the flow on RSVP, door check-in, attended mark, no-show mark, or manually.
-              </p>
-            </div>
-            <div className="rounded-lg border border-neutral-200 p-4">
-              <div className="mb-2 text-2xl">🔀</div>
-              <h3 className="text-sm font-bold text-neutral-900">Branch</h3>
-              <p className="mt-1 text-xs text-neutral-600">
-                If opened → halt. If not opened → wait 5h and send step 2. Up to 5 steps per flow.
-              </p>
-            </div>
-            <div className="rounded-lg border border-neutral-200 p-4">
-              <div className="mb-2 text-2xl">👥</div>
-              <h3 className="text-sm font-bold text-neutral-900">Filter</h3>
-              <p className="mt-1 text-xs text-neutral-600">
-                Target by company, role, interestedIn, appliedFor, profileCategories — re-evaluated at each send.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-lg bg-[#00E6FF]/10 p-4 text-xs text-neutral-700">
-            <strong>Tracking:</strong> Every send fires the open pixel + click redirect (legacy orchestrator's tracking,
-            already wired). GA4 + Meta CAPI events fire via <code className="rounded bg-white px-1">/api/track/event</code>{" "}
-            on RSVP, door check-in, and attendance marks.
-          </div>
         </div>
-      </TabsContent>
-    </Tabs>
+      )}
+
+      {activeTab === "campaigns" && (
+        <div className="space-y-10">
+          {/* Quick links to Flows + Audiences (same DB, full editor in /admin/email/flows) */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <QuickLinkCard
+              href="/admin/email/flows"
+              icon={<Workflow className="h-4 w-4" />}
+              title={`Flows (${flows.length})`}
+              desc="Automated email sequences with triggers, delays, and A/B subject testing."
+              accent="#FF005A"
+            />
+            <QuickLinkCard
+              href="/admin/email/flows"
+              icon={<Users className="h-4 w-4" />}
+              title={`Audiences (${audiences.length})`}
+              desc="Static email lists + dynamic filter-based audiences (members, RSVPs, users)."
+              accent="#00E6FF"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("flow-subtab-pref", "audiences");
+                  window.dispatchEvent(new CustomEvent("flow-subtab-change", { detail: "audiences" }));
+                }
+              }}
+            />
+            <QuickLinkCard
+              href="/admin/email/flows"
+              icon={<FileText className="h-4 w-4" />}
+              title={`Flow Templates (${stageTemplatesState.length})`}
+              desc="Stage 1-5 templates + custom templates — editable, duplicable, with metrics."
+              accent="#820A7D"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("flow-subtab-pref", "templates");
+                  window.dispatchEvent(new CustomEvent("flow-subtab-change", { detail: "templates" }));
+                }
+              }}
+            />
+          </section>
+
+          {/* Flow Templates section (EmailStageTemplate — same DB as /admin/email/flows) */}
+          <section>
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-bold text-black flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-[#820A7D]" />
+                  Flow Templates (Stage 1-5)
+                </h2>
+                <p className="text-sm text-black/80">
+                  Same templates used in the Flow Builder. Edit, duplicate, view metrics — all changes
+                  sync to /admin/email/flows instantly (shared DB).
+                </p>
+              </div>
+              <Link
+                href="/admin/email/flows"
+                className="text-xs text-[#FF005A] hover:underline inline-flex items-center gap-1"
+              >
+                Open full editor <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+            <TemplatesClient
+              templates={[]}
+              onTemplatesChange={(next) => {
+                setStageTemplatesState(next.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  subject: t.subject,
+                  stage: t.stage,
+                  isDefault: t.isDefault ?? false,
+                  isActive: t.isActive ?? true,
+                  flowStepsCount: 0,
+                })));
+              }}
+            />
+          </section>
+
+          {/* Campaign Templates section (EmailTemplate model — campaign composer) */}
+          <section>
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-bold text-black">Campaign Templates</h2>
+                <p className="text-sm text-black/80">
+                  Reusable subject + body pairs for one-off campaigns. Pick from the composer's template dropdown.
+                </p>
+              </div>
+              <Button
+                onClick={handleCreateTemplate}
+                className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white"
+              >
+                <FilePlus2 className="h-4 w-4 mr-1.5" />
+                Create template
+              </Button>
+            </div>
+            <TemplatesTable
+              templates={templates}
+              onEdit={(t) => {
+                setEditingTemplate(t);
+                setTemplateEditorOpen(true);
+              }}
+            />
+          </section>
+
+          {/* Campaigns section */}
+          <section>
+            <div className="flex items-end justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-bold text-black">Campaigns</h2>
+                <p className="text-sm text-black/80">
+                  Draft, scheduled, and sent email campaigns. {membersCount} members in the
+                  community.
+                </p>
+              </div>
+              <Button onClick={handleNewCampaign} className="bg-black hover:bg-black/90 text-white">
+                <Plus className="h-4 w-4 mr-1.5" />
+                New campaign
+              </Button>
+            </div>
+            <CampaignsTable
+              campaigns={campaigns}
+              onEdit={handleEditCampaign}
+              onDelete={handleDeleteCampaign}
+              onSaveAsTemplate={handleSaveAsTemplateFromRow}
+              onRefresh={refreshCampaigns}
+            />
+          </section>
+
+          {/* Composer modal */}
+          <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingCampaign ? "Edit campaign" : "New campaign"}
+                </DialogTitle>
+                <DialogDescription>
+                  Compose your email below. Save a draft, save it as a reusable template,
+                  or send it now to the selected recipient list.
+                </DialogDescription>
+              </DialogHeader>
+              <CampaignComposer
+                key={editingCampaign?.id || "new"}
+                campaign={editingCampaign}
+                templates={templates}
+                tags={tags}
+                membersCount={membersCount}
+                adminEmail={adminEmail}
+                onSaved={handleComposerSaved}
+                onCancel={() => {
+                  setComposerOpen(false);
+                  setEditingCampaign(null);
+                }}
+                onRequestSaveAsTemplate={async (subject, bodyHtml, suggestedName) => {
+                  try {
+                    let campaignId = editingCampaign?.id;
+                    let campaignName = editingCampaign?.name || suggestedName || "Draft";
+
+                    if (!campaignId) {
+                      const createRes = await fetch("/api/admin/email/campaigns", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: campaignName,
+                          subject,
+                          bodyHtml,
+                          listSource: "ALL_MEMBERS",
+                          listConfigJson: "{}",
+                        }),
+                      });
+                      if (!createRes.ok) {
+                        const d = await createRes.json().catch(() => ({}));
+                        toast.error(d.error || "Failed to create draft for template");
+                        return;
+                      }
+                      const d = await createRes.json();
+                      campaignId = d.campaign.id;
+                    } else {
+                      await fetch(`/api/admin/email/campaigns/${campaignId}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          subject,
+                          bodyHtml,
+                          name: suggestedName || campaignName,
+                        }),
+                      });
+                    }
+
+                    setSaveAsTemplateSource({
+                      campaignId: campaignId!,
+                      campaignName: suggestedName || campaignName,
+                      defaultName: `${suggestedName || campaignName} (template)`,
+                    });
+                    setSaveAsTemplateOpen(true);
+                  } catch (e) {
+                    toast.error("Failed to prepare template");
+                    console.error(e);
+                  }
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+
+          {/* Template editor modal */}
+          <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
+            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingTemplate ? "Edit template" : "Create template"}
+                </DialogTitle>
+                <DialogDescription>
+                  Templates store a reusable subject + body pair. They don't send — pick
+                  one from the composer's dropdown to use it as a starting point.
+                </DialogDescription>
+              </DialogHeader>
+              <TemplateEditor
+                key={editingTemplate?.id || "new"}
+                template={editingTemplate}
+                onSaved={handleTemplateSaved}
+                onCancel={() => {
+                  setTemplateEditorOpen(false);
+                  setEditingTemplate(null);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+
+          {/* Save-as-template modal (used by both row button + in-composer button) */}
+          <Dialog open={saveAsTemplateOpen} onOpenChange={setSaveAsTemplateOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Save as template</DialogTitle>
+                <DialogDescription>
+                  Save this email's subject + body as a reusable template. You can pick it
+                  from the composer's template dropdown in future campaigns.
+                </DialogDescription>
+              </DialogHeader>
+              {saveAsTemplateSource && (
+                <SaveAsTemplateForm
+                  campaignId={saveAsTemplateSource.campaignId}
+                  defaultName={saveAsTemplateSource.defaultName}
+                  campaignName={saveAsTemplateSource.campaignName}
+                  onSaved={handleSaveAsTemplateSaved}
+                  onCancel={() => {
+                    setSaveAsTemplateOpen(false);
+                    setSaveAsTemplateSource(null);
+                  }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// QuickLinkCard — small CTA card for navigating to /admin/email/flows
+// ---------------------------------------------------------------------------
+
+function QuickLinkCard({
+  href,
+  icon,
+  title,
+  desc,
+  accent,
+  onClick,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  accent: string;
+  onClick?: () => void;
+}) {
+  return (
+    <a
+      href={href}
+      onClick={onClick}
+      className="group rounded-lg border border-black/10 bg-white p-4 hover:border-[#FF005A]/40 hover:shadow-sm transition-all"
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-white"
+          style={{ backgroundColor: accent }}
+        >
+          {icon}
+        </span>
+        <h3 className="text-sm font-bold text-black">{title}</h3>
+      </div>
+      <p className="text-xs text-black/80 leading-relaxed">{desc}</p>
+      <p className="mt-2 text-[0.65rem] font-semibold uppercase tracking-wider text-[#FF005A] opacity-0 group-hover:opacity-100 transition-opacity">
+        Open in Flow Builder →
+      </p>
+    </a>
   );
 }
 

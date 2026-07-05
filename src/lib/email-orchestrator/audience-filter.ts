@@ -78,6 +78,7 @@ export const USER_FIELDS: FieldDef[] = [
   { field: "name", label: "Name", type: "string" },
   { field: "company", label: "Company", type: "string" },
   { field: "companyUrl", label: "Company URL", type: "string" },
+  { field: "title", label: "Title / Role", type: "string" },
   { field: "linkedinUrl", label: "LinkedIn URL", type: "string" },
   { field: "portfolioUrl", label: "Portfolio URL", type: "string" },
   { field: "bio", label: "Bio", type: "string" },
