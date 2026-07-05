@@ -195,3 +195,66 @@ Files modified:
 - src/app/admin/email/flows/templates-client.tsx (infinite-loop fix)
 - src/app/admin/email/flows/audiences-client.tsx (event name filter)
 - src/app/admin/email/flows/flows-page-client.tsx (pass events prop)
+
+---
+Task ID: event-agenda-redesign
+Agent: main
+Task: Redesign the Event Agenda section on /events/{slug} → Speakers & Agenda
+  tab. The Lineup section (right column) must stay untouched. Issues with
+  the old design:
+    - too much empty space (text centered with max-w-prose)
+    - small fonts (time text-sm, title text-sm, description text-xs)
+    - pictures section was a tiny 96×64px thumbnail
+    - layout was vertically stacked and centered
+    - colors used #7C3AED (violet) for PANEL — not in brand palette
+
+Work Log:
+- Inspected src/app/events/[slug]/tabs/agenda-tab.tsx — found the agenda
+  card markup at lines 1014-1209 (inside AgendaTab component).
+- Inspected event-tabs.tsx, overview-tab.tsx, event-prep-tab.tsx to confirm
+  the brand color palette:
+    #FF005A (pink)  #00E6FF (cyan)  #007E72 (teal)
+    #004F98 (blue)  #820A7D (magenta)  #FFAC30 (amber)
+  Violet #7C3AED was the only non-brand color in the agenda.
+- Replaced PANEL type color from #7C3AED → #004F98 (brand blue).
+  This applies to: card tint, panelist buttons, panelist avatar fallbacks,
+  moderator label — all now use the brand blue accent.
+- Removed the unused `start` variable (was declared but never read).
+- Redesigned the agenda card layout from a vertically-stacked centered
+  layout to a horizontal split:
+    LEFT column (flex-1, p-5):
+      - Time row: large mono time (text-xl, bold, accent color) +
+        end-time chip + type icon in a circular tinted badge (ml-auto)
+      - Title (text-lg, bold)
+      - Description (text-sm, leading-relaxed)
+      - Speaker info (text-sm, semibold name + role/company)
+      - Panelists (PANEL only) — inline pill buttons using accent color
+      - Action buttons row (mt-1, pt-3, border-t):
+        Pictures / Presentation / Session URL / Contact
+        — SAME size as before (w-24, h-16 icon area, h-[0.6rem] label)
+        — left-aligned under the text instead of centered
+    RIGHT column (md:w-56 lg:w-72, only when speaker has pictures):
+      - Large clickable image preview (h-44 on mobile, h-full on md+,
+        min-h-[180px]) with object-cover
+      - Gradient overlay (from-black/55) for legibility
+      - "1/N" counter top-right (now larger: text-[0.65rem], px-2 py-0.5)
+      - "Pictures" label bottom-left with icon
+  On mobile (<md), the picture stacks BELOW the info column with a
+  border-top separator. On md+ screens, picture sits to the right of
+  the info column with a border-left separator.
+- The accent color is computed per card based on item.type, applied via
+  inline style. This avoids Tailwind purge issues with dynamic class
+  names while still using only brand palette colors.
+- Hover states on panelist pills use onMouseEnter/onMouseLeave to bump
+  background/border opacity (style attribute approach for the same
+  purge-safety reason).
+
+Stage Summary:
+- Single file modified: src/app/events/[slug]/tabs/agenda-tab.tsx
+- Dev server compiles cleanly (✓ Compiled in 646ms, then 219ms — no
+  errors, no warnings).
+- HTTP 200 on /events/ai-salon-human (real event with 7 agenda items
+  including a PANEL with 5 panelists).
+- The Lineup section (right sidebar) is unchanged.
+- All action buttons (Pictures, Presentation, Session URL, Contact)
+  retain their original w-24 thumbnail size as requested.

@@ -137,8 +137,8 @@ const typeColor: Record<string, string> = {
   TALK: "bg-[#FF005A]/10 text-[#FF005A] border-[#FF005A]/30",
   BREAK: "bg-black/5 text-black/80 border-black/10",
   NETWORKING: "bg-[#820A7D]/10 text-[#820A7D] border-[#820A7D]/30",
-  FAST_PITCH: "bg-[#FFAC30]/10 text-[#FFAC30] border-[#FFAC30]/30",
-  PANEL: "bg-[#7C3AED]/10 text-[#7C3AED] border-[#7C3AED]/30",
+  FAST_PITCH: "bg-[#FFAC30]/10 text-[#9A6800] border-[#FFAC30]/30",
+  PANEL: "bg-[#004F98]/10 text-[#004F98] border-[#004F98]/30",
 };
 
 function fmtTime(iso: string): string {
@@ -1011,9 +1011,8 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
         <h2 className="text-xs font-bold uppercase tracking-widest text-[#FF005A] mb-4">
           Event agenda
         </h2>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {event.agenda.map((item) => {
-            const start = new Date(item.startsAt);
             const end = item.endsAt ? new Date(item.endsAt) : null;
             const assets = agendaItemHasAssets(item);
             const showThumbnails =
@@ -1021,188 +1020,264 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
               assets.hasPresentation ||
               assets.hasUrl ||
               assets.hasContact;
+            const cardTint = typeColor[item.type] || "bg-white border-black/10";
+            const accentColor =
+              item.type === "PANEL" ? "#004F98" :
+              item.type === "NETWORKING" ? "#820A7D" :
+              item.type === "WELCOME" ? "#007E72" :
+              item.type === "FAST_PITCH" ? "#9A6800" :
+              item.type === "TALK" ? "#FF005A" :
+              "#000000";
 
             return (
               <Card
                 key={item.id}
-                className={`p-4 border ${typeColor[item.type] || "bg-white border-black/10"}`}
+                className={`overflow-hidden border ${cardTint}`}
               >
-                {/* Top row: time · icon · title · description · speaker (all centered) */}
-                <div className="flex flex-col items-center text-center gap-1.5">
-                  <div className="flex items-center gap-3 text-black/80">
-                    <span className="font-mono text-sm font-bold text-black">
-                      {fmtTime(item.startsAt)}
-                    </span>
-                    {end && (
-                      <span className="font-mono text-[0.65rem] text-black/80">
-                        → {fmtTime(item.endsAt!)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className={typeColor[item.type] ? "" : "text-black/80"}>
-                    {typeIcon[item.type]}
-                  </div>
-
-                  <div className="font-semibold text-sm text-black leading-snug">
-                    {item.title}
-                  </div>
-
-                  {item.description && (
-                    <p className="text-xs text-black/80 leading-relaxed max-w-prose">
-                      {item.description}
-                    </p>
-                  )}
-
-                  {item.speaker && (
-                    <div
-                      className={`text-xs ${
-                        item.type === "PANEL" ? "text-[#7C3AED]" : "text-black/80"
-                      }`}
-                    >
-                      {item.type === "PANEL" && (
-                        <span className="font-bold">Moderator: </span>
+                <div className="flex flex-col md:flex-row">
+                  {/* ──────────────────────────────────────────────────────
+                      LEFT — time + text + action buttons (the "info" column)
+                      Stacks vertically; on md+ screens takes the remaining
+                      width next to the picture on the right.
+                     ────────────────────────────────────────────────────── */}
+                  <div className="flex-1 flex flex-col gap-3 p-5">
+                    {/* Time + type icon row */}
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="font-mono text-xl font-bold leading-none tabular-nums"
+                        style={{ color: accentColor }}
+                      >
+                        {fmtTime(item.startsAt)}
+                      </div>
+                      {end && (
+                        <div className="font-mono text-xs text-black/60 leading-none tabular-nums">
+                          → {fmtTime(item.endsAt!)}
+                        </div>
                       )}
-                      {item.speaker.name}
-                      {item.speaker.role && (
-                        <span>
-                          {" · "}
-                          {item.speaker.role}
-                          {item.speaker.company ? `, ${item.speaker.company}` : ""}
-                        </span>
-                      )}
+                      <div
+                        className="ml-auto flex items-center justify-center h-8 w-8 rounded-full"
+                        style={{
+                          backgroundColor: `${accentColor}14`,
+                          color: accentColor,
+                        }}
+                      >
+                        {typeIcon[item.type]}
+                      </div>
                     </div>
-                  )}
-                  {item.type === "PANEL" &&
-                    item.panelists &&
-                    item.panelists.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1.5 justify-center">
-                        {item.panelists.map((p) => {
-                          const initials = p.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase();
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => setContactSpeaker(p)}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-[#7C3AED]/30 bg-[#7C3AED]/5 hover:bg-[#7C3AED]/10 hover:border-[#7C3AED]/50 px-2 py-0.5 text-[0.7rem] font-semibold text-[#7C3AED] transition-colors"
-                              title={`Contact ${p.name}`}
-                            >
-                              <Avatar className="h-4 w-4">
-                                <AvatarImage src={p.photoUrl || undefined} alt={p.name} />
-                                <AvatarFallback className="text-[0.5rem] bg-[#7C3AED]/15 text-[#7C3AED]">
-                                  {initials || "?"}
-                                </AvatarFallback>
-                              </Avatar>
-                              {p.name}
-                              {p.role && (
-                                <span className="text-[#7C3AED]/60 font-normal">· {p.role}</span>
-                              )}
-                            </button>
-                          );
-                        })}
+
+                    {/* Title */}
+                    <h3 className="text-lg font-bold text-black leading-tight">
+                      {item.title}
+                    </h3>
+
+                    {/* Description */}
+                    {item.description && (
+                      <p className="text-sm text-black/75 leading-relaxed">
+                        {item.description}
+                      </p>
+                    )}
+
+                    {/* Speaker info */}
+                    {item.speaker && (
+                      <div className="text-sm text-black/85">
+                        {item.type === "PANEL" && (
+                          <span className="font-bold" style={{ color: accentColor }}>
+                            Moderator:{" "}
+                          </span>
+                        )}
+                        <span className="font-semibold">{item.speaker.name}</span>
+                        {item.speaker.role && (
+                          <span className="text-black/65">
+                            {" · "}
+                            {item.speaker.role}
+                            {item.speaker.company ? `, ${item.speaker.company}` : ""}
+                          </span>
+                        )}
                       </div>
                     )}
-                </div>
 
-                {/* Thumbnails row (only if speaker has assets) */}
-                {showThumbnails && (
-                  <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap items-stretch justify-center gap-2">
-                    {/* Pictures of the session — ONE thumbnail with a
-                        "1/N" counter in the top-right corner. Clicking
-                        opens the full slideshow dialog (with reorder). */}
-                    {assets.hasPictures && assets.firstImage && item.speaker && (
+                    {/* Panelists (PANEL type only) */}
+                    {item.type === "PANEL" &&
+                      item.panelists &&
+                      item.panelists.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.panelists.map((p) => {
+                            const initials = p.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase();
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setContactSpeaker(p)}
+                                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors"
+                                style={{
+                                  borderColor: `${accentColor}4D`,
+                                  backgroundColor: `${accentColor}0D`,
+                                  color: accentColor,
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = `${accentColor}1A`;
+                                  e.currentTarget.style.borderColor = `${accentColor}80`;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = `${accentColor}0D`;
+                                  e.currentTarget.style.borderColor = `${accentColor}4D`;
+                                }}
+                                title={`Contact ${p.name}`}
+                              >
+                                <Avatar className="h-5 w-5">
+                                  <AvatarImage src={p.photoUrl || undefined} alt={p.name} />
+                                  <AvatarFallback
+                                    className="text-[0.6rem]"
+                                    style={{
+                                      backgroundColor: `${accentColor}26`,
+                                      color: accentColor,
+                                    }}
+                                  >
+                                    {initials || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {p.name}
+                                {p.role && (
+                                  <span className="font-normal opacity-70">· {p.role}</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                    {/* Action buttons row — pictures / presentation / session URL / contact
+                        Same size as before (w-24 thumbnails) but now left-aligned
+                        under the text instead of centered. */}
+                    {showThumbnails && (
+                      <div className="mt-1 pt-3 border-t border-black/10 flex flex-wrap items-stretch gap-2">
+                        {/* Pictures */}
+                        {assets.hasPictures && assets.firstImage && item.speaker && (
+                          <button
+                            onClick={() => setPicturesSpeaker(item.speaker!)}
+                            className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#FF005A]/40 bg-white overflow-hidden transition-colors"
+                            title={`Pictures of ${item.speaker.name}'s session`}
+                          >
+                            <div className="relative w-full h-16 bg-black/5 overflow-hidden">
+                              <img
+                                src={assets.firstImage.fileUrl}
+                                alt={assets.firstImage.caption || assets.firstImage.fileName}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                loading="lazy"
+                              />
+                              <div className="absolute top-1 right-1 bg-black/75 text-white text-[0.6rem] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums shadow-sm">
+                                1/{(item.speaker.images ?? []).length}
+                              </div>
+                            </div>
+                            <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
+                              <ImageIcon className="h-2.5 w-2.5" />
+                              Pictures
+                            </div>
+                          </button>
+                        )}
+
+                        {/* Presentation */}
+                        {assets.hasPresentation && assets.firstPresentation && (
+                          <a
+                            href={assets.firstPresentation.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#004F98]/40 bg-white overflow-hidden transition-colors"
+                            title={`Open ${assets.firstPresentation.fileName}`}
+                          >
+                            <div className="w-full h-16 bg-[#004F98]/5 flex items-center justify-center">
+                              <FileText className="h-7 w-7 text-[#004F98]" />
+                            </div>
+                            <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#004F98] flex items-center gap-1 pb-1 truncate w-full justify-center px-1">
+                              <FileText className="h-2.5 w-2.5 flex-shrink-0" />
+                              <span className="truncate">
+                                {assets.firstPresentation.title || assets.firstPresentation.fileName}
+                              </span>
+                            </div>
+                          </a>
+                        )}
+
+                        {/* Session URL */}
+                        {assets.hasUrl && assets.sessionUrl && (
+                          <a
+                            href={assets.sessionUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#007E72]/40 bg-white overflow-hidden transition-colors"
+                            title={`Open session link: ${assets.sessionUrl}`}
+                          >
+                            <div className="w-full h-16 bg-[#007E72]/5 flex items-center justify-center">
+                              <Link2 className="h-7 w-7 text-[#007E72]" />
+                            </div>
+                            <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#007E72] flex items-center gap-1 pb-1">
+                              <Link2 className="h-2.5 w-2.5" />
+                              Session URL
+                            </div>
+                          </a>
+                        )}
+
+                        {/* Contact */}
+                        {assets.hasContact && item.speaker && (
+                          <button
+                            onClick={() => setContactSpeaker(item.speaker!)}
+                            className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#FF005A]/40 bg-white overflow-hidden transition-colors"
+                            title={`Send a message to ${item.speaker.name}`}
+                          >
+                            <div className="w-full h-16 bg-[#FF005A]/5 flex items-center justify-center">
+                              <Mail className="h-7 w-7 text-[#FF005A]" />
+                            </div>
+                            <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
+                              <Mail className="h-2.5 w-2.5" />
+                              Contact
+                            </div>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ──────────────────────────────────────────────────────
+                      RIGHT — large picture preview.
+                      Only renders when the speaker has images. Larger than
+                      the old thumbnail — fills the right side of the card
+                      on md+ screens, or sits below on mobile.
+                     ────────────────────────────────────────────────────── */}
+                  {assets.hasPictures && assets.firstImage && item.speaker && (
+                    <div className="md:w-56 lg:w-72 shrink-0 relative bg-black/5 overflow-hidden border-t md:border-t-0 md:border-l border-black/10">
                       <button
                         onClick={() => setPicturesSpeaker(item.speaker!)}
-                        className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#FF005A]/40 bg-white overflow-hidden transition-colors"
+                        className="group block w-full h-full"
                         title={`Pictures of ${item.speaker.name}'s session`}
                       >
-                        <div className="relative w-full h-16 bg-black/5 overflow-hidden">
+                        <div className="relative w-full h-44 md:h-full min-h-[180px] overflow-hidden">
                           <img
                             src={assets.firstImage.fileUrl}
                             alt={assets.firstImage.caption || assets.firstImage.fileName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             loading="lazy"
                           />
-                          {/* "1/N" counter — top-right of the thumbnail.
-                              Shows "1 of N" so users immediately see how
-                              many pictures are available without rendering
-                              them all on the agenda box. */}
-                          <div className="absolute top-1 right-1 bg-black/75 text-white text-[0.6rem] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums shadow-sm">
+                          {/* Gradient overlay for legibility of the counter + label */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0 pointer-events-none" />
+                          {/* "1 of N" counter — top-right */}
+                          <div className="absolute top-2 right-2 bg-black/75 text-white text-[0.65rem] font-bold px-2 py-0.5 rounded leading-none tabular-nums shadow-sm">
                             1/{(item.speaker.images ?? []).length}
                           </div>
-                        </div>
-                        <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
-                          <ImageIcon className="h-2.5 w-2.5" />
-                          Pictures
-                        </div>
-                      </button>
-                    )}
-
-                    {/* Session presentation */}
-                    {assets.hasPresentation && assets.firstPresentation && (
-                      <a
-                        href={assets.firstPresentation.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#004F98]/40 bg-white overflow-hidden transition-colors"
-                        title={`Open ${assets.firstPresentation.fileName}`}
-                      >
-                        <div className="w-full h-16 bg-[#004F98]/5 flex items-center justify-center">
-                          <FileText className="h-7 w-7 text-[#004F98]" />
-                        </div>
-                        <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#004F98] flex items-center gap-1 pb-1 truncate w-full justify-center px-1">
-                          <FileText className="h-2.5 w-2.5 flex-shrink-0" />
-                          <span className="truncate">
-                            {assets.firstPresentation.title || assets.firstPresentation.fileName}
-                          </span>
-                        </div>
-                      </a>
-                    )}
-
-                    {/* Session URL — appears next to the Contact thumbnail
-                        when the description contains an http(s) link. */}
-                    {assets.hasUrl && assets.sessionUrl && (
-                      <a
-                        href={assets.sessionUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#007E72]/40 bg-white overflow-hidden transition-colors"
-                        title={`Open session link: ${assets.sessionUrl}`}
-                      >
-                        <div className="w-full h-16 bg-[#007E72]/5 flex items-center justify-center">
-                          <Link2 className="h-7 w-7 text-[#007E72]" />
-                        </div>
-                        <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#007E72] flex items-center gap-1 pb-1">
-                          <Link2 className="h-2.5 w-2.5" />
-                          Session URL
-                        </div>
-                      </a>
-                    )}
-
-                    {/* Contact the speaker */}
-                    {assets.hasContact && item.speaker && (
-                      <button
-                        onClick={() => setContactSpeaker(item.speaker!)}
-                        className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#FF005A]/40 bg-white overflow-hidden transition-colors"
-                        title={`Send a message to ${item.speaker.name}`}
-                      >
-                        <div className="w-full h-16 bg-[#FF005A]/5 flex items-center justify-center">
-                          <Mail className="h-7 w-7 text-[#FF005A]" />
-                        </div>
-                        <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
-                          <Mail className="h-2.5 w-2.5" />
-                          Contact
+                          {/* Label — bottom-left */}
+                          <div className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 text-white text-xs font-semibold">
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            Pictures
+                          </div>
                         </div>
                       </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </Card>
             );
           })}
