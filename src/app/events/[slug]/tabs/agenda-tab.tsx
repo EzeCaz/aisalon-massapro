@@ -1034,11 +1034,15 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
             // Consistent layout: info LEFT | slideshow RIGHT for every session.
             // (Previously alternated per index, but the user requested all
             // slideshows on the right and large, matching the regular talks.)
-            // Break / fast-pitch sessions have no speaker, no slideshow, no
-            // action buttons — they're just a time + title strip. Skip the
-            // slideshow column entirely and shrink the info column padding /
-            // title font so these cards are ~60% shorter than regular talks.
-            const isBreak = item.type === "BREAK" || item.type === "FAST_PITCH";
+            // "Compact" treatment (single-column strip, ~60% shorter) only
+            // applies to sessions WITHOUT a speaker — i.e. real breaks like
+            // "Rest & Networking" or a header-style "Fast Pitch Round" entry.
+            // Individual fast-pitch talks (SpeedSize, JobFinder, Bizone.ai…)
+            // have their own speaker, so they get the full layout with the
+            // large auto-crossfade slideshow on the right, just like talks.
+            const isBreak =
+              (item.type === "BREAK" || item.type === "FAST_PITCH") &&
+              !item.speaker;
 
             return (
               <Card
