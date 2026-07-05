@@ -60,7 +60,10 @@ type Audience = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Field catalogue — duplicated from audience-filter.ts (server side) to keep
-// the client self-contained.
+// the client self-contained. The `eventId` field is upgraded to an `enum`
+// whose options are injected at runtime from the live events list (so the
+// user can filter by event NAME while the underlying filter still stores
+// the event ID).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type FieldDef = {
@@ -100,35 +103,63 @@ const USER_FIELDS: FieldDef[] = [
   { field: "createdAt", label: "Signed up at", type: "date" },
 ];
 
-const RSVP_FIELDS: FieldDef[] = [
-  { field: "email", label: "Email", type: "string" },
-  { field: "name", label: "Name", type: "string" },
-  {
-    field: "status",
-    label: "RSVP status",
-    type: "enum",
-    options: [
-      { value: "GOING", label: "Going" },
-      { value: "MAYBE", label: "Maybe" },
-      { value: "NOT_GOING", label: "Not going" },
-    ],
-  },
-  {
-    field: "source",
-    label: "RSVP source",
-    type: "enum",
-    options: [
-      { value: "MANUAL", label: "Manual" },
-      { value: "EVENT_PAGE", label: "Event page" },
-      { value: "IMPORT", label: "Import" },
-    ],
-  },
-  { field: "eventId", label: "Event ID", type: "string" },
-  { field: "doorCheckedAt", label: "Door checked-in at", type: "date" },
-  { field: "attendedAt", label: "Attended at", type: "date" },
-  { field: "noShow", label: "No-show", type: "boolean" },
-  { field: "createdAt", label: "RSVP created at", type: "date" },
-];
+/**
+ * Build the RSVP field catalogue. The `eventId` field is rendered as an
+ * `enum` dropdown populated with the live events list — the user picks an
+ * event by NAME, but the underlying value stored in the filter spec is the
+ * event ID (which is what the server-side resolver applies to
+ * EventRsvp.eventId).
+ *
+ * If the events list is empty (e.g. no events in DB), the field falls back
+ * to a free-text string input so admins can still paste an event ID.
+ */
+function buildRsvpFields(events: { id: string; title: string; startsAt?: string }[]): FieldDef[] {
+  const eventOptions = events
+    .slice()
+    .sort((a, b) => {
+      // Sort by start date desc (most recent first); fall back to title.
+      if (a.startsAt && b.startsAt) {
+        return new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime();
+      }
+      return a.title.localeCompare(b.title);
+    })
+    .map((e) => ({
+      value: e.id,
+      label: e.title + (e.startsAt ? `  ·  ${new Date(e.startsAt).toLocaleDateString()}` : ""),
+    }));
+
+  return [
+    { field: "email", label: "Email", type: "string" },
+    { field: "name", label: "Name", type: "string" },
+    {
+      field: "status",
+      label: "RSVP status",
+      type: "enum",
+      options: [
+        { value: "GOING", label: "Going" },
+        { value: "MAYBE", label: "Maybe" },
+        { value: "NOT_GOING", label: "Not going" },
+      ],
+    },
+    {
+      field: "source",
+      label: "RSVP source",
+      type: "enum",
+      options: [
+        { value: "MANUAL", label: "Manual" },
+        { value: "EVENT_PAGE", label: "Event page" },
+        { value: "IMPORT", label: "Import" },
+      ],
+    },
+    eventOptions.length > 0
+      ? { field: "eventId", label: "Event", type: "enum" as const, options: eventOptions }
+      : { field: "eventId", label: "Event ID", type: "string" as const },
+    { field: "doorCheckedAt", label: "Door checked-in at", type: "date" },
+    { field: "attendedAt", label: "Attended at", type: "date" },
+    { field: "noShow", label: "No-show", type: "boolean" },
+    { field: "createdAt", label: "RSVP created at", type: "date" },
+  ];
+}
 
 const ALL_OPS: { value: FilterOp; label: string }[] = [
   { value: "equals", label: "equals" },
@@ -158,13 +189,19 @@ function opsForField(field: FieldDef): FilterOp[] {
   }
 }
 
-function fieldsForSource(source: FilterSpec["source"]): FieldDef[] {
+function fieldsForSource(
+  source: FilterSpec["source"],
+  events: { id: string; title: string; startsAt?: string }[],
+): FieldDef[] {
   if (source === "users") return USER_FIELDS;
-  if (source === "rsvps") return RSVP_FIELDS;
-  // users_and_rsvps — union, dedup by field name
+  const rsvpFields = buildRsvpFields(events);
+  if (source === "rsvps") return rsvpFields;
+  // users_and_rsvps — union, dedup by field name. RSVP fields come second so
+  // their richer `eventId` enum definition (with event options) wins over the
+  // (non-existent) user-side `eventId` definition.
   const seen = new Set<string>();
   const merged: FieldDef[] = [];
-  for (const f of [...USER_FIELDS, ...RSVP_FIELDS]) {
+  for (const f of [...USER_FIELDS, ...rsvpFields]) {
     if (!seen.has(f.field)) {
       seen.add(f.field);
       merged.push(f);
@@ -180,9 +217,16 @@ function fieldsForSource(source: FilterSpec["source"]): FieldDef[] {
 export function AudiencesClient({
   initialAudiences,
   onAudiencesChange,
+  events = [],
 }: {
   initialAudiences: Audience[];
   onAudiencesChange?: (audiences: Audience[]) => void;
+  /**
+   * Live events list (id + title + startsAt). Used to populate the `Event`
+   * filter dropdown in the dynamic audience editor. If absent, the eventId
+   * field falls back to a free-text input.
+   */
+  events?: { id: string; title: string; startsAt?: string }[];
 }) {
   const [audiences, setAudiences] = React.useState<Audience[]>(initialAudiences);
   const [selectedId, setSelectedId] = React.useState<string | null>(initialAudiences[0]?.id ?? null);
@@ -370,6 +414,7 @@ export function AudiencesClient({
           <AudienceEditor
             key={selected.id}
             audience={selected}
+            events={events}
             onSaved={() => refresh()}
           />
         ) : (
@@ -390,9 +435,11 @@ export function AudiencesClient({
 
 function AudienceEditor({
   audience,
+  events = [],
   onSaved,
 }: {
   audience: Audience;
+  events?: { id: string; title: string; startsAt?: string }[];
   onSaved: () => void;
 }) {
   const [name, setName] = React.useState(audience.name);
@@ -537,7 +584,7 @@ function AudienceEditor({
         {kind === "STATIC" ? (
           <StaticEditor emailsText={emailsText} setEmailsText={setEmailsText} />
         ) : (
-          <DynamicEditor filters={filters} setFilters={setFilters} />
+          <DynamicEditor filters={filters} setFilters={setFilters} events={events} />
         )}
       </div>
 
@@ -593,11 +640,13 @@ function StaticEditor({
 function DynamicEditor({
   filters,
   setFilters,
+  events = [],
 }: {
   filters: FilterSpec;
   setFilters: (f: FilterSpec) => void;
+  events?: { id: string; title: string; startsAt?: string }[];
 }) {
-  const fields = fieldsForSource(filters.source);
+  const fields = fieldsForSource(filters.source, events);
 
   const updateGroup = (idx: number, updater: (g: FilterGroup) => FilterGroup) => {
     setFilters({
@@ -639,7 +688,7 @@ function DynamicEditor({
               value={filters.source}
               onChange={(e) => {
                 const newSource = e.target.value as FilterSpec["source"];
-                const newFields = fieldsForSource(newSource);
+                const newFields = fieldsForSource(newSource, events);
                 setFilters({
                   ...filters,
                   source: newSource,

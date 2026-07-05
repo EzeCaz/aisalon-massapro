@@ -67,6 +67,7 @@ export function FlowsPageClient({
       {tab === "audiences" && (
         <AudiencesClient
           initialAudiences={audiences as never /* AudiencesClient uses its own Audience type */}
+          events={events}
           onAudiencesChange={(next) => {
             setAudiences(
               next.map((a: { id: string; name: string; isTest: boolean; emails: string[]; kind: string }) => ({

@@ -140,3 +140,58 @@ Stage Summary:
 - Templates: edit any of the 5 stage defaults OR create custom templates (stage=null); duplicate any template
 - Per-template metrics: overall + by A/B variant + by flow + recent 25 sends
 - TO TEST: open /admin/email/flows → Audiences tab → click "New audience" → switch kind to DYNAMIC → build filter → Preview → Save. Then Templates tab → edit/duplicate/metrics.
+
+---
+Task ID: email-flow-followup-2
+Agent: main
+Task: User follow-up changes:
+  1. Add event name filter (dropdown of all DB events) to the audience editor
+  2. Explain what "Source Both" means in the audience filter UI
+  3. Fix "Maximum update depth exceeded" error on the Templates tab
+     (errors fire on /admin/email and /admin/email/flows when the Templates
+     tab is rendered)
+
+Work Log:
+- Investigated audiences-client.tsx: the RSVP field catalogue had `eventId`
+  typed as a free-text string field with no event picker.
+- Investigated templates-client.tsx + flows-page-client.tsx + email-tab-client.tsx:
+  found the infinite-loop root cause. TemplatesClient had a useEffect with
+  deps `[list, onTemplatesChange]` that called `onTemplatesChange(list)`.
+  Both parents (FlowsPageClient and EmailTabClient) pass an inline arrow
+  function as `onTemplatesChange`, so its identity changes on every parent
+  render. Loop: parent setState -> parent re-render -> new callback identity
+  -> effect re-fires -> parent setState -> ...
+
+Stage Summary:
+- Fix #3 (Templates infinite loop): Replaced the dependency on `onTemplatesChange`
+  with a ref pattern (onTemplatesChangeRef.current). Added a `lastSummaryRef`
+  that stores a content fingerprint (id|name|subject|stage|isActive|isDefault|
+  updatedAt joined). The effect now only fires when the meaningful content
+  actually changes, never when the callback identity changes. Bulletproof
+  against parent re-renders.
+- Fix #1 (Event name filter): Updated audiences-client.tsx so:
+  * `AudiencesClient` now accepts an `events` prop
+    ({id, title, startsAt?}[]).
+  * `AudienceEditor` receives and forwards `events` to `DynamicEditor`.
+  * `DynamicEditor` passes `events` to `fieldsForSource`.
+  * `buildRsvpFields(events)` replaces the static `RSVP_FIELDS` constant:
+    - When events list is non-empty, the `eventId` field is rendered as
+      an `enum` dropdown populated with event options
+      (value=event ID, label="Event Title · YYYY-MM-DD"), sorted by start
+      date desc.
+    - When events list is empty, the field falls back to free-text "Event ID".
+  * User picks event by NAME, but the underlying filter spec stores the
+    event ID — which the server-side resolver in audience-filter.ts already
+    applies to EventRsvp.eventId. No server changes required.
+- FlowsPageClient updated to pass `events` prop to `<AudiencesClient>`.
+  The events list is already loaded server-side in flows/page.tsx and passed
+  to FlowsPageClient — we just thread it through to AudiencesClient.
+- Verified: dev server compiles cleanly after edits (no TypeScript errors,
+  no runtime errors in next-development.log after the fix). All
+  "Maximum update depth exceeded" errors in the log are stale entries from
+  before the fix was hot-reloaded.
+
+Files modified:
+- src/app/admin/email/flows/templates-client.tsx (infinite-loop fix)
+- src/app/admin/email/flows/audiences-client.tsx (event name filter)
+- src/app/admin/email/flows/flows-page-client.tsx (pass events prop)

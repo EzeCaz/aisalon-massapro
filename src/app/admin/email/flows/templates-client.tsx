@@ -53,6 +53,19 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
   const [creating, setCreating] = React.useState(false);
   const [metricsFor, setMetricsFor] = React.useState<Template | null>(null);
 
+  // Keep the latest onTemplatesChange callback in a ref so we don't have to
+  // depend on its identity in the sync effect below. The parent passes an
+  // inline arrow function on every render, which would otherwise cause an
+  // infinite update loop (parent setState -> parent re-render -> new callback
+  // identity -> effect re-fires -> parent setState -> ...).
+  const onTemplatesChangeRef = React.useRef(onTemplatesChange);
+  onTemplatesChangeRef.current = onTemplatesChange;
+
+  // Track the last summary we pushed up so we only call onTemplatesChange
+  // when the meaningful content actually changed (id + name + subject + stage
+  // + isActive + isDefault + updatedAt).
+  const lastSummaryRef = React.useRef<string>("");
+
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -74,9 +87,17 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
   }, [refresh]);
 
   // Push template list changes up to parent (so flow builder dropdown updates).
+  // Only fires when the meaningful content actually changes — NOT when the
+  // onTemplatesChange callback identity changes (which happens on every parent
+  // re-render and would otherwise cause a Maximum update depth exceeded loop).
   React.useEffect(() => {
-    onTemplatesChange(list);
-  }, [list, onTemplatesChange]);
+    const summary = list
+      .map((t) => `${t.id}|${t.name}|${t.subject}|${t.stage ?? ""}|${t.isActive ? 1 : 0}|${t.isDefault ? 1 : 0}|${t.updatedAt}`)
+      .join("||");
+    if (summary === lastSummaryRef.current) return;
+    lastSummaryRef.current = summary;
+    onTemplatesChangeRef.current(list);
+  }, [list]);
 
   const handleDuplicate = async (t: Template) => {
     setLoading(true);
