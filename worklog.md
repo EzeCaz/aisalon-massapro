@@ -258,3 +258,37 @@ Stage Summary:
 - The Lineup section (right sidebar) is unchanged.
 - All action buttons (Pictures, Presentation, Session URL, Contact)
   retain their original w-24 thumbnail size as requested.
+
+---
+Task ID: agenda-session-company
+Agent: main
+Task: On /events/{slug} → Speakers & Agenda → Event agenda → under the
+  sessions, add the company after the Speaker/panelist name, then title,
+  then company.
+
+Work Log:
+- Inspected src/app/events/[slug]/tabs/agenda-tab.tsx — found the two
+  rendering spots that needed updating:
+  * Speaker line (~line 1114) — already showed company but with a
+    comma separator: "Name · Role, Company".
+  * Panelist line (~line 1154) — did NOT show company at all, only
+    "Name · Role".
+- Updated the speaker line to use a consistent middle-dot separator
+  and to render the company even when role is missing:
+    "Name · Role · Company"
+  (with the role/company spans only rendered if at least one exists).
+- Updated the panelist line to add the company after the role using
+  the same separator pattern:
+    "Name · Role · Company"
+- Left the Lineup section (line ~1318) untouched, consistent with the
+  prior event-agenda-redesign task's explicit constraint.
+- Left the ContactSpeakerDialog mini-card (line ~434) untouched — that
+  is a dialog header, not "under the sessions".
+
+Stage Summary:
+- Single file modified: src/app/events/[slug]/tabs/agenda-tab.tsx
+- Dev server compiles cleanly (no errors, no warnings).
+- HTTP 307 (auth redirect) on /events/ai-salon-human — expected since
+  the page requires login; compile step succeeded.
+- Both speakers and panelists now display: Name · Role · Company
+  (with each segment gracefully omitted if blank).

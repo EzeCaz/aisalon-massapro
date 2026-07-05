@@ -1112,11 +1112,10 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                           </span>
                         )}
                         <span className="font-semibold">{item.speaker.name}</span>
-                        {item.speaker.role && (
+                        {(item.speaker.role || item.speaker.company) && (
                           <span className="text-black/65">
-                            {" · "}
-                            {item.speaker.role}
-                            {item.speaker.company ? `, ${item.speaker.company}` : ""}
+                            {item.speaker.role && ` · ${item.speaker.role}`}
+                            {item.speaker.company && ` · ${item.speaker.company}`}
                           </span>
                         )}
                       </div>
@@ -1152,8 +1151,11 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                                   </AvatarFallback>
                                 </Avatar>
                                 {p.name}
-                                {p.role && (
-                                  <span className="font-normal opacity-70">· {p.role}</span>
+                                {(p.role || p.company) && (
+                                  <span className="font-normal opacity-70">
+                                    {p.role && ` · ${p.role}`}
+                                    {p.company && ` · ${p.company}`}
+                                  </span>
                                 )}
                               </button>
                             );
