@@ -1190,3 +1190,142 @@ Files modified this session:
 Git state:
 - Commit 076b7a3 on main, pushed to origin/main.
 - Vercel auto-deployed; live at https://aisalon.massapro.com.
+
+---
+Task ID: V6-QUIZ-RESTART-3
+Agent: main (Super Z)
+Task: Three follow-up questions from Eze:
+  1. "Show me the preview" — provided the production URL.
+  2. "If the quiz is finished can I restart?"
+  3. "Can I delete all previous answers and leaderboard?"
+  4. "Can I duplicate the quiz and start a new one with the same Q&A?"
+
+Work Log:
+- Confirmed the production preview URL is https://aisalon.massapro.com/
+  admin/quiz/cmr9aqhq50001l4044d8lt37h (log in with eze@massapro.com).
+- Inspected prisma/schema.prisma to understand the QuizSession /
+  QuizQuestion / QuizResponse / QuizParticipant relations — all use
+  onDelete: Cascade from QuizSession, so a session delete already
+  wipes everything. For restart/clear we need finer-grained control.
+- Designed three new admin-only endpoints under /api/admin/quiz/[id]/:
+
+Code changes:
+
+NEW: src/app/api/admin/quiz/[id]/restart/route.ts (POST)
+  - Resets a FINISHED/ABORTED session back to DRAFT so the host can
+    launch it again.
+  - Refuses to restart an in-flight session (LOBBY/LIVE/PAUSED/
+    BETWEEN) — returns 409 with a helpful message. Host must Finish
+    or Abort first.
+  - In a single transaction:
+      • deleteMany on QuizResponse where sessionId
+      • updateMany on QuizParticipant: totalScore=0, correctCount=0,
+        answeredCount=0, avgResponseMs=null, isOnline=false
+      • update on QuizSession: status=DRAFT, currentQuestionIndex=null,
+        currentQuestionStartedAt=null, startedAt=null, finishedAt=null
+  - KEEPS the questions + the participant roster — so the same cohort
+    can re-play without re-joining. Host clicks "Start quiz" to
+    relaunch.
+  - Returns { ok, session, wipedResponses: <count> }.
+
+NEW: src/app/api/admin/quiz/[id]/clear-responses/route.ts (POST)
+  - Deletes all QuizResponse rows + zeroes participant score counters
+    (totalScore, correctCount, answeredCount, avgResponseMs).
+  - Does NOT change session status. Useful for a mid-flight do-over
+    (wrong question was asked) or a pre-launch sanity reset.
+  - KEEPS participants + questions.
+  - Returns { ok, wipedResponses: <count> }.
+
+NEW: src/app/api/admin/quiz/[id]/duplicate/route.ts (POST)
+  - Creates a brand-new DRAFT QuizSession with the same:
+      • title (suffixed " (copy)" unless ?title= overrides)
+      • questionTimeLimitSec
+      • eventId (event link preserved)
+      • contentSource
+      • host = the duplicating user (so they own the new session)
+  - Deep-copies every QuizQuestion: text, optionsJson, correctIndex,
+    deepDive, sourceAreaId, enabled, timeLimitSec, order.
+  - Does NOT copy participants or responses — the duplicate starts
+    with a clean slate.
+  - All work happens in a single db.$transaction so we never end up
+    with a half-duplicated session.
+  - Returns { ok, session, duplicatedQuestions: <count> }.
+  - Optional ?title= query param for a custom title (truncated to
+    200 chars).
+
+MODIFIED: src/app/admin/quiz/[id]/quiz-control-room.tsx
+  - Imported RotateCcw, Trash2, Copy, MoreVertical icons + the
+    DropdownMenu components from shadcn/ui.
+  - Added three handler functions:
+      • handleRestart() — confirmation dialog explaining what gets
+        wiped, calls POST /restart, emits quiz:host:abort so clients
+        refresh + see DRAFT, toasts "Wiped N responses. Session is
+        back to DRAFT — click 'Start quiz' to launch again."
+      • handleClearResponses() — confirmation dialog, calls POST
+        /clear-responses, refreshes leaderboard, toasts "Wiped N
+        responses. Leaderboard reset to 0."
+      • handleDuplicate() — calls POST /duplicate, toasts "New draft
+        'X' created with N questions. Opening in a new tab…", then
+        window.open(/admin/quiz/<newId>, "_blank").
+  - Added a prominent pink "Restart quiz" button (RotateCcw icon)
+    that appears only when session status is FINISHED or ABORTED.
+    Sits in the host action bar in place of the Finish/Abort buttons
+    that are hidden in those states.
+  - Added a "More" dropdown menu (MoreVertical icon, outline button)
+    that is visible in any session status. Contains:
+      • "Duplicate (new draft with same Q&A)" — Copy icon.
+      • "Clear responses + reset leaderboard" — Trash2 icon,
+        amber-highlighted to signal destructive intent.
+  - All three operations set busy=<id> while in flight, which
+    disables the other host action buttons via the existing
+    `disabled={busy !== null}` checks.
+
+Verification:
+- TypeScript: npx tsc --noEmit reports zero errors in any of the
+  four changed/created files.
+- Dev server (Next 16) running on localhost:3000 — /admin/quiz/[id]
+  compiles cleanly (HTTP 307 auth redirect, no 500).
+- All three new endpoints return 401 without auth (routes are wired
+  correctly):
+    POST /api/admin/quiz/[id]/restart          → 401 ✓
+    POST /api/admin/quiz/[id]/clear-responses  → 401 ✓
+    POST /api/admin/quiz/[id]/duplicate        → 401 ✓
+- Committed as 833ee47 and pushed to origin/main. Vercel auto-
+  deployed; verified live at https://aisalon.massapro.com:
+    /admin/quiz/cmr9aqhq50001l4044d8lt37h → 307 (auth redirect)
+    /api/admin/quiz/[id]/restart          → 401 ✓
+    /api/admin/quiz/[id]/clear-responses  → 401 ✓
+    /api/admin/quiz/[id]/duplicate        → 401 ✓
+  (initial 404s on restart + clear-responses were just Vercel's edge
+  cache lagging the new route files; resolved within 30s.)
+
+Stage Summary:
+- All three requested operations are live in production:
+  1. Restart quiz — when a session is FINISHED or ABORTED, a pink
+     "Restart quiz" button appears. Clicking it (after confirmation)
+     wipes all responses + zeroes scores + resets the session to
+     DRAFT. Questions + participant roster are kept. The host can
+     then click "Start quiz" to launch again for the same cohort.
+  2. Clear responses — available any time via the "More" dropdown.
+     Wipes every answer + zeroes the leaderboard without changing
+     the session status. Useful for mid-flight do-overs or
+     pre-launch sanity resets.
+  3. Duplicate — available any time via the "More" dropdown. Creates
+     a brand-new DRAFT session with the same questions, settings,
+     and event link. The new session opens in a new browser tab.
+     Participants + responses are NOT copied — the duplicate starts
+     with a clean slate.
+
+Files modified/created this session:
+- src/app/api/admin/quiz/[id]/restart/route.ts (NEW)
+- src/app/api/admin/quiz/[id]/clear-responses/route.ts (NEW)
+- src/app/api/admin/quiz/[id]/duplicate/route.ts (NEW)
+- src/app/admin/quiz/[id]/quiz-control-room.tsx (MODIFIED — three
+  new handlers, Restart button, More dropdown)
+
+Git state:
+- Commit 833ee47 on main, pushed to origin/main.
+- Vercel auto-deployed; live at https://aisalon.massapro.com.
+- No schema migration needed (all operations work against the
+  existing QuizSession/QuizQuestion/QuizResponse/QuizParticipant
+  tables).
