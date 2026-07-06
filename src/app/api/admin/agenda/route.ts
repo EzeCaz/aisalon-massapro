@@ -474,6 +474,17 @@ export async function GET(req: NextRequest) {
           photoUrl: true,
         },
       },
+      // Per-item main image (used as fallback when the speaker/panelists
+      // have no linked images). Admins pick this in the EditAgendaItemDialog.
+      mainImage: {
+        select: {
+          id: true,
+          fileUrl: true,
+          fileName: true,
+          caption: true,
+          slideOrder: true,
+        },
+      },
       _count: { select: { presentations: true } },
     },
   });

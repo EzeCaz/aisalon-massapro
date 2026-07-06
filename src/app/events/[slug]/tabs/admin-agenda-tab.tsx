@@ -39,6 +39,7 @@ import {
   Search,
   X,
   UserPlus,
+  ImageIcon,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -63,6 +64,14 @@ type Panelist = {
   photoUrl: string | null;
 };
 
+type SlimImage = {
+  id: string;
+  fileUrl: string;
+  fileName: string;
+  caption: string | null;
+  slideOrder?: number;
+};
+
 type AgendaItem = {
   id: string;
   startsAt: string;
@@ -72,6 +81,9 @@ type AgendaItem = {
   type: string;
   speaker: Speaker | null;
   panelists?: Panelist[];
+  // Per-item main image — used as a fallback when the session's
+  // speaker (or panelists) have no linked images. Null = no main image set.
+  mainImage?: SlimImage | null;
   _count: { presentations: number };
 };
 
@@ -180,6 +192,11 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
   const [items, setItems] = useState<AgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  // Event-wide image roster — fetched once on mount and shared with every
+  // EditAgendaItemDialog so the admin can pick a per-item main image.
+  // We intentionally don't gate this on canManageEvent because the
+  // AdminAgendaTab is only rendered for managers (see event-tabs.tsx).
+  const [eventImages, setEventImages] = useState<SlimImage[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,6 +212,37 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
       setLoading(false);
     }
   }, [event.id]);
+
+  // Load the event's images once — used by EditAgendaItemDialog's main
+  // image picker. We pull the full list (not paginated) because the
+  // gallery is typically a few hundred photos at most, and we want to
+  // give the admin the full set to choose from.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/events/${encodeURIComponent(event.slug)}/images`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const imgs: SlimImage[] = (data.images ?? []).map((i: Record<string, unknown>) => ({
+          id: String(i.id),
+          fileUrl: String(i.fileUrl),
+          fileName: String(i.fileName ?? ""),
+          caption: (i.caption as string | null) ?? null,
+          slideOrder: typeof i.slideOrder === "number" ? (i.slideOrder as number) : undefined,
+        }));
+        setEventImages(imgs);
+      } catch {
+        // silent — main image picker will just show "no images available"
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [event.slug]);
 
   useEffect(() => {
     load();
@@ -282,6 +330,7 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
               key={item.id}
               item={item}
               event={event}
+              eventImages={eventImages}
               onDelete={() => handleDelete(item)}
               onSaved={() => {
                 load();
@@ -300,11 +349,13 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
 function AgendaItemRow({
   item,
   event,
+  eventImages,
   onDelete,
   onSaved,
 }: {
   item: AgendaItem;
   event: Props["event"];
+  eventImages: SlimImage[];
   onDelete: () => void;
   onSaved: () => void;
 }) {
@@ -394,6 +445,7 @@ function AgendaItemRow({
           onOpenChange={setEditOpen}
           item={item}
           event={event}
+          eventImages={eventImages}
           onSaved={onSaved}
         >
           <button
@@ -934,6 +986,7 @@ function EditAgendaItemDialog({
   onOpenChange,
   item,
   event,
+  eventImages,
   onSaved,
   children,
 }: {
@@ -941,6 +994,9 @@ function EditAgendaItemDialog({
   onOpenChange: (v: boolean) => void;
   item: AgendaItem;
   event: Props["event"];
+  // Event-wide image roster — used by the per-item main image picker.
+  // Fetched once in AdminAgendaTab and threaded down through AgendaItemRow.
+  eventImages: SlimImage[];
   onSaved: () => void;
   children: React.ReactNode;
 }) {
@@ -952,6 +1008,13 @@ function EditAgendaItemDialog({
     item.endsAt ? toLocalDatetimeInput(item.endsAt) : ""
   );
   const [speakerId, setSpeakerId] = useState(item.speaker?.id || "__none__");
+  // Per-item main image — null means "no main image". Initialized from
+  // item.mainImage (loaded by the GET /api/admin/agenda include). The
+  // value is the EventImage id, or "__none__" for the "no main image"
+  // sentinel (mirrors the speakerId pattern above).
+  const [mainImageId, setMainImageId] = useState<string>(
+    item.mainImage?.id || "__none__"
+  );
   const [saving, setSaving] = useState(false);
 
   // Panelist picker state (PANEL only) — initialized from item.panelists
@@ -991,6 +1054,10 @@ function EditAgendaItemDialog({
         startsAt: fromLocalDatetimeInput(startsAt),
         endsAt: endsAt ? fromLocalDatetimeInput(endsAt) : null,
         speakerId: speakerId === "__none__" ? null : speakerId,
+        // Always send mainImageId so we can both set and clear it. The
+        // server treats null as "remove the per-item main image pointer"
+        // and validates any non-null id belongs to this event.
+        mainImageId: mainImageId === "__none__" ? null : mainImageId,
       };
       // Always send panelistIds when type is PANEL (so we can sync the m:n),
       // OR when the user switched FROM Panel to something else (so we can
@@ -1037,38 +1104,52 @@ function EditAgendaItemDialog({
     }
   }
 
+  // Resolve the currently-selected main image object (for the preview
+  // thumbnail next to the picker). null when "— No main image —" is picked
+  // or when the id no longer matches an image in the event roster (e.g.
+  // image was deleted after the agenda item was last saved).
+  const selectedMainImage =
+    mainImageId === "__none__"
+      ? null
+      : eventImages.find((i) => i.id === mainImageId) ?? null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto ais-scroll">
+      {/* max-w-4xl (was max-w-2xl) so the form fields have room to breathe
+          and the Start/End row + the new main-image picker don't trigger
+          horizontal scrolling on standard laptop widths. */}
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto ais-scroll">
         <DialogHeader>
           <DialogTitle>Edit agenda item</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label className="text-xs font-semibold text-black/70">Type</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-full mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FAST_PITCH">🚀 Fast Pitch</SelectItem>
-                <SelectItem value="TALK">🎤 Talk</SelectItem>
-                <SelectItem value="WELCOME">👋 Welcome</SelectItem>
-                <SelectItem value="BREAK">☕ Break</SelectItem>
-                <SelectItem value="NETWORKING">🤝 Networking</SelectItem>
-                <SelectItem value="PANEL">👥 Panel</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label className="text-xs font-semibold text-black/70">Title</Label>
-            <Input
-              className="mt-1"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+          {/* Row: Type | Title (2-col on md+) */}
+          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-black/70">Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="w-full mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FAST_PITCH">🚀 Fast Pitch</SelectItem>
+                  <SelectItem value="TALK">🎤 Talk</SelectItem>
+                  <SelectItem value="WELCOME">👋 Welcome</SelectItem>
+                  <SelectItem value="BREAK">☕ Break</SelectItem>
+                  <SelectItem value="NETWORKING">🤝 Networking</SelectItem>
+                  <SelectItem value="PANEL">👥 Panel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-black/70">Title</Label>
+              <Input
+                className="mt-1"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
           </div>
 
           <div>
@@ -1137,6 +1218,69 @@ function EditAgendaItemDialog({
                 {item._count.presentations === 1 ? "" : "s"} attached — manage them in the
                 Presentations tab.
               </p>
+            )}
+          </div>
+
+          {/* ──────────────────────────────────────────────────────────
+              Per-item main image picker.
+              The selected image is shown as a fallback on the public
+              agenda tab when the session's speaker (or panelists) have
+              no linked photos. Lets the admin pick ANY image from the
+              event gallery (no per-speaker restriction) so it works for
+              break / fast-pitch entries that don't have a speaker too.
+              ────────────────────────────────────────────────────── */}
+          <div className="rounded-lg border border-black/10 bg-black/[0.02] p-3">
+            <Label className="text-xs font-semibold text-black/70 flex items-center gap-1.5">
+              <ImageIcon className="h-3.5 w-3.5 text-[#FF005A]" />
+              Main image (fallback)
+              <span className="font-normal text-black/50">
+                — shown when this session has no speaker photos
+              </span>
+            </Label>
+            {eventImages.length === 0 ? (
+              <p className="text-[0.7rem] text-black/50 mt-2">
+                No images uploaded for this event yet. Upload some on the Photos tab first.
+              </p>
+            ) : (
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-start">
+                <div>
+                  <Select value={mainImageId} onValueChange={setMainImageId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="__none__">— No main image —</SelectItem>
+                      {eventImages.map((img) => (
+                        <SelectItem key={img.id} value={img.id}>
+                          {img.caption || img.fileName || "(untitled image)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[0.65rem] text-black/50 mt-1.5">
+                    Tip: upload photos on the Photos tab, then tag them to speakers — those
+                    speaker-tagged photos are shown automatically and take priority over this
+                    fallback. This picker is for sessions without speaker photos.
+                  </p>
+                </div>
+                {/* Live preview of the selected image. Stays blank when
+                    "— No main image —" is selected or when the id is stale. */}
+                <div className="w-full md:w-40 aspect-video rounded-md overflow-hidden border border-black/10 bg-black/5 flex items-center justify-center">
+                  {selectedMainImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={selectedMainImage.fileUrl}
+                      alt={selectedMainImage.caption || selectedMainImage.fileName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-black/40">
+                      <ImageIcon className="h-6 w-6" />
+                      <span className="text-[0.6rem]">No image</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 

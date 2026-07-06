@@ -108,6 +108,9 @@ type AgendaItem = {
   speaker: Speaker | null;
   panelists?: Speaker[];
   presentations?: SlimPresentation[];
+  // Per-item main image — used as a fallback when this session has no
+  // speaker photos. Set by admins in the Manage Agenda → Edit dialog.
+  mainImage?: SlimImage | null;
 };
 
 type EventData = {
@@ -163,7 +166,9 @@ function extractFirstUrl(text: string | null): string | null {
  * "Presentation", "URL", and "Contact" thumbnails row.
  *
  * Rules (per the user's request):
- *   - Show pictures thumbnail if the speaker has any linked images.
+ *   - Show pictures thumbnail if there are ANY pictures to show for this
+ *     session: speaker images, panelist images (PANEL), OR the per-item
+ *     main image fallback.
  *   - Show presentation thumbnail if EITHER the agenda item has a
  *     linked presentation OR the speaker has a linked presentation.
  *   - Show URL thumbnail if the description contains an http(s) URL.
@@ -175,6 +180,13 @@ function extractFirstUrl(text: string | null): string | null {
  *
  * If none of the above are true, the agenda box stays compact (no
  * thumbnails row).
+ *
+ * PICTURES RESOLUTION (new): for PANEL items we merge the moderator's
+ * images with every panelist's images (deduped by id). For non-PANEL
+ * items we use the speaker's images. When the merged list is empty,
+ * we fall back to the per-item mainImage (admin-set fallback). This
+ * merged list is what both the inline slideshow AND the
+ * SpeakerSlideshowDialog render.
  */
 function agendaItemHasAssets(item: AgendaItem): {
   hasPictures: boolean;
@@ -184,24 +196,91 @@ function agendaItemHasAssets(item: AgendaItem): {
   firstImage: SlimImage | null;
   firstPresentation: SlimPresentation | null;
   sessionUrl: string | null;
+  // Full ordered + deduped image list for this session, used by both
+  // the inline AutoCrossfadeSlideshow and the SpeakerSlideshowDialog.
+  // Includes: moderator images + panelist images (PANEL) + per-item
+  // mainImage fallback (when no speaker/panelist images exist).
+  sessionImages: SlimImage[];
+  // Whether the "Reorder" button should be enabled in the dialog.
+  // Only true when ALL images come from a single speaker (so reordering
+  // them via /api/images/reorder — which writes slideOrder — makes sense).
+  // False for merged panel views and for the mainImage-only fallback.
+  allowReorder: boolean;
+  // Display title for the slideshow dialog (e.g. "Pictures of X's session"
+  // for single-speaker views, or the agenda item title for merged views).
+  slideshowTitle: string;
+  // Whether the slideshow dialog is showing a single speaker's images
+  // (true) or a merged multi-speaker view (false). Used by the lineup
+  // sidebar to keep the per-speaker "Photos" button showing the proper
+  // single-speaker slideshow.
+  singleSpeaker: Speaker | null;
 } {
+  // Gather images from the lead speaker (or moderator) and — for PANEL
+  // items — from every panelist, deduping by id (an image can be linked
+  // to multiple speakers, e.g. a panel photo tagged with everyone).
   const speakerImages = item.speaker?.images ?? [];
+  const panelistImages = (item.panelists ?? []).flatMap((p) => p.images ?? []);
+
+  // Dedupe by id while preserving order (moderator first, then panelists
+  // in their declared order, each keeping their own slideOrder within
+  // their per-speaker subset — which is already sorted by the page.tsx
+  // include clause).
+  const merged: SlimImage[] = [];
+  const seen = new Set<string>();
+  for (const img of [...speakerImages, ...panelistImages]) {
+    if (seen.has(img.id)) continue;
+    seen.add(img.id);
+    merged.push(img);
+  }
+
+  // Fallback to the per-item main image when no speaker/panelist photos
+  // exist. We DON'T merge the main image into the speaker-photo list
+  // (the user said the main image is "to use as main image WHEN THERE
+  // IS NOT image related to the session" — so it's strictly a fallback).
+  let sessionImages = merged;
+  let usingMainImageFallback = false;
+  if (sessionImages.length === 0 && item.mainImage) {
+    sessionImages = [item.mainImage];
+    usingMainImageFallback = true;
+  }
+
+  // Reorder is allowed only when we're showing a single speaker's photos
+  // AND we're not in the main-image-fallback mode (the mainImage is a
+  // single image — no reorder needed — and merged panel views can't be
+  // consistently reordered because each image belongs to a different
+  // speaker's slideOrder sequence).
+  const isSingleSpeakerView =
+    (item.panelists?.length ?? 0) === 0 && !!item.speaker && !usingMainImageFallback;
+  const allowReorder = isSingleSpeakerView;
+
+  // Title for the slideshow dialog.
+  let slideshowTitle: string;
+  if (isSingleSpeakerView && item.speaker) {
+    slideshowTitle = `Pictures of ${item.speaker.name}'s session`;
+  } else {
+    slideshowTitle = `Pictures — ${item.title}`;
+  }
+
   const itemPresentations = item.presentations ?? [];
   const speakerPresentations = item.speaker?.presentations ?? [];
 
-  const firstImage = speakerImages[0] ?? null;
+  const firstImage = sessionImages[0] ?? null;
   const firstPresentation =
     itemPresentations[0] ?? speakerPresentations[0] ?? null;
   const sessionUrl = extractFirstUrl(item.description);
 
   return {
-    hasPictures: speakerImages.length > 0,
+    hasPictures: sessionImages.length > 0,
     hasPresentation: firstPresentation !== null,
     hasUrl: sessionUrl !== null,
     hasContact: !!item.speaker,
     firstImage,
     firstPresentation,
     sessionUrl,
+    sessionImages,
+    allowReorder,
+    slideshowTitle,
+    singleSpeaker: isSingleSpeakerView ? item.speaker : null,
   };
 }
 
@@ -582,41 +661,60 @@ function ContactSpeakerDialog({
 // Replaces the old "PicturesPreviewDialog" (which was just a static grid).
 // The new dialog is a real slideshow viewer:
 //   • Big main viewer with prev/next/play-pause controls (← / → / space)
-//   • Filmstrip at the bottom showing ALL of the speaker's images
-//   • "Reorder" button that opens a drag-and-drop dialog (dnd-kit) to
-//     reorder the speaker's images — saved via POST /api/images/reorder
-//     so the order is persisted on every EventImage row's slideOrder
-//     field (the same field the main Slideshow tab reads).
+//   • Filmstrip at the bottom showing ALL of the session's images
+//   • "Reorder" button (only when allowReorder=true) that opens a
+//     drag-and-drop dialog (dnd-kit) to reorder the speaker's images —
+//     saved via POST /api/images/reorder so the order is persisted on
+//     every EventImage row's slideOrder field (the same field the main
+//     Slideshow tab reads).
 //
-// Per the user's request, there's no 4-image cap — all of the speaker's
+// The dialog now takes an `images` array + `title` + `allowReorder` flag
+// instead of a full Speaker, so it can render:
+//   • A single speaker's photos (lineup sidebar + non-PANEL agenda items
+//     with a speaker) — allowReorder=true, title="Pictures of X's session"
+//   • A merged moderator+panelists view (PANEL agenda items) —
+//     allowReorder=false, title="Pictures — <agenda item title>"
+//   • A main-image-only fallback (sessions without speaker photos but
+//     with an admin-set per-item mainImage) — allowReorder=false
+//
+// Per the user's request, there's no 4-image cap — all of the session's
 // linked pictures are shown.
 // ============================================================================
 
 const SPEAKER_SLIDE_DURATION_MS = 2500;
 
 function SpeakerSlideshowDialog({
-  speaker,
+  images: initialImages,
+  title,
   eventSlug,
+  allowReorder,
   open,
   onOpenChange,
 }: {
-  speaker: Speaker;
+  images: SlimImage[];
+  title: string;
   eventSlug: string;
+  allowReorder: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const [images, setImages] = useState<SlimImage[]>(speaker.images ?? []);
+  const [images, setImages] = useState<SlimImage[]>(initialImages);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [reorderOpen, setReorderOpen] = useState(false);
 
-  // Sync images + reset playback whenever the speaker changes (the
-  // dialog is reused across speakers on the agenda page).
+  // Sync images + reset playback whenever the SOURCE image set changes.
+  // We compare by id-list (joined string) rather than by array reference
+  // because the parent computes `initialImages` fresh on every render
+  // via agendaItemHasAssets — without this guard, the effect would fire
+  // on every parent re-render and reset the user's playback position.
+  const imageFingerprint = initialImages.map((i) => i.id).join("|");
   useEffect(() => {
-    setImages(speaker.images ?? []);
+    setImages(initialImages);
     setCurrentIdx(0);
     setPlaying(false);
-  }, [speaker.id, speaker.images]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageFingerprint]);
 
   // Auto-advance every 2.5s while playing
   useEffect(() => {
@@ -678,7 +776,7 @@ function SpeakerSlideshowDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4 text-[#FF005A]" />
-            Pictures of {speaker.name}&apos;s session
+            {title}
             <span className="ml-1 text-xs font-normal text-black/50">
               {images.length} photo{images.length === 1 ? "" : "s"}
             </span>
@@ -687,7 +785,7 @@ function SpeakerSlideshowDialog({
 
         {images.length === 0 ? (
           <div className="text-center py-8 text-sm text-black/50">
-            No pictures linked to this speaker yet.
+            No pictures linked to this session yet.
           </div>
         ) : (
           <>
@@ -771,14 +869,16 @@ function SpeakerSlideshowDialog({
               <div className="text-xs text-black/50">
                 Auto-advance every 2.5s · Use ← / → keys · <strong>Space</strong> to play/pause
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-black/20"
-                onClick={() => setReorderOpen(true)}
-              >
-                <GripVertical className="h-4 w-4 mr-1.5" /> Reorder pictures
-              </Button>
+              {allowReorder && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-black/20"
+                  onClick={() => setReorderOpen(true)}
+                >
+                  <GripVertical className="h-4 w-4 mr-1.5" /> Reorder pictures
+                </Button>
+              )}
             </div>
 
             {/* Filmstrip */}
@@ -798,13 +898,15 @@ function SpeakerSlideshowDialog({
               ))}
             </div>
 
-            {/* Reorder dialog */}
-            <SpeakerReorderDialog
-              open={reorderOpen}
-              onOpenChange={setReorderOpen}
-              images={images}
-              onSave={saveOrder}
-            />
+            {/* Reorder dialog — only rendered when reorder is allowed */}
+            {allowReorder && (
+              <SpeakerReorderDialog
+                open={reorderOpen}
+                onOpenChange={setReorderOpen}
+                images={images}
+                onSave={saveOrder}
+              />
+            )}
           </>
         )}
 
@@ -1000,7 +1102,20 @@ function SpeakerSortableRow({
 export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
   // Track which speaker the user is currently contacting (for the dialog)
   const [contactSpeaker, setContactSpeaker] = useState<Speaker | null>(null);
-  const [picturesSpeaker, setPicturesSpeaker] = useState<Speaker | null>(null);
+  // Track the current "pictures" view: a snapshot of images + a dialog title
+  // + a flag controlling whether the reorder button is shown. Replaces the
+  // old `picturesSpeaker: Speaker | null` state so we can render:
+  //   • single-speaker views (lineup sidebar + non-PANEL agenda items with a
+  //     speaker) — allowReorder=true, title="Pictures of X's session"
+  //   • merged moderator+panelists views (PANEL agenda items) —
+  //     allowReorder=false, title="Pictures — <agenda item title>"
+  //   • main-image-only fallbacks (sessions without speaker photos but with
+  //     an admin-set per-item mainImage) — allowReorder=false
+  const [picturesView, setPicturesView] = useState<{
+    images: SlimImage[];
+    title: string;
+    allowReorder: boolean;
+  } | null>(null);
 
   return (
     <div className="grid lg:grid-cols-[1fr_360px] gap-8">
@@ -1029,8 +1144,13 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
               assets.hasPresentation ||
               assets.hasUrl ||
               assets.hasContact;
-            const hasSlideshow = assets.hasPictures && !!item.speaker && (item.speaker.images ?? []).length > 0;
-            const sessionImages = item.speaker?.images ?? [];
+            // hasSlideshow = the session has ANY pictures to show in the
+            // inline right-column AutoCrossfadeSlideshow. Includes the
+            // per-item mainImage fallback (so sessions without speaker
+            // photos but with an admin-set main image still get the
+            // large slideshow on the right).
+            const hasSlideshow = assets.hasPictures;
+            const sessionImages = assets.sessionImages;
             // Consistent layout: info LEFT | slideshow RIGHT for every session.
             // (Previously alternated per index, but the user requested all
             // slideshows on the right and large, matching the regular talks.)
@@ -1168,11 +1288,17 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     {showThumbnails && (
                       <div className="mt-2 pt-4 border-t border-black/10 flex flex-wrap items-stretch gap-2">
                         {/* Pictures */}
-                        {assets.hasPictures && assets.firstImage && item.speaker && (
+                        {assets.hasPictures && assets.firstImage && (
                           <button
-                            onClick={() => setPicturesSpeaker(item.speaker!)}
+                            onClick={() =>
+                              setPicturesView({
+                                images: assets.sessionImages,
+                                title: assets.slideshowTitle,
+                                allowReorder: assets.allowReorder,
+                              })
+                            }
                             className="group flex flex-col items-center gap-1 w-24 rounded-md border border-black/10 hover:border-[#FF005A]/40 bg-white overflow-hidden transition-colors"
-                            title={`Pictures of ${item.speaker.name}'s session`}
+                            title={assets.slideshowTitle}
                           >
                             <div className="relative w-full h-16 bg-black/5 overflow-hidden">
                               <img
@@ -1182,7 +1308,7 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                                 loading="lazy"
                               />
                               <div className="absolute top-1 right-1 bg-black/75 text-white text-[0.6rem] font-bold px-1.5 py-0.5 rounded leading-none tabular-nums shadow-sm">
-                                1/{(item.speaker.images ?? []).length}
+                                1/{sessionImages.length}
                               </div>
                             </div>
                             <div className="text-[0.6rem] font-semibold text-black/70 group-hover:text-[#FF005A] flex items-center gap-1 pb-1">
@@ -1270,8 +1396,14 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                             images={sessionImages}
                             intervalMs={2500}
                             transitionMs={700}
-                            onClick={() => setPicturesSpeaker(item.speaker!)}
-                            ariaLabel={`Open ${item.speaker?.name ?? "speaker"}'s session pictures`}
+                            onClick={() =>
+                              setPicturesView({
+                                images: assets.sessionImages,
+                                title: assets.slideshowTitle,
+                                allowReorder: assets.allowReorder,
+                              })
+                            }
+                            ariaLabel={assets.slideshowTitle}
                             className="w-full h-full"
                           />
                         </div>
@@ -1346,7 +1478,13 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setPicturesSpeaker(s)}
+                      onClick={() =>
+                        setPicturesView({
+                          images: s.images ?? [],
+                          title: `Pictures of ${s.name}'s session`,
+                          allowReorder: true,
+                        })
+                      }
                       className="h-7 text-[0.7rem] border-black/20 text-black/70 hover:bg-black/5"
                     >
                       <ImageIcon className="h-3 w-3 mr-1" /> {s.images!.length} photo
@@ -1386,13 +1524,15 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
           }}
         />
       )}
-      {picturesSpeaker && (
+      {picturesView && (
         <SpeakerSlideshowDialog
-          speaker={picturesSpeaker}
+          images={picturesView.images}
+          title={picturesView.title}
           eventSlug={event.slug}
+          allowReorder={picturesView.allowReorder}
           open={true}
           onOpenChange={(v) => {
-            if (!v) setPicturesSpeaker(null);
+            if (!v) setPicturesView(null);
           }}
         />
       )}

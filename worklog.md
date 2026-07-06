@@ -344,3 +344,138 @@ Stage Summary:
 - All changes from prior tasks (email-flow-restructure,
   audiences-templates-tab, email-flow-followup-2,
   event-agenda-redesign, agenda-session-company) are now live.
+
+---
+Task ID: agenda-main-image-and-panelist-slideshow
+Agent: main
+Task: Three follow-up changes to the Event Agenda section on /events/{slug}:
+  1. Make the "Edit agenda item" popup wider, to avoid horizontal scrolling
+  2. Add a per-item "main image" picker to each agenda item, used as the
+     session's main picture when there is no image related to the session
+     (i.e. the speaker / panelists have no linked photos)
+  3. When a session has panelists (PANEL type), also include each
+     panelist's linked images in the slideshow (moderator + all
+     panelists, deduped by id)
+
+Work Log:
+- Phase 1 — Prisma schema changes (prisma/schema.prisma):
+  * EventAgendaItem: added mainImageId String? + mainImage EventImage?
+    @relation("AgendaItemMainImage", onDelete: SetNull)
+  * EventImage: added back-relation mainOfAgendaItems
+    EventAgendaItem[] @relation("AgendaItemMainImage")
+  * Applied via `npx prisma db push` (database is now in sync)
+  * Regenerated Prisma Client v6.19.3
+- Phase 2 — API changes:
+  * GET /api/admin/agenda: include mainImage (id, fileUrl, fileName,
+    caption, slideOrder) on every returned item
+  * PATCH /api/admin/agenda/[id]: accept `mainImageId` (string | null)
+    in body; null = clear the per-item main image, non-null must belong
+    to the same event (cross-event ids are rejected with HTTP 400)
+  * PATCH response (refreshed row) now also includes mainImage so the
+    admin UI re-renders with the new selection immediately
+- Phase 3 — Server-side data loader (src/app/events/[slug]/page.tsx):
+  * Added `mainImage` to the agenda include clause so member-facing
+    agenda items ship with their main image pre-attached
+- Phase 4 — EditAgendaItemDialog (admin-agenda-tab.tsx):
+  * Widened the dialog from max-w-2xl (672px) → max-w-4xl (896px) so
+    the form fields have room to breathe and the Start/End row + the
+    new main-image picker don't trigger horizontal scrolling
+  * Refactored the form layout to use a 2-column grid for Type | Title
+    (md+) so the extra horizontal space is actually used
+  * Added a new "Main image (fallback)" picker section:
+    - Dropdown of ALL event images (fetched once in AdminAgendaTab on
+      mount via GET /api/events/[slug]/images, threaded down through
+      AgendaItemRow → EditAgendaItemDialog as `eventImages`)
+    - "— No main image —" sentinel option (value "__none__")
+    - Live preview thumbnail (aspect-video, w-40) next to the picker
+      showing the currently-selected image; placeholder icon when none
+    - Hint text explaining: speaker-tagged photos take priority; this
+      picker is the fallback for sessions without speaker photos
+  * Dialog sends `mainImageId` in every PATCH body (null when sentinel)
+  * Added `ImageIcon` to the lucide-react imports
+  * Added SlimImage type at the top of the file
+  * Added `mainImage?: SlimImage | null` to the AgendaItem type
+- Phase 5 — Member-facing agenda-tab.tsx:
+  * Added `mainImage?: SlimImage | null` to the AgendaItem type
+  * Rewrote agendaItemHasAssets() to compute a merged image list per
+    session:
+    - For PANEL items: moderator.images + every panelist.images,
+      deduped by id (an image linked to multiple speakers appears
+      once). Order: moderator first, then panelists in declared order
+    - For non-PANEL items: speaker.images only
+    - When the merged list is empty AND item.mainImage exists, fall
+      back to [item.mainImage] (the per-item main image fallback)
+    - Returns: sessionImages (full list), firstImage (for the
+      thumbnail), slideshowTitle (per-view title), allowReorder
+      (true only for single-speaker views — disabled for merged panel
+      views and main-image-only fallbacks since reordering them via
+      /api/images/reorder would mix slideOrder across speakers or
+      attempt to reorder a single-image list)
+  * Refactored SpeakerSlideshowDialog to accept
+    { images, title, eventSlug, allowReorder, open, onOpenChange }
+    instead of { speaker, ... }. Same UI, but now renders three view
+    modes from one component: single-speaker / merged panel / fallback
+  * Used an image-id fingerprint (`images.map(i => i.id).join("|")`)
+    as the useEffect dep so the dialog doesn't reset playback position
+    on every parent re-render (the parent computes assets fresh per
+    render, so the array reference is unstable)
+  * Replaced the AgendaTab's `picturesSpeaker: Speaker | null` state
+    with `picturesView: { images, title, allowReorder } | null`
+  * Updated the "Pictures" button on each agenda card to:
+    - Render whenever assets.hasPictures (no longer requires item.speaker,
+      so breaks/fast-pitch sessions with a main image also get the button)
+    - Use assets.slideshowTitle for the title attribute and the dialog
+    - Use assets.sessionImages.length for the "1/N" counter
+    - Set picturesView with the merged image set on click
+  * Updated the inline AutoCrossfadeSlideshow to use assets.sessionImages
+    and to open picturesView on click (no longer requires item.speaker)
+  * Updated the lineup sidebar "Photos" button to set picturesView with
+    the speaker's own images + "Pictures of X's session" title +
+    allowReorder=true (single-speaker view preserved per-speaker)
+- Phase 6 — Build + deploy:
+  * npx tsc --noEmit: 0 new errors from my changes (110 pre-existing
+    errors remain, all in unrelated files — verified via git stash)
+  * npm run build: succeeded with no errors or warnings
+  * Stopped the old production server (PID 28831 from the prior
+    deploy-agenda-company-fix task) and started a fresh one
+  * Had to use the `(env ... node ... &)` subshell-detach pattern —
+    nohup/setsid/disown combinations all left the next-server process
+    dying after the parent shell exited. The bare subshell form works.
+  * Production server now running on PID 477, port 3000
+  * Caddy :81 → :3000 reverse proxy works
+  * All routes respond: /login 200, /events 200, /events/ai-salon-human
+    307 (auth redirect), /testimonials 307 (auth redirect), /privacy 200
+  * No errors, no warnings, no hydration mismatches in server.log
+
+Stage Summary:
+- All 3 requirements implemented, deployed, and verified
+- Files modified:
+  * prisma/schema.prisma (added mainImageId + mainImage on
+    EventAgendaItem; added mainOfAgendaItems back-relation on EventImage)
+  * src/app/api/admin/agenda/route.ts (GET includes mainImage)
+  * src/app/api/admin/agenda/[id]/route.ts (PATCH accepts + validates
+    mainImageId; refreshed response includes mainImage)
+  * src/app/events/[slug]/page.tsx (server-side include for mainImage)
+  * src/app/events/[slug]/tabs/admin-agenda-tab.tsx (wider dialog,
+    2-col layout, main image picker with live preview, eventImages
+    fetched in AdminAgendaTab and threaded to all dialogs)
+  * src/app/events/[slug]/tabs/agenda-tab.tsx (refactored
+    SpeakerSlideshowDialog signature, merged moderator+panelists image
+    list, mainImage fallback, new picturesView state shape)
+- Edit agenda item dialog is now max-w-4xl (was max-w-2xl), so no more
+  horizontal scrolling on standard laptop widths
+- Each agenda item has a "Main image (fallback)" picker in the edit
+  dialog — admins choose any event image; it shows on the public agenda
+  tab when the session's speaker/panelists have no linked photos
+- PANEL agenda items now show moderator + all panelists' linked images
+  in the inline slideshow AND in the dialog (deduped by id, moderator's
+  photos first). Reorder button is hidden for merged views (would mix
+  slideOrder across speakers — not meaningful); still enabled for
+  single-speaker views (lineup sidebar + non-PANEL agenda items)
+- TO TEST: open /events/{slug} → 🛠 Manage Agenda → click any item's
+  edit button → see the wider dialog + new "Main image (fallback)"
+  section → pick an image → Save. Then switch to the Speakers & Agenda
+  tab → for a PANEL item, the inline slideshow + Pictures dialog should
+  cycle through moderator + every panelist's images. For a session
+  with no speaker photos but a set main image, the slideshow should
+  show that single image.

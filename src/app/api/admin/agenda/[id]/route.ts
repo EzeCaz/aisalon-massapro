@@ -28,7 +28,7 @@ export async function PATCH(
   if (isError(me)) return me;
 
   const body = await req.json();
-  const { title, description, type, startsAt, endsAt, speakerId, panelistIds, newPanelists } = body as {
+  const { title, description, type, startsAt, endsAt, speakerId, panelistIds, newPanelists, mainImageId } = body as {
     title?: string;
     description?: string | null;
     type?: string;
@@ -44,6 +44,7 @@ export async function PATCH(
       topic?: string;
       contactEmail?: string;
     }>;
+    mainImageId?: string | null;
   };
 
   const data: Record<string, unknown> = {};
@@ -68,6 +69,26 @@ export async function PATCH(
         );
       }
       data.speakerId = speakerId;
+    }
+  }
+  if (mainImageId !== undefined) {
+    // null is allowed (clear the per-item main image); otherwise verify
+    // the image belongs to the same event so a cross-event image can't
+    // be set as another event's agenda item main.
+    if (mainImageId === null) {
+      data.mainImageId = null;
+    } else {
+      const img = await db.eventImage.findFirst({
+        where: { id: mainImageId, eventId: item.eventId },
+        select: { id: true },
+      });
+      if (!img) {
+        return NextResponse.json(
+          { error: "Image not found for this event" },
+          { status: 400 }
+        );
+      }
+      data.mainImageId = mainImageId;
     }
   }
 
@@ -197,6 +218,17 @@ export async function PATCH(
           bio: true,
           topic: true,
           photoUrl: true,
+        },
+      },
+      // Include the (possibly updated) per-item main image so the
+      // admin UI can re-render the picker with the new selection.
+      mainImage: {
+        select: {
+          id: true,
+          fileUrl: true,
+          fileName: true,
+          caption: true,
+          slideOrder: true,
         },
       },
     },

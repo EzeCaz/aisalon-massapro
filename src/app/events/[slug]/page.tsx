@@ -61,6 +61,18 @@ export default async function EventDetailPage({ params }: Params) {
       agenda: {
         orderBy: { startsAt: "asc" },
         include: {
+          // Per-item main image — used as a fallback when the session's
+          // speaker (or panelists) have no linked images. Admins pick
+          // this in the Manage Agenda → Edit dialog.
+          mainImage: {
+            select: {
+              id: true,
+              fileUrl: true,
+              fileName: true,
+              caption: true,
+              slideOrder: true,
+            },
+          },
           speaker: {
             include: {
               // Include the linked User (if any) so the client can decide

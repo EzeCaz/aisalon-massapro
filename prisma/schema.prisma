@@ -298,6 +298,14 @@ model EventAgendaItem {
   // Stored via the implicit _EventAgendaItemToSpeaker join table.
   panelists      Speaker[] @relation("AgendaPanelist")
   presentations  PresentationFile[] // files uploaded for this specific agenda item
+  // Optional pointer to ONE EventImage row to use as the "main picture"
+  // for this agenda item on the public agenda tab. Used as a fallback
+  // when the session's speaker (or panelists) have no linked images.
+  // Admins set this in the EditAgendaItemDialog (per-item main image picker).
+  // Null = no per-item main image; the agenda tab falls back to speaker
+  // images, or hides the slideshow column entirely when none exist.
+  mainImageId    String?
+  mainImage      EventImage? @relation("AgendaItemMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
 }
 
@@ -363,6 +371,10 @@ model EventImage {
   // Back-relation: events that have this image as their mainImage.
   // (One image can be the main of at most one event — the FK lives on Event.)
   mainOfEvents Event[] @relation("EventMainImage")
+  // Back-relation: agenda items that have this image as their per-item
+  // mainImage. An image can be the main of multiple agenda items (rare
+  // but allowed — e.g. one image reused across two related sessions).
+  mainOfAgendaItems EventAgendaItem[] @relation("AgendaItemMainImage")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
