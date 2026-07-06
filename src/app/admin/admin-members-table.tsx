@@ -63,6 +63,8 @@ import {
   Eye,
   EyeOff,
   Mail as MailIcon,
+  Copy,
+  Check,
 } from "lucide-react";
 import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
 
@@ -101,6 +103,10 @@ type Member = {
   importSource?: string | null;
   importedAt?: string | null;
   onboardedAt?: string | null;
+  // Referral ID — 12-char hex used in ?utm_uid=... URLs. Read-only in
+  // the Edit Member dialog (visible to Super Admins only). May be null
+  // for legacy accounts created before the utm_uid backfill.
+  utmUid?: string | null;
   role: string;
   createdAt: string;
   tags: { id: string; label: string; color: string | null }[];
@@ -2114,6 +2120,81 @@ function EditMemberDialog({
               </div>
             </div>
           </div>
+
+          {/* Referral ID section — Super Admin only.
+              Shows the member's utm_uid (the unique ID embedded in their
+              referral URLs) plus a copy button and a sample referral URL.
+              Read-only — the ID is auto-generated at signup and cannot be
+              modified via the UI. Legacy accounts without a utmUid show
+              "—" with a short note. */}
+          {isSuperAdminEmail(currentUserEmail) && (
+            <div className="rounded-md border border-[#7C3AED]/30 bg-gradient-to-br from-[#7C3AED]/[0.03] to-[#00E6FF]/[0.03] p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[0.65rem] font-bold uppercase tracking-widest text-[#7C3AED]">
+                  <Link2 className="h-3 w-3" />
+                  Referral ID
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[0.55rem] font-bold uppercase bg-[#7C3AED]/10 text-[#7C3AED] px-1.5 py-0.5 rounded">
+                    Super Admin only
+                  </span>
+                  <span className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40">
+                    Read-only
+                  </span>
+                </div>
+              </div>
+
+              {member.utmUid ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[0.7rem] font-semibold text-black/80 mb-1">
+                        utm_uid
+                      </label>
+                      <code className="block w-full font-mono text-sm font-bold text-[#7C3AED] bg-white border border-[#7C3AED]/20 rounded-md px-3 py-2 break-all">
+                        {member.utmUid}
+                      </code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(member.utmUid || "");
+                          toast.success("Referral ID copied to clipboard");
+                        } catch {
+                          toast.error("Could not copy to clipboard");
+                        }
+                      }}
+                      className="mt-5 inline-flex items-center gap-1 rounded-md border border-black/15 bg-white px-2.5 py-2 text-[0.7rem] font-semibold text-black/80 hover:bg-black/[0.03] flex-shrink-0"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                  <div className="pt-2 border-t border-[#7C3AED]/15">
+                    <div className="text-[0.65rem] text-black/60 mb-1">
+                      Sample referral URL:
+                    </div>
+                    <code className="block font-mono text-[0.7rem] text-[#004F98] bg-white/60 border border-black/10 rounded px-2 py-1.5 break-all">
+                      {typeof window !== "undefined"
+                        ? `${window.location.origin}/events?utm_uid=${member.utmUid}`
+                        : `/events?utm_uid=${member.utmUid}`}
+                    </code>
+                  </div>
+                  <p className="text-[0.65rem] text-black/50 leading-relaxed flex items-start gap-1.5">
+                    <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                    Auto-generated at signup. Embedded in <code className="bg-black/5 px-1 rounded">?utm_uid=…</code> query param to attribute signups &amp; RSVPs back to this member.
+                  </p>
+                </>
+              ) : (
+                <div className="rounded-md bg-white/60 border border-black/10 px-3 py-2.5">
+                  <div className="text-sm font-mono font-bold text-black/40">—</div>
+                  <p className="mt-1 text-[0.65rem] text-black/60 leading-relaxed">
+                    This legacy account has no referral ID. Created before the utm_uid backfill — run the backfill script to assign one.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Role section — ONLY visible to Super Admins.
               Non-Super-Admins see the role as a read-only badge.

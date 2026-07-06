@@ -41,6 +41,15 @@ type Props = {
   eventAddress?: string | null;
   eventCity?: string | null;
   eventCountry?: string | null;
+  /**
+   * Visual variant:
+   *   - "card"    (default) — full card with borders, descriptions, and padding.
+   *                 Used in the Overview tab sidebar.
+   *   - "header"            — compact stack with no card chrome, no descriptions,
+   *                 just the action button(s). Used in the event page header
+   *                 directly below the chapter-shaped date block.
+   */
+  variant?: "card" | "header";
 };
 
 // ------------------------------------------------------------------
@@ -118,7 +127,9 @@ export function RsvpCheckInCard({
   eventAddress = null,
   eventCity = null,
   eventCountry = null,
+  variant = "card",
 }: Props) {
+  const isHeader = variant === "header";
   // Server-passed initial state — avoids a flash of the wrong CTA.
   const [rsvp, setRsvp] = React.useState<Rsvp>(initialRsvp);
   const [registering, setRegistering] = React.useState(false);
@@ -216,6 +227,36 @@ export function RsvpCheckInCard({
 
   // ---------- State 4: Already checked in → show entry code ----------
   if (hasCheckedIn && rsvp?.checkInCode) {
+    if (isHeader) {
+      // Compact header variant — just the code + copy button, no chrome.
+      return (
+        <div className="w-full space-y-1.5">
+          <div className="rounded-md bg-white border-2 border-[#007E72]/40 p-2 text-center">
+            <div className="text-[0.55rem] font-bold uppercase tracking-widest text-black/80">
+              Your entry code
+            </div>
+            <div className="text-xl font-extrabold font-mono tracking-[0.15em] text-[#007E72] leading-tight">
+              {rsvp.checkInCode}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyCode}
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-black/15 bg-white px-2 py-1.5 text-[0.7rem] font-semibold text-black hover:bg-black/[0.03]"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3 w-3" /> Copied
+              </>
+            ) : (
+              <>
+                <Copy className="h-3 w-3" /> Copy code
+              </>
+            )}
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border-2 border-[#007E72]/30 bg-gradient-to-br from-[#007E72]/5 to-[#00E6FF]/5 p-5 space-y-3">
         <div className="flex items-center gap-2 text-[#007E72]">
@@ -269,6 +310,13 @@ export function RsvpCheckInCard({
 
   // ---------- Past event ----------
   if (isPast) {
+    if (isHeader) {
+      return (
+        <div className="w-full rounded-md border border-black/10 bg-black/[0.03] px-2 py-1.5 text-center text-[0.7rem] font-semibold text-black/80">
+          Event ended
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border border-black/10 bg-black/[0.03] p-5 space-y-3">
         <div className="flex items-center gap-2 text-black/80">
@@ -289,6 +337,45 @@ export function RsvpCheckInCard({
   // (once registered + within the 2h window) the Check-in button
   // appears in the registered state below.
   if (!hasRsvped) {
+    if (isHeader) {
+      // Compact header variant — just the register button, no card chrome.
+      return (
+        <div className="w-full space-y-1.5">
+          <button
+            type="button"
+            onClick={handleRegister}
+            disabled={registering}
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-2 text-[0.75rem] hover:bg-[#FF005A]/90 disabled:opacity-50 ais-lift"
+          >
+            {registering ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Registering…
+              </>
+            ) : (
+              <>
+                Register to event <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            )}
+          </button>
+          <SaveToCalendar
+            event={{
+              title: eventTitle,
+              description: eventDescription,
+              startsAt: eventStartsAt,
+              endsAt: eventEndsAt,
+              venue: eventVenue,
+              address: eventAddress,
+              city: eventCity,
+              country: eventCountry,
+              url: typeof window !== "undefined" ? window.location.href : null,
+            }}
+            variant="outline"
+            size="sm"
+            className="w-full justify-center"
+          />
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border-2 border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-white p-5 space-y-3">
         <div className="flex items-center gap-2 text-[#FF005A]">
@@ -319,6 +406,55 @@ export function RsvpCheckInCard({
   }
 
   // ---------- State 2/3: Registered, not yet checked in ----------
+  if (isHeader) {
+    // Compact header variant — badge + Save to Calendar + (if window open) check-in button.
+    return (
+      <div className="w-full space-y-1.5">
+        <div className="flex items-center justify-center gap-1.5 rounded-md bg-[#00E6FF]/10 border border-[#00E6FF]/30 px-2 py-1 text-[#007E72]">
+          <CheckCircle2 className="h-3 w-3" />
+          <span className="font-bold text-[0.65rem] uppercase tracking-wider">Registered</span>
+        </div>
+        <SaveToCalendar
+          event={{
+            title: eventTitle,
+            description: eventDescription,
+            startsAt: eventStartsAt,
+            endsAt: eventEndsAt,
+            venue: eventVenue,
+            address: eventAddress,
+            city: eventCity,
+            country: eventCountry,
+            url: typeof window !== "undefined" ? window.location.href : null,
+          }}
+          variant="outline"
+          size="sm"
+          className="w-full justify-center"
+        />
+        {windowOpen ? (
+          <button
+            type="button"
+            onClick={handleCheckIn}
+            disabled={checkingIn}
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-md bg-[#007E72] text-white font-semibold px-3 py-2 text-[0.75rem] hover:bg-[#007E72]/90 disabled:opacity-50 ais-lift"
+          >
+            {checkingIn ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking in…
+              </>
+            ) : (
+              <>
+                <CalendarCheck className="h-3.5 w-3.5" /> I&apos;m here — Check in
+              </>
+            )}
+          </button>
+        ) : (
+          <p className="text-[0.6rem] text-black/60 text-center leading-relaxed px-1">
+            Check-in opens 2h before
+          </p>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl border-2 border-[#00E6FF]/30 bg-gradient-to-br from-[#00E6FF]/5 to-white p-5 space-y-3">
       <div className="flex items-center gap-2 text-[#007E72]">

@@ -7,6 +7,7 @@ import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, normalizeRole, ROLES 
 import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
+import { RsvpCheckInCard } from "@/components/events/rsvp-check-in-card";
 import { format } from "date-fns";
 import { Users } from "lucide-react";
 
@@ -476,6 +477,28 @@ export default async function EventDetailPage({ params }: Params) {
               </div>
               <div className="mt-2 text-[0.85rem] font-mono text-black/90">
                 {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.startsAt)} – {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit", hour12: false }).format(event.endsAt)}
+              </div>
+
+              {/* Register / Check-in / Save-to-Calendar widget.
+                  Compact "header" variant of the same RsvpCheckInCard used
+                  in the Overview sidebar. Visible on lg+ screens (matches
+                  the date block visibility). Renders one of four states:
+                  register / registered / check-in available / checked-in
+                  with code. Synced with the Overview tab via the RSVP API. */}
+              <div className="mt-4 w-44">
+                <RsvpCheckInCard
+                  eventSlug={event.slug}
+                  eventTitle={event.title}
+                  eventStartsAt={event.startsAt.toISOString()}
+                  eventEndsAt={event.endsAt.toISOString()}
+                  initialRsvp={serializedRsvp}
+                  eventDescription={event.description}
+                  eventVenue={event.venue}
+                  eventAddress={event.address}
+                  eventCity={event.city}
+                  eventCountry={event.country}
+                  variant="header"
+                />
               </div>
             </div>
           </div>
