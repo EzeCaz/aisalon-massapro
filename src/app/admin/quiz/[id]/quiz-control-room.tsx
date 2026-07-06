@@ -22,6 +22,10 @@ import {
   ListOrdered,
   Calendar,
   Save,
+  RotateCcw,
+  Trash2,
+  Copy,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +37,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardContent,
@@ -486,6 +496,138 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
     }
   };
 
+  // ── Lifecycle: restart / clear / duplicate ──────────────────────────
+  // These are post-session utilities for hosts who want to re-run a
+  // quiz, wipe the leaderboard without ending the session, or spin up
+  // a clean copy with the same questions.
+
+  /**
+   * Restart — reset a FINISHED/ABORTED session back to DRAFT. Wipes
+   * all responses + zeroes participant scores. Keeps questions +
+   * participant roster. Host can then click "Start quiz" to run it
+   * again for the same cohort.
+   */
+  const handleRestart = async () => {
+    const ok = confirm(
+      "Restart this quiz?\n\n" +
+        "• All answers will be deleted.\n" +
+        "• All participant scores reset to 0.\n" +
+        "• Questions + the participant roster are kept.\n" +
+        "• Status goes back to DRAFT so you can launch again.\n\n" +
+        "This cannot be undone.",
+    );
+    if (!ok) return;
+    setBusy("restart");
+    try {
+      const res = await fetch(`/api/admin/quiz/${sessionId}/restart`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to restart");
+      }
+      const data = await res.json();
+      emitHostAction("quiz:host:abort"); // tell clients to refresh — they'll see DRAFT
+      toast({
+        title: "Quiz restarted",
+        description: `Wiped ${data.wipedResponses ?? 0} response${
+          (data.wipedResponses ?? 0) === 1 ? "" : "s"
+        }. Session is back to DRAFT — click "Start quiz" to launch again.`,
+      });
+      setRevealed(false);
+      refreshState();
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to restart",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Clear responses — wipe every answer + zero the leaderboard, but
+   * don't change the session status. Useful for a mid-flight do-over
+   * or a pre-launch sanity reset.
+   */
+  const handleClearResponses = async () => {
+    const ok = confirm(
+      "Clear all responses?\n\n" +
+        "• All answers will be deleted.\n" +
+        "• All participant scores reset to 0.\n" +
+        "• Participants stay registered.\n" +
+        "• Session status stays the same.\n\n" +
+        "This cannot be undone.",
+    );
+    if (!ok) return;
+    setBusy("clear");
+    try {
+      const res = await fetch(`/api/admin/quiz/${sessionId}/clear-responses`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to clear responses");
+      }
+      const data = await res.json();
+      toast({
+        title: "Responses cleared",
+        description: `Wiped ${data.wipedResponses ?? 0} response${
+          (data.wipedResponses ?? 0) === 1 ? "" : "s"
+        }. Leaderboard reset to 0.`,
+      });
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to clear",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Duplicate — create a new DRAFT session with the same questions +
+   * settings. The duplicate opens in a new browser tab so the host
+   * can edit/run it without losing the original.
+   */
+  const handleDuplicate = async () => {
+    setBusy("duplicate");
+    try {
+      const res = await fetch(`/api/admin/quiz/${sessionId}/duplicate`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to duplicate");
+      }
+      const data = await res.json();
+      const newId = data.session?.id;
+      toast({
+        title: "Quiz duplicated",
+        description: `New draft "${data.session?.title}" created with ${
+          data.duplicatedQuestions ?? 0
+        } questions. Opening in a new tab…`,
+      });
+      if (newId && typeof window !== "undefined") {
+        window.open(`/admin/quiz/${newId}`, "_blank");
+      }
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to duplicate",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // ── Event linking ─────────────────────────────────────────────────
   // Lets the admin/co-host attach this session to an Event so it shows
   // up on the event page's Quiz tab. The events list is fetched on
@@ -872,6 +1014,45 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                     Abort
                   </Button>
                 )}
+                {/* Restart — only on FINISHED/ABORTED. Wipes responses +
+                    resets to DRAFT so the host can launch again. */}
+                {(isFinished || isAborted) && (
+                  <Button
+                    onClick={handleRestart}
+                    disabled={busy !== null}
+                    className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1.5" />
+                    Restart quiz
+                  </Button>
+                )}
+                {/* More actions: Clear responses + Duplicate. Available in
+                    any status. Use a dropdown so we don't clutter the
+                    primary action bar. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" disabled={busy !== null}>
+                      <MoreVertical className="h-4 w-4 mr-1" />
+                      More
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={handleDuplicate}
+                      className="cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-2" />
+                      Duplicate (new draft with same Q&amp;A)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleClearResponses}
+                      className="cursor-pointer text-amber-700 focus:text-amber-800 focus:bg-amber-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Clear responses + reset leaderboard
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </CardContent>
           </Card>
