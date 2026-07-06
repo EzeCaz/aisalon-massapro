@@ -105,6 +105,7 @@ export async function PATCH(
     currentQuestionStartedAt?: Date | null;
     startedAt?: Date | null;
     finishedAt?: Date | null;
+    eventId?: string | null;
   };
   try {
     body = await req.json();
@@ -148,6 +149,25 @@ export async function PATCH(
   }
   if (body.finishedAt !== undefined) {
     data.finishedAt = body.finishedAt;
+  }
+  // Allow re-linking a session to a different event (or unlinking with null).
+  // Validates the eventId points to a real event before writing.
+  if (body.eventId !== undefined) {
+    if (body.eventId === null) {
+      data.eventId = null;
+    } else {
+      const event = await db.event.findUnique({
+        where: { id: body.eventId },
+        select: { id: true },
+      });
+      if (!event) {
+        return NextResponse.json(
+          { error: "Event not found" },
+          { status: 404 },
+        );
+      }
+      data.eventId = event.id;
+    }
   }
 
   const updated = await db.quizSession.update({

@@ -10,6 +10,7 @@ import { PresentationsTab } from "./tabs/presentations-tab";
 import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
 import { ManageEventTab } from "./tabs/manage-event-tab";
 import { EventPrepTab } from "./tabs/event-prep-tab";
+import { QuizTab } from "./tabs/quiz-tab";
 import type { CoHost, EventSpeaker } from "@/components/admin/event-editor";
 import type { Rsvp } from "@/components/events/rsvp-check-in-card";
 
@@ -61,6 +62,19 @@ type AgendaItem = {
   presentations?: SlimPresentation[];
 };
 
+type QuizSessionSummary = {
+  id: string;
+  title: string;
+  status: string;
+  questionTimeLimitSec: number;
+  totalQuestions: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  host: { id: string; name: string | null; email: string } | null;
+  _count: { participants: number };
+};
+
 type EventData = {
   id: string;
   slug: string;
@@ -107,6 +121,8 @@ export function EventTabs({
   coHosts = [],
   eventStats = null,
   speakersForEditor = [],
+  quizzes = [],
+  canHostQuiz = false,
 }: {
   event: EventData;
   me: Me;
@@ -125,6 +141,10 @@ export function EventTabs({
   eventStats?: EventStats | null;
   /** Full speaker roster for the EventEditor (managers only). Empty for non-managers. */
   speakersForEditor?: EventSpeaker[];
+  /** Quiz sessions linked to this event (all logged-in members can see them). */
+  quizzes?: QuizSessionSummary[];
+  /** Whether the viewer can create/host a quiz for this event (admin / super-admin / co-host). */
+  canHostQuiz?: boolean;
 }) {
   const [tab, setTab] = useState("agenda");
   // Force re-mount of agenda tabs when the admin edits agenda so the
@@ -161,6 +181,22 @@ export function EventTabs({
         <TabsTrigger value="presentations" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Presentations
         </TabsTrigger>
+        {quizzes.length > 0 && (
+          <TabsTrigger
+            value="quiz"
+            className="data-[state=active]:bg-[#FF005A] data-[state=active]:text-white"
+          >
+            🧠 Quiz ({quizzes.length})
+          </TabsTrigger>
+        )}
+        {canHostQuiz && quizzes.length === 0 && (
+          <TabsTrigger
+            value="quiz"
+            className="data-[state=active]:bg-[#FF005A] data-[state=active]:text-white"
+          >
+            🧠 Quiz
+          </TabsTrigger>
+        )}
         {canViewEventPrep && (
           <TabsTrigger
             value="event-prep"
@@ -202,6 +238,17 @@ export function EventTabs({
       <TabsContent value="presentations" className="mt-6">
         <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
+      {(quizzes.length > 0 || canHostQuiz) && (
+        <TabsContent value="quiz" className="mt-6">
+          <QuizTab
+            eventId={event.id}
+            eventSlug={event.slug}
+            initialQuizzes={quizzes}
+            canHost={canHostQuiz}
+            hostUserId={me.id}
+          />
+        </TabsContent>
+      )}
       {canViewEventPrep && (
         <TabsContent value="event-prep" className="mt-6">
           <EventPrepTab

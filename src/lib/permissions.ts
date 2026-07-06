@@ -196,10 +196,12 @@ const CAN_MAP: Record<string, Role> = {
   "eventprep.view": ROLES.SPEAKER,
 
   // ── Quiz Engine ───────────────────────────────────────────────────
-  // Admins can host quiz sessions (create, start, advance questions,
-  // pause/resume, view analytics). Members participate via /quiz/[id]
-  // without needing this permission.
-  "quiz.host": ROLES.ADMIN,
+  // Co-hosts and above can host quiz sessions (create, start, advance
+  // questions, pause/resume, view analytics, EDIT question bank).
+  // Members participate via /quiz/[id] without needing this permission.
+  // Per-event scope for CO_HOST is enforced at the route layer via
+  // isEventCoHost() when the route knows the eventId.
+  "quiz.host": ROLES.CO_HOST,
 };
 
 /**

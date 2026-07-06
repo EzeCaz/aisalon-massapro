@@ -18,9 +18,21 @@ import {
   AlertCircle,
   CheckCircle2,
   Radio,
+  Pencil,
+  ListOrdered,
+  Calendar,
+  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -31,6 +43,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useQuizSocket } from "@/components/quiz/use-quiz-socket";
+import { QuizQuestionEditor } from "./quiz-question-editor";
 
 interface Question {
   id: string;
@@ -96,6 +109,7 @@ const STATUS_COLORS: Record<string, string> = {
 export function QuizControlRoom({ initialSession, hostUser }: Props) {
   const { toast } = useToast();
   const [session, setSession] = useState<SessionState>(initialSession);
+  const [questions, setQuestions] = useState<Question[]>(initialSession.questions);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [currentQuestionStats, setCurrentQuestionStats] = useState<{
     questionId: string;
@@ -105,9 +119,17 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
   const [revealed, setRevealed] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState(false);
+  const [linkingEvent, setLinkingEvent] = useState(false);
+  const [eventsList, setEventsList] = useState<
+    { id: string; title: string; slug: string; startsAt: string }[]
+  >([]);
+  const [pickedEventId, setPickedEventId] = useState<string>(
+    initialSession.event?.id ?? "",
+  );
+  const [savingEventLink, setSavingEventLink] = useState(false);
 
   const sessionId = session.id;
-  const questions = initialSession.questions;
   const currentQuestion =
     session.currentQuestionIndex != null
       ? questions[session.currentQuestionIndex]
@@ -395,6 +417,62 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
     }
   };
 
+  // ── Event linking ─────────────────────────────────────────────────
+  // Lets the admin/co-host attach this session to an Event so it shows
+  // up on the event page's Quiz tab. The events list is fetched on
+  // demand (only when the user opens the picker) to keep the initial
+  // page payload small.
+  const openEventPicker = async () => {
+    if (!linkingEvent) {
+      // Lazy-load events on first open
+      try {
+        const res = await fetch("/api/admin/quiz/events", { method: "GET" });
+        if (res.ok) {
+          const data = await res.json();
+          setEventsList(data.events || []);
+        }
+      } catch {
+        /* ignore — user can still try to save with the existing value */
+      }
+    }
+    setLinkingEvent(!linkingEvent);
+  };
+
+  const saveEventLink = async () => {
+    setSavingEventLink(true);
+    try {
+      const res = await fetch(`/api/admin/quiz/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: pickedEventId || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to save");
+      }
+      toast({
+        title: pickedEventId
+          ? "Linked to event"
+          : "Unlinked from event",
+        description: pickedEventId
+          ? "Members will see this quiz on the event page's Quiz tab."
+          : "Quiz is now standalone (no event).",
+      });
+      setLinkingEvent(false);
+      refreshState();
+    } catch (e: unknown) {
+      toast({
+        title: "Could not save",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEventLink(false);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────────
   const isLive = session.status === "LIVE";
   const isPaused = session.status === "PAUSED";
@@ -431,6 +509,79 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
               WS {wsConnected ? "connected" : "disconnected"}
             </span>
           </p>
+          {/* Event link row */}
+          <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+            {linkingEvent ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={pickedEventId} onValueChange={setPickedEventId}>
+                  <SelectTrigger className="h-8 min-w-[260px]">
+                    <SelectValue placeholder="Pick an event…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">(no event — standalone)</SelectItem>
+                    {eventsList.map((ev) => (
+                      <SelectItem key={ev.id} value={ev.id}>
+                        {ev.title} —{" "}
+                        {new Date(ev.startsAt).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={saveEventLink}
+                  disabled={savingEventLink}
+                >
+                  <Save className="h-3.5 w-3.5 mr-1" />
+                  {savingEventLink ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setLinkingEvent(false);
+                    setPickedEventId(initialSession.event?.id ?? "");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : initialSession.event ? (
+              <span className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Event:</span>
+                <Link
+                  href={`/events/${initialSession.event.slug}`}
+                  className="text-[#FF005A] hover:underline"
+                >
+                  {initialSession.event.title}
+                </Link>
+                <button
+                  onClick={openEventPicker}
+                  className="text-xs text-blue-600 hover:underline ml-1"
+                >
+                  Change
+                </button>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <span className="text-amber-700">
+                  ⚠ No event linked — members can&apos;t find this quiz from
+                  the event page.
+                </span>
+                <button
+                  onClick={openEventPicker}
+                  className="text-xs text-[#FF005A] hover:underline"
+                >
+                  Link an event →
+                </button>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button asChild variant="outline" size="sm">
@@ -438,6 +589,19 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
               <ExternalLink className="h-3.5 w-3.5 mr-1" />
               Open member view
             </Link>
+          </Button>
+          <Button
+            variant={editorMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEditorMode(!editorMode)}
+            className={editorMode ? "bg-[#FF005A] hover:bg-[#FF005A]/90 text-white" : ""}
+          >
+            {editorMode ? (
+              <ListOrdered className="h-3.5 w-3.5 mr-1" />
+            ) : (
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+            )}
+            {editorMode ? "Back to run view" : "Edit questions"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => { refreshState(); refreshLeaderboard(); }}>
             <RefreshCw className="h-3.5 w-3.5 mr-1" />
@@ -618,58 +782,78 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
             </CardContent>
           </Card>
 
-          {/* Question list (jump-to) */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Question bank</CardTitle>
-              <CardDescription>
-                Click a question to start it (jumps the live cursor).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-1.5 max-h-80 overflow-y-auto">
-              {questions.map((q, i) => {
-                const isCurrent = i === session.currentQuestionIndex;
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => {
-                      if (session.status === "DRAFT") {
-                        toast({
-                          title: "Open the lobby first",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      handleStartQuestion(i);
-                    }}
-                    disabled={busy !== null || isFinished || isAborted}
-                    className={`w-full text-left rounded-md border p-2.5 transition-colors ${
-                      isCurrent
-                        ? "border-[#FF005A] bg-[#FF005A]/5"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                    } ${!q.enabled ? "opacity-40" : ""}`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-bold text-muted-foreground mt-0.5 shrink-0">
-                        Q{i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm leading-snug line-clamp-2">{q.text}</p>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          {q.sourceAreaId} · {q.options.length} options
-                        </p>
+          {/* Question list (jump-to) OR full editor */}
+          {editorMode ? (
+            <QuizQuestionEditor
+              sessionId={sessionId}
+              questions={questions}
+              sessionStatus={session.status}
+              sessionDefaultTimeSec={session.questionTimeLimitSec}
+              onQuestionsChanged={(next) => {
+                setQuestions(next);
+                // Also patch the parent's session.totalQuestions so the
+                // header counter stays in sync.
+                setSession((s) => ({
+                  ...s,
+                  totalQuestions: next.length,
+                }));
+              }}
+            />
+          ) : (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Question bank</CardTitle>
+                <CardDescription>
+                  Click a question to start it (jumps the live cursor). Use
+                  &quot;Edit questions&quot; above to modify text, options,
+                  or the correct answer.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-1.5 max-h-80 overflow-y-auto">
+                {questions.map((q, i) => {
+                  const isCurrent = i === session.currentQuestionIndex;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => {
+                        if (session.status === "DRAFT") {
+                          toast({
+                            title: "Open the lobby first",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        handleStartQuestion(i);
+                      }}
+                      disabled={busy !== null || isFinished || isAborted}
+                      className={`w-full text-left rounded-md border p-2.5 transition-colors ${
+                        isCurrent
+                          ? "border-[#FF005A] bg-[#FF005A]/5"
+                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                      } ${!q.enabled ? "opacity-40" : ""}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-bold text-muted-foreground mt-0.5 shrink-0">
+                          Q{i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm leading-snug line-clamp-2">{q.text}</p>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {q.sourceAreaId} · {q.options.length} options
+                          </p>
+                        </div>
+                        {isCurrent && (
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            LIVE
+                          </Badge>
+                        )}
                       </div>
-                      {isCurrent && (
-                        <Badge variant="outline" className="text-[10px] shrink-0">
-                          LIVE
-                        </Badge>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
+                    </button>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* RIGHT: Live leaderboard + participants */}

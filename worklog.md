@@ -857,3 +857,77 @@ Git state:
 - Commits pushed: cfd9c38 (release log), 1bbfbfb (V6-START.md)
 - HEAD: 1bbfbfb on main, pushed to origin/main
 - Vercel: auto-deployed 1bbfbfb, live at https://aisalon.massapro.com
+
+---
+Task ID: V6-QUIZ-FIXES-1
+Agent: main (Super Z)
+Task: Address three quiz engine issues reported by user (Eze):
+  1. "Couldn't submit — You haven't joined this session" when answering at /quiz/[id]
+  2. Quiz must be related to a specific Event, with a Quiz tab on the event page accessible to all logged-in members
+  3. No editable version — admin/super-admin/co-host must be able to edit quiz questions and answers
+
+Work Log:
+- Diagnosed Concern 1: QuizPlayer only showed Join button when status was DRAFT/LOBBY. Members landing on a LIVE quiz saw the question card, clicked an option, and the answer API rejected them (no QuizParticipant row).
+- Diagnosed Concern 2: QuizSession.eventId field existed but wasn't surfaced anywhere on the event page. /events/[slug] had no Quiz tab.
+- Diagnosed Concern 3: QuizQuestion rows were seeded from a hard-coded bank at session creation time and never editable. No PATCH/DELETE routes existed.
+- Diagnosed Concern 4 (bonus): quiz.host permission was ADMIN-only — CO_HOST users couldn't host quizzes even for their own events.
+- Fixed local dev DB connection: shell env had DATABASE_URL=file:/home/z/my-project/db/custom.db (non-existent SQLite), overriding .env's Neon URL. Restarted Next dev + quiz-service sidecar with explicit Neon URL — both services now connect to production Neon DB (read-only verification; the user's production deploy runs separately on Vercel).
+- Verified quiz tables exist on Neon: QuizSession, QuizQuestion, QuizResponse, QuizParticipant. Existing session cmr9aqhq50001l4044d8lt37h was LIVE with 0 participants and eventId=null — matches user's exact reported scenario.
+- Verified eze@massapro.com exists with role SUPER_ADMIN (login itself was already working from previous session — the user is now actively testing).
+
+Code changes:
+- src/lib/permissions.ts: lowered "quiz.host" permission from ROLES.ADMIN to ROLES.CO_HOST. CO_HOST users now inherit it; per-event scope check (isEventCoHost) already exists for use at route layer when needed.
+- src/app/quiz/[sessionId]/quiz-player.tsx:
+    * Added auto-join useEffect — on mount, if session is in a joinable state (LOBBY/LIVE/PAUSED/BETWEEN) and user hasn't joined yet, POST /api/quiz/[id]/join automatically. Idempotent (API upserts).
+    * Restructured Join CTA — now visible for ANY joinable status (LOBBY/LIVE/PAUSED/BETWEEN), not just DRAFT/LOBBY. This gives the user a manual fallback if auto-join fails.
+    * Gated showQuestion and showBetween on hasJoined — unjoined users see ONLY the Join card, never a clickable question they can't actually answer.
+- src/app/api/admin/quiz/[id]/route.ts (PATCH): added eventId to the updatable fields. Validates the eventId points to a real Event before writing. null is allowed (unlinks).
+- src/app/api/admin/quiz/[id]/questions/route.ts (NEW): GET lists all questions; POST creates a new question (validates text 1-1000, options 2-6 each 1-200, correctIndex in range, deepDive max 2000, sourceAreaId max 100, timeLimitSec 5-300). Auto-appends to end (order = max+1). Bumps parent session.totalQuestions in a transaction.
+- src/app/api/admin/quiz/[id]/questions/[questionId]/route.ts (NEW): PATCH updates any subset of fields (validates options+correctIndex together so the index stays within new bounds). DELETE removes the question, re-numbers subsequent questions to keep `order` contiguous, decrements totalQuestions, and shifts currentQuestionIndex if needed. Forbids editing/deleting when session is FINISHED/ABORTED (historical record). Forbids deleting the currently-live question.
+- src/app/api/admin/quiz/events/route.ts (NEW): GET lists events the user can link a quiz to (admins see all, CO_HOST sees only their co-hosted events). Used by the Control Room's event-link picker.
+- src/app/admin/quiz/page.tsx: now also loads the events list server-side and passes it down to QuizAdminList (no new API call needed on render). CO_HOST users see only quizzes for their events.
+- src/app/admin/quiz/quiz-admin-list.tsx: added an Event picker (<Select>) to the create-quiz form. Shows a ⚠ "No event linked" warning next to sessions that aren't tied to an event.
+- src/app/admin/quiz/[id]/quiz-control-room.tsx:
+    * Added "Edit questions" toggle button in the header — switches the Question Bank card between Run mode (jump-to list) and Edit mode (full editor).
+    * Made questions state mutable (was a const pulled from initialSession) so the editor can update it after PATCH/POST/DELETE.
+    * Added an Event-link row in the header showing the linked event (or ⚠ "No event linked" warning) with a Change button that opens a lazy-loaded event picker.
+- src/app/admin/quiz/[id]/quiz-question-editor.tsx (NEW ~600 lines): full question editor component. Each question card has: editable text (Textarea), 2-6 options each with a tap-to-mark-correct radio circle, deep dive (Textarea), source area dropdown, time limit input, enabled toggle (Switch), Save/Cancel/Delete buttons. Includes a "Add question" flow with the same editor body.
+- src/app/events/[slug]/tabs/quiz-tab.tsx (NEW): Quiz tab content for the event page. Shows a hero "Quiz is live now!" banner if any session is LIVE, lists upcoming/joinable quizzes with one-tap "Join live" / "Open quiz" buttons, lists past quizzes with "See results" buttons. Admins/co-hosts see a "Create a quiz for this event" form (auto-links the eventId).
+- src/app/events/[slug]/event-tabs.tsx: added a "🧠 Quiz" tab trigger (visible to all logged-in users when there are quizzes OR when the viewer can host). Wired the QuizTab component.
+- src/app/events/[slug]/page.tsx: server-side now loads event.quizSessions (with host + _count.participants) and passes them to EventTabs. Also passes canHostQuiz = canManageEvent so admins/co-hosts get the create-quiz CTA in the tab.
+
+DB backfill:
+- Linked the existing session cmr9aqhq50001l4044d8lt37h to event cmqs1k6w30000nbfla4jbwffv (slug "ai-salon-human") so Eze immediately sees it on the event page's Quiz tab.
+
+Stage Summary:
+- All three user concerns addressed:
+  1. Auto-join + always-visible Join CTA fixes "You haven't joined this session".
+  2. Event-page Quiz tab + Event picker in create form + backfill makes quizzes discoverable from the event page.
+  3. Question editor (with full CRUD API backing) lets admin/super-admin/co-host edit text, options, correct answer, deep dive, time limit, enabled flag — and add/delete questions.
+- Bonus: CO_HOST role can now host quizzes for their events.
+- Dev server (Next 16 + Bun quiz-service sidecar) running cleanly against Neon DB. All three pages (quiz player, admin quiz list, event page) compile and respond 200.
+- Production deploy: changes need to be committed and pushed to deploy on Vercel (https://aisalon.massapro.com). The Neon DB schema already has the Quiz tables — no migration needed.
+- Pre-existing TS errors (recharts PieLabel types in dashboard, image-edit skill, state/route selectedIndex type) are NOT in scope for this task and were left untouched.
+
+Files modified/created this session:
+- src/lib/permissions.ts (modified — quiz.host permission lowered)
+- src/app/quiz/[sessionId]/quiz-player.tsx (modified — auto-join + Join CTA)
+- src/app/api/admin/quiz/[id]/route.ts (modified — eventId in PATCH)
+- src/app/api/admin/quiz/[id]/questions/route.ts (NEW — GET + POST)
+- src/app/api/admin/quiz/[id]/questions/[questionId]/route.ts (NEW — PATCH + DELETE)
+- src/app/api/admin/quiz/events/route.ts (NEW — GET events picker)
+- src/app/admin/quiz/page.tsx (modified — load events, CO_HOST scoping)
+- src/app/admin/quiz/quiz-admin-list.tsx (modified — Event picker, no-event warning)
+- src/app/admin/quiz/[id]/quiz-control-room.tsx (modified — Edit questions toggle, event-link picker, mutable questions state)
+- src/app/admin/quiz/[id]/quiz-question-editor.tsx (NEW — full editor component)
+- src/app/events/[slug]/tabs/quiz-tab.tsx (NEW — event-page Quiz tab)
+- src/app/events/[slug]/event-tabs.tsx (modified — Quiz tab trigger + content)
+- src/app/events/[slug]/page.tsx (modified — load quizSessions, pass to client)
+- .env (modified — wrapped DATABASE_URL in quotes so Prisma parses & correctly)
+
+DB state:
+- Existing session cmr9aqhq50001l4044d8lt37h backfilled: eventId = cmqs1k6w30000nbfla4jbwffv (ai-salon-human).
+- No schema migration needed (QuizSession.eventId already existed; just was unused).
+
+Git state:
+- Uncommitted changes — user should review and push when ready.

@@ -156,6 +156,48 @@ export function QuizPlayer({ initialSession, user }: Props) {
     refreshLeaderboard();
   }, [refreshState, refreshLeaderboard]);
 
+  // ── Auto-join ──────────────────────────────────────────────────────
+  // If the user lands on the page and hasn't joined yet, but the session
+  // is in a joinable state (LOBBY/LIVE/PAUSED/BETWEEN), auto-join them
+  // on mount. This eliminates the "You haven't joined this session" error
+  // when someone clicks a late-arriving quiz link while the quiz is
+  // already LIVE. Idempotent — the API upserts.
+  const autoJoinedRef = useRef(false);
+  useEffect(() => {
+    if (autoJoinedRef.current) return;
+    // Wait for the first state fetch to resolve so we know whether we're
+    // already joined (then no-op) or need to join.
+    if (me !== null) {
+      autoJoinedRef.current = true;
+      return;
+    }
+    const joinableStatuses = new Set(["LOBBY", "LIVE", "PAUSED", "BETWEEN"]);
+    if (!joinableStatuses.has(session.status)) return;
+    autoJoinedRef.current = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/quiz/${session.id}/join`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          // Don't toast destructive errors for auto-join — the user can
+          // still click the manual Join button if auto-join failed.
+          console.warn("[quiz] auto-join failed:", err?.error);
+          return;
+        }
+        toast({
+          title: "Joined the quiz",
+          description: "You're in the game — answer fast for more points!",
+        });
+        refreshState();
+        refreshLeaderboard();
+      } catch {
+        /* ignore — manual join button still available */
+      }
+    })();
+  }, [me, session.status, session.id, refreshState, refreshLeaderboard, toast]);
+
   // Tick when LIVE
   useEffect(() => {
     if (session.status !== "LIVE" || !currentQuestion) return;
@@ -266,9 +308,9 @@ export function QuizPlayer({ initialSession, user }: Props) {
   const progressPct =
     timeLimitSec > 0 ? Math.min(100, (elapsedMs / (timeLimitSec * 1000)) * 100) : 0;
 
-  const showQuestion = session.status === "LIVE" && currentQuestion;
+  const showQuestion = session.status === "LIVE" && currentQuestion && hasJoined;
   const showWaiting = session.status === "DRAFT" || session.status === "LOBBY";
-  const showBetween = session.status === "BETWEEN" || session.status === "PAUSED";
+  const showBetween = (session.status === "BETWEEN" || session.status === "PAUSED") && hasJoined;
   const showFinished = session.status === "FINISHED";
   const showAborted = session.status === "ABORTED";
 
@@ -354,22 +396,29 @@ export function QuizPlayer({ initialSession, user }: Props) {
           </Card>
         )}
 
-        {/* Not joined yet — show join button */}
-        {showWaiting && !hasJoined && (
-          <Card className="text-center">
-            <CardContent className="py-12">
-              <Radio className="h-12 w-12 mx-auto text-[#FF005A] mb-3 animate-pulse" />
-              <h2 className="text-lg font-semibold mb-1">
-                {session.status === "LOBBY"
-                  ? "Lobby is open"
-                  : "Waiting for host"}
-              </h2>
-              <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-                {session.status === "LOBBY"
-                  ? "Tap join to get into the game. The quiz will start in a moment."
-                  : "The host hasn't opened the lobby yet. Hang tight — this page will auto-update."}
-              </p>
-              {session.status === "LOBBY" && (
+        {/* Not joined yet — show join button (any joinable status) */}
+        {!hasJoined &&
+          (session.status === "LOBBY" ||
+            session.status === "LIVE" ||
+            session.status === "PAUSED" ||
+            session.status === "BETWEEN") && (
+            <Card className="text-center border-[#FF005A]/30 bg-[#FF005A]/5">
+              <CardContent className="py-8">
+                <Radio className="h-10 w-10 mx-auto text-[#FF005A] mb-3 animate-pulse" />
+                <h2 className="text-lg font-semibold mb-1">
+                  {session.status === "LIVE"
+                    ? "Quiz is live — join now!"
+                    : session.status === "LOBBY"
+                    ? "Lobby is open"
+                    : session.status === "PAUSED"
+                    ? "Quiz is paused"
+                    : "Join to see the question"}
+                </h2>
+                <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+                  {session.status === "LIVE"
+                    ? "You're missing points every second. Tap join to jump in."
+                    : "Tap join to get into the game."}
+                </p>
                 <Button
                   size="lg"
                   onClick={handleJoin}
@@ -383,7 +432,22 @@ export function QuizPlayer({ initialSession, user }: Props) {
                   )}
                   Join the quiz
                 </Button>
-              )}
+              </CardContent>
+            </Card>
+          )}
+
+        {/* DRAFT and not joined — waiting for host */}
+        {session.status === "DRAFT" && !hasJoined && (
+          <Card className="text-center">
+            <CardContent className="py-12">
+              <Radio className="h-12 w-12 mx-auto text-[#FF005A] mb-3 animate-pulse" />
+              <h2 className="text-lg font-semibold mb-1">
+                Waiting for host
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+                The host hasn't opened the lobby yet. Hang tight — this page
+                will auto-update.
+              </p>
             </CardContent>
           </Card>
         )}

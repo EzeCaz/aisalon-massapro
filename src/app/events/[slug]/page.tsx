@@ -41,6 +41,24 @@ export default async function EventDetailPage({ params }: Params) {
       // The admin-picked main image — used as the event's hero picture
       // at the top-left of the event page. null when none has been set.
       mainImage: { select: { id: true, fileUrl: true, caption: true } },
+      // Quiz sessions linked to this event — shown in the Quiz tab.
+      // Sorted by createdAt DESC so the most recent (typically the next
+      // upcoming one) shows first.
+      quizSessions: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          questionTimeLimitSec: true,
+          totalQuestions: true,
+          createdAt: true,
+          startedAt: true,
+          finishedAt: true,
+          host: { select: { id: true, name: true, email: true } },
+          _count: { select: { participants: true } },
+        },
+      },
       speakers: {
         orderBy: { order: "asc" },
         include: {
@@ -339,6 +357,12 @@ export default async function EventDetailPage({ params }: Params) {
       startsAt: a.startsAt.toISOString(),
       endsAt: a.endsAt?.toISOString() || null,
     })),
+    quizSessions: event.quizSessions.map((q) => ({
+      ...q,
+      createdAt: q.createdAt.toISOString(),
+      startedAt: q.startedAt?.toISOString() ?? null,
+      finishedAt: q.finishedAt?.toISOString() ?? null,
+    })),
   };
 
   // Serialize the manager-only speaker roster (with _count + dates as ISO
@@ -542,6 +566,8 @@ export default async function EventDetailPage({ params }: Params) {
           coHosts={coHostsList}
           eventStats={eventStats}
           speakersForEditor={speakersForEditor}
+          quizzes={serialized.quizSessions}
+          canHostQuiz={canManageEvent}
         />
       </main>
 
