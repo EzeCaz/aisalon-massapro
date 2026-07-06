@@ -80,17 +80,38 @@ MODELS="$(gunzip -c "$FILE" | node -e "
 echo "[db-backup] OK  $FILE  ($SIZE)"
 echo "[db-backup] models: $MODELS"
 
-# Optional auto-sync to Google Drive if rclone is configured.
-# To enable: install rclone, run `rclone config`, name the remote "gdrive",
-# set RCLONE_DRIVE_FOLDER_ID to a Google Drive folder ID, then export
-# AUTO_SYNC_DRIVE=1 in .env or your shell.
-if [ "${AUTO_SYNC_DRIVE:-0}" = "1" ] && command -v rclone >/dev/null 2>&1; then
-  echo "[db-backup] AUTO_SYNC_DRIVE=1 — copying to Google Drive ..."
-  rclone copyto "$FILE" "gdrive:${RCLONE_DRIVE_FOLDER_ID:-aisalon-backups}/db/$(basename "$FILE")" \
-    --drive-stop-on-upload-limit \
-    --transfers 1 \
-    --quiet
-  echo "[db-backup] Google Drive sync done."
-elif [ "${AUTO_SYNC_DRIVE:-0}" = "1" ]; then
-  echo "[db-backup] WARNING: AUTO_SYNC_DRIVE=1 but rclone is not installed. Skipping drive sync." >&2
+# ── Auto-sync to Google Drive ────────────────────────────────────
+# Two methods supported (in priority order):
+#
+#   1. Python service-account (RECOMMENDED for headless servers)
+#      Requires: GDRIVE_FOLDER_ID + GCP_SERVICE_ACCOUNT_PATH in .env,
+#      plus `pip install google-auth google-api-python-client`.
+#      See scripts/drive-backup.py for one-time setup instructions.
+#
+#   2. rclone OAuth (works if rclone is configured with a "gdrive" remote)
+#      Requires: rclone installed, `rclone config` run once, and
+#      RCLONE_DRIVE_FOLDER_ID in .env.
+#
+# Enable either by setting AUTO_SYNC_DRIVE=1 in .env or your shell.
+if [ "${AUTO_SYNC_DRIVE:-0}" = "1" ]; then
+  if [ -n "${GDRIVE_FOLDER_ID:-}" ] && [ -x "/usr/bin/python3" ] && [ -f "scripts/drive-backup.py" ]; then
+    echo "[db-backup] AUTO_SYNC_DRIVE=1 — uploading to Google Drive via service account ..."
+    if /usr/bin/python3 scripts/drive-backup.py --latest; then
+      echo "[db-backup] Google Drive sync done."
+    else
+      echo "[db-backup] WARNING: drive-backup.py failed. See logs above." >&2
+    fi
+  elif [ -n "${RCLONE_DRIVE_FOLDER_ID:-}" ] && command -v rclone >/dev/null 2>&1; then
+    echo "[db-backup] AUTO_SYNC_DRIVE=1 — copying to Google Drive via rclone ..."
+    rclone copyto "$FILE" "gdrive:${RCLONE_DRIVE_FOLDER_ID:-aisalon-backups}/db/$(basename "$FILE")" \
+      --drive-stop-on-upload-limit \
+      --transfers 1 \
+      --quiet
+    echo "[db-backup] Google Drive sync done."
+  else
+    echo "[db-backup] WARNING: AUTO_SYNC_DRIVE=1 but no Drive method is configured." >&2
+    echo "[db-backup]          Either set GDRIVE_FOLDER_ID + drop a service-account JSON" >&2
+    echo "[db-backup]          (see scripts/drive-backup.py docstring) OR install rclone" >&2
+    echo "[db-backup]          and run 'rclone config'. Skipping drive sync." >&2
+  fi
 fi

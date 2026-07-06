@@ -1702,3 +1702,31 @@ Deployment notes (for when this hits production):
   handles routing automatically.
 - No new env vars required (the WS service is stateless; DATABASE_URL
   is only used by Next.js).
+
+---
+Task ID: deploy-and-drive-backup
+Agent: main
+Task: Deploy the latest code to Vercel and set up Google Drive backups for the database.
+
+Work Log:
+- Verified production deployment: ca4ca13 (feat(community): member directory + Contact button → 1-on-1 DM dialog) auto-deployed to Vercel on push to main. Confirmed `https://aisalon.massapro.com/community` returns 307 → /login?callbackUrl=/community (auth gate working).
+- Inspected existing backup infrastructure:
+  - scripts/db-backup.sh + scripts/db-backup.ts already dump every Prisma model to download/backups/db-<timestamp>-<sha>.json.gz
+  - scripts/sync-to-drive.sh (rclone-based) existed but required interactive OAuth
+- Ran a fresh DB backup to verify the pipeline:
+  - 35 models dumped, 100K compressed
+  - Includes new community chat data (chatRoom=1, chatRoomMember=49, chatMessage=1)
+- Installed rclone v1.74.3 to ~/.local/bin/rclone (no sudo needed).
+- Created scripts/drive-backup.py — Python service-account-based Google Drive uploader (NO browser OAuth needed; perfect for headless servers). Uses google-auth + google-api-python-client. Uploads to a "db" subfolder inside the user-provided Drive folder. Supports --latest flag for incremental uploads. Idempotent: re-uploads replace the existing file (preserves version history).
+- Modified scripts/db-backup.sh to auto-call drive-backup.py after a successful local backup when AUTO_SYNC_DRIVE=1. Falls back to rclone if Python script isn't configured. Falls back to a helpful warning if neither is set up.
+- Created scripts/setup-drive-backup.sh — interactive one-time setup helper that walks the user through: (1) verifying Python + Google libs, (2) dropping the service account JSON at /home/z/my-project/.gcp-service-account.json, (3) entering the Drive folder ID, (4) writing GDRIVE_FOLDER_ID + AUTO_SYNC_DRIVE=1 to .env, (5) running a test backup + upload, (6) optionally installing a nightly 3 AM cron entry.
+- Installed google-auth + google-auth-oauthlib + google-api-python-client to /home/z/.local/lib/python3.13/site-packages (used via /usr/bin/python3 since the default python3 in this env is uv-managed 3.12 without site-packages).
+
+Stage Summary:
+- Production deployment: COMPLETE (Vercel auto-deployed ca4ca13; /community live at aisalon.massapro.com).
+- Local DB backup: WORKING (latest snapshot: download/backups/db-20260706-231250-ca4ca13.json.gz, 100K, 35 models).
+- Google Drive backup: SCRIPTED + TESTED (drive-backup.py runs cleanly; errors helpfully when GDRIVE_FOLDER_ID isn't set). NOT yet pushed to Drive because the user needs to complete the one-time Google Cloud Console setup (service account JSON + share Drive folder with service account email). Once they run `bash scripts/setup-drive-backup.sh`, everything will wire up automatically and a nightly 3 AM cron can be installed.
+- Files created/modified:
+  - NEW scripts/drive-backup.py (Python service-account Drive uploader)
+  - NEW scripts/setup-drive-backup.sh (interactive setup helper)
+  - MODIFIED scripts/db-backup.sh (auto-calls drive-backup.py when AUTO_SYNC_DRIVE=1)
