@@ -126,6 +126,10 @@ model User {
   // Email orchestrator + flows — back-relations
   emailQueueItems       EmailQueue[]          @relation("EmailQueueUser")
   // ----------------------------------------------------------------
+  // Flourishing Quiz — sessions this user is hosting + participation records
+  hostedQuizSessions    QuizSession[]         @relation("QuizHost")
+  quizParticipations    QuizParticipant[]
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -221,6 +225,9 @@ model Event {
   prepSuggestions EventPrepSuggestion[]
   /// Email orchestrator queue items for this event (5-stage + flow steps).
   emailQueueItems EmailQueue[]
+  /// Flourishing Quiz sessions tied to this event (optional link for
+  /// post-event follow-up outreach to top performers).
+  quizSessions    QuizSession[]
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -1041,4 +1048,171 @@ model EmailAudience {
 
   @@index([isTest])
   @@index([kind])
+}
+
+// ============================================================================
+// FLOURISHING QUIZ ENGINE
+// Real-time, Kahoot-style interactive quiz module for AI Salon events.
+// First quiz: "AI and Human Flourishing" — content pulled dynamically
+// from /resources/ai-human-flourishing.
+// ============================================================================
+
+/// A single quiz session — one run of a quiz at an event.
+/// Created by an admin/co-host from the Control Room at /admin/quiz.
+/// Members join at /quiz/[sessionId].
+model QuizSession {
+  id              String   @id @default(cuid())
+  /// Human-friendly title, e.g. "AI & Human Flourishing — July 2026".
+  title           String
+  /// Optional event link — when set, the session is tied to a specific
+  /// Event row so the leaderboard can flow into event follow-up outreach.
+  eventId         String?
+  event           Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  /// The user (admin/co-host) who created + is hosting this session.
+  hostId          String?
+  host            User?    @relation("QuizHost", fields: [hostId], references: [id], onDelete: SetNull)
+  /// Source of the quiz content. "resource:ai-human-flourishing" pulls
+  /// dynamically from the salon-data module; "manual" uses admin-authored
+  /// questions; future sources can be added.
+  contentSource   String   @default("resource:ai-human-flourishing")
+  /// Live state machine:
+  ///   "DRAFT"     — created, not started. Admin can edit questions.
+  ///   "LOBBY"     — admin opened the lobby; members can join.
+  ///   "LIVE"      — a question is currently active (timer running).
+  ///   "PAUSED"    — admin hit the kill switch; timer frozen, state preserved.
+  ///   "BETWEEN"   — between questions (showing leaderboard or deep-dive).
+  ///   "FINISHED"  — session ended; final leaderboard locked.
+  ///   "ABORTED"   — admin cancelled the session early.
+  status          String   @default("DRAFT")
+  /// When the current question was started (server time). Used to compute
+  /// response latency for scoring. Null when no question is active.
+  currentQuestionStartedAt DateTime?
+  /// The index (0-based) of the current question in the questions array.
+  /// Null when between questions or before the first question.
+  currentQuestionIndex      Int?
+  /// Per-question time limit in seconds (default 30s, Kahoot-style).
+  questionTimeLimitSec      Int      @default(30)
+  /// Total questions planned for this session (may be less than the
+  /// number in the source if admin toggled some off).
+  totalQuestions            Int      @default(0)
+  /// Optional JSON blob with host-side settings (e.g. enableFastestBonus,
+  /// showLeaderboardBetweenQuestions, deepDiveSnippetIds). Free-form so
+  /// we can add settings without migrating.
+  settingsJson              String?
+  /// When the session was started (status → LOBBY). Null before that.
+  startedAt        DateTime?
+  /// When the session was finished (status → FINISHED). Null until then.
+  finishedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  // --- relations ---
+  questions        QuizQuestion[]
+  responses        QuizResponse[]
+  participants     QuizParticipant[]
+  @@index([eventId])
+  @@index([hostId])
+  @@index([status])
+}
+
+/// A question in a quiz session. Stored at session-creation time so the
+/// quiz is reproducible even if the source content changes later.
+/// Each question has 4 options (Kahoot-style) with one marked correct.
+model QuizQuestion {
+  id              String   @id @default(cuid())
+  sessionId       String
+  session         QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// 0-based order in the session.
+  order           Int
+  /// The full text of the question.
+  text            String
+  /// The 4 answer options, stored as JSON array of strings.
+  /// e.g. ["Curiosity", "Intentionality", "Clarity", "Care"]
+  optionsJson     String
+  /// 0-based index of the correct option in optionsJson.
+  correctIndex    Int
+  /// Optional "deep dive" explanation shown after the correct answer
+  /// is revealed. Pulled from the resource page's quotes/stories/tools.
+  deepDive        String?
+  /// The conversation area this question came from (e.g. "identity-purpose").
+  /// Null for admin-authored questions.
+  sourceAreaId    String?
+  /// Whether the admin has toggled this question OFF for the current
+  /// session. Off questions are skipped during play.
+  enabled         Boolean  @default(true)
+  /// How long (seconds) this specific question runs. Falls back to
+  /// QuizSession.questionTimeLimitSec when null.
+  timeLimitSec    Int?
+  // --- relations ---
+  responses       QuizResponse[]
+  @@index([sessionId])
+  @@index([order])
+}
+
+/// A single participant's answer to a single question.
+/// One row per (participant, question) pair — enforced by the unique
+/// constraint. Used to compute scores + final leaderboard.
+model QuizResponse {
+  id              String   @id @default(cuid())
+  sessionId       String
+  session         QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  participantId   String
+  participant     QuizParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  /// 0-based index of the option the participant selected.
+  /// Null if they didn't answer in time (counts as wrong).
+  selectedIndex   Int?
+  /// Whether the answer was correct.
+  isCorrect       Boolean  @default(false)
+  /// Response latency in milliseconds (from question start to answer submit).
+  /// Null if no answer.
+  responseMs      Int?
+  /// Points awarded for this response. Kahoot-style: 0 if wrong; if correct,
+  ///   base 500 + up to 500 bonus for speed (faster = more).
+  points          Int      @default(0)
+  /// Server timestamp when the response was recorded.
+  answeredAt      DateTime @default(now())
+  @@unique([questionId, participantId])
+  @@index([sessionId])
+  @@index([questionId])
+  @@index([participantId])
+}
+
+/// A participant in a quiz session. One row per (user, session).
+/// Tracks live connection state + cumulative score.
+model QuizParticipant {
+  id              String   @id @default(cuid())
+  sessionId       String
+  session         QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Display name (copied from User.name at join time so the leaderboard
+  /// doesn't break if the user later changes their name).
+  displayName     String
+  /// Avatar URL (copied from User.photoUrl or User.image at join time).
+  avatarUrl       String?
+  /// Cumulative score across all answered questions in this session.
+  /// Updated on every response.
+  totalScore      Int      @default(0)
+  /// Number of questions answered correctly.
+  correctCount    Int      @default(0)
+  /// Number of questions answered (right or wrong).
+  answeredCount   Int      @default(0)
+  /// Average response latency in ms (rolling). Null until first answer.
+  avgResponseMs   Int?
+  /// Whether the participant is currently connected via WebSocket.
+  /// Updated by the quiz-service on connect/disconnect events.
+  isOnline        Boolean  @default(false)
+  /// Last time we saw activity from this participant (heartbeat or
+  /// answer). Used for stale-participant cleanup.
+  lastSeenAt      DateTime @default(now())
+  joinedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([isOnline])
+  // --- relations ---
+  responses       QuizResponse[]
 }
