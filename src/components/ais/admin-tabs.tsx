@@ -16,6 +16,7 @@ import {
   BookOpen,
   LayoutTemplate,
   TrendingUp,
+  Brain,
 } from "lucide-react";
 
 /**
@@ -93,6 +94,7 @@ const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/images", label: "Images", icon: Images, match: "/admin/images" },
   { href: "/admin/knowledge-base", label: "Knowledge Base", icon: BookOpen, match: "/admin/knowledge-base" },
   { href: "/admin/mockups", label: "Mockups", icon: LayoutTemplate, match: "/admin/mockups" },
+  { href: "/admin/quiz", label: "Quiz", icon: Brain, match: "/admin/quiz" },
 ];
 
 /**

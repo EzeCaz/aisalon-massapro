@@ -194,6 +194,12 @@ const CAN_MAP: Record<string, Role> = {
   // are speaking at. They cannot edit anything — agenda, event details,
   // speakers, etc. are all read-only.
   "eventprep.view": ROLES.SPEAKER,
+
+  // ── Quiz Engine ───────────────────────────────────────────────────
+  // Admins can host quiz sessions (create, start, advance questions,
+  // pause/resume, view analytics). Members participate via /quiz/[id]
+  // without needing this permission.
+  "quiz.host": ROLES.ADMIN,
 };
 
 /**

@@ -1,0 +1,762 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  Brain,
+  Play,
+  Pause,
+  SkipForward,
+  Square,
+  Users,
+  Trophy,
+  Clock,
+  RefreshCw,
+  ExternalLink,
+  ChevronRight,
+  Eye,
+  AlertCircle,
+  CheckCircle2,
+  Radio,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import { useQuizSocket } from "@/components/quiz/use-quiz-socket";
+
+interface Question {
+  id: string;
+  order: number;
+  text: string;
+  options: string[];
+  correctIndex: number;
+  deepDive: string | null;
+  sourceAreaId: string | null;
+  enabled: boolean;
+  timeLimitSec: number | null;
+}
+
+interface Participant {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  totalScore: number;
+  correctCount: number;
+  answeredCount: number;
+  avgResponseMs: number | null;
+  isOnline: boolean;
+  lastSeenAt: string;
+  joinedAt: string;
+  userId: string;
+  rank?: number;
+  isPodium?: boolean;
+}
+
+interface SessionState {
+  id: string;
+  title: string;
+  status: string;
+  questionTimeLimitSec: number;
+  totalQuestions: number;
+  currentQuestionIndex: number | null;
+  currentQuestionStartedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  _count: { participants: number; responses: number };
+}
+
+interface Props {
+  initialSession: SessionState & {
+    questions: Question[];
+    host: { id: string; name: string | null; email: string } | null;
+    event: { id: string; title: string; slug: string } | null;
+  };
+  hostUser: { id: string; name: string; email: string; role: string };
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-gray-100 text-gray-700 border-gray-200",
+  LOBBY: "bg-blue-100 text-blue-700 border-blue-200",
+  LIVE: "bg-red-100 text-red-700 border-red-200 animate-pulse",
+  PAUSED: "bg-amber-100 text-amber-700 border-amber-200",
+  BETWEEN: "bg-purple-100 text-purple-700 border-purple-200",
+  FINISHED: "bg-green-100 text-green-700 border-green-200",
+  ABORTED: "bg-gray-200 text-gray-600 border-gray-300 line-through",
+};
+
+export function QuizControlRoom({ initialSession, hostUser }: Props) {
+  const { toast } = useToast();
+  const [session, setSession] = useState<SessionState>(initialSession);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [currentQuestionStats, setCurrentQuestionStats] = useState<{
+    questionId: string;
+    totalResponses: number;
+    distribution: number[];
+  } | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const sessionId = session.id;
+  const questions = initialSession.questions;
+  const currentQuestion =
+    session.currentQuestionIndex != null
+      ? questions[session.currentQuestionIndex]
+      : null;
+  const timeLimitSec =
+    currentQuestion?.timeLimitSec ?? session.questionTimeLimitSec;
+  const startedAtMs = session.currentQuestionStartedAt
+    ? new Date(session.currentQuestionStartedAt).getTime()
+    : 0;
+  const elapsedMs = session.status === "LIVE" ? now - startedAtMs : 0;
+  const remainingMs = Math.max(0, timeLimitSec * 1000 - elapsedMs);
+  const remainingSec = Math.ceil(remainingMs / 1000);
+  const progressPct =
+    timeLimitSec > 0 ? Math.min(100, (elapsedMs / (timeLimitSec * 1000)) * 100) : 0;
+
+  // ── Data fetchers ──────────────────────────────────────────────────
+  const refreshState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/admin/quiz/${sessionId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.session) {
+          const { questions: _q, ...rest } = data.session;
+          setSession(rest);
+        }
+      }
+    } catch {
+      /* ignore — non-critical */
+    }
+  }, [sessionId]);
+
+  const refreshLeaderboard = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/quiz/${sessionId}/leaderboard`);
+      if (res.ok) {
+        const data = await res.json();
+        setParticipants(data.participants || []);
+        setCurrentQuestionStats(data.currentQuestionStats || null);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [sessionId]);
+
+  // Initial load
+  useEffect(() => {
+    refreshLeaderboard();
+  }, [refreshLeaderboard]);
+
+  // Tick every 200ms when LIVE (for the countdown)
+  useEffect(() => {
+    if (session.status !== "LIVE") return;
+    const interval = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(interval);
+  }, [session.status]);
+
+  // Auto-refresh leaderboard every 3s when LIVE
+  useEffect(() => {
+    if (session.status !== "LIVE") return;
+    const interval = setInterval(refreshLeaderboard, 3000);
+    return () => clearInterval(interval);
+  }, [session.status, refreshLeaderboard]);
+
+  // ── WebSocket ──────────────────────────────────────────────────────
+  const {
+    isConnected: wsConnected,
+    emitHostAction,
+  } = useQuizSocket({
+    sessionId,
+    userId: hostUser.id,
+    displayName: hostUser.name,
+    role: hostUser.role,
+    onStateChange: () => {
+      refreshState();
+      refreshLeaderboard();
+      setRevealed(false);
+    },
+    onReveal: () => {
+      setRevealed(true);
+      refreshLeaderboard();
+    },
+    onLeaderboard: refreshLeaderboard,
+    onFinished: () => {
+      refreshState();
+      refreshLeaderboard();
+    },
+    onParticipantJoined: refreshLeaderboard,
+    onParticipantLeft: refreshLeaderboard,
+    onAnswerCount: () => {
+      // Throttle — refresh at most once per 500ms
+      const t = lastAnswerRefresh.current;
+      if (Date.now() - t > 500) {
+        lastAnswerRefresh.current = Date.now();
+        refreshLeaderboard();
+      }
+    },
+  });
+  const lastAnswerRefresh = useRef(0);
+
+  // ── Host actions ───────────────────────────────────────────────────
+  const patchSession = async (body: Record<string, unknown>) => {
+    const res = await fetch(`/api/admin/quiz/${sessionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update session");
+    }
+    return res.json();
+  };
+
+  const handleStartLobby = async () => {
+    setBusy("lobby");
+    try {
+      await patchSession({
+        status: "LOBBY",
+        startedAt: new Date().toISOString(),
+      });
+      emitHostAction("quiz:host:start-lobby");
+      toast({ title: "Lobby opened", description: "Members can now join." });
+      refreshState();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to open lobby",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleStartQuestion = async (index: number) => {
+    setBusy("start");
+    try {
+      await patchSession({
+        status: "LIVE",
+        currentQuestionIndex: index,
+        currentQuestionStartedAt: new Date().toISOString(),
+      });
+      setRevealed(false);
+      emitHostAction("quiz:host:start-question");
+      toast({
+        title: `Question ${index + 1} live`,
+        description: `${timeLimitSec}s timer started.`,
+      });
+      refreshState();
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to start question",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleReveal = async () => {
+    setBusy("reveal");
+    try {
+      // Move to BETWEEN status — clients re-fetch /state and see the
+      // current question's correctIndex via the leaderboard endpoint's
+      // currentQuestionStats. Actually we expose correctIndex only via
+      // a separate reveal event — for V1 we just flip to BETWEEN and
+      // let the member UI show "correct answer coming up".
+      await patchSession({
+        status: "BETWEEN",
+        currentQuestionStartedAt: null,
+      });
+      setRevealed(true);
+      emitHostAction("quiz:host:reveal");
+      toast({ title: "Answer revealed" });
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to reveal",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleNextQuestion = async () => {
+    const nextIndex = (session.currentQuestionIndex ?? -1) + 1;
+    if (nextIndex >= questions.length) {
+      // No more questions — finish
+      await handleFinish();
+      return;
+    }
+    await handleStartQuestion(nextIndex);
+  };
+
+  const handlePause = async () => {
+    setBusy("pause");
+    try {
+      await patchSession({ status: "PAUSED" });
+      emitHostAction("quiz:host:pause");
+      toast({ title: "Paused" });
+      refreshState();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to pause",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleResume = async () => {
+    setBusy("resume");
+    try {
+      // Reset the startedAt so the timer resumes from where it left off
+      // (approximate — we lose the exact pause moment, but it's close
+      // enough for a live quiz).
+      await patchSession({
+        status: "LIVE",
+        currentQuestionStartedAt: new Date().toISOString(),
+      });
+      emitHostAction("quiz:host:resume");
+      toast({ title: "Resumed" });
+      refreshState();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to resume",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleFinish = async () => {
+    setBusy("finish");
+    try {
+      await patchSession({
+        status: "FINISHED",
+        finishedAt: new Date().toISOString(),
+        currentQuestionIndex: null,
+        currentQuestionStartedAt: null,
+      });
+      emitHostAction("quiz:host:finish");
+      toast({ title: "Session finished", description: "Final leaderboard locked." });
+      refreshState();
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to finish",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleAbort = async () => {
+    if (!confirm("Abort this session? Members will be kicked out.")) return;
+    setBusy("abort");
+    try {
+      await patchSession({
+        status: "ABORTED",
+        currentQuestionIndex: null,
+        currentQuestionStartedAt: null,
+      });
+      emitHostAction("quiz:host:abort");
+      toast({ title: "Session aborted" });
+      refreshState();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to abort",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────
+  const isLive = session.status === "LIVE";
+  const isPaused = session.status === "PAUSED";
+  const isFinished = session.status === "FINISHED";
+  const isAborted = session.status === "ABORTED";
+  const isBetween = session.status === "BETWEEN";
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+            <Link href="/admin/quiz" className="hover:underline">
+              Quiz
+            </Link>
+            <ChevronRight className="h-3 w-3" />
+            <span>Control Room</span>
+          </div>
+          <h1 className="text-2xl font-bold flex items-center gap-2 flex-wrap">
+            <Radio className="h-6 w-6 text-[#FF005A]" />
+            {initialSession.title}
+            <Badge
+              variant="outline"
+              className={STATUS_COLORS[session.status] || STATUS_COLORS.DRAFT}
+            >
+              {session.status}
+            </Badge>
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Host: {initialSession.host?.name || initialSession.host?.email} ·{" "}
+            {questions.length} questions · {session.questionTimeLimitSec}s/Q ·{" "}
+            <span className={wsConnected ? "text-green-600" : "text-red-600"}>
+              WS {wsConnected ? "connected" : "disconnected"}
+            </span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/quiz/${sessionId}`} target="_blank">
+              <ExternalLink className="h-3.5 w-3.5 mr-1" />
+              Open member view
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { refreshState(); refreshLeaderboard(); }}>
+            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        {/* LEFT: Control panel */}
+        <div className="space-y-5">
+          {/* Live question card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-[#FF005A]" />
+                  {currentQuestion
+                    ? `Question ${currentQuestion.order + 1} of ${questions.length}`
+                    : "No active question"}
+                </CardTitle>
+                {isLive && (
+                  <div className="flex items-center gap-2 text-sm font-mono">
+                    <Clock className="h-4 w-4 text-red-500" />
+                    <span className={remainingSec <= 5 ? "text-red-600 font-bold" : ""}>
+                      {remainingSec}s
+                    </span>
+                  </div>
+                )}
+              </div>
+              {isLive && (
+                <Progress value={progressPct} className="h-2 mt-2" />
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {currentQuestion ? (
+                <>
+                  <p className="text-lg font-medium leading-snug">
+                    {currentQuestion.text}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {currentQuestion.options.map((opt, i) => {
+                      const isCorrect = i === currentQuestion.correctIndex;
+                      const showCorrect = revealed || isFinished;
+                      const responseCount = currentQuestionStats?.distribution[i] ?? 0;
+                      const responsePct = currentQuestionStats && currentQuestionStats.totalResponses > 0
+                        ? Math.round((responseCount / currentQuestionStats.totalResponses) * 100)
+                        : 0;
+                      return (
+                        <div
+                          key={i}
+                          className={`relative rounded-lg border-2 p-3 transition-colors ${
+                            showCorrect && isCorrect
+                              ? "border-green-500 bg-green-50"
+                              : "border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2">
+                              <span className="font-bold text-xs text-muted-foreground mt-0.5">
+                                {String.fromCharCode(65 + i)}
+                              </span>
+                              <span className="text-sm">{opt}</span>
+                            </div>
+                            {showCorrect && isCorrect && (
+                              <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                            )}
+                          </div>
+                          {currentQuestionStats && (
+                            <div className="mt-2">
+                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-[#FF005A] transition-all"
+                                  style={{ width: `${responsePct}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                                {responseCount} response{responseCount !== 1 ? "s" : ""} ({responsePct}%)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {revealed && currentQuestion.deepDive && (
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                      <p className="text-xs font-semibold text-amber-900 mb-1">
+                        Deep dive
+                      </p>
+                      <p className="text-sm text-amber-800 leading-relaxed">
+                        {currentQuestion.deepDive}
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Source area: <span className="font-medium">{currentQuestion.sourceAreaId || "—"}</span>
+                    {" · "}
+                    {currentQuestionStats?.totalResponses ?? 0} of{" "}
+                    {participants.length} participants answered
+                  </p>
+                </>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">
+                  {session.status === "DRAFT" && "Session is in draft. Open the lobby to let members join."}
+                  {session.status === "LOBBY" && "Lobby is open. Start the first question when you're ready."}
+                  {isBetween && "Between questions. Click \"Next question\" to continue."}
+                  {isFinished && "Session finished. Final leaderboard is on the right."}
+                  {isAborted && "Session was aborted."}
+                  {session.status === "PAUSED" && "Question is paused."}
+                </div>
+              )}
+
+              {/* Host action bar */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t">
+                {session.status === "DRAFT" && (
+                  <Button onClick={handleStartLobby} disabled={busy !== null}>
+                    <Play className="h-4 w-4 mr-1" />
+                    Open lobby
+                  </Button>
+                )}
+                {session.status === "LOBBY" && (
+                  <Button
+                    onClick={() => handleStartQuestion(0)}
+                    disabled={busy !== null}
+                  >
+                    <Play className="h-4 w-4 mr-1" />
+                    Start first question
+                  </Button>
+                )}
+                {isLive && (
+                  <>
+                    <Button onClick={handleReveal} disabled={busy !== null} variant="secondary">
+                      <Eye className="h-4 w-4 mr-1" />
+                      Reveal answer
+                    </Button>
+                    <Button onClick={handlePause} disabled={busy !== null} variant="outline">
+                      <Pause className="h-4 w-4 mr-1" />
+                      Pause
+                    </Button>
+                  </>
+                )}
+                {isPaused && (
+                  <Button onClick={handleResume} disabled={busy !== null}>
+                    <Play className="h-4 w-4 mr-1" />
+                    Resume
+                  </Button>
+                )}
+                {isBetween && (
+                  <Button onClick={handleNextQuestion} disabled={busy !== null}>
+                    <SkipForward className="h-4 w-4 mr-1" />
+                    Next question
+                  </Button>
+                )}
+                {!isFinished && !isAborted && session.status !== "DRAFT" && (
+                  <Button
+                    onClick={handleFinish}
+                    disabled={busy !== null}
+                    variant="outline"
+                    className="text-green-700 border-green-300 hover:bg-green-50"
+                  >
+                    <Square className="h-4 w-4 mr-1" />
+                    Finish
+                  </Button>
+                )}
+                {!isFinished && !isAborted && (
+                  <Button
+                    onClick={handleAbort}
+                    disabled={busy !== null}
+                    variant="ghost"
+                    className="text-red-600 hover:bg-red-50"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Abort
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Question list (jump-to) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Question bank</CardTitle>
+              <CardDescription>
+                Click a question to start it (jumps the live cursor).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5 max-h-80 overflow-y-auto">
+              {questions.map((q, i) => {
+                const isCurrent = i === session.currentQuestionIndex;
+                return (
+                  <button
+                    key={q.id}
+                    onClick={() => {
+                      if (session.status === "DRAFT") {
+                        toast({
+                          title: "Open the lobby first",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      handleStartQuestion(i);
+                    }}
+                    disabled={busy !== null || isFinished || isAborted}
+                    className={`w-full text-left rounded-md border p-2.5 transition-colors ${
+                      isCurrent
+                        ? "border-[#FF005A] bg-[#FF005A]/5"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    } ${!q.enabled ? "opacity-40" : ""}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-muted-foreground mt-0.5 shrink-0">
+                        Q{i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm leading-snug line-clamp-2">{q.text}</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {q.sourceAreaId} · {q.options.length} options
+                        </p>
+                      </div>
+                      {isCurrent && (
+                        <Badge variant="outline" className="text-[10px] shrink-0">
+                          LIVE
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* RIGHT: Live leaderboard + participants */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-amber-500" />
+                Leaderboard
+              </CardTitle>
+              <CardDescription>
+                {participants.length} participant{participants.length !== 1 ? "s" : ""}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1.5 max-h-[480px] overflow-y-auto">
+              {participants.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  No participants yet
+                </div>
+              ) : (
+                participants.map((p, i) => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-2 rounded-md p-2 ${
+                      p.isPodium
+                        ? "bg-amber-50 border border-amber-200"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="w-6 text-center text-sm font-bold text-muted-foreground shrink-0">
+                      {i + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium truncate">
+                          {p.displayName}
+                        </span>
+                        {p.isOnline && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {p.correctCount}/{p.answeredCount} correct
+                        {p.avgResponseMs
+                          ? ` · ${(p.avgResponseMs / 1000).toFixed(1)}s avg`
+                          : ""}
+                      </div>
+                    </div>
+                    <span className="text-sm font-mono font-bold tabular-nums">
+                      {p.totalScore.toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Member link card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Member join link</CardTitle>
+              <CardDescription>
+                Share this with members. They sign in, then join the quiz.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md bg-gray-100 p-2.5 font-mono text-xs break-all">
+                {typeof window !== "undefined" ? window.location.origin : ""}
+                /quiz/{sessionId}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => {
+                  const url = `${window.location.origin}/quiz/${sessionId}`;
+                  navigator.clipboard.writeText(url);
+                  toast({ title: "Link copied" });
+                }}
+              >
+                Copy member link
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
