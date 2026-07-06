@@ -931,3 +931,149 @@ DB state:
 
 Git state:
 - Uncommitted changes — user should review and push when ready.
+
+---
+Task ID: V6-QUIZ-REVEAL-1
+Agent: main (Super Z)
+Task: Two quiz-engine improvements requested by Eze:
+  1. Add a "Show next question" button to the admin Control Room
+     during LIVE state (timer counting) — when clicked, all users
+     immediately see the next question.
+  2. When the host reveals the answer, all users must see their own
+     answer marked correct/incorrect, with the leaderboard on the
+     right side and their position in it.
+
+Work Log:
+- Read the existing control room, player, state API, leaderboard API,
+  and the quiz-service WS relay to understand the data + event flow.
+- Found that handleNextQuestion() already existed in the control room
+  (called from the BETWEEN state's "Next question" button) and just
+  needed to be surfaced during LIVE.
+- Found a pre-existing bug in the player's BETWEEN view: it tried to
+  mark the correct option but only had myAnswer.isCorrect to go on
+  (no correctIndex from the server), so a wrong pick never saw the
+  actual correct option highlighted. Also the BETWEEN view required
+  currentQuestion but the state API only returned currentQuestion
+  during LIVE — so during BETWEEN the view rendered empty.
+- Found that PAUSED was incorrectly bucketed into showBetween —
+  PAUSED happens mid-LIVE (frozen timer), not after reveal.
+
+Code changes:
+- src/app/admin/quiz/[id]/quiz-control-room.tsx:
+    * Added a "Show next question" button (SkipForward icon, pink-
+      outlined) to the LIVE-state host action bar. Calls existing
+      handleNextQuestion, which advances currentQuestionIndex and
+      emits quiz:host:start-question so all players re-fetch /state
+      and see the new question.
+    * Disabled on the last question (host must click Finish instead)
+      with a helpful title attribute.
+
+- src/app/api/quiz/[sessionId]/state/route.ts:
+    * Added correctIndex + deepDive to the Prisma select for
+      questions (was excluded for security).
+    * Added a QUESTION_VISIBLE_STATUSES set: LIVE, PAUSED, BETWEEN
+      (was LIVE only). Now currentQuestion is returned for all three
+      so the player can render the answered question during reveal
+      and the frozen question during pause.
+    * Added a REVEAL_STATUSES set: BETWEEN, FINISHED. correctIndex
+      and deepDive are attached to currentQuestion ONLY when status
+      is in REVEAL_STATUSES. During LIVE/PAUSED they're null so a
+      member can't peek at the answer via the network tab.
+    * Fixed a pre-existing TS error: QuizResponse.selectedIndex is
+      number | null in the schema; myAnswer now coerces null to -1
+      before returning so the client can uniformly use array
+      indexing.
+
+- src/app/quiz/[sessionId]/quiz-player.tsx:
+    * Extended CurrentQuestion interface with optional correctIndex
+      and deepDive fields.
+    * Widened <main> from max-w-2xl to max-w-5xl. Wrapped every
+      non-reveal view (header, my-stats, join CTA, DRAFT/LOBBY
+      waiting, LIVE question, FINISHED leaderboard, ABORTED) in
+      max-w-2xl mx-auto so they stay focused. The BETWEEN reveal
+      view uses the full width for its two-column layout.
+    * Separated PAUSED from BETWEEN in derived state:
+        - showQuestion now includes PAUSED (was LIVE only).
+        - showBetween now requires BETWEEN (was BETWEEN || PAUSED).
+      Added isPaused flag.
+    * LIVE/PAUSED question view: when isPaused, show a "Paused"
+      indicator instead of the countdown, disable answer buttons,
+      and change the "Answer locked in!" subtext to "Quiz is
+      paused — waiting for the host to resume."
+    * Reworked the BETWEEN reveal view into a two-column grid
+      (lg:grid-cols-[1fr_340px]):
+        LEFT  — Question card with every option:
+                  * Correct option (from currentQuestion.correctIndex)
+                    gets a green border, green letter badge, and a
+                    CheckCircle2 icon.
+                  * Player's wrong pick gets a red border, red letter
+                    badge, and an XCircle icon.
+                  * A "Your pick" label appears under the player's
+                    selected option.
+                  * Result banner: "Correct! +X points" (green) or
+                    "Not quite — but you're still in the game." (red)
+                    or "You didn't answer in time — no points this
+                    round." (gray, for users who never submitted).
+                  * Deep dive rendered in an amber callout if present.
+        RIGHT — Pinned "Your position" hero card showing #rank / N,
+                total score, and correct/answered counts. Below it,
+                the full live leaderboard with the current user
+                highlighted in pink and top-3 marked with medals.
+    * Added Pause icon to lucide-react imports.
+    * Removed the old reveal-view logic that inferred correctness
+      from myAnswer.isCorrect alone — now uses the real
+      correctIndex from the server.
+
+Verification:
+- TypeScript: npx tsc --noEmit reports zero errors in the three
+  changed files (and one pre-existing error in state/route.ts was
+  fixed along the way). 252 pre-existing errors in unrelated files
+  (chart.tsx, auth-guards.ts, email-orchestrator, referral) are
+  out of scope and untouched.
+- Dev server (Next 16 + Bun quiz-service sidecar) running on
+  localhost:3000 — both pages compile on first hit (HTTP 307 auth
+  redirects, no 500s).
+- DB inspection confirms the existing session
+  cmr9aqhq50001l4044d8lt37h is LIVE with Q1 active, 18 questions
+  all have correctIndex + deepDive populated in the DB. 0
+  participants (Eze hasn't joined yet from this session).
+- Committed as fa8f542 and pushed to origin/main. Vercel auto-
+  deployed; verified live at https://aisalon.massapro.com:
+    /quiz/cmr9aqhq50001l4044d8lt37h  → 307 (auth redirect)
+    /admin/quiz                       → 307 (auth redirect)
+    /admin/quiz/cmr9aqhq50001l4044d8lt37h → 307 (auth redirect)
+    /api/quiz/[id]/state              → 401 (no auth, correct)
+    /api/quiz/[id]/leaderboard        → 401 (no auth, correct)
+
+Stage Summary:
+- Two requested improvements are live in production:
+  1. Admins/super-admins/co-hosts see a "Show next question" button
+     in the Control Room while a question is LIVE. Clicking it
+     immediately advances to the next question — all players see
+     the new question on their screen via the WS broadcast.
+  2. When the host clicks "Reveal answer", every player's screen
+     switches to a two-column reveal view: the question with the
+     correct option highlighted green and their own pick marked
+     correct/incorrect, plus a right-side leaderboard with their
+     rank pinned to the top.
+- Bonus fix: PAUSED state no longer incorrectly renders the reveal
+  view — it now keeps the question visible with disabled answer
+  buttons and a "Paused" indicator.
+- Bonus fix: pre-existing TS error in state/route.ts (selectedIndex
+  null vs number) resolved.
+
+Files modified this session:
+- src/app/admin/quiz/[id]/quiz-control-room.tsx (modified — Show
+  next question button)
+- src/app/api/quiz/[sessionId]/state/route.ts (modified —
+  reveal-aware correctIndex/deepDive exposure, BETWEEN/PAUSED state
+  support, selectedIndex null-coercion)
+- src/app/quiz/[sessionId]/quiz-player.tsx (modified — two-column
+  reveal view with leaderboard, paused-state handling, layout
+  widening)
+
+Git state:
+- Commit fa8f542 on main, pushed to origin/main.
+- Vercel auto-deployed; live at https://aisalon.massapro.com.
+- No schema migration needed (QuizQuestion.correctIndex and
+  QuizQuestion.deepDive columns already existed).
