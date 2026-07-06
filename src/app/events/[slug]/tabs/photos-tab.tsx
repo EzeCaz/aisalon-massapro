@@ -29,6 +29,7 @@ import {
   RotateCw,
   RotateCcw,
   Star,
+  CalendarClock,
 } from "lucide-react";
 
 type Speaker = {
@@ -36,6 +37,13 @@ type Speaker = {
   name: string;
   role: string | null;
   company: string | null;
+};
+
+type AgendaItem = {
+  id: string;
+  title: string;
+  type: string;
+  startsAt: string;
 };
 
 type ImageItem = {
@@ -48,6 +56,10 @@ type ImageItem = {
   height: number | null;
   uploader: { id: string; name: string | null; email: string };
   speakers: { id: string; name: string; role: string | null; company: string | null }[];
+  // Sessions (agenda items) this photo is tagged with. Parallel to
+  // `speakers` above — a photo can be tagged with both speakers AND
+  // specific sessions. Empty array when none are tagged.
+  agendaItems: { id: string; title: string; type: string; startsAt: string }[];
 };
 
 type Props = {
@@ -56,6 +68,13 @@ type Props = {
     slug: string;
     title: string;
     speakers: Speaker[];
+    // Event's full agenda — passed down to PhotoCard + the bulk-link
+    // sessions dialog so the user can pick from every session in this
+    // event (talks, panels, fast-pitches, breaks, networking slots…).
+    // The agenda is already part of the EventData the parent page
+    // serializes — we just declare it on Props so the type-checker is
+    // happy.
+    agenda: AgendaItem[];
     mainImageId?: string | null;
   };
   me: { id: string; email: string; name: string | null; role: string };
@@ -68,6 +87,10 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
   const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
+  // Bulk-link-sessions dialog open state. Separate from `bulkLinkOpen`
+  // (which is for the speaker bulk-link) so the two dialogs can coexist
+  // as parallel actions on the same selection.
+  const [bulkLinkSessionsOpen, setBulkLinkSessionsOpen] = useState(false);
   // mainImageId — populated from the event's mainImage field on load,
   // updated optimistically when the admin sets a new main image.
   const [mainImageId, setMainImageId] = useState<string | null>(
@@ -235,6 +258,25 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
     }
   }
 
+  // Single-photo session tagging. Mirrors `handleSingleLink` above —
+  // sends only `agendaItemIds` so the speaker tags on the same photo
+  // are left untouched (set semantics on the server side).
+  async function handleSingleLinkSessions(imageId: string, agendaItemIds: string[]) {
+    const t = toast.loading("Linking session…");
+    try {
+      const res = await fetch(`/api/images/${imageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agendaItemIds }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success("Linked", { id: t });
+      await loadImages();
+    } catch (e) {
+      toast.error("Link failed", { id: t });
+    }
+  }
+
   async function handleBulkLink(speakerIds: string[]) {
     if (selected.size === 0) return;
     const t = toast.loading(`Linking ${selected.size} photo${selected.size === 1 ? "" : "s"}…`);
@@ -250,6 +292,32 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
       if (!res.ok) throw new Error("Failed");
       toast.success(`Linked ${selected.size} photo${selected.size === 1 ? "" : "s"}`, { id: t });
       setBulkLinkOpen(false);
+      clearSelection();
+      await loadImages();
+    } catch (e) {
+      toast.error("Bulk link failed", { id: t });
+    }
+  }
+
+  // Bulk session tagging. Sends only `agendaItemIds` so speaker tags
+  // on the same photos are preserved (server-side, the bulk-link
+  // endpoint only updates the relations whose arrays are present in
+  // the request body).
+  async function handleBulkLinkSessions(agendaItemIds: string[]) {
+    if (selected.size === 0) return;
+    const t = toast.loading(`Linking ${selected.size} photo${selected.size === 1 ? "" : "s"}…`);
+    try {
+      const res = await fetch("/api/images/bulk-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageIds: Array.from(selected),
+          agendaItemIds,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast.success(`Linked ${selected.size} photo${selected.size === 1 ? "" : "s"}`, { id: t });
+      setBulkLinkSessionsOpen(false);
       clearSelection();
       await loadImages();
     } catch (e) {
@@ -316,6 +384,16 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
                   <Link2 className="h-4 w-4 mr-1.5" /> Link to speaker
                 </Button>
               </BulkLinkDialog>
+              <BulkLinkSessionsDialog
+                open={bulkLinkSessionsOpen}
+                onOpenChange={setBulkLinkSessionsOpen}
+                agendaItems={event.agenda}
+                onSubmit={handleBulkLinkSessions}
+              >
+                <Button size="sm" variant="outline" className="border-[#7C3AED] text-[#7C3AED]">
+                  <CalendarClock className="h-4 w-4 mr-1.5" /> Link to session
+                </Button>
+              </BulkLinkSessionsDialog>
               <Button
                 size="sm"
                 variant="outline"
@@ -386,12 +464,14 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
               key={img.id}
               image={img}
               speakers={event.speakers}
+              agendaItems={event.agenda}
               selected={selected.has(img.id)}
               isMain={img.id === mainImageId}
               canSetMain={isAdmin}
               onToggle={() => toggleSelect(img.id)}
               onDelete={() => handleDelete(img.id)}
               onLink={(sids) => handleSingleLink(img.id, sids)}
+              onLinkSessions={(aids) => handleSingleLinkSessions(img.id, aids)}
               onRotate={(dir) => handleRotate([img.id], dir)}
               onSetMain={() => handleSetMain(img.id)}
               canManage={isAdmin || img.uploader.id === me.id}
@@ -415,12 +495,14 @@ export function PhotosTab({ event, me, isAdmin }: Props) {
 function PhotoCard({
   image,
   speakers,
+  agendaItems,
   selected,
   isMain,
   canSetMain,
   onToggle,
   onDelete,
   onLink,
+  onLinkSessions,
   onRotate,
   onSetMain,
   canManage,
@@ -428,12 +510,14 @@ function PhotoCard({
 }: {
   image: ImageItem;
   speakers: Speaker[];
+  agendaItems: AgendaItem[];
   selected: boolean;
   isMain: boolean;
   canSetMain: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onLink: (speakerIds: string[]) => void;
+  onLinkSessions: (agendaItemIds: string[]) => void;
   onRotate: (direction: "cw" | "ccw") => void;
   onSetMain: () => void;
   canManage: boolean;
@@ -443,9 +527,24 @@ function PhotoCard({
   const [pendingSpeakers, setPendingSpeakers] = useState<Set<string>>(
     new Set(image.speakers.map((s) => s.id))
   );
+  // Session-link dialog open state + pending selection (initialized
+  // from the image's currently-tagged agenda items).
+  const [linkSessionsOpen, setLinkSessionsOpen] = useState(false);
+  const [pendingAgendaItems, setPendingAgendaItems] = useState<Set<string>>(
+    new Set(image.agendaItems.map((a) => a.id))
+  );
 
   function toggleSpeaker(id: string) {
     setPendingSpeakers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAgendaItem(id: string) {
+    setPendingAgendaItems((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -571,6 +670,75 @@ function PhotoCard({
             </DialogContent>
           </Dialog>
 
+          {/* Link to session (agenda item) — parallel to the speaker
+              link dialog above. Lets the user tag this photo with the
+              specific session(s) it belongs to (talks, panels, breaks,
+              fast-pitches, networking slots). Useful for photos that
+              don't have an obvious speaker (e.g. a panel group photo,
+              or a networking-shot during a break). */}
+          <Dialog open={linkSessionsOpen} onOpenChange={setLinkSessionsOpen}>
+            <DialogTrigger asChild>
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-md bg-white/90 hover:bg-white p-1.5 text-[#7C3AED]"
+                title="Link to session"
+              >
+                <CalendarClock className="h-3.5 w-3.5" />
+              </button>
+            </DialogTrigger>
+            <DialogContent onClick={(e) => e.stopPropagation()}>
+              <DialogHeader>
+                <DialogTitle>Link photo to session(s)</DialogTitle>
+              </DialogHeader>
+              <p className="text-xs text-black/80">
+                Tag which session(s) this photo belongs to. This complements the speaker tag —
+                useful for panels, breaks, fast-pitches, and networking slots where the session
+                is more meaningful than a specific speaker.
+              </p>
+              {agendaItems.length === 0 ? (
+                <p className="text-xs text-black/50 italic p-2">
+                  No agenda items have been added to this event yet. Add sessions on the Manage
+                  Agenda tab first.
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-72 overflow-y-auto ais-scroll">
+                  {agendaItems.map((a) => (
+                    <label
+                      key={a.id}
+                      className="flex items-start gap-3 p-2 rounded-md hover:bg-black/5 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={pendingAgendaItems.has(a.id)}
+                        onCheckedChange={() => toggleAgendaItem(a.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm truncate">{a.title}</div>
+                        <div className="text-xs text-black/80 flex items-center gap-1.5">
+                          <span className="font-mono">{fmtAgendaTime(a.startsAt)}</span>
+                          <span className="text-[0.6rem] font-bold uppercase tracking-wide text-[#7C3AED]">
+                            {agendaTypeLabel(a.type)}
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    onLinkSessions(Array.from(pendingAgendaItems));
+                    setLinkSessionsOpen(false);
+                  }}
+                  disabled={agendaItems.length === 0}
+                  className="bg-[#7C3AED] hover:bg-[#7C3AED]/90"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" /> Save links
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -584,9 +752,14 @@ function PhotoCard({
         </div>
       )}
 
-      {/* Bottom gradient + speaker tags */}
+      {/* Bottom gradient + speaker tags + session tags.
+          We render BOTH speaker tags (cyan) and session tags (purple)
+          when present — they answer different questions ("who is in
+          this photo?" vs "which session is this photo from?"). When
+          neither is present, we fall back to the uploader name so the
+          bottom bar is never empty. */}
       <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none">
-        {image.speakers.length > 0 ? (
+        {image.speakers.length > 0 || image.agendaItems.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {image.speakers.slice(0, 2).map((s) => (
               <span
@@ -599,6 +772,25 @@ function PhotoCard({
             {image.speakers.length > 2 && (
               <span className="text-[0.55rem] font-semibold text-white">
                 +{image.speakers.length - 2}
+              </span>
+            )}
+            {/* Session tags — purple, max 2, same +N overflow pattern
+                as speaker tags above. We show the agenda item's title
+                (truncated to ~14 chars so two tags fit side-by-side
+                on a 1-col phone grid). */}
+            {image.agendaItems.slice(0, 2).map((a) => (
+              <span
+                key={a.id}
+                className="text-[0.55rem] font-semibold uppercase tracking-wide bg-[#7C3AED] text-white px-1.5 py-0.5 rounded inline-flex items-center gap-0.5"
+                title={a.title}
+              >
+                <CalendarClock className="h-2.5 w-2.5" />
+                {a.title.length > 14 ? a.title.slice(0, 13) + "…" : a.title}
+              </span>
+            ))}
+            {image.agendaItems.length > 2 && (
+              <span className="text-[0.55rem] font-semibold text-white">
+                +{image.agendaItems.length - 2}
               </span>
             )}
           </div>
@@ -800,6 +992,137 @@ function BulkLinkDialog({
             className="bg-[#004F98] hover:bg-[#004F98]/90"
           >
             <Link2 className="h-4 w-4 mr-1.5" /> Link to {selected.size} speaker
+            {selected.size === 1 ? "" : "s"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- Helpers for the session-tag UI ----------
+
+/** Format an agenda item's startsAt as HH:MM (Asia/Jerusalem). Used in
+ *  the link-to-session picker + the photo-card session badges so the
+ *  user can tell apart two sessions with similar titles. */
+function fmtAgendaTime(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Jerusalem",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(iso));
+  } catch {
+    return "";
+  }
+}
+
+/** Human-readable label for an agenda item type (TALK → "Talk", etc.).
+ *  Mirrors the typeLabel map used in the admin agenda tab so the labels
+ *  are consistent across the admin + member surfaces. */
+function agendaTypeLabel(type: string): string {
+  switch (type) {
+    case "TALK":
+      return "Talk";
+    case "FAST_PITCH":
+      return "Fast Pitch";
+    case "WELCOME":
+      return "Welcome";
+    case "BREAK":
+      return "Break";
+    case "NETWORKING":
+      return "Networking";
+    case "PANEL":
+      return "Panel";
+    default:
+      return type;
+  }
+}
+
+// ---------- BulkLinkSessionsDialog ----------
+
+/** Bulk-link-sessions dialog. Mirrors `BulkLinkDialog` but for tagging
+ *  the selected photos with one or more agenda items (sessions) instead
+ *  of speakers. Sends only `agendaItemIds` to /api/images/bulk-link so
+ *  existing speaker tags on the same photos are preserved. */
+function BulkLinkSessionsDialog({
+  open,
+  onOpenChange,
+  agendaItems,
+  onSubmit,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  agendaItems: AgendaItem[];
+  onSubmit: (agendaItemIds: string[]) => void;
+  children: React.ReactNode;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) setSelected(new Set());
+        onOpenChange(v);
+      }}
+    >
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Link selected photos to session(s)</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-black/80">
+          Tag these photos with one or more sessions from the agenda. Existing session tags on
+          these photos will be replaced. Speaker tags are left untouched.
+        </p>
+        {agendaItems.length === 0 ? (
+          <p className="text-xs text-black/50 italic p-2">
+            No agenda items have been added to this event yet. Add sessions on the Manage Agenda
+            tab first.
+          </p>
+        ) : (
+          <div className="space-y-1 max-h-72 overflow-y-auto ais-scroll">
+            {agendaItems.map((a) => (
+              <label
+                key={a.id}
+                className="flex items-start gap-3 p-2 rounded-md hover:bg-black/5 cursor-pointer"
+              >
+                <Checkbox checked={selected.has(a.id)} onCheckedChange={() => toggle(a.id)} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">{a.title}</div>
+                  <div className="text-xs text-black/80 flex items-center gap-1.5">
+                    <span className="font-mono">{fmtAgendaTime(a.startsAt)}</span>
+                    <span className="text-[0.6rem] font-bold uppercase tracking-wide text-[#7C3AED]">
+                      {agendaTypeLabel(a.type)}
+                    </span>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={() => onSubmit(Array.from(selected))}
+            disabled={selected.size === 0 || agendaItems.length === 0}
+            className="bg-[#7C3AED] hover:bg-[#7C3AED]/90"
+          >
+            <CalendarClock className="h-4 w-4 mr-1.5" /> Link to {selected.size} session
             {selected.size === 1 ? "" : "s"}
           </Button>
         </DialogFooter>

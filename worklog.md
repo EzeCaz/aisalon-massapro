@@ -479,3 +479,146 @@ Stage Summary:
   cycle through moderator + every panelist's images. For a session
   with no speaker photos but a set main image, the slideshow should
   show that single image.
+
+---
+Task ID: agenda-popup-widen + photos-session-tagging
+Agent: main
+Task: Pre-deploy changes (project is currently NOT deployed to Vercel/GitHub):
+  1. Make the "Edit agenda item" popup wider so it doesn't trigger horizontal scrolling
+  2. Add to the /events/[slug] Photos tab the ability to tag a photo with a specific
+     session (agenda item), not just with a speaker
+
+Work Log:
+- Read worklog.md to understand prior session context (email-flow-restructure work).
+- Located the EditAgendaItemDialog + CreateAgendaItemDialog in
+  src/app/events/[slug]/tabs/admin-agenda-tab.tsx (existing max-w-4xl + max-w-2xl).
+- Located the Photos tab in src/app/events/[slug]/tabs/photos-tab.tsx — already
+  had speaker tagging (single + bulk) via /api/images/[id] PATCH and
+  /api/images/bulk-link POST. No session tagging existed.
+- Confirmed Prisma schema (prisma/schema.prisma) had EventImage.speakers m:n
+  but no EventImage ↔ EventAgendaItem m:n for tagging.
+- Confirmed the build pipeline uses `prisma db push --accept-data-loss` (see
+  package.json `build` script), so a migration SQL file is documentation-only
+  here — db push will create the join table from schema.prisma automatically.
+
+Task 1 — Wider agenda popups:
+- admin-agenda-tab.tsx: bumped EditAgendaItemDialog `max-w-4xl` → `max-w-5xl`
+  (1024px) and CreateAgendaItemDialog `max-w-2xl` → `max-w-5xl` so both
+  dialogs feel symmetric. Updated the explanatory comments to reflect the
+  history (max-w-2xl → max-w-4xl → max-w-5xl) and the reason for each bump.
+
+Task 2 — Photo ↔ session tagging:
+
+  Step 2a — Prisma schema:
+  - Added `taggedImages EventImage[] @relation("AgendaItemTaggedImages")`
+    on EventAgendaItem (between `panelists` and `mainImage`).
+  - Added `agendaItems EventAgendaItem[] @relation("AgendaItemTaggedImages")`
+    on EventImage (between `speakers` and `mainOfEvents`).
+  - Added explanatory comments on both sides describing the use case
+    (panels, breaks, fast-pitches where the session is more meaningful
+    than a specific speaker) and the implicit join table name.
+
+  Step 2b — Migration SQL:
+  - Created prisma/migrations/20260706000000_image_agenda_tagging/migration.sql
+    with the join table `_AgendaItemTaggedImages`, unique index on (A, B),
+    a separate index on B, and ON DELETE CASCADE FK constraints to both
+    EventImage and EventAgendaItem.
+  - Migration is documentation-only (build uses db push) but is ready for
+    manual `prisma migrate deploy` runs on production.
+
+  Step 2c — API routes:
+  - GET /api/events/[slug]/images: added `agendaItems` to the Prisma include,
+    selecting { id, title, type, startsAt }, ordered by startsAt asc. This
+    is what the Photos tab reads on every load.
+  - PATCH /api/images/[id]: added `agendaItemIds?: string[]` to the body
+    type, applied with `{ set: [...] }` semantics (same pattern as the
+    existing `speakerIds`). Added `agendaItems` to the response include
+    so the client gets the post-update state back. Documented why we don't
+    cross-check event membership (the client only ever shows this event's
+    own agenda items, and the m:n itself enforces existence).
+  - POST /api/images/bulk-link: rewrote the route to accept EITHER
+    `speakerIds` OR `agendaItemIds` (or both). When a field is omitted,
+    that relation is left untouched on every image (so a "Link to session"
+    bulk action doesn't accidentally clear existing speaker tags, and
+    vice versa). Validates that at least one of the two arrays is present.
+
+  Step 2d — Photos tab UI (photos-tab.tsx):
+  - Imported the `CalendarClock` icon (purple-tinted, sits next to the
+    existing `Tag` icon for speakers).
+  - Added a slim `AgendaItem` type { id, title, type, startsAt } and
+    extended `ImageItem` with `agendaItems: AgendaItem[]`.
+  - Extended `Props.event` with `agenda: AgendaItem[]` — the EventData
+    the parent already passes has this field; we just declared it on
+    Props so the type-checker is happy (structural typing handles the
+    rest, since EventData's AgendaItem has all the slim type's fields
+    plus extras).
+  - Added `handleSingleLinkSessions` + `handleBulkLinkSessions` handlers
+    that mirror the speaker equivalents but send only `agendaItemIds`
+    (so speaker tags on the same photo are preserved).
+  - Added a "Link to session" button to the bulk-actions toolbar
+    (purple `border-[#7C3AED] text-[#7C3AED]` to visually distinguish
+    from the blue "Link to speaker" button).
+  - PhotoCard now accepts `agendaItems` (event's full agenda) + an
+    `onLinkSessions` callback. Renders a second link dialog (titled
+    "Link photo to session(s)") with a checkbox list of every agenda
+    item, showing HH:MM (Asia/Jerusalem) + type label per row.
+  - The bottom gradient on each PhotoCard now shows BOTH speaker tags
+    (cyan) AND session tags (purple, with a CalendarClock icon),
+    falling back to the uploader name only when neither is present.
+    Session titles are truncated to ~14 chars so two tags fit
+    side-by-side on a 1-col phone grid; full title in the tooltip.
+  - Added a `BulkLinkSessionsDialog` component (parallel to the existing
+    `BulkLinkDialog`) plus two helper functions: `fmtAgendaTime` for
+    HH:MM formatting and `agendaTypeLabel` for TALK→"Talk" etc.
+    (mirrors the admin agenda tab's typeLabel map for consistency).
+
+  Step 2e — event-tabs.tsx: no changes needed. EventData.agenda already
+  has the right shape (id, title, type, startsAt) and TypeScript
+  structural typing accepts the assignment to PhotosTab's slimmer
+  AgendaItem prop. Verified by running `npx tsc --noEmit` and grepping
+  for errors in event-tabs.tsx + PhotosTab — zero hits.
+
+Verification:
+- Ran `npx prisma generate` — Prisma client regenerated cleanly with the
+  new m:n relation. No schema errors.
+- Ran `npx tsc --noEmit` on the whole project. Zero errors in any of
+  the files I modified (photos-tab.tsx, admin-agenda-tab.tsx,
+  event-tabs.tsx, api/images/[id]/route.ts, api/images/bulk-link/route.ts,
+  api/events/[slug]/images/route.ts). The remaining errors are all in
+  pre-existing unrelated files (mockups/agenda-profile, registrations,
+  members) — none of which I touched.
+- Ran `npx eslint` on the five modified files. Zero errors. Only
+  pre-existing warnings (unused `e` in catch blocks, the existing `<img>`
+  usage in PhotoCard, an unused `Badge` import in admin-agenda-tab).
+
+Stage Summary:
+- Edit/Create agenda item dialogs are now max-w-5xl (1024px) — wide
+  enough for the Type/Title row, Start/End datetime row, main-image
+  picker row, and PanelistsPicker inner two-column grids to all render
+  without horizontal scrolling on standard laptop widths.
+- Photos tab now supports tagging each photo with one or more sessions
+  (agenda items) IN ADDITION to tagging speakers. Single-tag via the
+  CalendarClock button on each photo; bulk-tag via the purple "Link to
+  session" button when photos are selected. Speaker and session tags
+  are independently editable — tagging a session never touches speaker
+  tags and vice versa.
+- Schema change is backward-compatible (additive m:n only). Existing
+  photos with no session tags continue to render exactly as before.
+- The build (which uses `prisma db push`) will create the join table
+  automatically on the next deploy. A migration SQL file is included
+  for documentation + manual `prisma migrate deploy` runs.
+- No breaking API changes — the new `agendaItemIds` field is optional
+  everywhere; existing callers that send only `speakerIds` keep working
+  unchanged.
+
+Files modified:
+  - prisma/schema.prisma (added m:n relation "AgendaItemTaggedImages"
+    between EventImage and EventAgendaItem)
+  - prisma/migrations/20260706000000_image_agenda_tagging/migration.sql (new)
+  - src/app/api/events/[slug]/images/route.ts (GET includes agendaItems)
+  - src/app/api/images/[id]/route.ts (PATCH accepts agendaItemIds)
+  - src/app/api/images/bulk-link/route.ts (accepts agendaItemIds, preserves
+    omitted relations)
+  - src/app/events/[slug]/tabs/photos-tab.tsx (UI for session tagging:
+    single + bulk, PhotoCard badge, BulkLinkSessionsDialog, helpers)
+  - src/app/events/[slug]/tabs/admin-agenda-tab.tsx (wider popups)

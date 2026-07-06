@@ -6,8 +6,9 @@ import { del } from "@vercel/blob";
 
 /**
  * PATCH /api/images/[id]
- * Body: { caption?, speakerIds?, slideOrder? }
- * Updates an image's caption, linked speakers, or slideshow order.
+ * Body: { caption?, speakerIds?, agendaItemIds?, slideOrder? }
+ * Updates an image's caption, linked speakers, linked agenda items
+ * (sessions), or slideshow order.
  * Uploader OR admin can edit.
  */
 export async function PATCH(
@@ -32,9 +33,10 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { caption, speakerIds, slideOrder } = body as {
+  const { caption, speakerIds, agendaItemIds, slideOrder } = body as {
     caption?: string;
     speakerIds?: string[];
+    agendaItemIds?: string[];
     slideOrder?: number;
   };
 
@@ -44,12 +46,30 @@ export async function PATCH(
   if (Array.isArray(speakerIds)) {
     data.speakers = { set: speakerIds.map((id) => ({ id })) };
   }
+  // Set semantics for agenda item tags — same pattern as speakers above.
+  // Passing `agendaItemIds: []` clears all session tags. The client uses
+  // this in the single-photo "Link to session" dialog (replaces existing
+  // tags) and the bulk-link-sessions endpoint (see /api/images/bulk-link).
+  // We deliberately do NOT validate that each id belongs to this image's
+  // event here — the m:n relation itself enforces existence, and a
+  // cross-event agenda item id simply won't be linkable (Prisma will
+  // throw P2025 "An operation failed because it depends on one or more
+  // records that were required but not found"). The client only ever
+  // shows this event's own agenda items, so cross-event ids never reach
+  // this code path in practice.
+  if (Array.isArray(agendaItemIds)) {
+    data.agendaItems = { set: agendaItemIds.map((id) => ({ id })) };
+  }
 
   const updated = await db.eventImage.update({
     where: { id },
     data,
     include: {
       speakers: { select: { id: true, name: true, role: true, company: true } },
+      agendaItems: {
+        select: { id: true, title: true, type: true, startsAt: true },
+        orderBy: { startsAt: "asc" },
+      },
     },
   });
   return NextResponse.json({ image: updated });

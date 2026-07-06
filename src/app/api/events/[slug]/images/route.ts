@@ -210,6 +210,20 @@ export async function GET(
     include: {
       uploader: { select: { id: true, name: true, email: true, image: true } },
       speakers: { select: { id: true, name: true, role: true, company: true } },
+      // Sessions (agenda items) this photo is tagged with — complements
+      // the speakers relation above. Lets the Photos tab show session
+      // badges on each photo + lets members filter/browse by session.
+      // We select the same minimal shape that the agenda-tab + admin
+      // agenda use so the client can reuse the same type.
+      agendaItems: {
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          startsAt: true,
+        },
+        orderBy: { startsAt: "asc" },
+      },
     },
   });
   return NextResponse.json({ images });

@@ -298,6 +298,13 @@ model EventAgendaItem {
   // Stored via the implicit _EventAgendaItemToSpeaker join table.
   panelists      Speaker[] @relation("AgendaPanelist")
   presentations  PresentationFile[] // files uploaded for this specific agenda item
+  // Photos tagged with this agenda item (m:n). Complements the
+  // EventImage.speakers relation — a photo can be tagged with BOTH the
+  // speaker(s) AND the specific session(s) it belongs to. Stored via
+  // the implicit _AgendaItemTaggedImages join table.
+  // Used by the Photos tab "Link to session" picker so members can
+  // organize the community gallery by agenda item, not just by speaker.
+  taggedImages   EventImage[] @relation("AgendaItemTaggedImages")
   // Optional pointer to ONE EventImage row to use as the "main picture"
   // for this agenda item on the public agenda tab. Used as a fallback
   // when the session's speaker (or panelists) have no linked images.
@@ -368,6 +375,14 @@ model EventImage {
   slideOrder  Int      @default(0)
   // Linked speakers — many-to-many (an image can be from multiple talks/speakers)
   speakers    Speaker[]
+  // Linked agenda items (sessions) — many-to-many. Members can tag a
+  // photo with the specific session(s) it belongs to, in addition to
+  // (or instead of) tagging the speaker. Useful for panels, breaks,
+  // fast-pitch sessions, networking slots — anything where "this photo
+  // was taken during session X" is more meaningful than "this photo
+  // contains speaker Y". Set via the Photos tab "Link to session"
+  // picker (single) or "Link to session" bulk action (multi).
+  agendaItems EventAgendaItem[] @relation("AgendaItemTaggedImages")
   // Back-relation: events that have this image as their mainImage.
   // (One image can be the main of at most one event — the FK lives on Event.)
   mainOfEvents Event[] @relation("EventMainImage")
