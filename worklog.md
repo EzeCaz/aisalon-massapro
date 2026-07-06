@@ -1077,3 +1077,116 @@ Git state:
 - Vercel auto-deployed; live at https://aisalon.massapro.com.
 - No schema migration needed (QuizQuestion.correctIndex and
   QuizQuestion.deepDive columns already existed).
+
+---
+Task ID: V6-QUIZ-START-2
+Agent: main (Super Z)
+Task: Two follow-up issues reported by Eze after V6-QUIZ-REVEAL-1:
+  1. "I see the next question, but I don't see the start quiz button
+     (this should start the quiz for everyone)" — Control Room was
+     missing a single 'Start quiz' button. The previous flow required
+     two clicks: 'Open lobby' (DRAFT) then 'Start first question'
+     (LOBBY).
+  2. Console error when clicking 'Edit' in the Control Room:
+     "A <Select.Item /> must have a value prop that is not an empty
+     string. This is because the Select value can be set to an empty
+     string to clear the selection and show the placeholder."
+     Plus a secondary "reset is not a function" error from the
+     Next.js dev overlay error boundary.
+
+Work Log:
+- Diagnosed Issue 1: The host action bar had separate buttons for
+  DRAFT ("Open lobby") and LOBBY ("Start first question"). Eze
+  expected a single prominent "Start quiz" button that does the
+  full launch in one tap.
+- Diagnosed Issue 2: The event-link picker in the Control Room
+  used <SelectItem value="">(no event — standalone)</SelectItem>.
+  Radix UI's Select component reserves the empty string as a
+  sentinel for "clear the selection / show placeholder" and
+  explicitly forbids it as a SelectItem value. The error fired
+  whenever the picker was rendered (which happens on the Edit-
+  questions screen too, because the event-link row is in the
+  header). The secondary "reset is not a function" error was the
+  Next.js dev overlay's error-boundary "try again" button failing
+  because the underlying render error kept re-throwing.
+
+Code changes:
+- src/app/admin/quiz/[id]/quiz-control-room.tsx:
+    * Added NO_EVENT_SENTINEL = "__none__" module-level constant
+      with a docstring explaining the Radix constraint.
+    * Changed pickedEventId initial state from
+      `initialSession.event?.id ?? ""` to
+      `initialSession.event?.id ?? NO_EVENT_SENTINEL`.
+    * Changed the SelectItem for "no event" from value="" to
+      value={NO_EVENT_SENTINEL}.
+    * Changed saveEventLink to translate the sentinel to null at
+      the API boundary:
+          eventId: pickedEventId === NO_EVENT_SENTINEL
+            ? null
+            : pickedEventId
+      Also replaced the truthy-string toast-message check with an
+      explicit `isLinked = pickedEventId !== NO_EVENT_SENTINEL`
+      boolean so the messages are correct even if (defensively)
+      a real event id were falsy.
+    * Changed the Cancel button's reset to use the sentinel
+      instead of "" (was a latent crash — would have re-thrown
+      the Radix error on next render).
+    * Added handleStartQuiz() — a unified launcher used when
+      session.status is DRAFT or LOBBY. Steps:
+        a. If DRAFT: PATCH status=LOBBY + startedAt=now (records
+           a clean lobby-opened timestamp; gives any race-condition
+           client a joinable state to land on between steps).
+        b. PATCH status=LIVE + currentQuestionIndex=0 +
+           currentQuestionStartedAt=now.
+        c. emitHostAction("quiz:host:start-question") so every
+           connected client re-fetches /state and sees Q1.
+        d. toast "Quiz is live! Q1 started — Xs timer running
+           for all players."
+      Guards: refuses to start if questions.length === 0 (shows
+      an amber "Add at least one question before starting" warning
+      instead).
+    * Replaced the DRAFT and LOBBY buttons in the host action bar
+      with a single pink "Start quiz" button (size=lg, Play icon
+      with fill). When status is DRAFT, a secondary outline
+      "Open lobby only" button is still available for hosts who
+      want to give members time to join before Q1 starts. When
+      status is LOBBY, only the "Start quiz" button is shown
+      (clicking it skips straight to LIVE Q1).
+    * Updated the empty-state placeholder text in the question
+      card to point at the new "Start quiz" button:
+        - DRAFT: "Session is in draft. Click \"Start quiz\" to
+          open the lobby and launch Q1 for everyone in one tap."
+        - LOBBY: "Lobby is open. Click \"Start quiz\" to launch
+          Q1 for everyone."
+
+Verification:
+- TypeScript: npx tsc --noEmit reports zero errors in the changed
+  file (and zero in any quiz-related file).
+- Dev server (Next 16 + Bun quiz-service sidecar) running on
+  localhost:3000 — /admin/quiz/[id] compiles cleanly (HTTP 307
+  auth redirect, no 500).
+- Committed as 076b7a3 and pushed to origin/main. Vercel auto-
+  deployed; verified live at https://aisalon.massapro.com:
+    /admin/quiz/cmr9aqhq50001l4044d8lt37h → 307 (auth redirect)
+    /admin/quiz                          → 307 (auth redirect)
+    /quiz/cmr9aqhq50001l4044d8lt37h      → 307 (auth redirect)
+
+Stage Summary:
+- Both reported issues are fixed and live in production:
+  1. A single prominent pink "Start quiz" button now appears in
+     the Control Room whenever the session is in DRAFT or LOBBY
+     state. Clicking it opens the lobby (if needed) and immediately
+     launches Q1 for every connected player in one tap.
+  2. The Radix Select.Item empty-value crash is resolved by using
+     a "__none__" sentinel value for the "no event" option. The
+     Edit-questions screen no longer crashes on open.
+- No schema migration needed. No new API endpoints.
+
+Files modified this session:
+- src/app/admin/quiz/[id]/quiz-control-room.tsx (modified —
+  NO_EVENT_SENTINEL + handleStartQuiz + Start-quiz button +
+  placeholder text + Cancel-button reset fix)
+
+Git state:
+- Commit 076b7a3 on main, pushed to origin/main.
+- Vercel auto-deployed; live at https://aisalon.massapro.com.
