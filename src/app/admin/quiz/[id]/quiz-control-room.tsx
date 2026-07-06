@@ -738,6 +738,20 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                       <Eye className="h-4 w-4 mr-1" />
                       Reveal answer
                     </Button>
+                    <Button
+                      onClick={handleNextQuestion}
+                      disabled={busy !== null || (session.currentQuestionIndex ?? -1) + 1 >= questions.length}
+                      variant="outline"
+                      className="border-[#FF005A]/40 text-[#FF005A] hover:bg-[#FF005A]/5"
+                      title={
+                        (session.currentQuestionIndex ?? -1) + 1 >= questions.length
+                          ? "No more questions — finish the session instead"
+                          : "Skip the reveal and immediately show the next question to all players"
+                      }
+                    >
+                      <SkipForward className="h-4 w-4 mr-1" />
+                      Show next question
+                    </Button>
                     <Button onClick={handlePause} disabled={busy !== null} variant="outline">
                       <Pause className="h-4 w-4 mr-1" />
                       Pause

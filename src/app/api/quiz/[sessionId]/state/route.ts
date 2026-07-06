@@ -69,6 +69,11 @@ export async function GET(
           optionsJson: true,
           timeLimitSec: true,
           sourceAreaId: true,
+          // Needed so we can reveal the correct answer once the host
+          // flips the session to BETWEEN / FINISHED. We never leak this
+          // to the client during LIVE — see the response shaping below.
+          correctIndex: true,
+          deepDive: true,
         },
       },
     },
@@ -106,7 +111,21 @@ export async function GET(
       });
   }
 
-  // Determine current question
+  // Determine current question.
+  //
+  // We surface currentQuestion for LIVE (answering), PAUSED (frozen
+  // mid-question), and BETWEEN (post-reveal — so the member UI can show
+  // the answered question with the correct option highlighted + their
+  // own answer marked right/wrong). For DRAFT/LOBBY/FINISHED/ABORTED
+  // we leave it null — those states have their own dedicated UI panels.
+  //
+  // Security: correctIndex + deepDive are only attached when the host
+  // has moved the session into a reveal-equivalent state (BETWEEN,
+  // PAUSED-after-reveal, or FINISHED). While LIVE we deliberately omit
+  // them so a savvy member can't peek at the answer via the network tab.
+  const REVEAL_STATUSES = new Set(["BETWEEN", "FINISHED"]);
+  const QUESTION_VISIBLE_STATUSES = new Set(["LIVE", "PAUSED", "BETWEEN"]);
+
   let currentQuestion: {
     id: string;
     order: number;
@@ -116,10 +135,12 @@ export async function GET(
     sourceAreaId: string | null;
     startedAt: Date | null;
     remainingMs: number | null;
+    correctIndex: number | null;
+    deepDive: string | null;
   } | null = null;
 
   if (
-    quiz.status === "LIVE" &&
+    QUESTION_VISIBLE_STATUSES.has(quiz.status) &&
     quiz.currentQuestionIndex != null &&
     quiz.currentQuestionIndex >= 0 &&
     quiz.currentQuestionIndex < quiz.questions.length
@@ -130,6 +151,7 @@ export async function GET(
     const now = Date.now();
     const elapsedMs = startedAt ? now - startedAt.getTime() : 0;
     const remainingMs = Math.max(0, timeLimitSec * 1000 - elapsedMs);
+    const isReveal = REVEAL_STATUSES.has(quiz.status);
     currentQuestion = {
       id: q.id,
       order: q.order,
@@ -139,10 +161,17 @@ export async function GET(
       sourceAreaId: q.sourceAreaId,
       startedAt,
       remainingMs,
+      // Only attach once the host has revealed.
+      correctIndex: isReveal ? q.correctIndex : null,
+      deepDive: isReveal ? q.deepDive : null,
     };
   }
 
-  // Check if the participant has already answered the current question
+  // Check if the participant has already answered the current question.
+  // selectedIndex is `number | null` in the schema — null means the
+  // participant timed out without submitting (we still record a response
+  // row in some flows). Treat null as -1 on the client so the UI can
+  // uniformly use array indexing.
   let myAnswer: { selectedIndex: number; isCorrect: boolean; points: number } | null = null;
   if (currentQuestion && participant) {
     const response = await db.quizResponse.findUnique({
@@ -155,7 +184,11 @@ export async function GET(
       select: { selectedIndex: true, isCorrect: true, points: true },
     });
     if (response) {
-      myAnswer = response;
+      myAnswer = {
+        selectedIndex: response.selectedIndex ?? -1,
+        isCorrect: response.isCorrect,
+        points: response.points,
+      };
     }
   }
 

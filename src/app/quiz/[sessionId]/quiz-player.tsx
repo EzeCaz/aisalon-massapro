@@ -12,6 +12,7 @@ import {
   LogIn,
   Radio,
   Sparkles,
+  Pause,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,10 @@ interface CurrentQuestion {
   sourceAreaId: string | null;
   startedAt: string | null;
   remainingMs: number | null;
+  // Only populated when the host has revealed (status BETWEEN/FINISHED).
+  // Null during LIVE so a savvy member can't peek at the network response.
+  correctIndex: number | null;
+  deepDive: string | null;
 }
 
 interface MyAnswer {
@@ -308,20 +313,21 @@ export function QuizPlayer({ initialSession, user }: Props) {
   const progressPct =
     timeLimitSec > 0 ? Math.min(100, (elapsedMs / (timeLimitSec * 1000)) * 100) : 0;
 
-  const showQuestion = session.status === "LIVE" && currentQuestion && hasJoined;
+  const showQuestion = (session.status === "LIVE" || session.status === "PAUSED") && currentQuestion && hasJoined;
   const showWaiting = session.status === "DRAFT" || session.status === "LOBBY";
-  const showBetween = (session.status === "BETWEEN" || session.status === "PAUSED") && hasJoined;
+  const showBetween = session.status === "BETWEEN" && hasJoined;
   const showFinished = session.status === "FINISHED";
   const showAborted = session.status === "ABORTED";
+  const isPaused = session.status === "PAUSED";
 
   const myRankInLeaderboard = leaderboard.find((p) => p.userId === user.id);
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-white to-gray-50">
-      <main className="mx-auto max-w-2xl px-4 py-6 pb-24">
+      <main className="mx-auto max-w-5xl px-4 py-6 pb-24">
         {/* Header */}
-        <div className="text-center mb-6">
+        <div className="max-w-2xl mx-auto text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-1">
             <Brain className="h-6 w-6 text-[#FF005A]" />
             <h1 className="text-xl font-bold">{session.title}</h1>
@@ -361,7 +367,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
         {/* My stats (if joined) */}
         {hasJoined && (
-          <Card className="mb-4 bg-gradient-to-br from-[#FF005A]/5 to-transparent border-[#FF005A]/20">
+          <Card className="mb-4 max-w-2xl mx-auto bg-gradient-to-br from-[#FF005A]/5 to-transparent border-[#FF005A]/20">
             <CardContent className="p-4">
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
@@ -402,7 +408,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
             session.status === "LIVE" ||
             session.status === "PAUSED" ||
             session.status === "BETWEEN") && (
-            <Card className="text-center border-[#FF005A]/30 bg-[#FF005A]/5">
+            <Card className="max-w-2xl mx-auto text-center border-[#FF005A]/30 bg-[#FF005A]/5">
               <CardContent className="py-8">
                 <Radio className="h-10 w-10 mx-auto text-[#FF005A] mb-3 animate-pulse" />
                 <h2 className="text-lg font-semibold mb-1">
@@ -438,7 +444,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
         {/* DRAFT and not joined — waiting for host */}
         {session.status === "DRAFT" && !hasJoined && (
-          <Card className="text-center">
+          <Card className="max-w-2xl mx-auto text-center">
             <CardContent className="py-12">
               <Radio className="h-12 w-12 mx-auto text-[#FF005A] mb-3 animate-pulse" />
               <h2 className="text-lg font-semibold mb-1">
@@ -454,7 +460,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
         {/* Joined but waiting for first question */}
         {showWaiting && hasJoined && (
-          <Card className="text-center">
+          <Card className="max-w-2xl mx-auto text-center">
             <CardContent className="py-12">
               <Sparkles className="h-10 w-10 mx-auto text-[#FF005A] mb-3" />
               <h2 className="text-lg font-semibold mb-1">
@@ -471,19 +477,26 @@ export function QuizPlayer({ initialSession, user }: Props) {
           </Card>
         )}
 
-        {/* Live question */}
+        {/* Live question (also used for PAUSED — buttons disabled) */}
         {showQuestion && currentQuestion && (
-          <div className="space-y-4">
-            {/* Timer */}
+          <div className="max-w-2xl mx-auto space-y-4">
+            {/* Timer / paused indicator */}
             <div className="text-center">
-              <div
-                className={`inline-flex items-center gap-1.5 text-2xl font-bold font-mono ${
-                  remainingSec <= 5 ? "text-red-600 animate-pulse" : "text-foreground"
-                }`}
-              >
-                <Clock className="h-5 w-5" />
-                {remainingSec}s
-              </div>
+              {isPaused ? (
+                <div className="inline-flex items-center gap-1.5 text-2xl font-bold text-amber-600">
+                  <Pause className="h-5 w-5" />
+                  Paused
+                </div>
+              ) : (
+                <div
+                  className={`inline-flex items-center gap-1.5 text-2xl font-bold font-mono ${
+                    remainingSec <= 5 ? "text-red-600 animate-pulse" : "text-foreground"
+                  }`}
+                >
+                  <Clock className="h-5 w-5" />
+                  {remainingSec}s
+                </div>
+              )}
               <Progress value={progressPct} className="h-1.5 mt-1.5" />
             </div>
 
@@ -507,7 +520,9 @@ export function QuizPlayer({ initialSession, user }: Props) {
                     </div>
                     <p className="text-sm font-medium">Answer locked in!</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Waiting for the host to reveal the answer.
+                      {isPaused
+                        ? "Quiz is paused — waiting for the host to resume."
+                        : "Waiting for the host to reveal the answer."}
                     </p>
                   </div>
                 ) : (
@@ -517,7 +532,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                       <button
                         key={i}
                         onClick={() => handleAnswer(i)}
-                        disabled={submitting || remainingMs === 0}
+                        disabled={submitting || remainingMs === 0 || isPaused}
                         className={`${OPTION_STYLES[i % 4]} text-white rounded-xl p-4 text-left transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed min-h-[72px]`}
                       >
                         <div className="flex items-center gap-2.5">
@@ -544,80 +559,206 @@ export function QuizPlayer({ initialSession, user }: Props) {
           </div>
         )}
 
-        {/* Between questions / reveal */}
+        {/* Between questions / reveal — question on left, leaderboard on right */}
         {showBetween && currentQuestion && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base text-muted-foreground">
-                  Question {currentQuestion.order + 1}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-base font-medium mb-3">{currentQuestion.text}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {currentQuestion.options.map((opt, i) => {
-                    const isCorrect = i === (
-                      // We don't have correctIndex client-side unless revealed.
-                      // The host's reveal flips status to BETWEEN — at that point
-                      // we infer correctness from myAnswer.isCorrect IF my selected
-                      // index matches.
-                      myAnswer?.isCorrect && myAnswer.selectedIndex === i ? true : false
-                    );
-                    const isMine = myAnswer?.selectedIndex === i;
-                    return (
-                      <div
-                        key={i}
-                        className={`rounded-lg p-3 border-2 ${
-                          isCorrect
-                            ? "border-green-500 bg-green-50"
-                            : isMine
-                            ? "border-red-400 bg-red-50"
-                            : "border-gray-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs">
-                            {OPTION_LABELS[i]}
-                          </span>
-                          <span className="text-sm">{opt}</span>
-                          {isCorrect && (
-                            <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto" />
-                          )}
-                          {isMine && !isCorrect && (
-                            <XCircle className="h-4 w-4 text-red-500 ml-auto" />
+          <div className="grid gap-5 lg:grid-cols-[1fr_340px] items-start">
+            {/* LEFT: Question + answer reveal */}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-muted-foreground">
+                    Question {currentQuestion.order + 1} · Reveal
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-base font-medium mb-3">{currentQuestion.text}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {currentQuestion.options.map((opt, i) => {
+                      // Now that the API exposes correctIndex on reveal, we
+                      // can mark the actual correct option (green) regardless
+                      // of what the user picked, and separately flag the
+                      // user's pick (red if wrong).
+                      const correctIdx = currentQuestion.correctIndex;
+                      const isCorrectAnswer = correctIdx != null && i === correctIdx;
+                      const isMyPick = myAnswer?.selectedIndex === i;
+                      const iGotItRight = myAnswer?.isCorrect === true;
+                      const isMyWrongPick = isMyPick && !iGotItRight;
+
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-lg p-3 border-2 transition-colors ${
+                            isCorrectAnswer
+                              ? "border-green-500 bg-green-50"
+                              : isMyWrongPick
+                              ? "border-red-400 bg-red-50"
+                              : "border-gray-200"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`flex h-7 w-7 items-center justify-center rounded-md font-bold text-sm shrink-0 ${
+                                isCorrectAnswer
+                                  ? "bg-green-500 text-white"
+                                  : isMyWrongPick
+                                  ? "bg-red-400 text-white"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {OPTION_LABELS[i]}
+                            </span>
+                            <span className="text-sm flex-1">{opt}</span>
+                            {isCorrectAnswer && (
+                              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                            )}
+                            {isMyWrongPick && (
+                              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                            )}
+                          </div>
+                          {isMyPick && (
+                            <p
+                              className={`text-[10px] mt-1.5 font-semibold uppercase tracking-wide ${
+                                isCorrectAnswer ? "text-green-700" : "text-red-600"
+                              }`}
+                            >
+                              Your pick
+                            </p>
                           )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {myAnswer && (
-                  <div
-                    className={`mt-3 rounded-md p-3 ${
-                      myAnswer.isCorrect
-                        ? "bg-green-50 border border-green-200"
-                        : "bg-red-50 border border-red-200"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold">
-                      {myAnswer.isCorrect
-                        ? `Correct! +${myAnswer.points} points`
-                        : "Not quite — but you're still in the game."}
-                    </p>
+                      );
+                    })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-            <p className="text-center text-xs text-muted-foreground">
-              Next question coming up...
-            </p>
+
+                  {/* Result banner */}
+                  {myAnswer ? (
+                    <div
+                      className={`mt-3 rounded-md p-3 ${
+                        myAnswer.isCorrect
+                          ? "bg-green-50 border border-green-200"
+                          : "bg-red-50 border border-red-200"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold">
+                        {myAnswer.isCorrect
+                          ? `Correct! +${myAnswer.points} points`
+                          : "Not quite — but you're still in the game."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-md p-3 bg-gray-50 border border-gray-200">
+                      <p className="text-sm text-gray-700">
+                        You didn&apos;t answer in time — no points this round.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Deep dive */}
+                  {currentQuestion.deepDive && (
+                    <div className="mt-3 rounded-md bg-amber-50 border border-amber-200 p-3">
+                      <p className="text-xs font-semibold text-amber-900 mb-1">
+                        Deep dive
+                      </p>
+                      <p className="text-sm text-amber-800 leading-relaxed">
+                        {currentQuestion.deepDive}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <p className="text-center text-xs text-muted-foreground">
+                Next question coming up...
+              </p>
+            </div>
+
+            {/* RIGHT: Live leaderboard with my rank pinned to top */}
+            <div className="space-y-3 lg:sticky lg:top-4">
+              {/* My rank hero card */}
+              {myRankInLeaderboard && (
+                <Card className="bg-gradient-to-br from-[#FF005A]/8 to-transparent border-[#FF005A]/30">
+                  <CardContent className="p-4 text-center">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                      Your position
+                    </p>
+                    <div className="flex items-baseline justify-center gap-1.5 mt-1">
+                      <span className="text-4xl font-bold tabular-nums">
+                        #{myRankInLeaderboard.rank}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        / {leaderboard.length}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold mt-1 text-[#FF005A]">
+                      {myRankInLeaderboard.totalScore.toLocaleString()} pts
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {myRankInLeaderboard.correctCount}/{myRankInLeaderboard.answeredCount} correct
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Full leaderboard */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    Leaderboard
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 max-h-[420px] overflow-y-auto">
+                  {leaderboard.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-muted-foreground">
+                      <Users className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                      No participants yet
+                    </div>
+                  ) : (
+                    leaderboard.map((p) => {
+                      const isMe = p.userId === user.id;
+                      return (
+                        <div
+                          key={p.id}
+                          className={`flex items-center gap-2 rounded-md p-1.5 ${
+                            isMe
+                              ? "bg-[#FF005A]/10 border border-[#FF005A]/30"
+                              : p.isPodium
+                              ? "bg-amber-50"
+                              : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <span className="w-6 text-center text-xs font-bold text-muted-foreground shrink-0">
+                            {p.rank <= 3
+                              ? ["🥇", "🥈", "🥉"][p.rank - 1]
+                              : `#${p.rank}`}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-medium truncate">
+                                {p.displayName}
+                                {isMe && (
+                                  <span className="text-[10px] text-[#FF005A] ml-1">(you)</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {p.correctCount}/{p.answeredCount} correct
+                            </div>
+                          </div>
+                          <span className="text-xs font-mono font-bold tabular-nums">
+                            {p.totalScore.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
 
         {/* Finished — final leaderboard */}
         {showFinished && (
-          <div className="space-y-4">
+          <div className="max-w-2xl mx-auto space-y-4">
             <Card className="text-center bg-gradient-to-br from-amber-50 to-white border-amber-200">
               <CardContent className="py-8">
                 <Trophy className="h-12 w-12 mx-auto text-amber-500 mb-2" />
@@ -688,7 +829,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
         {/* Aborted */}
         {showAborted && (
-          <Card className="text-center">
+          <Card className="max-w-2xl mx-auto text-center">
             <CardContent className="py-12">
               <XCircle className="h-12 w-12 mx-auto text-red-400 mb-3" />
               <h2 className="text-lg font-semibold mb-1">Session ended</h2>
