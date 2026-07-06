@@ -516,9 +516,10 @@ export function PublicEventPage({ event, me }: Props) {
                                       </span>
                                     )}
                                     {p.name}
-                                    {p.role && (
+                                    {(p.role || p.company) && (
                                       <span className="text-[#7C3AED]/60 font-normal">
-                                        · {p.role}
+                                        {p.role && ` · ${p.role}`}
+                                        {p.company && ` · ${p.company}`}
                                       </span>
                                     )}
                                   </span>
