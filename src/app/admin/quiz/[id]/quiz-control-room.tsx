@@ -54,6 +54,8 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useQuizSocket } from "@/components/quiz/use-quiz-socket";
 import { QuizQuestionEditor } from "./quiz-question-editor";
+import { QuizResultsView } from "./quiz-results-view";
+import { BarChart3 } from "lucide-react";
 
 interface Question {
   id: string;
@@ -146,6 +148,12 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
     initialSession.event?.id ?? NO_EVENT_SENTINEL,
   );
   const [savingEventLink, setSavingEventLink] = useState(false);
+  /** When true, the control room is replaced by the full end-of-quiz
+   *  results view (leaderboard + per-question answer matrix). Set
+   *  automatically after the host clicks Finish. Can be re-opened
+   *  later via the "View results" button (visible whenever the
+   *  session is FINISHED). */
+  const [showResults, setShowResults] = useState(false);
 
   const sessionId = session.id;
   const currentQuestion =
@@ -460,8 +468,11 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
       });
       emitHostAction("quiz:host:finish");
       toast({ title: "Session finished", description: "Final leaderboard locked." });
-      refreshState();
-      refreshLeaderboard();
+      await refreshState();
+      await refreshLeaderboard();
+      // Auto-open the end-of-quiz results view so the host immediately
+      // sees the full answer matrix + final standings.
+      setShowResults(true);
     } catch (e: unknown) {
       toast({
         title: "Failed to finish",
@@ -689,6 +700,19 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
   const isFinished = session.status === "FINISHED";
   const isAborted = session.status === "ABORTED";
   const isBetween = session.status === "BETWEEN";
+
+  // If the host has the results view open (either auto-shown after
+  // Finish or re-opened via the "View results" button), render it
+  // instead of the regular control room. They can return via the
+  // "Back to control room" button inside the results view.
+  if (showResults && isFinished) {
+    return (
+      <QuizResultsView
+        sessionId={sessionId}
+        onClose={() => setShowResults(false)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1014,13 +1038,26 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                     Abort
                   </Button>
                 )}
+                {/* View results — re-opens the end-of-quiz summary view
+                    (the same one that auto-opens when the host clicks
+                    Finish). Only shown for FINISHED sessions. */}
+                {isFinished && (
+                  <Button
+                    onClick={() => setShowResults(true)}
+                    disabled={busy !== null}
+                    className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-1.5" />
+                    View results
+                  </Button>
+                )}
                 {/* Restart — only on FINISHED/ABORTED. Wipes responses +
                     resets to DRAFT so the host can launch again. */}
                 {(isFinished || isAborted) && (
                   <Button
                     onClick={handleRestart}
                     disabled={busy !== null}
-                    className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+                    variant="outline"
                   >
                     <RotateCcw className="h-4 w-4 mr-1.5" />
                     Restart quiz

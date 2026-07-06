@@ -1329,3 +1329,137 @@ Git state:
 - No schema migration needed (all operations work against the
   existing QuizSession/QuizQuestion/QuizResponse/QuizParticipant
   tables).
+
+---
+Task ID: V6-QUIZ-RESULTS-1
+Agent: main (Super Z)
+Task: When the admin clicks Finish on a quiz, show the answer for each
+question and how each participant answered (selected option, response
+time, correct/incorrect badge), plus the final leaderboard.
+
+Work Log:
+- Inspected existing quiz-control-room.tsx (1221 lines) to find the
+  handleFinish handler. Currently it just PATCHes status=FINISHED,
+  emits quiz:host:finish, and shows a toast. There was no end-of-quiz
+  summary view — the host had to scroll the right-side leaderboard to
+  see results, and there was no way to see who answered what per
+  question.
+- Inspected prisma/schema.prisma for the QuizSession/QuizQuestion/
+  QuizResponse/QuizParticipant relations. QuizResponse has
+  selectedIndex, isCorrect, responseMs, points, answeredAt — all we
+  need to render the per-participant answer matrix.
+- Inspected the existing GET /api/quiz/[sessionId]/leaderboard route
+  to mirror its sort order (totalScore desc, correctCount desc,
+  avgResponseMs asc, joinedAt asc) so the results view stays
+  consistent with the live leaderboard.
+
+Code changes:
+
+NEW: src/app/api/admin/quiz/[id]/results/route.ts (GET)
+  - Admin-only endpoint (requires quiz.host permission).
+  - Returns three things in one round-trip:
+      1. session metadata (title, status, startedAt, finishedAt,
+         totalQuestions, _count.responses, _count.participants)
+      2. leaderboard — every participant sorted by score, with rank +
+         isPodium flags for the top 3.
+      3. questions[] — every question with options (parsed from
+         optionsJson), correctIndex, deepDive, and a `responses[]`
+         array containing one row PER participant (even those who
+         didn't answer — so the admin sees the full picture). Each
+         row has: displayName, rank, answered, selectedIndex,
+         isCorrect, responseMs, points, answeredAt.
+  - Also computes per-question aggregate stats: totalAnswered,
+    totalCorrect, totalParticipants, distribution (count per option
+    index) — for the option bars in the UI.
+  - Single Prisma findMany on QuizQuestion with responses included,
+    then index responses by participantId in JS to fill "no answer"
+    rows. Avoids an N+1 query pattern.
+
+NEW: src/app/admin/quiz/[id]/quiz-results-view.tsx
+  - Full "end-of-quiz summary" component.
+  - Layout:
+      a. Header card — title, FINISHED badge, finishedAt timestamp,
+         participant/question counts. Four stat tiles: participants,
+         total responses, avg score, avg accuracy.
+      b. Final leaderboard card — top 3 rendered as podium tiles
+         (gold/silver/bronze styling with Medal/Award icons), then a
+         full standings table with rank, name, score, correct,
+         answered, avg time columns.
+      c. Per-question breakdown card — collapsible accordion, one
+         entry per question. Header shows the question text + a quick
+         stats row ("X/N correct (Y%)", "X/N answered (Y%)",
+         sourceAreaId). When expanded, shows:
+           - All 4 options with the correct one highlighted green and
+             a CORRECT badge. Each option has a distribution bar
+             showing how many participants picked it.
+           - The deep dive explanation (if any) in an amber callout.
+           - A table of every participant with: rank, name, their
+             selected option (or "No answer" in italic gray),
+             response time (formatted as 1.2s or 230ms), a
+             green-check / red-X result badge, and points awarded.
+  - Toolbar buttons in header: Refresh (re-fetches), Export CSV
+    (downloads a per-participant-per-question matrix as CSV), and
+    "Back to control room" (calls onClose).
+  - Expand all / Collapse all buttons for the accordion.
+  - CSV export builds a row per participant with rank, name, total
+    score, correct, answered, avg response, then one column per
+    question for: their answer, response time (ms), correct?, points.
+    Properly escapes quotes in display names and option text.
+
+MODIFIED: src/app/admin/quiz/[id]/quiz-control-room.tsx
+  - Imported QuizResultsView + BarChart3 icon.
+  - Added `showResults` state (default false).
+  - Modified handleFinish to set `showResults = true` after the
+    status patch + refreshes complete. This auto-opens the results
+    view as soon as the host clicks Finish — no extra click needed.
+  - Added an early-return render: if `showResults && isFinished`,
+    render <QuizResultsView sessionId onClose> instead of the regular
+    control room. The "Back to control room" button in the results
+    view calls onClose to flip showResults back to false.
+  - Added a pink "View results" button (BarChart3 icon) to the host
+    action bar. Only visible when session.status === "FINISHED". Lets
+    the host re-open the results view after closing it (or after a
+    page reload — showResults is intentionally session-scoped state,
+    not persisted, so a reload drops you back at the control room
+    where the View results button is visible).
+  - Demoted the Restart button from pink-filled to outline — the
+    View results button is now the primary FINISHED-state action.
+
+Verification:
+- TypeScript: npx tsc --noEmit reports ZERO errors in any of the
+  three changed/created files. (Pre-existing errors in unrelated
+  dashboard/skill files are not affected.)
+- Dev server (Next 16) running on localhost:3000:
+    GET /api/admin/quiz/<test-id>/results  → 401 ✓ (auth gate works)
+    GET /admin/quiz/<test-id>              → 307 ✓ (page compiles,
+                                                 auth redirect)
+- Committed as <HASH> and pushed to origin/main. Vercel auto-deploys.
+
+Stage Summary:
+- Clicking Finish now does what the user asked for:
+    1. Ends the quiz (status → FINISHED, finishedAt set).
+    2. Auto-opens a full-screen results view showing:
+       - The final leaderboard with podium for top 3.
+       - Every question with its correct answer highlighted.
+       - Every participant's answer per question (selected option,
+         response time, correct/incorrect badge, points awarded).
+       - Aggregate stats: X/N answered, X/N correct, distribution
+         bars per option.
+    3. CSV export available for offline analysis.
+- The "View results" button (pink, visible only when FINISHED) lets
+  the host re-open the results view later. The "Back to control
+  room" button returns them to the live view (e.g. to click
+  Restart or Duplicate).
+- The QuizResultsView fetches its own data, so it stays fresh even
+  if late responses arrive (rare but possible if a participant's
+  socket was lagging when Finish was clicked).
+
+Files modified/created this session:
+- src/app/api/admin/quiz/[id]/results/route.ts (NEW — endpoint)
+- src/app/admin/quiz/[id]/quiz-results-view.tsx (NEW — UI)
+- src/app/admin/quiz/[id]/quiz-control-room.tsx (MODIFIED —
+  showResults state + handleFinish change + early-return render +
+  View results button + Restart demoted to outline)
+
+Git state:
+- Commit pending — will be pushed next.
