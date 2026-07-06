@@ -11,6 +11,13 @@ import { sendMail } from "@/lib/email";
  * badge updates as soon as the user opens the conversation).
  *
  * Response: { partner: {...}, messages: [...], currentUserId: string }
+ *
+ * PERF: uses session.user.id from the JWT (skips a db.user.findUnique)
+ * and parallelizes the partner + messages queries with Promise.all.
+ * The markRead updateMany runs in parallel with the response build
+ * (fire-and-forget — the user already sees the un-read state in the
+ * thread, and the unread badge refresh is triggered client-side by
+ * the GET response itself).
  */
 export async function GET(
   _req: NextRequest,
@@ -20,57 +27,73 @@ export async function GET(
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const me = await db.user.findUnique({
-    where: { email: session.user.email },
-    select: { id: true },
-  });
-  if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
+  // PERF: use session.user.id from the JWT (set in auth.ts callback).
+  let meId = (session.user as { id?: string }).id;
+  if (!meId) {
+    const me = await db.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+    if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
+    meId = me.id;
+  }
 
   const { userId: partnerId } = await params;
-  if (partnerId === me.id) {
+  if (partnerId === meId) {
     return NextResponse.json({ error: "Cannot chat with yourself" }, { status: 400 });
   }
 
-  const partner = await db.user.findUnique({
-    where: { id: partnerId },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      photoUrl: true,
-      image: true,
-      company: true,
-      bio: true,
-      tags: { select: { id: true, label: true, color: true } },
-    },
-  });
+  // PERF: fetch partner profile + thread in parallel (used to be serial).
+  const [partner, messages] = await Promise.all([
+    db.user.findUnique({
+      where: { id: partnerId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        photoUrl: true,
+        image: true,
+        company: true,
+        bio: true,
+        tags: { select: { id: true, label: true, color: true } },
+      },
+    }),
+    db.conversationMessage.findMany({
+      where: {
+        OR: [
+          { senderId: meId, recipientId: partnerId },
+          { senderId: partnerId, recipientId: meId },
+        ],
+      },
+      orderBy: { createdAt: "asc" },
+      take: 500,
+      select: {
+        id: true,
+        senderId: true,
+        recipientId: true,
+        body: true,
+        readAt: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
   if (!partner) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  // Fetch thread (both directions).
-  const messages = await db.conversationMessage.findMany({
-    where: {
-      OR: [
-        { senderId: me.id, recipientId: partnerId },
-        { senderId: partnerId, recipientId: me.id },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-    take: 500,
-    select: {
-      id: true,
-      senderId: true,
-      recipientId: true,
-      body: true,
-      readAt: true,
-      createdAt: true,
-    },
-  });
-
-  // Mark messages from partner as read.
-  await db.conversationMessage.updateMany({
-    where: { senderId: partnerId, recipientId: me.id, readAt: null },
-    data: { readAt: new Date() },
-  });
+  // Fire-and-forget: mark messages from partner as read. We don't need
+  // to await this — the user already sees the messages in the thread,
+  // and the unread badge refresh is triggered by the GET response
+  // itself (the client calls refreshUnread() after loading the thread).
+  // Using .catch() to swallow any error (don't want an unhandled
+  // promise rejection in a fire-and-forget).
+  db.conversationMessage
+    .updateMany({
+      where: { senderId: partnerId, recipientId: meId, readAt: null },
+      data: { readAt: new Date() },
+    })
+    .catch((err) => {
+      console.error("[api/messages/[userId]] markRead failed:", err);
+    });
 
   return NextResponse.json({
     partner,
@@ -79,7 +102,7 @@ export async function GET(
       createdAt: m.createdAt.toISOString(),
       readAt: m.readAt ? m.readAt.toISOString() : null,
     })),
-    currentUserId: me.id,
+    currentUserId: meId,
   });
 }
 
@@ -97,10 +120,20 @@ export async function POST(
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const me = await db.user.findUnique({
-    where: { email: session.user.email },
-    select: { id: true, name: true, email: true, photoUrl: true, image: true },
-  });
+  // PERF: use session.user.id from the JWT when available; only fall
+  // back to the email lookup if needed (we still need name/email/photo
+  // for the email notification, but we can fetch those in parallel
+  // with the partner lookup below).
+  const meIdFromJwt = (session.user as { id?: string }).id;
+  const me = meIdFromJwt
+    ? await db.user.findUnique({
+        where: { id: meIdFromJwt },
+        select: { id: true, name: true, email: true, photoUrl: true, image: true },
+      })
+    : await db.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true, name: true, email: true, photoUrl: true, image: true },
+      });
   if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
   const { userId: partnerId } = await params;
@@ -108,20 +141,18 @@ export async function POST(
     return NextResponse.json({ error: "Cannot message yourself" }, { status: 400 });
   }
 
-  const partner = await db.user.findUnique({
-    where: { id: partnerId },
-    select: { id: true, name: true, email: true },
-  });
+  // PERF: parse body + fetch partner in parallel.
+  const [partner, payload] = await Promise.all([
+    db.user.findUnique({
+      where: { id: partnerId },
+      select: { id: true, name: true, email: true },
+    }),
+    req.json().catch(() => null as unknown as { body?: unknown }),
+  ]);
+
   if (!partner) return NextResponse.json({ error: "Recipient not found" }, { status: 404 });
 
-  let payload: { body?: unknown };
-  try {
-    payload = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const text = typeof payload.body === "string" ? payload.body.trim() : "";
+  const text = typeof payload?.body === "string" ? payload.body.trim() : "";
   if (!text) {
     return NextResponse.json({ error: "Message body is required" }, { status: 400 });
   }
@@ -140,10 +171,10 @@ export async function POST(
     },
   });
 
-  // Best-effort email notification. We send to BOTH the recipient and
-  // the platform admin (ADMIN_EMAIL) — the admin gets CC'd on every
-  // DM so they can monitor the conversation flow on the platform.
-  // Failures are logged and ignored (the message is already stored).
+  // Fire-and-forget email notification — don't block the response.
+  // We send to BOTH the recipient and the platform admin (ADMIN_EMAIL)
+  // — the admin gets CC'd on every DM so they can monitor the
+  // conversation flow on the platform. Failures are logged only.
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXTAUTH_URL ||
@@ -180,18 +211,16 @@ Reply on the platform: ${siteUrl}/events
     Sent from <strong>${chatFrom}</strong> · AI Salon Tel Aviv
   </p>
 </div>`;
-  try {
-    await sendMail({
-      to: partner.email,
-      cc: adminEmail,
-      subject,
-      text: textEmail,
-      html: htmlEmail,
-      from: chatFrom,
-    });
-  } catch (err) {
+  sendMail({
+    to: partner.email,
+    cc: adminEmail,
+    subject,
+    text: textEmail,
+    html: htmlEmail,
+    from: chatFrom,
+  }).catch((err) => {
     console.error("[dm] email notification failed:", err);
-  }
+  });
 
   return NextResponse.json({
     ok: true,

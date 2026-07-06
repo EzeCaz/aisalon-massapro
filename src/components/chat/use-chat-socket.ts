@@ -120,10 +120,15 @@ export function useChatSocket({
 
     const socket = io("/?XTransformPort=3004", {
       transports: ["websocket", "polling"],
-      forceNew: true,
+      // NOTE: do NOT set `forceNew: true` — Socket.io dedupes by URI+opts
+      // and shares one Manager across io() calls. With forceNew, every
+      // mount of useChatSocket (InboxButton in desktop header + mobile
+      // header + CommunityGrid's MessagesDialog = 3× on /community) would
+      // open its own socket, tripling idle pings and reconnect storms.
       reconnection: true,
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity, // keep trying — better than giving up
+      reconnectionDelay: 500,         // first retry after 500ms (was 1000ms)
+      reconnectionDelayMax: 5000,     // cap at 5s
       timeout: 10000,
     });
     socketRef.current = socket;
@@ -201,14 +206,12 @@ export function useChatSocket({
       },
     );
 
-    // Heartbeat every 25s — keeps the connection from being killed
-    // by intermediate proxies (Caddy has a 60s idle timeout).
-    const hb = setInterval(() => {
-      if (socket.connected) socket.emit("chat:heartbeat", {});
-    }, 25_000);
+    // No custom heartbeat needed — engine.io's built-in ping
+    // (pingInterval: 25000 on the server) keeps the connection alive
+    // and survives Caddy's 60s idle timeout. The old `chat:heartbeat`
+    // emit was redundant traffic.
 
     return () => {
-      clearInterval(hb);
       socket.disconnect();
       socketRef.current = null;
       joinedRoomRef.current = null;

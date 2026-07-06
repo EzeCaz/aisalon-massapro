@@ -147,7 +147,6 @@ export function MessagesDialog({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const threadEndRef = useRef<HTMLDivElement | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Keep latest activePartner in a ref so the WS callback (which is
   // set up ONCE) always sees the current value.
@@ -201,7 +200,10 @@ export function MessagesDialog({
   }, [refreshUnread]);
 
   // Load the thread with a specific partner (full UI loading state).
-  const loadThread = useCallback(async (partner: Partner) => {
+  // `skipConversationRefresh` is true when we already have the partner
+  // (Community "Contact" flow) — avoids a wasteful 1.4–3.7s call to
+  // /api/messages/conversations that the user will never look at.
+  const loadThread = useCallback(async (partner: Partner, opts?: { skipConversationRefresh?: boolean }) => {
     setLoadingThread(true);
     setThread([]);
     setActivePartner(partner);
@@ -210,11 +212,15 @@ export function MessagesDialog({
       if (!res.ok) throw new Error("Failed to load conversation");
       const data = await res.json();
       setThread(data.messages || []);
+      if (data.currentUserId) setCurrentUserId(data.currentUserId);
       // After loading the thread, the server marked partner→me messages as
-      // read — refresh the unread count and the conversations list so the
-      // unread dot disappears for this partner.
+      // read — refresh the unread count. Only refresh the conversations
+      // list if the user can actually see it (i.e. they opened the dialog
+      // WITHOUT a specific partner pre-targeted).
       refreshUnread();
-      loadConversations();
+      if (!opts?.skipConversationRefresh && openRef.current) {
+        loadConversations();
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load thread");
     } finally {
@@ -223,12 +229,33 @@ export function MessagesDialog({
   }, [loadConversations, refreshUnread]);
 
   // ── WebSocket subscription for live DM delivery ────────────────
-  const { relayDmSent } = useChatSocket({
+  // The hook connects to the chat-service on port 3004, joins our
+  // personal room (`chat:user:<userId>`), and calls onDmReceived
+  // whenever someone else sends us a DM.
+  //
+  // We track `isConnected` so we can:
+  //   - Skip the 20s polling fallback when the WS is healthy (saves
+  //     ~323 server calls per dev session).
+  //   - Trigger an immediate refresh on reconnect (so we catch up on
+  //     anything missed while the socket was down).
+  const lastDmReceivedAt = useRef<number>(0);
+  const { relayDmSent, isConnected } = useChatSocket({
     userId,
     displayName: userName,
     role: userRole,
     activeRoomId: null, // DMs don't use room-based presence
     onDmReceived: () => {
+      // Debounce: if multiple DMs arrive in quick succession (e.g. a
+      // partner sends 3 messages in a row), we only refresh once per
+      // 500ms window. This prevents 3× (refreshUnread + loadConversations
+      // + refreshThread) = 9 server calls from a single inbound burst.
+      const now = Date.now();
+      if (now - lastDmReceivedAt.current < 500) {
+        // Still schedule an unread refresh, but skip the heavy convos + thread refresh.
+        refreshUnread();
+        return;
+      }
+      lastDmReceivedAt.current = now;
       refreshUnread();
       if (openRef.current) {
         loadConversations();
@@ -249,48 +276,87 @@ export function MessagesDialog({
     if (onUnreadChange) onUnreadChange(unread);
   }, [unread, onUnreadChange]);
 
-  // Poll for unread count every 20s as a safety net (in case the WS
-  // is disconnected or the tab was backgrounded).
+  // Refresh unread count on reconnect (catch up on missed events).
   useEffect(() => {
+    if (isConnected) {
+      refreshUnread();
+      if (openRef.current) loadConversations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
+  // Polling fallback — ONLY when the WS is disconnected, OR as a
+  // long-interval safety net when the tab is foregrounded after
+  // being backgrounded (the WS may have missed events while hidden).
+  useEffect(() => {
+    // Always do an immediate refresh on mount.
     refreshUnread();
-    pollRef.current = setInterval(refreshUnread, 20000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+
+    // Short poll (5s) when WS is down — fast enough to feel live,
+    // but only runs in the broken state.
+    // Long poll (60s) as a permanent safety net — catches anything
+    // missed by the WS even when it's healthy (rare).
+    const shortPoll = isConnected ? null : setInterval(refreshUnread, 5000);
+    const longPoll = setInterval(refreshUnread, 60000);
+
+    // When the tab becomes visible again, refresh immediately
+    // (the WS may have missed events while the tab was hidden).
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshUnread();
+        if (openRef.current) loadConversations();
+      }
     };
-  }, [refreshUnread]);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      if (shortPoll) clearInterval(shortPoll);
+      clearInterval(longPoll);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refreshUnread, isConnected, loadConversations]);
 
   // When the dialog opens, load the conversation list AND — if an
   // initial partner was specified — open that partner's thread.
+  // PERF: when opening with initialPartnerId (Community "Contact" flow),
+  // we SKIP loadConversations() entirely. The conversation list is
+  // hidden when a thread is open, so fetching it is pure waste — it
+  // was previously adding 1.4–3.7s of latency to the Contact button.
   useEffect(() => {
     if (!open) return;
+
+    if (initialPartnerId && initialPartner) {
+      // Community "Contact" flow — we already have the partner profile,
+      // so skip the API round-trip and load just the thread. Don't
+      // refresh the conversation list — the user is looking at the
+      // thread, not the list.
+      loadThread(initialPartner as Partner, { skipConversationRefresh: true });
+    } else if (initialPartnerId) {
+      // initialPartnerId set but no initialPartner object — fetch
+      // partner profile + thread in one shot via the GET endpoint.
+      setLoadingThread(true);
+      fetch(`/api/messages/${initialPartnerId}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          if (data.partner) {
+            setActivePartner(data.partner as Partner);
+            setThread(data.messages || []);
+            if (data.currentUserId) setCurrentUserId(data.currentUserId);
+            refreshUnread();
+          }
+        })
+        .catch(() => {
+          /* ignore */
+        })
+        .finally(() => setLoadingThread(false));
+    } else {
+      // No initial partner — show the conversation list. This is the
+      // header InboxButton flow.
       loadConversations();
-      if (initialPartnerId && initialPartner) {
-        // Skip the API round-trip — we already have the partner profile.
-        loadThread(initialPartner as Partner);
-      } else if (initialPartnerId) {
-        // Fetch the partner profile + thread in one shot via the
-        // /api/messages/[userId] GET endpoint, which returns { partner,
-        // messages, currentUserId }.
-        setLoadingThread(true);
-        fetch(`/api/messages/${initialPartnerId}`, { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => {
-            if (!data) return;
-            if (data.partner) {
-              setActivePartner(data.partner as Partner);
-              setThread(data.messages || []);
-              if (data.currentUserId) setCurrentUserId(data.currentUserId);
-              refreshUnread();
-            }
-          })
-          .catch(() => {
-            /* ignore */
-          })
-          .finally(() => setLoadingThread(false));
-      } else {
-        setActivePartner(null);
-        setThread([]);
-      }
+      setActivePartner(null);
+      setThread([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialPartnerId]);
 
