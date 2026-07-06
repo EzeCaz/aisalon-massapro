@@ -96,6 +96,14 @@ interface Props {
   hostUser: { id: string; name: string; email: string; role: string };
 }
 
+/**
+ * Sentinel value used inside the event <Select> to represent
+ * "no event linked". Radix UI forbids empty-string SelectItem values
+ * (it reserves "" for clearing the selection), so we use this constant
+ * and translate to/from null at the I/O boundaries.
+ */
+const NO_EVENT_SENTINEL = "__none__";
+
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700 border-gray-200",
   LOBBY: "bg-blue-100 text-blue-700 border-blue-200",
@@ -125,7 +133,7 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
     { id: string; title: string; slug: string; startsAt: string }[]
   >([]);
   const [pickedEventId, setPickedEventId] = useState<string>(
-    initialSession.event?.id ?? "",
+    initialSession.event?.id ?? NO_EVENT_SENTINEL,
   );
   const [savingEventLink, setSavingEventLink] = useState(false);
 
@@ -256,6 +264,67 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
     } catch (e: unknown) {
       toast({
         title: "Failed to open lobby",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Unified "Start quiz" — used when the session is DRAFT or LOBBY.
+   * Performs the full start flow in one click:
+   *   1. (If DRAFT) Open the lobby + record startedAt so the session
+   *      has a non-null startedAt and a stable "lobby opened" timestamp.
+   *   2. Immediately advance to LIVE + Q1 with a fresh timer.
+   *   3. Broadcast quiz:host:start-question so every connected client
+   *      re-fetches /state and sees Q1 on their screen.
+   *
+   * Members who haven't joined yet will auto-join on the next state
+   * refresh (the player page has an auto-join useEffect for any
+   * joinable status — including LIVE).
+   */
+  const handleStartQuiz = async () => {
+    if (questions.length === 0) {
+      toast({
+        title: "No questions to start",
+        description: "Add at least one question before starting the quiz.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBusy("start");
+    try {
+      // Step 1: open lobby if we're still in DRAFT. We do this so the
+      // session has a clean LOBBY transition in its history (and so
+      // any race-condition client that connects between steps sees a
+      // joinable status). The lobby state is fleeting — we immediately
+      // flip to LIVE in step 2.
+      if (session.status === "DRAFT") {
+        await patchSession({
+          status: "LOBBY",
+          startedAt: new Date().toISOString(),
+        });
+        emitHostAction("quiz:host:start-lobby");
+      }
+      // Step 2: start Q1.
+      await patchSession({
+        status: "LIVE",
+        currentQuestionIndex: 0,
+        currentQuestionStartedAt: new Date().toISOString(),
+      });
+      setRevealed(false);
+      emitHostAction("quiz:host:start-question");
+      toast({
+        title: "Quiz is live!",
+        description: `Q1 started — ${timeLimitSec}s timer running for all players.`,
+      });
+      refreshState();
+      refreshLeaderboard();
+    } catch (e: unknown) {
+      toast({
+        title: "Failed to start quiz",
         description: e instanceof Error ? e.message : "Unknown error",
         variant: "destructive",
       });
@@ -445,18 +514,17 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventId: pickedEventId || null,
+          eventId: pickedEventId === NO_EVENT_SENTINEL ? null : pickedEventId,
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Failed to save");
       }
+      const isLinked = pickedEventId !== NO_EVENT_SENTINEL;
       toast({
-        title: pickedEventId
-          ? "Linked to event"
-          : "Unlinked from event",
-        description: pickedEventId
+        title: isLinked ? "Linked to event" : "Unlinked from event",
+        description: isLinked
           ? "Members will see this quiz on the event page's Quiz tab."
           : "Quiz is now standalone (no event).",
       });
@@ -519,7 +587,7 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                     <SelectValue placeholder="Pick an event…" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">(no event — standalone)</SelectItem>
+                    <SelectItem value={NO_EVENT_SENTINEL}>(no event — standalone)</SelectItem>
                     {eventsList.map((ev) => (
                       <SelectItem key={ev.id} value={ev.id}>
                         {ev.title} —{" "}
@@ -545,7 +613,7 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                   variant="ghost"
                   onClick={() => {
                     setLinkingEvent(false);
-                    setPickedEventId(initialSession.event?.id ?? "");
+                    setPickedEventId(initialSession.event?.id ?? NO_EVENT_SENTINEL);
                   }}
                 >
                   Cancel
@@ -706,8 +774,8 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
                 </>
               ) : (
                 <div className="py-8 text-center text-muted-foreground">
-                  {session.status === "DRAFT" && "Session is in draft. Open the lobby to let members join."}
-                  {session.status === "LOBBY" && "Lobby is open. Start the first question when you're ready."}
+                  {session.status === "DRAFT" && "Session is in draft. Click \"Start quiz\" to open the lobby and launch Q1 for everyone in one tap."}
+                  {session.status === "LOBBY" && "Lobby is open. Click \"Start quiz\" to launch Q1 for everyone."}
                   {isBetween && "Between questions. Click \"Next question\" to continue."}
                   {isFinished && "Session finished. Final leaderboard is on the right."}
                   {isAborted && "Session was aborted."}
@@ -717,20 +785,32 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
 
               {/* Host action bar */}
               <div className="flex flex-wrap gap-2 pt-2 border-t">
-                {session.status === "DRAFT" && (
-                  <Button onClick={handleStartLobby} disabled={busy !== null}>
-                    <Play className="h-4 w-4 mr-1" />
-                    Open lobby
-                  </Button>
-                )}
-                {session.status === "LOBBY" && (
-                  <Button
-                    onClick={() => handleStartQuestion(0)}
-                    disabled={busy !== null}
-                  >
-                    <Play className="h-4 w-4 mr-1" />
-                    Start first question
-                  </Button>
+                {(session.status === "DRAFT" || session.status === "LOBBY") && (
+                  <>
+                    <Button
+                      onClick={handleStartQuiz}
+                      disabled={busy !== null || questions.length === 0}
+                      className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+                      size="lg"
+                    >
+                      <Play className="h-4 w-4 mr-1.5" fill="currentColor" />
+                      Start quiz
+                    </Button>
+                    {session.status === "DRAFT" && (
+                      <Button
+                        onClick={handleStartLobby}
+                        disabled={busy !== null}
+                        variant="outline"
+                      >
+                        Open lobby only
+                      </Button>
+                    )}
+                    {questions.length === 0 && (
+                      <span className="text-xs text-amber-700 self-center">
+                        ⚠ Add at least one question before starting.
+                      </span>
+                    )}
+                  </>
                 )}
                 {isLive && (
                   <>
