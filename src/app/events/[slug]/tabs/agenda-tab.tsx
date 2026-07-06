@@ -237,9 +237,18 @@ function agendaItemHasAssets(item: AgendaItem): {
   // exist. We DON'T merge the main image into the speaker-photo list
   // (the user said the main image is "to use as main image WHEN THERE
   // IS NOT image related to the session" — so it's strictly a fallback).
+  // SKIP the fallback entirely for non-content sessions (BREAK / FAST_PITCH
+  // / NETWORKING without a speaker): the user wants these "without image
+  // related" — they're breaks / door-opening / networking slots where any
+  // image, even an admin-set main image, would be visual noise.
+  const isNonContentItem =
+    (item.type === "BREAK" ||
+      item.type === "FAST_PITCH" ||
+      item.type === "NETWORKING") &&
+    !item.speaker;
   let sessionImages = merged;
   let usingMainImageFallback = false;
-  if (sessionImages.length === 0 && item.mainImage) {
+  if (sessionImages.length === 0 && item.mainImage && !isNonContentItem) {
     sessionImages = [item.mainImage];
     usingMainImageFallback = true;
   }
@@ -1154,14 +1163,18 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
             // Consistent layout: info LEFT | slideshow RIGHT for every session.
             // (Previously alternated per index, but the user requested all
             // slideshows on the right and large, matching the regular talks.)
-            // "Compact" treatment (single-column strip, ~60% shorter) only
-            // applies to sessions WITHOUT a speaker — i.e. real breaks like
-            // "Rest & Networking" or a header-style "Fast Pitch Round" entry.
+            // "Compact" treatment (single-column strip, ~50% shorter than the
+            // compact strip used to be) applies to sessions WITHOUT a speaker
+            // that are non-content by type — i.e. real breaks like "Break",
+            // "Rest & Networking", a header-style "Fast Pitch Round" entry, or
+            // a NETWORKING slot like "Door opening" / "Snacks & Networking".
             // Individual fast-pitch talks (SpeedSize, JobFinder, Bizone.ai…)
             // have their own speaker, so they get the full layout with the
             // large auto-crossfade slideshow on the right, just like talks.
             const isBreak =
-              (item.type === "BREAK" || item.type === "FAST_PITCH") &&
+              (item.type === "BREAK" ||
+                item.type === "FAST_PITCH" ||
+                item.type === "NETWORKING") &&
               !item.speaker;
 
             return (
@@ -1185,24 +1198,30 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                       ════════════════════════════════════════════════════════ */}
                   <div
                     className={`flex flex-col ${
-                      isBreak ? "gap-2 p-4 lg:p-5" : "gap-4 p-6 lg:p-8"
+                      isBreak
+                        ? "gap-0.5 p-2 lg:p-2.5"
+                        : "gap-4 p-6 lg:p-8"
                     } lg:order-1`}
                   >
                     {/* Time + type icon row */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <div
                         className={`font-mono font-extrabold leading-none tabular-nums text-[#FF005A] ${
-                          isBreak ? "text-lg" : "text-2xl"
+                          isBreak ? "text-sm" : "text-2xl"
                         }`}
                       >
                         {fmtTime(item.startsAt)}
                       </div>
                       {end && (
-                        <div className="font-mono text-sm text-black/55 leading-none tabular-nums">
+                        <div className="font-mono text-xs text-black/55 leading-none tabular-nums">
                           → {fmtTime(item.endsAt!)}
                         </div>
                       )}
-                      <div className="ml-auto flex items-center justify-center h-9 w-9 rounded-full bg-[#FF005A]/10 text-[#FF005A]">
+                      <div
+                        className={`ml-auto flex items-center justify-center rounded-full bg-[#FF005A]/10 text-[#FF005A] ${
+                          isBreak ? "h-6 w-6" : "h-9 w-9"
+                        }`}
+                      >
                         {typeIcon[item.type]}
                       </div>
                     </div>
@@ -1210,15 +1229,24 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
                     {/* Title — larger, per user request */}
                     <h3
                       className={`font-bold tracking-tight text-black leading-tight ${
-                        isBreak ? "text-lg" : "text-2xl"
+                        isBreak ? "text-sm" : "text-2xl"
                       }`}
                     >
                       {item.title}
                     </h3>
 
-                    {/* Description — larger, per user request */}
+                    {/* Description — smaller + single line for compact
+                        break/networking/door-opening items to keep the card
+                        at ~50% the height of the previous compact strip.
+                        Larger description for full sessions. */}
                     {item.description && (
-                      <p className="text-base leading-relaxed text-black/75">
+                      <p
+                        className={`${
+                          isBreak
+                            ? "text-xs leading-snug text-black/65 line-clamp-1"
+                            : "text-base leading-relaxed text-black/75"
+                        }`}
+                      >
                         {item.description}
                       </p>
                     )}
