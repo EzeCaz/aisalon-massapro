@@ -130,6 +130,13 @@ model User {
   hostedQuizSessions    QuizSession[]         @relation("QuizHost")
   quizParticipations    QuizParticipant[]
   // ----------------------------------------------------------------
+  // Community chat — group rooms this user created + rooms they're a
+  // member of + messages they've sent. DMs reuse ConversationMessage
+  // (already wired above) — group chat lives in the ChatRoom family.
+  chatRoomsCreated      ChatRoom[]            @relation("ChatRoomCreator")
+  chatMemberships       ChatRoomMember[]
+  chatMessages          ChatMessage[]
+  // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -228,6 +235,9 @@ model Event {
   /// Flourishing Quiz sessions tied to this event (optional link for
   /// post-event follow-up outreach to top performers).
   quizSessions    QuizSession[]
+  /// Group chat room for this event (one-to-one). Looked up via
+  /// ChatRoom.eventId — the FK lives on ChatRoom.
+  chatRoom        ChatRoom?
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
@@ -1215,4 +1225,116 @@ model QuizParticipant {
   @@index([isOnline])
   // --- relations ---
   responses       QuizResponse[]
+}
+
+// ===========================================================================
+// Community chat — group rooms (event-scoped or standalone) + 1:1 DMs.
+// ===========================================================================
+//
+// DMs already work via ConversationMessage (senderId + recipientId).
+// This family adds GROUP rooms. The web UI exposes both as a unified
+// inbox; the WebSocket relay (mini-services/chat-service) drives real-
+// time delivery for both.
+//
+// Lifecycle of an event room:
+//   1. A member opens the "Chat" tab on /events/[slug].
+//   2. /api/chat/events/[eventId]/room get-or-creates a ChatRoom with
+//      type=EVENT + eventId set + title = event.title.
+//   3. The endpoint also bulk-inserts ChatRoomMember rows for every
+//      user with an EventRsvp{status=GOING} + every EventCoHost +
+//      every Speaker whose userId is set. Future RSVPs auto-add via
+//      the join API.
+//   4. The WS service relays chat:message events to room:<roomId>.
+//
+// Lifecycle of a DM:
+//   1. Member clicks "Message" on someone's profile / event RSVP row.
+//   2. POST /api/messages/[userId] inserts a ConversationMessage.
+//   3. The chat-service broadcasts chat:dm-received to that user's
+//      personal room (room:user:<userId>) so the InboxButton updates
+//      live (instead of polling).
+
+model ChatRoom {
+  id          String   @id @default(cuid())
+  /// "EVENT"  — one room per event, members auto-managed by RSVP.
+  /// "GROUP"  — admin-created custom room (future — not in V1 UI).
+  /// Reserved for future types: "SESSION" (breakout), "ANNOUNCE".
+  type        String   @default("EVENT")
+  /// Set when type=EVENT. Null for standalone rooms. One-to-one.
+  eventId     String?  @unique
+  event       Event?   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Human-friendly title shown in the room list. For event rooms we
+  /// copy event.title at creation time; if the event is later renamed
+  /// we DON'T sync (the room keeps its original name).
+  title       String
+  /// Optional description shown under the title (e.g. "Post-event
+  /// discussion thread"). Null for event rooms in V1.
+  description String?
+  /// The user who created the room (or the first member who opened
+  /// the event chat tab). Used for audit + soft-delete permissions.
+  createdById String?
+  createdBy   User?    @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Soft delete — keeps the row for audit but hides it from the UI.
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  // --- relations ---
+  members     ChatRoomMember[]
+  messages    ChatMessage[]
+  @@index([type])
+  @@index([createdById])
+}
+
+model ChatRoomMember {
+  id         String   @id @default(cuid())
+  roomId     String
+  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "MEMBER" by default; "HOST" for the event host + co-hosts so the
+  /// UI can badge them in the member list. Hosts can pin messages /
+  /// mute members (future — not enforced in V1).
+  role       String   @default("MEMBER")
+  /// Per-user read cursor. Updated whenever the user opens the room
+  /// or receives a chat:read event. Null = never opened.
+  lastReadAt DateTime?
+  /// Set when the user explicitly leaves the room. They stop receiving
+  /// notifications but their message history is preserved. Re-joining
+  /// un-hides the room.
+  leftAt     DateTime?
+  joinedAt   DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  roomId     String
+  room       ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  /// Null for system messages (e.g. "X joined the room"). Always set
+  /// for user-authored messages.
+  senderId   String?
+  sender     User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  /// Message body. 4000-char limit (matches ConversationMessage). For
+  /// system messages this holds the templated text.
+  body       String
+  /// Soft-edit: original body is replaced; editedAt records when.
+  /// The UI shows "(edited)" next to the timestamp. We don't keep
+  /// revision history in V1.
+  editedAt   DateTime?
+  /// Soft-delete: body is replaced with "[message deleted]" + the
+  /// row stays for audit. Sender + admins can delete.
+  deletedAt  DateTime?
+  /// Optional reply-to. Null for top-level messages. We don't enforce
+  /// that the referenced message is in the same room at the DB level
+  /// (the API validates), but we do index it for fast lookups.
+  replyToId String?
+  replyTo    ChatMessage? @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies    ChatMessage[] @relation("ChatReply")
+  createdAt  DateTime @default(now())
+  @@index([roomId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([replyToId])
 }

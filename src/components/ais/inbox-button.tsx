@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { tagColor } from "@/lib/tags";
 import { Inbox, Send, Loader2, ArrowLeft, Search } from "lucide-react";
+import { useChatSocket, type ChatMessagePayload } from "@/components/chat/use-chat-socket";
 
 type Partner = {
   id: string;
@@ -79,9 +80,22 @@ type Props = {
   initialUnreadCount: number;
   // Whether this user is logged in (controls rendering).
   loggedIn: boolean;
+  // ── Required for the WebSocket subscription ──────────────────
+  // The current user's id, name, role — used to join the personal
+  // `chat:user:<id>` room so we receive `chat:dm-received` events
+  // when other members DM us.
+  userId: string;
+  userName: string | null;
+  userRole: string;
 };
 
-export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
+export function InboxButton({
+  initialUnreadCount,
+  loggedIn,
+  userId,
+  userName,
+  userRole,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(initialUnreadCount);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -97,31 +111,26 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll for unread count when the dialog is closed (so the badge stays fresh).
-  useEffect(() => {
-    if (!loggedIn) return;
-    let cancelled = false;
-    async function poll() {
-      try {
-        const res = await fetch("/api/messages/unread-count", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled && typeof data.count === "number") {
-          setUnread(data.count);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    poll();
-    pollRef.current = setInterval(poll, 20000);
-    return () => {
-      cancelled = true;
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [loggedIn]);
+  // Keep latest activePartner in a ref so the WS callback (which is
+  // set up ONCE) always sees the current value.
+  const activePartnerRef = useRef<Partner | null>(null);
+  activePartnerRef.current = activePartner;
+  const openRef = useRef<boolean>(open);
+  openRef.current = open;
 
-  // Load the conversations list when the dialog opens.
+  // ── Data fetchers (declared BEFORE the WS hook so the WS callback
+  //    closure can reference them) ─────────────────────────────────
+  const refreshUnread = useCallback(async () => {
+    try {
+      const res = await fetch("/api/messages/unread-count", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.count === "number") setUnread(data.count);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
     try {
@@ -137,7 +146,23 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
     }
   }, []);
 
-  // Load the thread with a specific partner.
+  // Refresh just the active thread (no loading state — used by the WS
+  // callback to append new messages live without flicker).
+  const refreshThread = useCallback(async (partner: Partner) => {
+    try {
+      const res = await fetch(`/api/messages/${partner.id}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setThread(data.messages || []);
+      // The GET endpoint marks partner→me messages as read, so the
+      // unread badge should now be 0 for this partner.
+      refreshUnread();
+    } catch {
+      /* ignore */
+    }
+  }, [refreshUnread]);
+
+  // Load the thread with a specific partner (full UI loading state).
   const loadThread = useCallback(async (partner: Partner) => {
     setLoadingThread(true);
     setThread([]);
@@ -150,18 +175,53 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
       // After loading the thread, the server marked partner→me messages as
       // read — refresh the unread count and the conversations list so the
       // unread dot disappears for this partner.
-      const unreadRes = await fetch("/api/messages/unread-count", { cache: "no-store" });
-      if (unreadRes.ok) {
-        const u = await unreadRes.json();
-        if (typeof u.count === "number") setUnread(u.count);
-      }
+      refreshUnread();
       loadConversations();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load thread");
     } finally {
       setLoadingThread(false);
     }
-  }, [loadConversations]);
+  }, [loadConversations, refreshUnread]);
+
+  // ── WebSocket subscription for live DM delivery ────────────────
+  // The hook connects to the chat-service on port 3004, joins our
+  // personal room (`chat:user:<userId>`), and calls onDmReceived
+  // whenever someone else sends us a DM. This replaces the old 5s
+  // polling loop for the active thread, and complements the 20s
+  // unread-count polling loop (which is kept as a fallback for when
+  // the WS is disconnected).
+  const { relayDmSent } = useChatSocket({
+    userId,
+    displayName: userName,
+    role: userRole,
+    activeRoomId: null, // DMs don't use room-based presence
+    onDmReceived: () => {
+      refreshUnread();
+      if (openRef.current) {
+        loadConversations();
+        const partner = activePartnerRef.current;
+        if (partner) {
+          refreshThread(partner);
+        }
+      }
+    },
+    onUnreadCountChange: () => {
+      refreshUnread();
+    },
+  });
+
+  // Fallback: poll for unread count every 20s (in case the WS is
+  // disconnected or the browser tab was backgrounded and missed an
+  // event). The WS handles the live case; this is a safety net.
+  useEffect(() => {
+    if (!loggedIn) return;
+    refreshUnread();
+    pollRef.current = setInterval(refreshUnread, 20000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [loggedIn, refreshUnread]);
 
   // When the dialog opens, load the conversation list.
   useEffect(() => {
@@ -172,29 +232,10 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
     }
   }, [open, loggedIn, loadConversations]);
 
-  // When the dialog is open AND we're viewing a thread, poll the thread
-  // for new incoming messages (so live replies appear without refreshing).
-  useEffect(() => {
-    if (!open || !activePartner) return;
-    let cancelled = false;
-    async function pollThread() {
-      try {
-        const res = await fetch(`/api/messages/${activePartner!.id}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) {
-          setThread(data.messages || []);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    const t = setInterval(pollThread, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, [open, activePartner]);
+  // NOTE: We previously polled the active thread every 5s. That's now
+  // handled by the WebSocket `chat:dm-received` event — when the
+  // partner sends a new DM, the WS pushes it to us and we call
+  // refreshThread() in the onDmReceived callback above.
 
   // Scroll to bottom of thread when new messages arrive.
   useEffect(() => {
@@ -236,6 +277,12 @@ export function InboxButton({ initialUnreadCount, loggedIn }: Props) {
       setThread((t) => t.map((m) => (m.id === tempId ? data.message : m)));
       // Refresh conversations list so the latest message shows up.
       loadConversations();
+      // Tell the chat-service to push a `chat:dm-received` event to
+      // the recipient's personal room so their InboxButton updates
+      // live (instead of waiting up to 20s for the next poll).
+      if (data.message) {
+        relayDmSent(activePartner.id, data.message as unknown as ChatMessagePayload);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to send");
       // Remove the optimistic message on failure.

@@ -202,6 +202,15 @@ const CAN_MAP: Record<string, Role> = {
   // Per-event scope for CO_HOST is enforced at the route layer via
   // isEventCoHost() when the route knows the eventId.
   "quiz.host": ROLES.CO_HOST,
+  // ── Community chat ─────────────────────────────────────────────
+  // Anyone signed in (rank MEMBER+) can participate in chat rooms
+  // they're a member of (event rooms auto-add RSVP'd members; DMs
+  // are open between any two members).
+  // "chat.moderate" lets admins delete others' messages / kick from
+  // rooms. Room creation is currently automatic (event rooms) —
+  // manual group rooms will gate on "chat.createRoom".
+  "chat.moderate": ROLES.ADMIN,
+  "chat.createRoom": ROLES.ADMIN,
 };
 
 /**

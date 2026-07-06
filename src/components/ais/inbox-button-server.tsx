@@ -14,7 +14,7 @@ export async function InboxButtonServer() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true },
+    select: { id: true, name: true, role: true },
   });
   if (!me) return null;
 
@@ -22,5 +22,13 @@ export async function InboxButtonServer() {
     where: { recipientId: me.id, readAt: null },
   });
 
-  return <InboxButton initialUnreadCount={unreadCount} loggedIn />;
+  return (
+    <InboxButton
+      initialUnreadCount={unreadCount}
+      loggedIn
+      userId={me.id}
+      userName={me.name}
+      userRole={me.role}
+    />
+  );
 }

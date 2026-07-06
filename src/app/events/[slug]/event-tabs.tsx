@@ -11,6 +11,7 @@ import { AdminAgendaTab } from "./tabs/admin-agenda-tab";
 import { ManageEventTab } from "./tabs/manage-event-tab";
 import { EventPrepTab } from "./tabs/event-prep-tab";
 import { QuizTab } from "./tabs/quiz-tab";
+import { ChatTab } from "./tabs/chat-tab";
 import type { CoHost, EventSpeaker } from "@/components/admin/event-editor";
 import type { Rsvp } from "@/components/events/rsvp-check-in-card";
 
@@ -197,6 +198,16 @@ export function EventTabs({
             🧠 Quiz
           </TabsTrigger>
         )}
+        {/* Event chat — available to any signed-in user. The ChatTab
+            component calls /api/chat/events/[id]/room which returns 403
+            if the user isn't RSVP'd / co-host / speaker — in that case
+            it shows a friendly "no access" message instead of the chat. */}
+        <TabsTrigger
+          value="chat"
+          className="data-[state=active]:bg-[#FF005A] data-[state=active]:text-white"
+        >
+          💬 Chat
+        </TabsTrigger>
         {canViewEventPrep && (
           <TabsTrigger
             value="event-prep"
@@ -249,6 +260,9 @@ export function EventTabs({
           />
         </TabsContent>
       )}
+      <TabsContent value="chat" className="mt-6">
+        <ChatTab eventId={event.id} eventTitle={event.title} me={me} />
+      </TabsContent>
       {canViewEventPrep && (
         <TabsContent value="event-prep" className="mt-6">
           <EventPrepTab
