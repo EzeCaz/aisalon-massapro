@@ -751,3 +751,109 @@ Stage Summary:
   https://aisalon.massapro.com/. To see the changes, log in as admin
   (eze@massapro.com) and open /events/ai-salon-human → Speakers &
   Agenda tab.
+
+---
+Task ID: v5-final-backup + v6-start
+Agent: main
+Task: User said: "Create a backup for this version and close the series,
+  starting a new V6 series. Also backup in drive."
+
+Work Log:
+- Reviewed existing version/backup structure:
+  * Git tags v5.7, v5.7.1, v5.9, v5.10, v5.11, v5.12, v5.13, v5.14 exist
+    (latest v5.14 at commit eadfe2d, 68 commits ago).
+  * Existing backup tarballs at /home/sync/ (the project's off-site drive):
+    - repo.tar (375 MB, full repo state from Jul 4)
+    - aisalon-massapro-v5.16-backup.tar.gz (6.4 MB, source-only from Jun 30)
+  * In-repo backups/MANIFEST.md was missing (existed in old repo.tar but
+    never made it to current repo).
+  * Release log at core/releases/release-log.md had entries up to
+    2026-06-22 (admin tab bar persistence).
+- Confirmed clean working tree at commit 40d8a0c (V5 series HEAD after
+  the agenda-compact-deploy).
+- Wrote scripts/make-v5-final-backup.sh — a reusable backup script that:
+  * Stages src/, prisma/, scripts/, public/, core/, docs/, preview/,
+    examples/, mini-services/, .env.example, vercel.json, package.json,
+    package-lock.json, bun.lock, tsconfig.json, tsconfig.tsbuildinfo,
+    tailwind.config.ts, postcss.config.mjs, components.json,
+    next.config.ts, next-env.d.ts, README.md, worklog.md, Caddyfile
+    into a temp dir under a top-level version-named directory.
+  * Writes a MANIFEST.md with version, date, commit SHA, live URLs,
+    V5 series summary, restore instructions, known issues.
+  * tars the staged dir, computes sha256 + size + file count, writes
+    a .sha256 sidecar file.
+  * Output: download/backups/aisalon-massapro-v5-final-<date>-<sha>.tar.gz
+- Ran the script. Result:
+  * Path: download/backups/aisalon-massapro-v5-final-20260706-1208UTC-40d8a0c.tar.gz
+  * Size: 8.7 MB
+  * SHA-256: b163cfdde6886cb54ba0b072bfac0138dae7bf89f82fd452d85562fec261f2c2
+  * Files: 790
+  * Verified extractable + contains MANIFEST.md, agenda-tab.tsx,
+    photos-tab.tsx, prisma/schema.prisma, etc.
+- Created git tag v5.15 (annotated) at commit 40d8a0c with a detailed
+  message covering the full V5 series (v5.7 → v5.15) and pointing at
+  the backup tarball + sha256. Pushed to GitHub.
+- Copied the tarball + .sha256 sidecar to /home/sync/ (the off-site
+  drive). Verified sha256 matches the original.
+- Created /home/sync/BACKUPS-MANIFEST.md (drive-side backup ledger)
+  with the v5-final entry: version, date, commit, tag, tarball name,
+  size, sha256, file count, live URLs, trigger, restore instructions,
+  verification command. Future series-final backups will append here.
+- Created in-repo download/backups/MANIFEST.md with the same content
+  (was missing — only existed in the old repo.tar).
+- Appended to core/releases/release-log.md with the v5.15 series-final
+  entry: task, env, commit, tag, URLs, build status PASSED, prod verify
+  PASSED (homepage 307, /events 200, /login 200, /privacy 200,
+  /events/ai-salon-human 307 auth-redirect), summary listing the 68
+  commits since v5.14, and a "V6 starts here" footer.
+- Committed the release log update as release(v5.15): V5 series final
+  — closes V5, V6 begins (commit cfd9c38).
+- Created V6-START.md at repo root — a marker doc listing what V6
+  inherits from V5-final (auth, events, agenda, photos, email
+  orchestrator, check-in, slideshow, admin panel, brand), V6 scope
+  (TBD), known issues inherited (110 TS errors, email cron paused,
+  new m:n join table live), and backup locations.
+- Committed V6-START.md as docs(v6): V6 series start marker
+  (commit 1bbfbfb). Pushed both commits to GitHub.
+- Vercel auto-deployed commit 1bbfbfb. Verified live:
+  * https://aisalon.massapro.com/ → 307 (auth redirect), server: Vercel
+  * https://aisalon.massapro.com/events → 200
+  * https://aisalon.massapro.com/login → 200
+  * https://aisalon.massapro.com/privacy → 200
+
+Stage Summary:
+- V5 series is CLOSED. Git tag v5.15 (at commit 40d8a0c) is the
+  series-final reference, pushed to GitHub. The full V5 feature set
+  is live in production at https://aisalon.massapro.com.
+- Backup tarball (8.7 MB, 790 files, sha256 b163cfdd…) lives in:
+  * /home/z/my-project/download/backups/ (in-repo, gitignored)
+  * /home/sync/ (off-site drive)
+  Both copies verified to have matching sha256.
+- Backup manifests created at:
+  * /home/z/my-project/download/backups/MANIFEST.md (in-repo)
+  * /home/sync/BACKUPS-MANIFEST.md (drive)
+- Release log entry appended at core/releases/release-log.md.
+- V6 series has STARTED. Marker commit 1bbfbfb (V6-START.md) is the
+  V6 baseline. Live on Vercel. V6 scope is TBD — will be shaped by
+  user requests going forward.
+- The backup script scripts/make-v5-final-backup.sh is reusable —
+  copy it to scripts/make-v6-final-backup.sh and adjust the version
+  string when V6 is ready to close.
+
+Files modified/created this session:
+- scripts/make-v5-final-backup.sh (new, reusable backup script)
+- download/backups/aisalon-massapro-v5-final-20260706-1208UTC-40d8a0c.tar.gz (new, 8.7 MB)
+- download/backups/aisalon-massapro-v5-final-20260706-1208UTC-40d8a0c.tar.gz.sha256 (new)
+- download/backups/MANIFEST.md (new — was missing from current repo)
+- /home/sync/aisalon-massapro-v5-final-20260706-1208UTC-40d8a0c.tar.gz (new, drive copy)
+- /home/sync/aisalon-massapro-v5-final-20260706-1208UTC-40d8a0c.tar.gz.sha256 (new, drive copy)
+- /home/sync/BACKUPS-MANIFEST.md (new, drive-side ledger)
+- core/releases/release-log.md (appended v5.15 entry)
+- V6-START.md (new, V6 series marker)
+- worklog.md (this entry)
+
+Git state:
+- Tags: v5.15 (new, pushed to GitHub)
+- Commits pushed: cfd9c38 (release log), 1bbfbfb (V6-START.md)
+- HEAD: 1bbfbfb on main, pushed to origin/main
+- Vercel: auto-deployed 1bbfbfb, live at https://aisalon.massapro.com
