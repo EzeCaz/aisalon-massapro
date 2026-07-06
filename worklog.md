@@ -669,3 +669,85 @@ Stage Summary:
 - Files modified this session: none (this was a build + deploy of
   already-modified source).
 - Artefacts: server PID 2144, server.log updated, BUILD_ID refreshed.
+
+---
+Task ID: agenda-compact-deploy
+Agent: main
+Task: User pre-deploy request: "make sure the door opening and the break
+  box is 50% the height that currently is, and both without image related.
+  Then deploy to github and vercel for the live version."
+
+Work Log:
+- Queried DB: confirmed "Door opening" is type=NETWORKING (no speaker,
+  no mainImage) and "Break" is type=BREAK (no speaker, no mainImage) on
+  the ai-salon-human event.
+- Confirmed the existing isBreak compact-strip treatment in
+  agenda-tab.tsx only covered BREAK + FAST_PITCH — NETWORKING items
+  like "Door opening" got the full 2-column card with the right-column
+  gradient placeholder (visually "image related" even with no actual
+  image), plus min-h-[280px] making the card ~280px tall.
+- Also confirmed agendaItemHasAssets() would still apply the per-item
+  mainImage fallback for BREAK/FAST_PITCH/NETWORKING items if an admin
+  ever set one — needed to be suppressed too.
+
+Changes (1 file, src/app/events/[slug]/tabs/agenda-tab.tsx):
+- agendaItemHasAssets: added isNonContentItem check
+  (BREAK/FAST_PITCH/NETWORKING && !speaker); skip the mainImage fallback
+  when it's true. Documented why: these slots are "without image related"
+  per user — even an admin-set mainImage would be visual noise.
+- AgendaTab.isBreak: extended to also include NETWORKING type (was only
+  BREAK + FAST_PITCH). Updated the explanatory comment.
+- Compact card height reduced ~50%:
+  * padding: gap-2 p-4 lg:p-5 → gap-0.5 p-2 lg:p-2.5
+  * time font: text-lg → text-sm
+  * end-time font: text-sm → text-xs
+  * title font: text-lg → text-sm
+  * description: text-base leading-relaxed → text-xs leading-snug
+    line-clamp-1 (single line for compact items)
+  * icon container: h-9 w-9 → h-6 w-6 (was always h-9 w-9)
+  * gap between time-icon row children: gap-3 → gap-2
+- Resulting compact card height: ~64-82px (was ~138-280px depending
+  on whether the item was BREAK (already compact, ~138px) or
+  NETWORKING like "Door opening" (full 2-col, ~280px)). Both items
+  are now ~50% their previous compact-strip height, and both have
+  no image column AND no mainImage fallback.
+
+Build + deploy:
+- Ran `npm run build` locally — succeeded, 33.8s compile, 7.9s static
+  generation, no errors.
+- Killed old local server (PID 2144) and started a fresh one (PID 2952)
+  so the preview-chat-...space-z.ai URL also reflects the new build.
+- Committed change as fix(agenda): compact door-opening + break boxes
+  to ~50% height, no image (commit d200db6).
+- `git push origin main` — pushed 4 commits (3 prior + 1 new) to
+  https://github.com/EzeCaz/aisalon-massapro.git. Push succeeded.
+- Vercel auto-deployed via the GitHub integration (no VERCEL_TOKEN
+  needed; the integration is configured per the v3.0-plan-execution
+  CI doc). Verified by:
+  * Waited ~3 minutes for the build to complete.
+  * Fetched https://aisalon-massapro.vercel.app/events/ai-salon-human
+    and extracted the list of chunks loaded on that page.
+  * For each candidate chunk, fetched the JS from Vercel and grepped
+    for the new code: chunk b8253934c7e8a5f2.js contains BOTH
+    "gap-0.5 p-2" (new compact classes) AND "Link photo to session"
+    (prior session's photo-tagging UI).
+  * Vercel's deployed chunk hashes match the local build's chunk
+    hashes exactly, confirming the same build is live.
+- Live URLs verified:
+  * https://aisalon-massapro.vercel.app/ — HTTP 307 (auth redirect), server: Vercel
+  * https://aisalon.massapro.com/ — HTTP 307 (auth redirect), server: Vercel
+  * Both respond with the freshly-built chunks.
+
+Stage Summary:
+- "Door opening" (NETWORKING) and "Break" (BREAK) agenda items on
+  /events/ai-salon-human are now both rendered as compact single-column
+  strips, ~50% the height of their previous compact-strip form, with no
+  image column AND no mainImage fallback. The Door opening card in
+  particular shrank from ~280px (full 2-col with gradient placeholder)
+  to ~70px (compact strip).
+- All 4 pending commits are now pushed to GitHub main.
+- Vercel has auto-deployed the latest main to production. The new
+  bundle is live on both https://aisalon-massapro.vercel.app/ and
+  https://aisalon.massapro.com/. To see the changes, log in as admin
+  (eze@massapro.com) and open /events/ai-salon-human → Speakers &
+  Agenda tab.
