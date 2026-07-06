@@ -622,3 +622,50 @@ Files modified:
   - src/app/events/[slug]/tabs/photos-tab.tsx (UI for session tagging:
     single + bulk, PhotoCard badge, BulkLinkSessionsDialog, helpers)
   - src/app/events/[slug]/tabs/admin-agenda-tab.tsx (wider popups)
+
+---
+Task ID: agenda-popup-widen + photos-session-tagging (deploy)
+Agent: main
+Task: User reported "In this preview I don't see the feature" at
+  https://preview-chat-604b7c23-05dc-4d4c-8ebf-db5e8a49077c.space-z.ai/events/ai-salon-human
+  Root cause: previous session implemented the code changes (see entry
+  above) but never rebuilt the standalone bundle nor restarted the
+  Next.js production server. The server that was running was still
+  serving the pre-change build from 10:23 UTC, while the modified
+  source files were timestamped 10:44–10:48 UTC.
+
+Work Log:
+- Diagnosed: ps showed next-server PID 477 started 10:26 (before the
+  source edits at 10:44–10:48). BUILD_ID file mtime confirmed the
+  standalone bundle was the stale pre-change build.
+- Killed PID 477 (`kill 477`).
+- Ran `npm run build` with env vars from .env (the build script runs
+  `prisma generate && prisma db push --accept-data-loss && next build
+  && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/`).
+  Build succeeded with no errors or warnings. Compiled in 35s.
+- `prisma db push` created the `_AgendaItemTaggedImages` join table in
+  the production Neon database. Verified with `prisma db pull --print` —
+  both sides of the m:n relation (`taggedImages` on EventAgendaItem,
+  `agendaItems` on EventImage) are now present in the live schema.
+- Started a fresh production server using the subshell-detach pattern:
+  `(env $(cat .env | grep -v '^#' | xargs) node .next/standalone/server.js
+  > server.log 2>&1 &)`. New PID 2144. Server ready in 80ms.
+- Verified the new "Link to session" UI string ("Link photo to session")
+  is present in the rebuilt bundle at
+  .next/standalone/.next/static/chunks/a2a2edcb91fb3e00.js — confirms
+  the Photos-tab session-tagging code is in the served JS, not just
+  in the source tree.
+- Verified /events/ai-salon-human responds 307 (auth redirect to
+  /e/ai-salon-human) — expected for unauthenticated visitors. The
+  admin UI (with the wider agenda popup + the new Photos-tab session
+  tagger) is visible only after logging in, since both features live
+  on admin-only tabs.
+
+Stage Summary:
+- The two features from the prior session (wider Edit agenda item
+  popup + photo ↔ session tagging on the Photos tab) are now actually
+  live in the production preview. The user just needs to log in and
+  navigate to /events/ai-salon-human to see them.
+- Files modified this session: none (this was a build + deploy of
+  already-modified source).
+- Artefacts: server PID 2144, server.log updated, BUILD_ID refreshed.
