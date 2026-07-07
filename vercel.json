@@ -5,6 +5,7 @@
   "installCommand": "bun install",
   "devCommand": "bun run dev",
   "crons": [
-    { "path": "/api/cron/email", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/email", "schedule": "0 9 * * *" },
+    { "path": "/api/email-orchestrator/run", "schedule": "*/15 * * * *" }
   ]
 }

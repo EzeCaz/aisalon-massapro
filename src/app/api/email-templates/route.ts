@@ -46,6 +46,14 @@ export async function GET(req: NextRequest) {
       subject: t.subject,
       htmlBody: t.htmlBody,
       stopIfNotOpenedHours: t.stopIfNotOpenedHours,
+      // Feature 1: no-code variant
+      noCodeSubject: t.noCodeSubject,
+      noCodeHtmlBody: t.noCodeHtmlBody,
+      // Feature 2: logo override
+      logoUrl: t.logoUrl,
+      // Feature 3: alt-subject re-send
+      altSubject: t.altSubject,
+      altNotOpenedHours: t.altNotOpenedHours,
       isActive: t.isActive,
       isDefault: t.isDefault,
       flowStepsCount: t._count.flowSteps,
@@ -65,6 +73,14 @@ export async function POST(req: NextRequest) {
     htmlBody?: string;
     stopIfNotOpenedHours?: number | null;
     stage?: number | null;
+    // Feature 1: no-code variant
+    noCodeSubject?: string | null;
+    noCodeHtmlBody?: string | null;
+    // Feature 2: logo override
+    logoUrl?: string | null;
+    // Feature 3: alt-subject re-send
+    altSubject?: string | null;
+    altNotOpenedHours?: number | null;
   };
   try {
     body = await req.json();
@@ -87,6 +103,11 @@ export async function POST(req: NextRequest) {
         subject: body.subject,
         htmlBody: body.htmlBody,
         stopIfNotOpenedHours: body.stopIfNotOpenedHours ?? null,
+        noCodeSubject: body.noCodeSubject?.trim() || null,
+        noCodeHtmlBody: body.noCodeHtmlBody?.trim() || null,
+        logoUrl: body.logoUrl?.trim() || null,
+        altSubject: body.altSubject?.trim() || null,
+        altNotOpenedHours: body.altNotOpenedHours ?? null,
         stage,
         isActive: true,
         isDefault: false,

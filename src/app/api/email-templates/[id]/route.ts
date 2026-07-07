@@ -37,6 +37,14 @@ export async function PATCH(
     htmlBody?: string;
     stopIfNotOpenedHours?: number | null;
     isActive?: boolean;
+    // Feature 1: no-code variant
+    noCodeSubject?: string | null;
+    noCodeHtmlBody?: string | null;
+    // Feature 2: logo override
+    logoUrl?: string | null;
+    // Feature 3: alt-subject re-send
+    altSubject?: string | null;
+    altNotOpenedHours?: number | null;
   };
   try {
     body = await req.json();
@@ -66,6 +74,24 @@ export async function PATCH(
   }
   if (body.isActive !== undefined) {
     updateData.isActive = body.isActive;
+  }
+  // Feature 1: no-code variant (null is allowed to disable)
+  if (body.noCodeSubject !== undefined) {
+    updateData.noCodeSubject = body.noCodeSubject?.trim() || null;
+  }
+  if (body.noCodeHtmlBody !== undefined) {
+    updateData.noCodeHtmlBody = body.noCodeHtmlBody?.trim() || null;
+  }
+  // Feature 2: logo override
+  if (body.logoUrl !== undefined) {
+    updateData.logoUrl = body.logoUrl?.trim() || null;
+  }
+  // Feature 3: alt-subject re-send
+  if (body.altSubject !== undefined) {
+    updateData.altSubject = body.altSubject?.trim() || null;
+  }
+  if (body.altNotOpenedHours !== undefined) {
+    updateData.altNotOpenedHours = body.altNotOpenedHours;
   }
 
   try {

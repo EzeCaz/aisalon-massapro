@@ -17,7 +17,11 @@
  */
 
 import { db } from "@/lib/db";
-import { DEFAULT_TEMPLATES } from "./templates";
+import {
+  DEFAULT_TEMPLATES,
+  DEFAULT_NO_CODE_TEMPLATES,
+  DEFAULT_ALT_SUBJECTS,
+} from "./templates";
 import { STAGES } from "./stages";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,10 +65,30 @@ export async function runSeed(): Promise<SeedResult> {
       where: { stage: stageCfg.stage },
     });
     if (existing) {
+      // Backfill the new feature fields on existing rows (idempotent — only
+      // sets them if currently null). This lets us roll out the no-code,
+      // alt-subject, and logo features without dropping + re-creating the
+      // seeded templates.
+      const noCode = DEFAULT_NO_CODE_TEMPLATES[stageCfg.stage];
+      const alt = DEFAULT_ALT_SUBJECTS[stageCfg.stage];
+      const patch: Record<string, unknown> = {};
+      if (!existing.noCodeSubject && noCode) patch.noCodeSubject = noCode.subject;
+      if (!existing.noCodeHtmlBody && noCode)
+        patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
+      if (!existing.altSubject && alt) patch.altSubject = alt.altSubject;
+      if (!existing.altNotOpenedHours && alt) patch.altNotOpenedHours = alt.altNotOpenedHours;
+      if (Object.keys(patch).length > 0) {
+        await db.emailStageTemplate.update({
+          where: { id: existing.id },
+          data: patch,
+        });
+      }
       result.templates.existing++;
       continue;
     }
     const def = DEFAULT_TEMPLATES[stageCfg.stage];
+    const noCode = DEFAULT_NO_CODE_TEMPLATES[stageCfg.stage];
+    const alt = DEFAULT_ALT_SUBJECTS[stageCfg.stage];
     await db.emailStageTemplate.create({
       data: {
         stage: stageCfg.stage,
@@ -72,6 +96,14 @@ export async function runSeed(): Promise<SeedResult> {
         subject: def.subject,
         htmlBody: def.html,
         stopIfNotOpenedHours: stageCfg.stopIfNotOpenedHours,
+        // Feature 1: no-check-in-code variant body (only stages 3 & 4)
+        noCodeSubject: noCode?.subject ?? null,
+        noCodeHtmlBody: noCode
+          ? noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}")
+          : null,
+        // Feature 3: alt-subject re-send (all 5 stages)
+        altSubject: alt?.altSubject ?? null,
+        altNotOpenedHours: alt?.altNotOpenedHours ?? null,
         isActive: true,
         isDefault: true,
       },

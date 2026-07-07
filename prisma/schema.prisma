@@ -891,6 +891,15 @@ model EmailQueue {
   subjectVariant  String?
   /// Which audience this recipient belonged to (denormalized for reporting).
   audienceId      String?
+  /// True when this row is an alt-subject re-send of an earlier row (same
+  /// body, different subject). The original row's `subject` is preserved
+  /// on this row's `subject` snapshot — but `altOfEmailQueueId` points
+  /// back to the original. Used by the alt-subject re-send feature.
+  isAltResend     Boolean   @default(false)
+  altOfEmailQueueId String?
+  /// True when this row used the no-check-in-code body variant
+  /// (`EmailStageTemplate.noCodeHtmlBody`). Reporting flag.
+  usedNoCodeVariant Boolean @default(false)
   // --- failure ---
   errorMessage    String?
   attemptCount    Int       @default(0)
@@ -907,6 +916,7 @@ model EmailQueue {
   @@index([flowStepId])
   @@index([subjectVariant])
   @@index([audienceId])
+  @@index([isAltResend])
 }
 
 /// Admin-editable email templates. Originally tied 1:1 to the 5
@@ -932,6 +942,30 @@ model EmailStageTemplate {
   /// Marks the 5 seeded defaults — they cannot be deleted (only edited or
   /// deactivated). Set to false on duplicated / custom-created templates.
   isDefault   Boolean  @default(false)
+
+  // ─── Feature: Alternative subject line re-send ───────────────────────────
+  // If set: when this template's primary send isn't OPENED within
+  // `altNotOpenedHours` hours, the worker creates a new EmailQueue row
+  // (isAltResend=true) with the SAME body but `altSubject`. The recipient
+  // sees a fresh subject line in their inbox — same content, new hook.
+  altSubject          String?
+  altNotOpenedHours   Int?
+
+  // ─── Feature: No-check-in-code variant body ──────────────────────────────
+  // If set AND the RSVP has no checkInCode (checkInCode IS NULL), the worker
+  // sends this body instead of `htmlBody`. Used for stages 3 (Final Prep) and
+  // 4 (Day-Of) where the code is normally displayed. The variant should
+  // prompt the user to open the event page and generate their personal,
+  // non-transferrable code.
+  noCodeHtmlBody      String?
+  noCodeSubject       String?
+
+  // ─── Feature: Brand logo override per template ───────────────────────────
+  // If set: this URL is used as the top-right logo. If null, falls back to
+  // the EMAIL_BRAND_LOGO_URL env var, then to the hardcoded default
+  // (the small AI Salon mark hosted on Vercel Blob).
+  logoUrl             String?
+
   updatedAt   DateTime @updatedAt
   updatedBy   String?
   // --- back-relations ---

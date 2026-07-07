@@ -38,6 +38,7 @@ import {
   buildContext,
   renderTemplate,
   DEFAULT_TEMPLATES,
+  buildLogoBlock,
 } from "./templates";
 import { sendEmail } from "./sender";
 
@@ -47,6 +48,7 @@ export type WorkerResult = {
   skipped: number; // rows skipped (stop-awareness or checked-in)
   failed: number; // rows that failed to send
   processed: number; // total PENDING rows examined
+  altResent: number; // alt-subject re-sends sent this run
   errors: string[]; // error messages (capped at 20)
 };
 
@@ -59,6 +61,7 @@ export async function runWorker(): Promise<WorkerResult> {
     skipped: 0,
     failed: 0,
     processed: 0,
+    altResent: 0,
     errors: [],
   };
 
@@ -67,6 +70,13 @@ export async function runWorker(): Promise<WorkerResult> {
 
   // ── Phase 2: process due PENDING rows ───────────────────────────────────
   await processDuePending(result);
+
+  // ── Phase 3: alt-subject re-sends ───────────────────────────────────────
+  // For each SENT row whose template has an altSubject + altNotOpenedHours,
+  // if the row has NOT been opened and we're past the alt-resend window,
+  // create a new EmailQueue row (isAltResend=true) with the alt subject and
+  // the SAME rendered body, then send it.
+  await processAltResends(result);
 
   return result;
 }
@@ -255,12 +265,19 @@ async function sendStageEmail(
   const tplRow = await db.emailStageTemplate.findUnique({
     where: { stage: row.stage },
   });
-  const tpl =
-    tplRow ?? null;
-  const subject =
-    tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`;
-  const htmlTemplate =
-    tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>";
+  const tpl = tplRow ?? null;
+
+  // ─── Feature 1: pick no-code variant body if RSVP has no checkInCode ───
+  // Only applies when the template defines a noCodeHtmlBody. Used by stages
+  // 3 (Final Prep) and 4 (Day-Of). The variant tells the user to generate
+  // their personal, non-transferrable code on the event page.
+  const hasNoCode = !row.rsvp.checkInCode && !!tpl?.noCodeHtmlBody;
+  const subject = hasNoCode
+    ? (tpl?.noCodeSubject ?? tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`)
+    : (tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`);
+  const htmlTemplate = hasNoCode
+    ? (tpl?.noCodeHtmlBody ?? tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>")
+    : (tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>");
 
   // Load speakers + agenda for the event.
   const [speakers, agenda] = await Promise.all([
@@ -285,7 +302,9 @@ async function sendStageEmail(
     queueId: row.id,
   });
 
-  const renderedHtml = renderTemplate(htmlTemplate, ctx);
+  // ─── Feature 2: inject brand logo (top-right, 24px) at render time ─────
+  const logoHtml = buildLogoBlock(tpl?.logoUrl);
+  const renderedHtml = renderTemplate(htmlTemplate, ctx, { logoHtml });
   const renderedSubject = subject.replace(/{{eventTitle}}/g, ctx.eventTitle);
 
   const sendResult = await sendEmail({
@@ -309,10 +328,159 @@ async function sendStageEmail(
       htmlBody: renderedHtml,
       attemptCount: { increment: 1 },
       errorMessage: null,
+      usedNoCodeVariant: hasNoCode,
     },
   });
 
   return { ok: true };
+}
+
+// ----------------------------------------------------------------------------
+// Phase 3: alt-subject re-sends
+// ----------------------------------------------------------------------------
+
+/**
+ * For each SENT (non-alt) EmailQueue row whose template defines an altSubject
+ * + altNotOpenedHours, if the row has NOT been opened and we're past the
+ * alt-resend window, enqueue + send a new row with the alt subject.
+ *
+ * Idempotency: we look for an existing alt row (isAltResend=true, same
+ * rsvpId+stage) before creating one. Each primary send gets at most ONE alt
+ * resend. The alt row reuses the same rendered htmlBody (snapshot) but
+ * re-renders the subject with the alt template.
+ */
+async function processAltResends(result: WorkerResult): Promise<void> {
+  const now = new Date();
+
+  // Find all SENT primary rows (isAltResend=false) that have an altSubject
+  // defined on their template, are NOT opened, and whose alt-resend window
+  // has elapsed.
+  const candidates = await db.emailQueue.findMany({
+    where: {
+      status: "SENT",
+      isAltResend: false,
+      openedAt: null,
+      sentAt: { not: null },
+      // stage-based orchestrator rows only (flowStepId IS NULL)
+      flowStepId: null,
+    },
+    include: {
+      rsvp: {
+        include: {
+          event: { select: { title: true, startsAt: true, venue: true, address: true, slug: true } },
+        },
+      },
+    },
+    take: 100,
+  });
+
+  for (const row of candidates) {
+    try {
+      const tpl = await db.emailStageTemplate.findUnique({
+        where: { stage: row.stage },
+      });
+      if (!tpl?.altSubject || !tpl.altNotOpenedHours) continue;
+
+      // Has the alt-resend window elapsed?
+      if (!row.sentAt) continue;
+      const altFireAt = new Date(
+        row.sentAt.getTime() + tpl.altNotOpenedHours * 60 * 60 * 1000,
+      );
+      if (altFireAt > now) continue;
+
+      // Idempotency: already re-sent for this rsvpId+stage?
+      const existingAlt = await db.emailQueue.findFirst({
+        where: {
+          rsvpId: row.rsvpId,
+          stage: row.stage,
+          isAltResend: true,
+        },
+        select: { id: true },
+      });
+      if (existingAlt) continue;
+
+      // Build the alt row. Re-render the body with the alt row's queue id so
+      // the open pixel + click redirects point to the alt row (independent
+      // tracking — opens on the alt send are tracked separately from the
+      // original). Same body template, just the subject line changes.
+      const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+
+      // Create the alt row first (PENDING), then render + send using its id.
+      const altRow = await db.emailQueue.create({
+        data: {
+          rsvpId: row.rsvpId,
+          eventId: row.eventId,
+          userId: row.userId,
+          email: row.email,
+          stage: row.stage,
+          status: "PENDING",
+          scheduledFor: now,
+          isAltResend: true,
+          altOfEmailQueueId: row.id,
+        },
+      });
+
+      const [speakers, agenda] = await Promise.all([
+        db.speaker.findMany({
+          where: { eventId: row.eventId },
+          select: { name: true },
+        }),
+        db.eventAgendaItem.findMany({
+          where: { eventId: row.eventId },
+          orderBy: { startsAt: "asc" },
+          select: { title: true, startsAt: true },
+        }),
+      ]);
+      const ctx = buildContext({
+        event: row.rsvp.event,
+        rsvp: row.rsvp,
+        speakers,
+        agenda,
+        baseUrl,
+        queueId: altRow.id,
+      });
+      const logoHtml = buildLogoBlock(tpl.logoUrl);
+      const altRenderedHtml = renderTemplate(tpl.htmlBody, ctx, { logoHtml });
+      const altRenderedSubject = tpl.altSubject
+        .replace(/{{eventTitle}}/g, ctx.eventTitle)
+        .replace(/{{firstName}}/g, ctx.firstName)
+        .replace(/{{eventDate}}/g, ctx.eventDate)
+        .replace(/{{eventVenue}}/g, ctx.eventVenue);
+
+      const sendResult = await sendEmail({
+        to: row.email,
+        subject: altRenderedSubject,
+        html: altRenderedHtml,
+        toName: row.rsvp.name || undefined,
+      });
+
+      if (sendResult.ok) {
+        await db.emailQueue.update({
+          where: { id: altRow.id },
+          data: {
+            status: "SENT",
+            sentAt: new Date(),
+            subject: altRenderedSubject,
+            htmlBody: altRenderedHtml,
+            subjectVariant: "ALT",
+          },
+        });
+        result.altResent++;
+      } else {
+        await db.emailQueue.update({
+          where: { id: altRow.id },
+          data: {
+            status: "FAILED",
+            errorMessage: sendResult.error,
+            attemptCount: { increment: 1 },
+          },
+        });
+        result.failed++;
+      }
+    } catch (err) {
+      pushError(result, `alt-resend row ${row.id}: ${String(err)}`);
+    }
+  }
 }
 
 async function skipRowAndSubsequent(

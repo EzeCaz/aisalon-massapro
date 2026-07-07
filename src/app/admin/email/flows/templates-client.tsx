@@ -19,8 +19,9 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   Plus, Loader2, Trash2, Save, Eye, X, Copy, Pencil,
-  AlertCircle, FileText, BarChart3, Power,
+  AlertCircle, FileText, BarChart3, Power, Save as SaveIcon, FilePlus2,
 } from "lucide-react";
+import { RichTextEmailEditor } from "@/components/ais/rich-text-email-editor";
 
 // Full template type — fetched from /api/email-templates (not the
 // minimal FlowTemplate shape used by the flow builder).
@@ -31,6 +32,14 @@ type Template = {
   subject: string;
   htmlBody: string;
   stopIfNotOpenedHours: number | null;
+  // Feature 1: no-code variant
+  noCodeSubject?: string | null;
+  noCodeHtmlBody?: string | null;
+  // Feature 2: logo override
+  logoUrl?: string | null;
+  // Feature 3: alt-subject re-send
+  altSubject?: string | null;
+  altNotOpenedHours?: number | null;
   isActive: boolean;
   isDefault?: boolean;
   flowStepsCount: number;
@@ -330,22 +339,56 @@ function TemplateEditorDialog({
   const [subject, setSubject] = React.useState(template?.subject ?? "");
   const [htmlBody, setHtmlBody] = React.useState(template?.htmlBody ?? "");
   const [stopIfNotOpenedHours, setStopIfNotOpenedHours] = React.useState<number | null>(template?.stopIfNotOpenedHours ?? null);
+  // Feature 1: no-code variant
+  const [noCodeSubject, setNoCodeSubject] = React.useState<string>(template?.noCodeSubject ?? "");
+  const [noCodeHtmlBody, setNoCodeHtmlBody] = React.useState<string>(template?.noCodeHtmlBody ?? "");
+  const [showNoCodeEditor, setShowNoCodeEditor] = React.useState(false);
+  // Feature 2: logo override
+  const [logoUrl, setLogoUrl] = React.useState<string>(template?.logoUrl ?? "");
+  // Feature 3: alt-subject re-send
+  const [altSubject, setAltSubject] = React.useState<string>(template?.altSubject ?? "");
+  const [altNotOpenedHours, setAltNotOpenedHours] = React.useState<number | null>(template?.altNotOpenedHours ?? null);
+
   const [saving, setSaving] = React.useState(false);
+  const [savingAs, setSavingAs] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
 
-  const handleSave = async () => {
+  // Save (in-place) or Create (new template).
+  // `mode: "save"` → PATCH existing; `mode: "saveAs"` → POST new with prompted name.
+  const handleSave = async (mode: "save" | "saveAs") => {
     if (!name.trim() || !subject.trim() || !htmlBody.trim()) {
       toast.error("Name, subject, and HTML body are all required");
       return;
     }
-    setSaving(true);
+    const isSaveAs = mode === "saveAs";
+    if (isSaveAs) {
+      const newName = window.prompt("Save as new template — enter a name:", `${name} (copy)`);
+      if (!newName?.trim()) return;
+      setName(newName.trim());
+    }
+    const target = isSaveAs ? null : template;
+    const setting = isSaveAs ? setSavingAs : setSaving;
+    setting(true);
     try {
-      const isCreate = !template;
+      const isCreate = !target;
       const url = isCreate
         ? "/api/email-templates"
-        : `/api/email-templates/${template.id}`;
+        : `/api/email-templates/${target.id}`;
       const method = isCreate ? "POST" : "PATCH";
-      const body: Record<string, unknown> = { name, subject, htmlBody, stopIfNotOpenedHours };
+      const body: Record<string, unknown> = {
+        name: isSaveAs ? name : undefined,
+        subject,
+        htmlBody,
+        stopIfNotOpenedHours,
+        noCodeSubject: noCodeSubject.trim() || null,
+        noCodeHtmlBody: noCodeHtmlBody.trim() || null,
+        logoUrl: logoUrl.trim() || null,
+        altSubject: altSubject.trim() || null,
+        altNotOpenedHours,
+      };
+      // For PATCH we don't send `name: undefined` — but the API allows it
+      // (it skips undefined fields). For POST, name is required.
+      if (isCreate) body.name = name;
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -360,7 +403,7 @@ function TemplateEditorDialog({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save template");
     } finally {
-      setSaving(false);
+      setting(false);
     }
   };
 
@@ -376,13 +419,13 @@ function TemplateEditorDialog({
       .replace(/{{eventUrl}}/g, "https://aisalon.massapro.com/e/demo-day")
       .replace(/{{checkInCode}}/g, "ABCD-1234")
       .replace(/{{speakers}}/g, "Eze Schloss, Sarah Chen")
-      .replace(/{{agenda}}/g, "• 6:00 PM — Doors open\n• 6:30 PM — Welcome\n• 7:00 PM — Demos\n• 8:30 PM — Networking");
+      .replace(/{{agenda}}/g, "• 6:00 PM — Doors open<br/>• 6:30 PM — Welcome<br/>• 7:00 PM — Demos<br/>• 8:30 PM — Networking");
   }, [htmlBody]);
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[820px] flex-col bg-white shadow-2xl">
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[900px] max-w-[95vw] flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
           <h3 className="text-lg font-bold">
@@ -423,6 +466,84 @@ function TemplateEditorDialog({
             </p>
           </div>
 
+          {/* Feature 3: Alt-subject re-send */}
+          <div className="mb-4 rounded border border-purple-200 bg-purple-50/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold text-purple-900">
+                Alternative subject (re-send if not opened)
+              </label>
+              <span className="text-[10px] text-purple-700">Feature · re-engagement</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <input
+                  type="text"
+                  value={altSubject}
+                  onChange={(e) => setAltSubject(e.target.value)}
+                  placeholder="Don't miss {{eventTitle}} — opens in 10 days"
+                  className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs"
+                />
+              </div>
+              <div>
+                <input
+                  type="number"
+                  min={1}
+                  value={altNotOpenedHours ?? ""}
+                  onChange={(e) => setAltNotOpenedHours(e.target.value ? parseInt(e.target.value) : null)}
+                  placeholder="hours"
+                  className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs"
+                />
+              </div>
+            </div>
+            <p className="mt-1.5 text-[10px] text-purple-800">
+              If set: when this email isn&rsquo;t opened within <strong>N hours</strong> of being sent, the worker
+              re-sends the same body with this alternative subject line. One re-send per recipient per stage.
+            </p>
+          </div>
+
+          {/* Feature 1: No-check-in-code variant */}
+          <div className="mb-4 rounded border border-amber-200 bg-amber-50/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold text-amber-900">
+                No check-in code variant (stages 3 &amp; 4)
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowNoCodeEditor((v) => !v)}
+                className="rounded border border-amber-300 px-2 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                {showNoCodeEditor ? "Hide" : "Edit"} variant
+              </button>
+            </div>
+            <input
+              type="text"
+              value={noCodeSubject}
+              onChange={(e) => setNoCodeSubject(e.target.value)}
+              placeholder="Alt subject when user has no code (e.g. Action needed: generate your check-in code)"
+              className="mb-2 w-full rounded border border-neutral-300 px-2 py-1.5 text-xs"
+            />
+            {showNoCodeEditor && (
+              <div className="mt-2">
+                <RichTextEmailEditor
+                  value={noCodeHtmlBody}
+                  onChange={setNoCodeHtmlBody}
+                  height={300}
+                />
+                <p className="mt-1 text-[10px] text-amber-800">
+                  Used when <code>rsvp.checkInCode IS NULL</code>. Should prompt the user to open the event page
+                  and tap &ldquo;I&rsquo;m here — Check in&rdquo;. The body should explain the code is personal &amp; non-transferrable.
+                </p>
+              </div>
+            )}
+            {!showNoCodeEditor && (
+              <p className="text-[10px] text-amber-800">
+                {noCodeHtmlBody
+                  ? `Variant body set (${noCodeHtmlBody.length} chars). Click "Edit variant" to modify.`
+                  : "No variant set — the standard body will be sent even when the user has no check-in code (the {{checkInCode}} token renders as empty)."}
+              </p>
+            )}
+          </div>
+
           <div className="mb-4 flex items-center gap-3">
             <label className="text-xs font-semibold text-neutral-700">Stop if not opened (hours)</label>
             <input
@@ -438,8 +559,26 @@ function TemplateEditorDialog({
             </span>
           </div>
 
+          {/* Feature 2: Logo override */}
+          <div className="mb-4 rounded border border-cyan-200 bg-cyan-50/40 p-3">
+            <label className="mb-1 block text-xs font-semibold text-cyan-900">
+              Brand logo URL (top-right, 24px tall) — leave empty to use the default
+            </label>
+            <input
+              type="text"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://... (defaults to the AI Salon mark on Vercel Blob)"
+              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs"
+            />
+            <p className="mt-1 text-[10px] text-cyan-800">
+              The logo is injected at the top-right of every email at render time. Override per-template here,
+              or set the <code>EMAIL_BRAND_LOGO_URL</code> env var to override globally.
+            </p>
+          </div>
+
           <div className="mb-3 flex items-center justify-between">
-            <label className="text-xs font-semibold text-neutral-700">HTML body</label>
+            <label className="text-xs font-semibold text-neutral-700">Email body (WYSIWYG)</label>
             <button
               onClick={() => setShowPreview((v) => !v)}
               className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
@@ -458,13 +597,7 @@ function TemplateEditorDialog({
               />
             </div>
           ) : (
-            <textarea
-              value={htmlBody}
-              onChange={(e) => setHtmlBody(e.target.value)}
-              rows={20}
-              className="w-full rounded border border-neutral-300 px-3 py-2 font-mono text-xs"
-              placeholder="<html>..."
-            />
+            <RichTextEmailEditor value={htmlBody} onChange={setHtmlBody} height={420} />
           )}
         </div>
 
@@ -476,12 +609,23 @@ function TemplateEditorDialog({
           >
             Cancel
           </button>
+          {/* Save As (new template) — visible always, prompts for new name */}
           <button
-            onClick={handleSave}
-            disabled={saving}
+            onClick={() => handleSave("saveAs")}
+            disabled={saving || savingAs}
+            className="inline-flex items-center gap-2 rounded border border-[#FF005A] px-3 py-1.5 text-sm font-semibold text-[#FF005A] hover:bg-[#FFF1F5] disabled:opacity-50"
+            title="Save a copy as a new template"
+          >
+            {savingAs ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus2 className="h-4 w-4" />}
+            Save as new
+          </button>
+          {/* Save (in-place if editing, Create if new) */}
+          <button
+            onClick={() => handleSave("save")}
+            disabled={saving || savingAs}
             className="inline-flex items-center gap-2 rounded bg-[#FF005A] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
           >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SaveIcon className="h-4 w-4" />}
             {template ? "Save changes" : "Create template"}
           </button>
         </div>

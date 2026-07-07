@@ -26,6 +26,40 @@
 import type { Event, EventRsvp, Speaker, EventAgendaItem } from "@prisma/client";
 
 // ----------------------------------------------------------------------------
+// Brand logo (top-right of every email)
+// ----------------------------------------------------------------------------
+
+/** Default brand logo URL — a small AI Salon mark hosted on Vercel Blob.
+ *  Override per-template via `EmailStageTemplate.logoUrl`, or globally via
+ *  the `EMAIL_BRAND_LOGO_URL` env var.
+ *
+ *  Spec: ~24px tall, transparent background, anchored top-right of the
+ *  560px-wide email body. Equivalent to a Plus Jakarta Sans 24px glyph. */
+export const DEFAULT_BRAND_LOGO_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png";
+
+/** Resolve the brand logo URL with the fallback chain:
+ *  per-template → env var → hardcoded default. */
+export function resolveLogoUrl(templateLogoUrl: string | null | undefined): string {
+  if (templateLogoUrl && templateLogoUrl.trim()) return templateLogoUrl.trim();
+  const env = process.env.EMAIL_BRAND_LOGO_URL;
+  if (env && env.trim()) return env.trim();
+  return DEFAULT_BRAND_LOGO_URL;
+}
+
+/** Build the HTML block for the brand-logo <img> tag, anchored top-right.
+ *  Returns an empty string if the resolved URL is falsy (which only happens
+ *  if someone explicitly sets `EMAIL_BRAND_LOGO_URL=""` and the per-template
+ *  override is also empty). */
+export function buildLogoBlock(templateLogoUrl: string | null | undefined): string {
+  const url = resolveLogoUrl(templateLogoUrl);
+  if (!url) return "";
+  // 24px tall — visually equivalent to Plus Jakarta Sans 24px line-height.
+  // Floated right with a small margin so body text wraps around it cleanly.
+  return `<img src="${url}" alt="AI Salon" width="120" height="24" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:120px;height:24px;max-height:24px;"/>`;
+}
+
+// ----------------------------------------------------------------------------
 // Template tokens
 // ----------------------------------------------------------------------------
 
@@ -104,8 +138,12 @@ function formatTime(d: Date): string {
 // Template rendering
 // ----------------------------------------------------------------------------
 
-/** Replace {{tokens}} in a template body and inject the open pixel. */
-export function renderTemplate(html: string, ctx: TemplateContext): string {
+/** Replace {{tokens}} in a template body and inject the open pixel + brand logo. */
+export function renderTemplate(
+  html: string,
+  ctx: TemplateContext,
+  opts?: { logoHtml?: string },
+): string {
   let out = html
     // {{name}} and {{firstName}} are aliases — both resolve to the same value.
     .replace(/{{firstName}}/g, escapeHtml(ctx.firstName))
@@ -118,6 +156,24 @@ export function renderTemplate(html: string, ctx: TemplateContext): string {
     .replace(/{{checkInCode}}/g, escapeHtml(ctx.checkInCode))
     .replace(/{{speakers}}/g, escapeHtml(ctx.speakers))
     .replace(/{{agenda}}/g, escapeHtml(ctx.agenda).replace(/\n/g, "<br/>"));
+
+  // Inject the brand logo immediately after the opening <body> tag (or after
+  // the first <div> if no <body>). The logo floats right; the email's first
+  // heading wraps around it. We only inject if the template hasn't already
+  // placed a logo manually (look for our marker `data-brand-logo`).
+  if (opts?.logoHtml && !/data-brand-logo/.test(out)) {
+    if (/<div[^>]*max-width:560px[^>]*>/i.test(out)) {
+      // The SHELL wrapper uses a 560px inner div — inject right after it.
+      out = out.replace(
+        /(<div[^>]*max-width:560px[^>]*>)/i,
+        `$1${opts.logoHtml}`,
+      );
+    } else if (/<body[^>]*>/i.test(out)) {
+      out = out.replace(/(<body[^>]*>)/i, `$1${opts.logoHtml}`);
+    } else {
+      out = opts.logoHtml + out;
+    }
+  }
 
   // Wrap all href="http..." links with the click-redirect.
   // (Skip mailto: and tel: and already-wrapped links.)
@@ -306,4 +362,81 @@ export const DEFAULT_TEMPLATES: Record<
           </p>
     `),
   },
+};
+
+// ----------------------------------------------------------------------------
+// No-check-in-code variant bodies
+// (used when rsvp.checkInCode IS NULL on stages 3 & 4)
+// ----------------------------------------------------------------------------
+
+/**
+ * NO_CODE_SHELL — variant wrapper used by stages 3 & 4 when the RSVP has no
+ * check-in code yet. The body swaps the "your code is XXXX-XXXX" line for a
+ * call-to-action: "Generate your check-in code" → links to the event page.
+ * The wrapper explicitly tells the user the code is personal and
+ * non-transferrable, mirroring the door-staffer warning copy.
+ */
+const NO_CODE_BODY = (eventTitle: string, eventDate: string, venue: string) => `
+          <h1 style="font-size:22px;font-weight:800;margin:0 0 16px;color:#0a0a0a;">You need your check-in code, {{name}}.</h1>
+          <p style="font-size:15px;line-height:1.6;color:#444;margin:0 0 16px;">
+            <strong style="color:#0a0a0a;">${eventTitle}</strong> is happening on
+            <strong style="color:#0a0a0a;">${eventDate}</strong> at
+            <strong style="color:#0a0a0a;">${venue}</strong> — but you haven't generated your check-in code yet.
+          </p>
+          <div style="background:#FFF1F5;border-left:4px solid #FF005A;padding:14px 16px;margin:0 0 20px;border-radius:4px;">
+            <p style="font-size:14px;line-height:1.55;color:#0a0a0a;margin:0 0 8px;">
+              <strong>Your check-in code is personal and non-transferrable.</strong>
+            </p>
+            <p style="font-size:13px;line-height:1.55;color:#444;margin:0;">
+              It identifies <em>you</em> at the door. Don't share it — if someone else
+              uses your code, you'll be marked as already checked in and may be
+              turned away. Generate it now, in 10 seconds, from the event page.
+            </p>
+          </div>
+          <a href="{{eventUrl}}" style="display:inline-block;padding:14px 28px;background:#FF005A;color:#fff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:700;">Generate my check-in code</a>
+          <p style="font-size:13px;line-height:1.55;color:#888;margin:14px 0 0;">
+            On the event page, tap <strong>"I'm here — Check in"</strong>. Your code
+            will appear on screen — show it to door staff when you arrive.
+          </p>
+          <p style="font-size:15px;line-height:1.6;color:#444;margin:20px 0 0;">
+            — The AI Salon Tel Aviv team
+          </p>
+`;
+
+/**
+ * Default no-code variant bodies for stages 3 (Final Prep) and 4 (Day-Of).
+ * Seeded into `EmailStageTemplate.noCodeHtmlBody` + `noCodeSubject` by seed.ts.
+ * Admins can override per-template in the editor.
+ */
+export const DEFAULT_NO_CODE_TEMPLATES: Record<
+  number,
+  { subject: string; html: (eventTitle: string, eventDate: string, venue: string) => string }
+> = {
+  3: {
+    subject: "Action needed: generate your check-in code for {{eventTitle}}",
+    html: (t, d, v) => SHELL(NO_CODE_BODY(t, d, v)),
+  },
+  4: {
+    subject: "Starting now — get your check-in code for {{eventTitle}}",
+    html: (t, d, v) => SHELL(NO_CODE_BODY(t, d, v)),
+  },
+};
+
+/**
+ * Default alt-subject lines for each stage. Seeded into
+ * `EmailStageTemplate.altSubject` + `altNotOpenedHours` by seed.ts.
+ *
+ * The default behavior: if the primary send isn't opened within 24h
+ * (stages 1-2) or 2h (stages 3-4) or 48h (stage 5), re-send the same body
+ * with the alt subject. Admins can override per-template in the editor.
+ */
+export const DEFAULT_ALT_SUBJECTS: Record<
+  number,
+  { altSubject: string; altNotOpenedHours: number }
+> = {
+  1: { altSubject: "Don't miss {{eventTitle}} — opens in 10 days", altNotOpenedHours: 24 },
+  2: { altSubject: "48h left — your seat at {{eventTitle}}", altNotOpenedHours: 12 },
+  3: { altSubject: "Final 4h — check-in details for {{eventTitle}}", altNotOpenedHours: 2 },
+  4: { altSubject: "We're starting — last chance to grab your seat", altNotOpenedHours: 1 },
+  5: { altSubject: "One more thing about {{eventTitle}}", altNotOpenedHours: 48 },
 };
