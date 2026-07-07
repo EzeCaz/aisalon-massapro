@@ -1,0 +1,70 @@
+# External cron for /api/email-orchestrator/run
+#
+# Why this exists:
+#   Vercel Hobby plan limits crons to 1/day. The 15-min orchestrator cron
+#   was removed from vercel.json (it was blocking ALL deployments — Vercel
+#   refuses the build when a cron violates the plan limit). GitHub Actions
+#   scheduled workflows have no such limit on public repos, so we run the
+#   orchestrator from here every 15 min instead.
+#
+# To enable:
+#   1. Reveal the existing CRON_SECRET in Vercel → Project → Settings →
+#      Environment Variables (Production).
+#   2. Add it as a GitHub Actions repo secret named CRON_SECRET:
+#      Repo → Settings → Secrets and variables → Actions → New repository secret
+#   3. Test: Actions tab → "Email Orchestrator (every 15 min)" → Run workflow.
+
+name: Email Orchestrator (every 15 min)
+
+on:
+  schedule:
+    # Every 15 min, UTC. Same cadence as the old Vercel cron.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Manual "Run workflow" button in the Actions tab
+
+# Least-privilege: this workflow doesn't touch the repo, just fires an HTTP POST.
+permissions:
+  contents: read
+
+concurrency:
+  group: email-orchestrator-cron
+  cancel-in-progress: false # never cancel a running orchestrator flush mid-flight
+
+jobs:
+  run-orchestrator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger email orchestrator
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          URL: https://aisalon.massapro.com/api/email-orchestrator/run
+        run: |
+          set -euo pipefail
+          TS=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          echo "[$TS] Triggering $URL"
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set. See .github/workflows/email-orchestrator-cron.yml for setup instructions."
+            exit 1
+          fi
+
+          # POST with 120s timeout (route has maxDuration=60, give margin)
+          # Capture body + HTTP status separately for clear logs.
+          HTTP_CODE=$(curl -sS -o /tmp/body.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            --max-time 120 || echo "000")
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "--- Response body ---"
+          cat /tmp/body.json 2>/dev/null && echo || echo "(empty body)"
+          echo "---------------------"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Orchestrator returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Done."
