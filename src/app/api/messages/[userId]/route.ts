@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendMail } from "@/lib/email";
+import { getMeId, getMe } from "@/lib/session-user";
 
 /**
  * GET /api/messages/[userId]
@@ -18,6 +19,13 @@ import { sendMail } from "@/lib/email";
  * (fire-and-forget — the user already sees the un-read state in the
  * thread, and the unread badge refresh is triggered client-side by
  * the GET response itself).
+ *
+ * ROBUSTNESS: session.user.id can be stale/invalid if the user's JWT
+ * was minted during a transient DB issue at login time (the jwt
+ * callback falls back to the Google `sub` instead of a Prisma UUID).
+ * We use getMeId() which verifies the id resolves to a real DB row
+ * and falls back to an email lookup if not. This is what makes the
+ * "User not found" toast go away for previously-messaged contacts.
  */
 export async function GET(
   _req: NextRequest,
@@ -27,16 +35,8 @@ export async function GET(
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // PERF: use session.user.id from the JWT (set in auth.ts callback).
-  let meId = (session.user as { id?: string }).id;
-  if (!meId) {
-    const me = await db.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
-    if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
-    meId = me.id;
-  }
+  const meId = await getMeId(session);
+  if (!meId) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
   const { userId: partnerId } = await params;
   if (partnerId === meId) {
@@ -120,20 +120,18 @@ export async function POST(
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // PERF: use session.user.id from the JWT when available; only fall
-  // back to the email lookup if needed (we still need name/email/photo
-  // for the email notification, but we can fetch those in parallel
-  // with the partner lookup below).
-  const meIdFromJwt = (session.user as { id?: string }).id;
-  const me = meIdFromJwt
-    ? await db.user.findUnique({
-        where: { id: meIdFromJwt },
-        select: { id: true, name: true, email: true, photoUrl: true, image: true },
-      })
-    : await db.user.findUnique({
-        where: { email: session.user.email },
-        select: { id: true, name: true, email: true, photoUrl: true, image: true },
-      });
+  // Resolve the sender — must include name/email/photo for the email
+  // notification below. getMe() verifies the JWT id resolves to a real
+  // DB row and falls back to an email lookup if not, so users with a
+  // stale token.id (minted during a transient DB issue at login) can
+  // still send DMs without hitting a "User not found" error.
+  const me = (await getMe(session, {
+    id: true,
+    name: true,
+    email: true,
+    photoUrl: true,
+    image: true,
+  })) as { id: string; name: string | null; email: string; photoUrl: string | null; image: string | null } | null;
   if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
   const { userId: partnerId } = await params;

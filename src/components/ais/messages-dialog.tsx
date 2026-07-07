@@ -393,7 +393,22 @@ export function MessagesDialog({
       });
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        throw new Error(err?.error || `HTTP ${res.status}`);
+        const apiError = err?.error || "";
+        // Translate raw API errors into user-friendly messages.
+        // "User not found" usually means the sender's session has a
+        // stale JWT id — reloading the page (which re-runs the jwt
+        // callback's self-heal) fixes it.
+        let friendly: string;
+        if (apiError === "User not found") {
+          friendly = "Your session is stale — please refresh the page and try again.";
+        } else if (apiError === "Recipient not found") {
+          friendly = "This member can no longer receive messages.";
+        } else if (res.status === 401) {
+          friendly = "Please sign in again to send messages.";
+        } else {
+          friendly = apiError || `Failed to send (HTTP ${res.status})`;
+        }
+        throw new Error(friendly);
       }
       const data = await res.json();
       // Replace optimistic message with the real one.

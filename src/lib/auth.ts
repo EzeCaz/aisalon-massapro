@@ -218,12 +218,32 @@ export const authOptions: NextAuthOptions = {
         if (dbUser) {
           token.role = dbUser.role;
           token.id = dbUser.id;
+          token.email = user.email.toLowerCase();
         } else {
           // Fallback (shouldn't happen since signIn creates the row)
           token.role = resolveInitialRole(user.email);
           token.id = user.id || token.sub;
+          token.email = user.email.toLowerCase();
         }
         if (account?.provider) token.provider = account.provider;
+      } else if (token.email && !token.idResolved) {
+        // Self-heal: if the user's JWT was minted during a transient
+        // DB issue (or before their row existed), `token.id` may be a
+        // Google OAuth `sub` instead of a Prisma UUID — which makes
+        // every API that does `db.user.findUnique({ where: { id } })`
+        // fail with "User not found". On subsequent requests (where
+        // `user` is undefined), re-resolve from the DB by email and
+        // mark the token as resolved so we don't repeat the lookup
+        // every request.
+        const dbUser = await db.user.findUnique({
+          where: { email: token.email as string },
+          select: { id: true, role: true },
+        });
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.role = dbUser.role;
+          token.idResolved = true;
+        }
       }
       return token;
     },

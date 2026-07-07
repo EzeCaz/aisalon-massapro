@@ -2,34 +2,25 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getMeId } from "@/lib/session-user";
 
 /**
  * GET /api/messages/unread-count
  * Returns the number of unread direct messages for the current user.
  * Used to drive the pulsating badge on the inbox icon.
  *
- * PERF: uses `session.user.id` (populated by the JWT callback) instead
- * of doing a `db.user.findUnique({ where: { email } })` lookup on
- * every call. Saves ~200–400ms of DB round-trip per poll. Falls back
- * to the email lookup only if the JWT id is missing (very rare).
+ * PERF: getMeId() verifies the JWT id against the DB on the first call
+ * (one indexed lookup), then caches the verified id on the session
+ * object so subsequent calls in the same request skip the check.
+ * Falls back to an email lookup if the JWT id is missing or stale.
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ count: 0 });
   }
-  // The JWT callback already puts the user id on session.user.id —
-  // use it directly and skip the DB lookup.
-  let meId = (session.user as { id?: string }).id;
-  if (!meId) {
-    // Fallback: very old sessions might not have id on the token.
-    const me = await db.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
-    if (!me) return NextResponse.json({ count: 0 });
-    meId = me.id;
-  }
+  const meId = await getMeId(session);
+  if (!meId) return NextResponse.json({ count: 0 });
 
   const count = await db.conversationMessage.count({
     where: { recipientId: meId, readAt: null },

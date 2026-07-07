@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getMeId } from "@/lib/session-user";
 
 /**
  * GET /api/messages/conversations
@@ -21,23 +22,17 @@ import { db } from "@/lib/db";
  *      partner (Prisma doesn't support DISTINCT ON natively).
  *   3. `findMany` for just the partner profiles involved.
  * Total: ~50–150ms warm (10–25× faster than before).
+ *
+ * ROBUSTNESS: getMeId() verifies the JWT id resolves to a real DB row
+ * and falls back to email lookup if not (handles stale token.id).
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // PERF: use session.user.id from the JWT (set in auth.ts callback),
-  // skipping a `db.user.findUnique` per call.
-  let meId = (session.user as { id?: string }).id;
-  if (!meId) {
-    const me = await db.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
-    if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
-    meId = me.id;
-  }
+  const meId = await getMeId(session);
+  if (!meId) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
   // 1. Unread counts per partner (one row per partner I have unread
   //    messages FROM). Cheap thanks to the @@index([recipientId, readAt]).
