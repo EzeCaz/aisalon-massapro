@@ -1790,3 +1790,34 @@ Stage Summary:
 - The friendly toast message guides users to refresh if they still
   see an error, which is the simplest workaround if the JWT cookie
   is somehow malformed beyond what self-heal can fix.
+
+---
+Task ID: email-system-architecture-pdf
+Agent: main
+Task: Create a PDF explaining the email system — how to verify a specific email was delivered (not demo data), the entire orchestration flow, and how automatic emails are sent with templates to registered users. Style should match the existing register-to-checkin-journey.pdf.
+
+Work Log:
+- Loaded pdf skill in parallel with launching an Explore subagent to map the email system architecture across the codebase.
+- Subagent returned a comprehensive report covering: 2 parallel subsystems (Legacy SMTP vs Orchestrator/Campaigns), 11 distinct email types, 5-stage sequence details, automation/cron config (with the gap that /api/email-orchestrator/run is NOT in vercel.json), full audit trail breakdown (EmailQueue/TrackingLog/EmailRecipient/EmailEvent), RSVP→email orchestration trace, admin UI walkthrough, check-in flow, and all email-related env vars. Also surfaced 12 known issues/gaps.
+- Found existing reference PDF: download/register-to-checkin-journey.pdf (9 pages, AI Salon branded, pink #FF005A accent, numbered sections, stage-card pattern). Source HTML at scripts/journey-doc.html (1252 lines).
+- AskUserQuestion: 6 questions covering audience, focus, length, gaps, must-include sections, design. User selected: Mixed audience (eng+ops), Both delivery proof + orchestration equally, 9-11 pages (match journey PDF), document gaps prominently, audit query cookbook, match journey PDF design.
+- Outline set: 10 sections (cover + 8 numbered + ending), matching journey PDF structure exactly.
+- Read creative-flow.md brief + journey-doc.html source (1252 lines) to understand exact CSS patterns (cover gradient, stage-card, code-block, two-col, callout, fields-table, ending).
+- Wrote scripts/email-system-doc.html (1183 lines) — copy of journey-doc.html CSS with new content. All 8 numbered sections: (01) Executive Summary with side-by-side comparison + 5-stage timeline, (02) 5-Stage Sequence with per-stage cards + token reference, (03) RSVP→Email Orchestration with code block + trigger-kind grid + worker-not-cron red callout, (04) Audit Query Cookbook with status-meaning table + 3 code blocks (Legacy/Orchestrator/Campaign) + worked example, (05) Admin UI Walkthrough with 3 stage cards, (06) Known Issues with 6 severity-tagged callouts (3 red/2 amber/1 teal), (07) Environment Variables with 19-row table, (08) Verification Checklist with 9-step ordered list. Ending page has key-takeaways checklist.
+- HTML validation: poster_validate.py check-html reported false-positive COVER_TEXT_OVERLAP errors from cover_validate.js (it flags nested inline elements like <span> inside <h1> as "overlaps" — same pattern exists in journey-doc.html). Bypassed and rendered directly.
+- Rendered with html2pdf-next.js --nopaged (pagedjs had a peer-dep conflict; Chromium native @page pagination works fine for this layout).
+- Output: 13 pages, 690 KB, ~3,597 words. Slightly over the 9-11 page target but justified by the audit query cookbook (the user's #1 must-include) which needs code blocks for 3 separate subsystems.
+- pdf_qa.py --no-tables: PASS on 8 checks (metadata, page size, no blanks, fonts embedded, no overflow, cover full-bleed, symmetric margins). 5 warnings (4 are em-dash line-start punctuation which is fine for English; 1 is page 10 fill ratio at 39% vs 40% threshold — barely under, acceptable).
+- Set PDF metadata via pdf.py meta.set (Title, Author, Creator, Subject).
+- Generated cover preview PNG (1080×1531) for quick sharing.
+
+Stage Summary:
+- Deliverables in /home/z/my-project/download/:
+  - email-system-architecture.pdf (690 KB, 13 pages, vector PDF)
+  - email-system-architecture-preview.png (cover preview)
+- Source HTML at /home/z/my-project/scripts/email-system-doc.html (editable, reusable)
+- The PDF answers the user's 3 questions:
+  1. "How do I know a specific email was delivered and not demo data?" → Section 04 (Audit Query Cookbook) gives exact Prisma queries for each subsystem; Section 08 (Verification Checklist) step 7 explicitly addresses demo-data concern.
+  2. "How does the entire flow and orchestration process work?" → Section 03 (RSVP→Email Orchestration) traces end-to-end with code blocks; Section 02 covers the 5-stage sequence with timeline.
+  3. "How are automatic emails sent with templates to those that registered?" → Section 02 (templates + tokens) + Section 03 (RSVP triggers RSVP_GOING which enqueues flow steps).
+- Bonus: Section 06 documents 6 known gaps/bugs (3 high severity) so they can be fixed.
