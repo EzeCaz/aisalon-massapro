@@ -69,9 +69,29 @@ type Audience = {
 type FieldDef = {
   field: string;
   label: string;
-  type: "string" | "enum" | "boolean" | "date";
+  type: "string" | "enum" | "boolean" | "date" | "engagement";
   options?: { value: string; label: string }[];
 };
+
+// Email-target option for engagement rules, returned by
+// GET /api/email-audiences/email-options.
+type EmailOption = {
+  value: string;        // "template:<id>" | "campaign:<id>"
+  label: string;
+  group: string;        // "Templates ..." | "Campaigns ..."
+  kind: "template" | "campaign";
+};
+
+// Engagement virtual fields — server-side these are intercepted by
+// audience-filter.ts and resolved against EmailQueue / EmailRecipient
+// tracking data. The value is a composite `kind:id` string picked from
+// the EmailOption dropdown.
+const ENGAGEMENT_FIELDS: FieldDef[] = [
+  { field: "__emailOpened",     label: "✉️  Opened a specific email",        type: "engagement" },
+  { field: "__emailNotOpened",  label: "📭  Did NOT open a specific email",  type: "engagement" },
+  { field: "__emailClicked",    label: "🖱️  Clicked in a specific email",    type: "engagement" },
+  { field: "__emailNotClicked", label: "🚫  Did NOT click in a specific email", type: "engagement" },
+];
 
 const USER_FIELDS: FieldDef[] = [
   { field: "email", label: "Email", type: "string" },
@@ -101,6 +121,8 @@ const USER_FIELDS: FieldDef[] = [
   { field: "onboardedAt", label: "Onboarded at", type: "date" },
   { field: "archivedAt", label: "Archived at", type: "date" },
   { field: "createdAt", label: "Signed up at", type: "date" },
+  // Engagement virtual fields — see comment block above.
+  ...ENGAGEMENT_FIELDS,
 ];
 
 /**
@@ -158,6 +180,8 @@ function buildRsvpFields(events: { id: string; title: string; startsAt?: string 
     { field: "attendedAt", label: "Attended at", type: "date" },
     { field: "noShow", label: "No-show", type: "boolean" },
     { field: "createdAt", label: "RSVP created at", type: "date" },
+    // Engagement virtual fields — see comment block above.
+    ...ENGAGEMENT_FIELDS,
   ];
 }
 
@@ -184,6 +208,11 @@ function opsForField(field: FieldDef): FilterOp[] {
       return ["equals", "not_equals", "in", "not_in"];
     case "date":
       return ["before", "after", "is_set", "is_not_set"];
+    case "engagement":
+      // Engagement rules use a single op — the field name itself encodes the
+      // behavior (Opened / NotOpened / Clicked / NotClicked). The value is a
+      // `kind:id` composite picked from the email-options dropdown.
+      return ["equals"];
     default:
       return ["equals", "not_equals", "contains", "not_contains", "starts_with", "ends_with", "in", "not_in", "is_set", "is_not_set"];
   }
@@ -648,6 +677,26 @@ function DynamicEditor({
 }) {
   const fields = fieldsForSource(filters.source, events);
 
+  // Load email-target options for engagement rules (templates + campaigns).
+  // Fetched once on mount, passed down to every FilterGroupEditor.
+  const [emailOptions, setEmailOptions] = React.useState<EmailOption[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/email-audiences/email-options");
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!cancelled && Array.isArray(data.options)) {
+          setEmailOptions(data.options);
+        }
+      } catch {
+        // silent — engagement rules just won't show options if fetch fails.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const updateGroup = (idx: number, updater: (g: FilterGroup) => FilterGroup) => {
     setFilters({
       ...filters,
@@ -739,6 +788,7 @@ function DynamicEditor({
           key={gIdx}
           group={group}
           fields={fields}
+          emailOptions={emailOptions}
           onChange={(g) => updateGroup(gIdx, () => g)}
           onRemove={() => removeGroup(gIdx)}
           canRemove={filters.groups.length > 1}
@@ -759,6 +809,7 @@ function DynamicEditor({
 function FilterGroupEditor({
   group,
   fields,
+  emailOptions = [],
   onChange,
   onRemove,
   canRemove,
@@ -766,6 +817,7 @@ function FilterGroupEditor({
 }: {
   group: FilterGroup;
   fields: FieldDef[];
+  emailOptions?: EmailOption[];
   onChange: (g: FilterGroup) => void;
   onRemove: () => void;
   canRemove: boolean;
@@ -834,11 +886,21 @@ function FilterGroupEditor({
                     value: newField?.type === "boolean" ? "true" : "",
                   });
                 }}
-                className="w-44 rounded border border-neutral-300 px-2 py-1 text-sm"
+                className="w-56 rounded border border-neutral-300 px-2 py-1 text-sm"
               >
-                {fields.map((f) => (
-                  <option key={f.field} value={f.field}>{f.label}</option>
-                ))}
+                {/* Group user/rsvp fields first, engagement fields last under a separate header */}
+                <optgroup label="Profile / RSVP fields">
+                  {fields.filter((f) => f.type !== "engagement").map((f) => (
+                    <option key={f.field} value={f.field}>{f.label}</option>
+                  ))}
+                </optgroup>
+                {fields.some((f) => f.type === "engagement") && (
+                  <optgroup label="Email engagement (open / click)">
+                    {fields.filter((f) => f.type === "engagement").map((f) => (
+                      <option key={f.field} value={f.field}>{f.label}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <select
                 value={rule.op}
@@ -851,7 +913,29 @@ function FilterGroupEditor({
               </select>
               {!isUnary && (
                 <>
-                  {field?.type === "enum" && field.options ? (
+                  {field?.type === "engagement" ? (
+                    <select
+                      value={rule.value}
+                      onChange={(e) => updateRule(rIdx, { value: e.target.value })}
+                      className="flex-1 rounded border border-[#FF005A]/40 bg-[#FF005A]/[0.04] px-2 py-1 text-sm"
+                      disabled={emailOptions.length === 0}
+                    >
+                      <option value="">— select email —</option>
+                      {/* Group options by their `group` field (Templates, Campaigns) */}
+                      {Object.entries(
+                        emailOptions.reduce<Record<string, EmailOption[]>>((acc, o) => {
+                          (acc[o.group] ??= []).push(o);
+                          return acc;
+                        }, {}),
+                      ).map(([groupName, opts]) => (
+                        <optgroup key={groupName} label={groupName}>
+                          {opts.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  ) : field?.type === "enum" && field.options ? (
                     <select
                       value={rule.value}
                       onChange={(e) => updateRule(rIdx, { value: e.target.value })}
