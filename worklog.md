@@ -1821,3 +1821,54 @@ Stage Summary:
   2. "How does the entire flow and orchestration process work?" → Section 03 (RSVP→Email Orchestration) traces end-to-end with code blocks; Section 02 covers the 5-stage sequence with timeline.
   3. "How are automatic emails sent with templates to those that registered?" → Section 02 (templates + tokens) + Section 03 (RSVP triggers RSVP_GOING which enqueues flow steps).
 - Bonus: Section 06 documents 6 known gaps/bugs (3 high severity) so they can be fixed.
+
+---
+Task ID: audience-engagement-targeting
+Agent: main
+Task: Add 4 new behaviour-based audience targeting options to the email system: (A) didn't open a specific email, (B) did open, (C) didn't click, (D) clicked. The specific email is picked from the template list or existing emails (campaigns) list.
+
+Work Log:
+- Read prior worklog to confirm the 3 previously-committed email features (no-code variant, WYSIWYG editor, alt-subject resend) are already on main as commit 29c4816.
+- Mapped the audience filter system:
+  - src/lib/email-orchestrator/audience-filter.ts — spec evaluator (source: users/rsvps/both + groups + rules, each rule = field/op/value).
+  - src/app/admin/email/flows/audiences-client.tsx — admin UI for building DYNAMIC audiences.
+  - GET/POST/PATCH /api/email-audiences/[id] — CRUD.
+  - POST /api/email-audiences/preview — evaluate a spec without persisting.
+- Confirmed engagement tracking schema is already in place:
+  - EmailQueue: openedAt, clickedAt, status (PENDING/QUEUED/SENT/OPENED/CLICKED/SKIPPED/FAILED), flowStepId, stage (1-5).
+  - EmailRecipient: openCount, clickCount, firstOpenedAt, lastOpenedAt, firstClickedAt, lastClickedAt, status (QUEUED/SENT/FAILED/BOUNCED/COMPLAINED).
+  - EmailStageTemplate: id, stage (1-5 for defaults, null for custom), name, subject.
+  - EmailFlowStep: templateId (links queue rows to templates).
+  - EmailCampaign: id, name, subjectSnapshot, recipientCount, status, completedAt.
+- Implementation:
+  - Added 4 virtual engagement fields to USER_FIELDS + RSVP_FIELDS: __emailOpened, __emailNotOpened, __emailClicked, __emailNotClicked. New "engagement" FieldDef type.
+  - Added ENGAGEMENT_FIELD_TO_BEHAVIOR map + parseEngagementValue() (parses "template:<id>" | "campaign:<id>" composite).
+  - New EngagementContext type with emailSets Map keyed by "groupIdx:ruleIdx". Threaded through buildUserWhere/buildRsvpWhere/groupToPrisma/ruleToPrisma.
+  - ruleToPrisma intercepts engagement fields → returns { email: { in: [...] } } Prisma fragment using the pre-computed email set from ctx.
+  - 4 resolver functions:
+    - resolveReceivedEmails(target) — emails that were SENT the target (template via EmailQueue, campaign via EmailRecipient).
+    - resolveOpenedEmails(target) — emails that opened (openedAt != null OR status in OPENED/CLICKED for queue; openCount>0 OR firstOpenedAt!=null for recipient).
+    - resolveClickedEmails(target) — emails that clicked.
+    - resolveEngagementEmails(behavior, target) — combines the above: opened = openedEmails; notOpened = receivedEmails − openedEmails; clicked = clickedEmails; notClicked = receivedEmails − clickedEmails.
+  - buildEngagementContext() walks the spec, finds all engagement rules, fires all resolver queries in parallel via Promise.all.
+  - Template match logic: EmailQueue where flowStep.templateId = id OR (for default stage templates) stage = template.stage AND flowStepId IS NULL. Custom templates (stage=null) only match flow-step queue rows.
+- New API endpoint:
+  - GET /api/email-audiences/email-options — returns {options: [...], templates: [...], campaigns: [...]}.
+  - Templates: all active EmailStageTemplates with sent count (pulled via EmailQueue.groupBy + flow-step lookup).
+  - Campaigns: last 50 EmailCampaigns with status in SENT/SENDING/SCHEDULED, with recipientCount + completedAt.
+  - Each option's value is the composite "kind:id" string the engagement rule expects.
+- UI changes in audiences-client.tsx:
+  - New EmailOption type, ENGAGEMENT_FIELDS constant (with emoji labels for scannability).
+  - DynamicEditor fetches /api/email-audiences/email-options on mount via useEffect, passes options down to FilterGroupEditor.
+  - FilterGroupEditor field picker now groups options under two <optgroup>s: "Profile / RSVP fields" and "Email engagement (open / click)" — engagement rules are clearly separated from regular fields.
+  - Engagement field type renders a pink-tinted <select> dropdown listing all email targets (templates + campaigns, grouped by <optgroup>) instead of a free-text input. Disabled if options fetch hasn't returned yet.
+  - opsForField() returns ["equals"] for engagement type (the only meaningful op).
+- Type-check: zero new errors. Pre-existing errors in unrelated files (skills/, dashboard, mockups) untouched.
+- Committed as c1ad89d, pushed to main. Vercel auto-deploy triggered.
+
+Stage Summary:
+- The audience builder now supports 4 new behaviour-based rules that target users based on their engagement with a specific past email (template OR campaign).
+- The "specific email" is picked from a dropdown that lists every flow template (with sent count) and every recent campaign (with recipient count + send date) — admins can see at a glance which emails have tracking data.
+- notOpened / notClicked correctly exclude users who never received the email (standard email-marketing semantics) — the rule resolves to "receivedEmails minus openedEmails" not "all users minus openedEmails".
+- Works for any source (users / rsvps / both) because the resolver produces an email set that's injected as an `email: { in: [...] }` filter on either User or EventRsvp.
+- All engagement resolvers run in parallel via Promise.all, so adding multiple engagement rules to a single audience doesn't increase latency linearly.

@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>From Register to Check-in — User Journey</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PAGE SETUP — Creative Flow (720 × 1020 px)
+   ============================================================ */
+@page {
+    size: 720px 1020px;
+    margin: 0;
+}
+
+:root {
+    --brand-pink:   #FF005A;
+    --brand-teal:   #007E72;
+    --brand-amber:  #FFB800;
+    --ink:          #0F0F1A;
+    --ink-soft:     #1F2235;
+    --ink-mute:     #5C6172;
+    --line:         #E6E6EC;
+    --bg-soft:      #F7F7FA;
+    --bg-card:      #FFFFFF;
+    --bg-pink-soft: #FFF1F5;
+    --bg-teal-soft: #E6F4F2;
+    --bg-amber-soft:#FFF8E6;
+    --bg-red-soft:  #FFEEEE;
+    --red:          #D7263D;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 720px;
+    background: var(--bg-soft);
+    color: var(--ink);
+    font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    font-size: 13.5px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+@media screen {
+    html {
+        height: auto;
+        display: flex;
+        justify-content: center;
+        background: #2a2a2e;
+    }
+    body {
+        margin: 20px auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+}
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+.cover {
+    width: 720px;
+    height: 1020px;
+    box-sizing: border-box;
+    break-after: page;
+    overflow: hidden;
+    position: relative;
+    background:
+        radial-gradient(circle at 85% 12%, rgba(255, 184, 0, 0.35) 0%, transparent 35%),
+        radial-gradient(circle at 12% 88%, rgba(0, 126, 114, 0.55) 0%, transparent 45%),
+        linear-gradient(135deg, #FF005A 0%, #C20047 60%, #7A0030 100%);
+    color: #FFFFFF;
+    padding: 64px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.cover-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+    z-index: 2;
+}
+
+.cover-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.cover-brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #FFB800;
+    box-shadow: 0 0 12px rgba(255, 184, 0, 0.7);
+}
+
+.cover-middle {
+    z-index: 2;
+    margin-top: 60px;
+}
+.cover-eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #FFB800;
+    margin-bottom: 22px;
+}
+.cover-title {
+    font-size: 64px;
+    font-weight: 900;
+    line-height: 1.0;
+    letter-spacing: -1.5px;
+    margin: 0 0 24px 0;
+    color: #FFFFFF;
+}
+.cover-title .accent {
+    color: #FFB800;
+    font-style: italic;
+}
+.cover-subtitle {
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.92);
+    max-width: 520px;
+    margin-bottom: 32px;
+}
+
+.cover-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+.cover-tag {
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #FFFFFF;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(2px);
+}
+
+.cover-bottom {
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+    letter-spacing: 1px;
+}
+.cover-bottom .doc-id {
+    font-family: 'JetBrains Mono', monospace;
+    color: #FFB800;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+/* Decorative geometric anchors on cover (kept inside page bounds, no overlap with text) */
+.cover-shape-1 {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 110px;
+    height: 110px;
+    border: 2px solid rgba(255, 184, 0, 0.35);
+    border-radius: 50%;
+    z-index: 1;
+}
+.cover-shape-2 {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 130px;
+    height: 130px;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+/* ============================================================
+   MAIN CONTENT (flows naturally across pages)
+   ============================================================ */
+.main-content {
+    padding: 56px 56px 40px 56px;
+    background: var(--bg-soft);
+}
+
+/* Chapter headers */
+.chapter-header {
+    break-after: avoid;
+    break-inside: avoid;
+    margin-top: 28px;
+    margin-bottom: 18px;
+}
+.chapter-header:first-child { margin-top: 0; }
+
+.chapter-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--brand-pink);
+    margin-bottom: 8px;
+}
+.chapter-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 10px 0;
+    letter-spacing: -0.4px;
+    line-height: 1.2;
+}
+.chapter-divider {
+    width: 48px;
+    height: 3px;
+    background: var(--brand-pink);
+    border-radius: 2px;
+    margin-bottom: 14px;
+}
+
+h3.subsection {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 18px 0 8px 0;
+    break-after: avoid;
+}
+
+p.body {
+    margin: 0 0 10px 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.65;
+    text-align: left;
+}
+p.body strong {
+    color: var(--ink);
+    font-weight: 700;
+}
+
+/* ============================================================
+   EXECUTIVE SUMMARY CALLOUT
+   ============================================================ */
+.summary-callout {
+    background: linear-gradient(135deg, #FFFFFF 0%, var(--bg-pink-soft) 100%);
+    border-left: 4px solid var(--brand-pink);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 22px;
+    break-inside: avoid;
+}
+.summary-callout p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--ink);
+}
+.summary-callout strong { color: var(--brand-pink); }
+
+/* ============================================================
+   FLOW DIAGRAM
+   ============================================================ */
+.flow-diagram {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 18px 18px 18px;
+    margin-top: 8px;
+    break-inside: avoid;
+}
+.flow-row {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    align-items: stretch;
+}
+.flow-node {
+    background: var(--bg-soft);
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 6px 8px 6px;
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+.flow-node .num {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    border-radius: 50%;
+    background: var(--brand-pink);
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 800;
+    margin: 0 auto 6px auto;
+}
+.flow-node .label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+.flow-node .desc {
+    font-size: 10px;
+    color: var(--ink-mute);
+    line-height: 1.3;
+}
+.flow-node.teal .num { background: var(--brand-teal); }
+.flow-node.amber .num { background: var(--brand-amber); color: var(--ink); }
+
+.flow-arrows {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+.flow-arrows .arr {
+    text-align: right;
+    padding-right: 4px;
+    color: var(--brand-pink);
+    font-size: 12px;
+    font-weight: 800;
+}
+.flow-arrows .arr:last-child { visibility: hidden; }
+
+.flow-legend {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 10px;
+    color: var(--ink-mute);
+}
+.flow-legend .lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.flow-legend .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.flow-legend .dot.p { background: var(--brand-pink); }
+.flow-legend .dot.t { background: var(--brand-teal); }
+.flow-legend .dot.a { background: var(--brand-amber); }
+
+/* ============================================================
+   STAGE CARDS
+   ============================================================ */
+.stage-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    break-inside: avoid;
+    position: relative;
+}
+.stage-card .stage-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.stage-card .stage-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--brand-pink);
+    background: var(--bg-pink-soft);
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+.stage-card .stage-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+}
+.stage-card .stage-sub {
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+}
+.stage-card p {
+    margin: 0 0 8px 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+}
+.stage-card p:last-child { margin-bottom: 0; }
+.stage-card code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    background: var(--bg-pink-soft);
+    color: var(--brand-pink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+.stage-card.teal { border-left: 4px solid var(--brand-teal); }
+.stage-card.teal .stage-num { color: var(--brand-teal); background: var(--bg-teal-soft); }
+.stage-card.teal code { background: var(--bg-teal-soft); color: var(--brand-teal); }
+.stage-card.amber { border-left: 4px solid var(--brand-amber); }
+.stage-card.amber .stage-num { color: #B07700; background: var(--bg-amber-soft); }
+
+/* Mini info row inside stage cards */
+.info-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+    font-size: 11.5px;
+}
+.info-row .k {
+    color: var(--ink-mute);
+    font-weight: 600;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.info-row .v {
+    color: var(--ink-soft);
+    font-size: 11.5px;
+}
+.info-row .v code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-soft);
+    color: var(--ink);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* ============================================================
+   CODE BLOCK
+   ============================================================ */
+.code-block {
+    background: #1A1D2E;
+    color: #E8E8F0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 8px 0 4px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.55;
+    overflow: hidden;
+    break-inside: avoid;
+    white-space: pre;
+}
+.code-block .kw { color: #FF6FB5; }
+.code-block .str { color: #FFD479; }
+.code-block .com { color: #6E7390; font-style: italic; }
+.code-block .fn { color: #7EEAD0; }
+.code-block .num { color: #FFB800; }
+.code-caption {
+    font-size: 10px;
+    color: var(--ink-mute);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ============================================================
+   API ENDPOINTS TABLE
+   ============================================================ */
+.api-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin-top: 6px;
+    break-inside: avoid;
+    background: var(--bg-card);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+}
+.api-table thead {
+    background: var(--ink);
+    color: #FFFFFF;
+}
+.api-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+.api-table td {
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+    color: var(--ink-soft);
+    line-height: 1.45;
+}
+.api-table tr:nth-child(even) td { background: #FAFAFC; }
+.api-table .method {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #FFFFFF;
+    display: inline-block;
+    min-width: 38px;
+    text-align: center;
+}
+.api-table .m-post { background: var(--brand-pink); }
+.api-table .m-get  { background: var(--brand-teal); }
+.api-table .m-del  { background: var(--red); }
+.api-table .m-patch{ background: var(--brand-amber); color: var(--ink); }
+.api-table .path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink);
+    word-break: break-all;
+}
+
+/* ============================================================
+   TWO-COLUMN BLOCK (email flow)
+   ============================================================ */
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 10px;
+    break-inside: avoid;
+}
+.col-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 14px 12px 14px;
+}
+.col-card h4 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: var(--ink);
+}
+.col-card .col-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+.col-card.legacy .col-tag { background: var(--bg-amber-soft); color: #B07700; }
+.col-card.flows .col-tag  { background: var(--bg-teal-soft); color: var(--brand-teal); }
+.col-card p {
+    font-size: 11.5px;
+    line-height: 1.55;
+    margin: 0 0 6px 0;
+    color: var(--ink-soft);
+}
+.col-card ul {
+    margin: 6px 0 0 0;
+    padding-left: 14px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+}
+.col-card li { margin-bottom: 2px; }
+.col-card li code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--bg-soft);
+    color: var(--brand-pink);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
+/* ============================================================
+   TRIGGER KIND LIST
+   ============================================================ */
+.trigger-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+.trigger-item {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    break-inside: avoid;
+}
+.trigger-item .tk {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--brand-pink);
+    margin-bottom: 3px;
+}
+.trigger-item .td {
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+}
+.trigger-item.fired .tk { color: var(--brand-teal); }
+.trigger-item.unfired { border-left: 3px solid var(--red); }
+.trigger-item.unfired .tk { color: var(--red); }
+
+/* ============================================================
+   CALLOUTS
+   ============================================================ */
+.callout {
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 12px 0;
+    break-inside: avoid;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.callout .co-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+.callout.red {
+    background: var(--bg-red-soft);
+    border-left: 4px solid var(--red);
+}
+.callout.red .co-tag { background: var(--red); color: #FFFFFF; }
+.callout.amber {
+    background: var(--bg-amber-soft);
+    border-left: 4px solid var(--brand-amber);
+}
+.callout.amber .co-tag { background: var(--brand-amber); color: var(--ink); }
+.callout.teal {
+    background: var(--bg-teal-soft);
+    border-left: 4px solid var(--brand-teal);
+}
+.callout.teal .co-tag { background: var(--brand-teal); color: #FFFFFF; }
+.callout p { margin: 0; color: var(--ink-soft); }
+.callout strong { color: var(--ink); }
+.callout code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: rgba(255,255,255,0.7);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* ============================================================
+   FIELDS TABLE
+   ============================================================ */
+.fields-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 8px;
+    background: var(--bg-card);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    break-inside: avoid;
+}
+.fields-table thead {
+    background: var(--brand-teal);
+    color: #FFFFFF;
+}
+.fields-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+.fields-table td {
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-soft);
+    line-height: 1.5;
+    vertical-align: top;
+}
+.fields-table tr:nth-child(even) td { background: #FAFAFC; }
+.fields-table .field-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--brand-pink);
+    font-weight: 600;
+    font-size: 10.5px;
+}
+
+/* ============================================================
+   CLOSING / ENDING
+   ============================================================ */
+.ending {
+    width: 720px;
+    height: 1020px;
+    box-sizing: border-box;
+    break-before: page;
+    overflow: hidden;
+    position: relative;
+    background:
+        radial-gradient(circle at 90% 10%, rgba(255, 184, 0, 0.25) 0%, transparent 35%),
+        linear-gradient(160deg, #007E72 0%, #004D45 100%);
+    color: #FFFFFF;
+    padding: 64px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.ending-shape-1 {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 120px;
+    height: 120px;
+    border: 2px solid rgba(255, 184, 0, 0.3);
+    border-radius: 50%;
+}
+.ending-shape-2 {
+    position: absolute;
+    top: 80px;
+    right: 60px;
+    width: 90px;
+    height: 90px;
+    background: rgba(255, 0, 90, 0.18);
+    border-radius: 16px;
+    transform: rotate(-12deg);
+}
+.ending-top {
+    z-index: 2;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #FFB800;
+}
+.ending-middle {
+    z-index: 2;
+}
+.ending-title {
+    font-size: 48px;
+    font-weight: 900;
+    line-height: 1.05;
+    margin: 0 0 18px 0;
+    letter-spacing: -1px;
+}
+.ending-title .accent { color: #FFB800; font-style: italic; }
+.ending-body {
+    font-size: 15px;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.92);
+    max-width: 520px;
+    margin-bottom: 20px;
+}
+.ending-checklist {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 18px 22px;
+    max-width: 520px;
+}
+.ending-checklist h4 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 10px 0;
+    color: #FFB800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+.ending-checklist ul {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 12.5px;
+    line-height: 1.8;
+}
+.ending-checklist li { margin-bottom: 4px; }
+.ending-bottom {
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 1px;
+}
+.ending-bottom .doc-id {
+    font-family: 'JetBrains Mono', monospace;
+    color: #FFB800;
+    font-weight: 700;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     COVER PAGE
+     ============================================================ -->
+<div class="cover">
+    <div class="cover-shape-1"></div>
+    <div class="cover-shape-2"></div>
+
+    <div class="cover-top">
+        <div class="cover-brand">
+            <div class="cover-brand-dot"></div>
+            <span>AI Salon · Tel Aviv</span>
+        </div>
+        <span>Engineering Reference</span>
+    </div>
+
+    <div class="cover-middle">
+        <div class="cover-eyebrow">User Journey · v1.2</div>
+        <h1 class="cover-title">From Register<br>to <span class="accent">Check-in</span></h1>
+        <p class="cover-subtitle">The end-to-end attendee flow on the AI Salon Tel Aviv platform — from the moment a prospect lands on the public event page, through community engagement between members, to the moment door staff verify their entry code.</p>
+        <div class="cover-tags">
+            <span class="cover-tag">Engineering</span>
+            <span class="cover-tag">Operations</span>
+            <span class="cover-tag">Mixed Audience</span>
+            <span class="cover-tag">7-Stage Flow</span>
+        </div>
+    </div>
+
+    <div class="cover-bottom">
+        <span>Updated · 2026-07-07</span>
+        <span class="doc-id">DOC-JOURNEY-001</span>
+    </div>
+</div>
+
+<!-- ============================================================
+     MAIN CONTENT (flows naturally)
+     ============================================================ -->
+<div class="main-content">
+
+    <!-- =========== CHAPTER 1: EXECUTIVE SUMMARY + DIAGRAM =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">01 · Executive Summary</div>
+        <h2 class="chapter-title">The Journey at a Glance</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <div class="summary-callout">
+        <p>Registration on this platform is a <strong>one-click RSVP</strong> for signed-in users — there is no long registration form. Account creation captures only a name and email; the rich profile is filled later via a forced onboarding intake. Once onboarded, members gain access to a <strong>community directory</strong> where they can browse other members and start 1-on-1 direct-message conversations, plus event-scoped group chat rooms. Check-in is split into two distinct phases: the attendee <strong>self-checks-in</strong> to generate a globally-unique 8-character code, then door staff <strong>verify that code</strong> at the venue in an explicit two-step lookup-and-confirm flow. The whole journey is automated by an email orchestrator that fires on RSVP, attendance, and door-checkin triggers.</p>
+    </div>
+
+    <h3 class="subsection">Seven-Stage Flow Diagram</h3>
+    <div class="flow-diagram">
+        <div class="flow-arrows">
+            <div class="arr">→</div><div class="arr">→</div><div class="arr">→</div>
+            <div class="arr">→</div><div class="arr">→</div><div class="arr">→</div>
+            <div class="arr">→</div><div class="arr"></div>
+        </div>
+        <div class="flow-row">
+            <div class="flow-node">
+                <div class="num">1</div>
+                <div class="label">Discovery</div>
+                <div class="desc">Public landing page</div>
+            </div>
+            <div class="flow-node">
+                <div class="num">2</div>
+                <div class="label">Account</div>
+                <div class="desc">Signup + password email</div>
+            </div>
+            <div class="flow-node teal">
+                <div class="num">3</div>
+                <div class="label">Onboarding</div>
+                <div class="desc">10-question intake form</div>
+            </div>
+            <div class="flow-node teal">
+                <div class="num">4</div>
+                <div class="label">RSVP</div>
+                <div class="desc">One-click "Register"</div>
+            </div>
+            <div class="flow-node teal">
+                <div class="num">5</div>
+                <div class="label">Community</div>
+                <div class="desc">Directory + DMs + group chat</div>
+            </div>
+            <div class="flow-node amber">
+                <div class="num">6</div>
+                <div class="label">Self Check-in</div>
+                <div class="desc">Issues 8-char code</div>
+            </div>
+            <div class="flow-node amber">
+                <div class="num">7</div>
+                <div class="label">Door Verify</div>
+                <div class="desc">Staff scans code</div>
+            </div>
+            <div class="flow-node">
+                <div class="num">8</div>
+                <div class="label">Post-event</div>
+                <div class="desc">Attendance mark</div>
+            </div>
+        </div>
+        <div class="flow-legend">
+            <span class="lg"><span class="dot p"></span>Acquisition</span>
+            <span class="lg"><span class="dot t"></span>Pre-event</span>
+            <span class="lg"><span class="dot a"></span>Event day</span>
+        </div>
+    </div>
+
+    <!-- =========== CHAPTER 2: STAGES 1-3 =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">02 · Acquisition & Onboarding</div>
+        <h2 class="chapter-title">Stages 1–3: Discovery, Account, Registration</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <div class="stage-card">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 01</span>
+            <h3 class="stage-title">Discovery &amp; Landing</h3>
+            <span class="stage-sub">/e/[slug]</span>
+        </div>
+        <p>A prospect arrives at the <strong>public event page</strong> at <code>/e/[slug]</code>. The page renders hero, speakers, agenda, and a sticky CTA card that adapts to four states: anonymous, signed-in-without-RSVP, registered-but-not-checked-in, and checked-in. If the visitor arrived via a member's share link, a <code>ais_utm_uid</code> cookie is set for later referral attribution.</p>
+        <div class="info-row">
+            <span class="k">CTA States</span>
+            <span class="v">4 (anonymous → registered → checked-in → door-verified)</span>
+        </div>
+        <div class="info-row">
+            <span class="k">Auth</span>
+            <span class="v">None required for viewing; required for RSVP</span>
+        </div>
+    </div>
+
+    <div class="stage-card">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 02</span>
+            <h3 class="stage-title">Account Creation</h3>
+            <span class="stage-sub">POST /api/auth/signup</span>
+        </div>
+        <p>Clicking "Join AI Salon" routes to <code>/login?callbackUrl=/e/[slug]</code>. The signup form captures <strong>only name and email</strong> — no company, no phone, no dietary. The endpoint generates a random 8-character password (bcrypt-hashed at cost 10), creates a <code>User</code> row with <code>role=MEMBER</code>, generates a unique <code>utmUid</code> for referral tracking, writes a <code>ReferralAttribution</code> row if the UTM cookie is set, and emails the one-time password to the user. Receiving that email IS the verification — there is no separate confirmation step.</p>
+        <div class="info-row">
+            <span class="k">Captured</span>
+            <span class="v"><code>email</code>, <code>name</code>, <code>passwordHash</code>, <code>role=MEMBER</code>, <code>utmUid</code></span>
+        </div>
+        <div class="info-row">
+            <span class="k">Email Sent</span>
+            <span class="v">"Your AI Salon Tel Aviv login" (plaintext password)</span>
+        </div>
+    </div>
+
+    <div class="stage-card teal">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 03</span>
+            <h3 class="stage-title">Onboarding + RSVP</h3>
+            <span class="stage-sub">/onboarding → /api/events/[slug]/rsvp</span>
+        </div>
+        <p>On first login, because <code>onboardedAt IS NULL</code>, the user is bounced to a 10-question intake form (company, title, mobile, LinkedIn, interests, profile categories, apply-for, bio). Posting it sets <code>onboardedAt=now()</code> and redirects to <code>/events</code>. Back on the event page, the CTA now reads "Register to event". Clicking fires the RSVP endpoint, which is <strong>idempotent</strong> on <code>@@unique([eventId, email])</code> — duplicate clicks just upgrade status to GOING.</p>
+        <p>Only on the <strong>first</strong> registration does the endpoint send a confirmation email with an <code>.ics</code> calendar attachment and fire the <code>RSVP_GOING</code> trigger that enqueues any matching email-flow steps.</p>
+        <div class="code-caption">// RSVP upsert — the heart of registration</div>
+        <div class="code-block"><span class="kw">const</span> rsvp = <span class="kw">await</span> db.<span class="fn">eventRsvp.upsert</span>({
+  <span class="kw">where</span>: { eventId_email: { eventId: event.id, email: user!.email } },
+  <span class="kw">create</span>: { eventId, userId, email, name,
+            status: <span class="str">"GOING"</span>, source: <span class="str">"EVENT_PAGE"</span>, referredByUserId },
+  <span class="kw">update</span>: { userId, status: <span class="str">"GOING"</span> },
+});</div>
+    </div>
+
+    <!-- =========== CHAPTER 2.5: STAGE 4 - COMMUNITY ENGAGEMENT =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">03 · Pre-event Engagement</div>
+        <h2 class="chapter-title">Stage 4: Community Directory &amp; Messaging</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <div class="stage-card teal">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 04</span>
+            <h3 class="stage-title">Community Engagement</h3>
+            <span class="stage-sub">/community · /events/[slug]/tabs/chat</span>
+        </div>
+        <p>Once onboarded, a member lands on <code>/community</code> — a paginated, searchable grid of every other onboarded member on the platform (card shows photo, name, title, company, profile categories, and a short bio excerpt). Each card has a <strong>Contact</strong> button that opens the messages dialog and either continues an existing 1-on-1 conversation or starts a new one. Concurrently, every event the member has RSVP'd to exposes a <strong>group chat room</strong> tab (Socket.io sidecar) where all registered attendees can collaborate in real time before, during, and after the event.</p>
+        <p>Direct messages live in the <code>DirectMessage</code> table (senderId, recipientId, body, readAt). Group chat lives in <code>ChatRoom</code> + <code>ChatMessage</code> tables, scoped per event. Both flows are pushed live over a WebSocket sidecar (Socket.io) so recipients see messages without polling — the previous 2-second poll storm was removed for sub-100ms perceived latency. Read receipts, unread counts, and "minimized vs. open" dialog state are all tracked client-side and reconciled with the server on dialog open.</p>
+        <div class="info-row">
+            <span class="k">Member Browse</span>
+            <span class="v"><code>/community</code> — search + filter by category, paginated grid</span>
+        </div>
+        <div class="info-row">
+            <span class="k">1-on-1 DM</span>
+            <span class="v"><code>/api/messages/[userId]</code> GET history / POST new — opens from Contact button</span>
+        </div>
+        <div class="info-row">
+            <span class="k">Event Group Chat</span>
+            <span class="v"><code>/api/chat/events/[eventId]/room</code> — auto-created per event, all RSVP'd members</span>
+        </div>
+        <div class="info-row">
+            <span class="k">Real-time</span>
+            <span class="v">Socket.io sidecar (mini-services/chat-service) — replaces poll storm</span>
+        </div>
+    </div>
+
+    <div class="callout teal">
+        <span class="co-tag">Pattern · Stale-JWT Self-Heal (v1.2 Reliability Fix)</span>
+        <p>The original JWT callback in <code>src/lib/auth.ts</code> set <code>token.id</code> once at login, with a fallback chain that could write the Google OAuth <code>sub</code> (NOT a Prisma UUID) into the cookie if the initial DB lookup failed transiently. Once that bad value was cached, every subsequent <code>db.user.findUnique({ where: { id: session.user.id } })</code> returned null and the Contact button surfaced <strong>"User not found"</strong> — even for known members the user had previously messaged. v1.2 introduces a 3-layer defense: (1) <code>src/lib/session-user.ts</code> exports <code>getMeId(session)</code> / <code>getMe(session, select)</code> that verify <code>session.user.id</code> against the DB on every API call and fall back to an email lookup if stale; (2) the JWT callback self-heals on subsequent requests via a new <code>token.idResolved</code> flag that re-resolves from DB by email; (3) the messages dialog now translates raw API errors into friendly toast messages ("Your session is stale — please refresh"). The same <code>getMeId</code> helper is now used by <code>/api/messages/[userId]</code>, <code>/api/messages/conversations</code>, and <code>/api/messages/unread-count</code>.</p>
+    </div>
+
+    <!-- =========== CHAPTER 3: STAGES 5-7 =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">04 · Event Day</div>
+        <h2 class="chapter-title">Stages 5–7: Codes, Door, Post-event</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <div class="stage-card amber">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 05</span>
+            <h3 class="stage-title">Self Check-in (Code Issuance)</h3>
+            <span class="stage-sub">POST /api/events/[slug]/check-in</span>
+        </div>
+        <p>Starting <strong>2 hours before <code>startsAt</code></strong> and up to 6 hours after <code>endsAt</code>, the CTA flips to "I'm here — Check in". Clicking validates the window and generates an <strong>8-character Crockford base32 code</strong> (alphabet <code>0123456789ABCDEFGHJKMNPQRSTVWXYZ</code> — no I/L/O/U to avoid 1/0/V confusion), formatted as <code>XXXX-XXXX</code>. The code is <strong>globally unique</strong> across all events (a single code identifies one RSVP platform-wide), idempotent on re-click, and stored on <code>EventRsvp.checkInCode</code> + <code>checkedInAt</code>.</p>
+        <p><strong>Unregistered members see only a "Register to event" button</strong> — the check-in CTA is hidden until they RSVP. The server-side endpoint still uses <code>upsert</code> as a defensive fallback (creates an RSVP on the fly if a user hits the API without one), but the UI no longer exposes that path. Members must register first, then the check-in button appears in the registered state once the 2-hour window opens.</p>
+        <div class="code-caption">// Time window: startsAt - 2h → endsAt + 6h</div>
+        <div class="code-block"><span class="kw">function</span> <span class="fn">isWithinCheckInWindow</span>(startsAt, endsAt, now = <span class="kw">new</span> <span class="fn">Date</span>()) {
+  <span class="kw">const</span> open  = startsAt.<span class="fn">getTime</span>() - <span class="num">2</span> * <span class="num">60</span> * <span class="num">60</span> * <span class="num">1000</span>;
+  <span class="kw">const</span> close = endsAt.<span class="fn">getTime</span>()  + <span class="num">6</span> * <span class="num">60</span> * <span class="num">60</span> * <span class="num">1000</span>;
+  <span class="kw">return</span> now.<span class="fn">getTime</span>() &gt;= open &amp;&amp; now.<span class="fn">getTime</span>() &lt;= close;
+}</div>
+    </div>
+
+    <div class="stage-card amber">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 06</span>
+            <h3 class="stage-title">Door Check-in (Two-Step Confirm)</h3>
+            <span class="stage-sub">/admin/check-in · GET /lookup · POST /confirm</span>
+        </div>
+        <p>At the venue, door staff type or scan the code at <code>/admin/check-in</code>. The flow is now <strong>two explicit steps</strong> — no pre-approval gate. <strong>ANY Super Admin, Admin, or Co-host of the event</strong> can perform both steps at the door; the confirmation itself IS the approval.</p>
+        <p><strong>Step 1 — Look up</strong> (GET <code>/api/admin/check-in/lookup?code=XXXX-XXXX</code>): normalizes input (<code>abcd1234</code>, lowercase, leading spaces all become <code>ABCD-1234</code>) and returns one of three outcomes: <strong>MISS</strong> (404, red panel), <strong>PENDING_CONFIRM</strong> (200, amber "Confirm member to check in" panel with member info + a red non-transferrable-code warning), or <strong>ALREADY_USED</strong> (200, amber "Code already used" panel with original check-in time + checker name). <strong>No write happens here</strong> — pure read.</p>
+        <p><strong>Step 2 — Confirm</strong> (POST <code>/api/admin/check-in/confirm</code> with <code>{ code }</code>): the door staffer reviews the member info + the warning ("Personal, non-transferrable code. This code belongs to X only. Verifying it admits this person into the event — do not confirm if the attendee at the door is not the person shown above."), then presses "Confirm check-in". The endpoint atomically sets <code>doorCheckedAt</code> + <code>doorCheckedBy</code> using race-safe <code>updateMany({ where: { id, doorCheckedAt: null } })</code>. Returns <strong>CONFIRMED</strong> (200, green panel) on first check-in, or <strong>ALREADY_USED</strong> (200, amber panel) if another staffer beat us to it (<code>count === 0</code> → re-fetch + return original timestamp). After each cycle, the input clears and refocuses for the next attendee.</p>
+        <div class="info-row">
+            <span class="k">No Pre-Approval</span>
+            <span class="v">Confirmation at the door IS the approval — any Admin/CoHost can do it</span>
+        </div>
+        <div class="info-row">
+            <span class="k">Two-step</span>
+            <span class="v">Look up → review member + warning → confirm (race-safe atomic write)</span>
+        </div>
+        <div class="info-row">
+            <span class="k">Single-use</span>
+            <span class="v"><code>doorCheckedAt</code> set once; subsequent scans return "already used"</span>
+        </div>
+    </div>
+
+    <div class="stage-card">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 07</span>
+            <h3 class="stage-title">Post-event Attendance Mark</h3>
+            <span class="stage-sub">PATCH /api/admin/rsvps/[id]/attendance</span>
+        </div>
+        <p>After the event, an admin marks each RSVP as <strong>ATTENDED</strong>, <strong>NO_SHOW</strong>, or <strong>CLEAR</strong>. This is independent of door check-in — someone can enter the door and leave early (still marked no-show for content), or attend without a door scan (admin override). The endpoint sets <code>attendedAt</code>/<code>noShow</code>/<code>attendedMarkedBy</code>, fires GA4 + Meta CAPI conversion events, and fires <code>triggerFlowsForRsvp({triggerKind: "MARKED_ATTENDED"})</code> — which typically enqueues the Recap email sent 24 hours after the event.</p>
+    </div>
+
+    <!-- =========== CHAPTER 5: API REFERENCE + EMAIL FLOW =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">05 · Reference</div>
+        <h2 class="chapter-title">API Endpoints &amp; Email Flow</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <h3 class="subsection">Endpoints Touched in the Journey</h3>
+    <table class="api-table">
+        <thead>
+            <tr>
+                <th style="width:50px">M</th>
+                <th style="width:240px">Path</th>
+                <th style="width:80px">Auth</th>
+                <th>Sets on DB</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/auth/signup</span></td>
+                <td>None</td>
+                <td><code>User</code> row, <code>passwordHash</code>, <code>utmUid</code>, <code>ReferralAttribution</code></td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/user/onboarding</span></td>
+                <td>Member</td>
+                <td><code>User.onboardedAt</code>, profile fields</td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/events/[slug]/rsvp</span></td>
+                <td>Member</td>
+                <td><code>EventRsvp</code> (status=GOING), fires <code>RSVP_GOING</code> trigger</td>
+            </tr>
+            <tr>
+                <td><span class="method m-del">DEL</span></td>
+                <td><span class="path">/api/events/[slug]/rsvp</span></td>
+                <td>Member</td>
+                <td>Deletes RSVP row, preserves any <code>checkInCode</code></td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/events/[slug]/check-in</span></td>
+                <td>Member</td>
+                <td><code>EventRsvp.checkInCode</code>, <code>checkedInAt</code></td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/admin/events/[id]/rsvps/[rsvpId]/approve</span></td>
+                <td>Admin/CoHost</td>
+                <td><code>approvedByCoHostId</code>, <code>approvedAt</code> — optional vetting field, no longer gates door check-in</td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/admin/check-in/lookup?code=...</span></td>
+                <td>Admin/CoHost</td>
+                <td>Read-only — returns PENDING_CONFIRM / ALREADY_USED / MISS (no write)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/admin/check-in/confirm</span></td>
+                <td>Admin/CoHost</td>
+                <td><code>doorCheckedAt</code>, <code>doorCheckedBy</code> (first confirm only, race-safe)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-patch">PATCH</span></td>
+                <td><span class="path">/api/admin/rsvps/[id]/attendance</span></td>
+                <td>Admin</td>
+                <td><code>attendedAt</code>/<code>noShow</code>/<code>attendedMarkedBy</code>, fires <code>MARKED_ATTENDED</code></td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/messages/conversations</span></td>
+                <td>Member</td>
+                <td>List of all DM conversations for current user (via <code>getMeId</code>)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/messages/[userId]</span></td>
+                <td>Member</td>
+                <td>DM thread with target user (verifies both users exist)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/messages/[userId]</span></td>
+                <td>Member</td>
+                <td>Send DM — creates row in <code>DirectMessage</code>, pushes via Socket.io</td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/messages/unread-count</span></td>
+                <td>Member</td>
+                <td>Unread DM count for header badge (parallelized with conversations)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/chat/events/[eventId]/room</span></td>
+                <td>Member</td>
+                <td>Resolve or auto-create the group chat room for an event</td>
+            </tr>
+            <tr>
+                <td><span class="method m-get">GET</span></td>
+                <td><span class="path">/api/chat/rooms/[roomId]/messages</span></td>
+                <td>Member</td>
+                <td>Group chat history (paginated, before-cursor supported)</td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/chat/rooms/[roomId]/messages</span></td>
+                <td>Member</td>
+                <td>Post to group chat — broadcast via Socket.io to room subscribers</td>
+            </tr>
+            <tr>
+                <td><span class="method m-post">POST</span></td>
+                <td><span class="path">/api/chat/rooms/[roomId]/read</span></td>
+                <td>Member</td>
+                <td>Mark room as read up to a cursor — clears unread badge</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 class="subsection" style="margin-top:22px;">Email Flow Integration — Two Parallel Systems</h3>
+    <p class="body" style="margin-bottom:14px; font-size:12.5px; color:var(--ink-mute);">A dedicated deep-dive on the email system — including the 5-stage sequence, audit queries to verify a real send vs. demo data, env vars, and a 9-step verification checklist — is published separately at <code>/email-system-architecture.pdf</code>. The summary below is the cross-reference for this journey.</p>
+    <div class="two-col">
+        <div class="col-card legacy">
+            <span class="col-tag">Legacy</span>
+            <h4>5-Stage Orchestrator</h4>
+            <p>Time-relative to <code>event.startsAt</code>. Processed by a cron tick on <code>/api/cron/email/send-scheduled</code>.</p>
+            <ul>
+                <li>Awareness — 240h before</li>
+                <li>Reminder — 48h before</li>
+                <li>Final Prep — 4h before</li>
+                <li>Day-Of — at start</li>
+                <li>Recap — 24h after</li>
+            </ul>
+        </div>
+        <div class="col-card flows">
+            <span class="col-tag">Flows v2</span>
+            <h4>Per-Step Triggers</h4>
+            <p>Each <code>EmailFlowStep</code> has its own <code>triggerKind</code> + delay. Idempotent on <code>(flowStepId, rsvpId)</code>.</p>
+            <ul>
+                <li>Each step independently triggered</li>
+                <li>A/B subject variants supported</li>
+                <li>Audience filter per step</li>
+                <li>Writes to same <code>EmailQueue</code> table</li>
+            </ul>
+        </div>
+    </div>
+
+    <h3 class="subsection" style="margin-top:18px;">Trigger Kinds &amp; Where They Fire</h3>
+    <div class="trigger-list">
+        <div class="trigger-item fired">
+            <div class="tk">RSVP_GOING</div>
+            <div class="td">Fires from <code>/api/events/[slug]/rsvp</code> on first registration only.</div>
+        </div>
+        <div class="trigger-item unfired">
+            <div class="tk">DOOR_CHECKED_IN</div>
+            <div class="td">Defined but never fired — see anomaly below.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MARKED_ATTENDED</div>
+            <div class="td">Fires from attendance route on transition to ATTENDED.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MARKED_NO_SHOW</div>
+            <div class="td">Fires from attendance route on transition to NO_SHOW.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MANUAL</div>
+            <div class="td">Admin-triggered from the flow reports dashboard.</div>
+        </div>
+    </div>
+
+    <div class="callout red">
+        <span class="co-tag">Anomaly · Medium Severity</span>
+        <p>The <code>DOOR_CHECKED_IN</code> trigger is defined in <code>flow-trigger.ts</code> and branch rules reference it, but the door confirm endpoint (<code>/api/admin/check-in/confirm/route.ts</code>) never calls <code>triggerFlowsForRsvp({triggerKind: "DOOR_CHECKED_IN"})</code>. Any flow step configured with this trigger will silently never fire. <strong>Fix:</strong> add the call after the <code>updateMany</code> succeeds (i.e. when <code>updateResult.count === 1</code> and the response status is <code>CONFIRMED</code>), so re-scans of an already-used code don't re-fire the trigger.</p>
+    </div>
+
+    <!-- =========== CHAPTER 6: KEY FIELDS + CLOSING =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">06 · The Four Timestamps</div>
+        <h2 class="chapter-title">EventRsvp Field Reference</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">The <code>EventRsvp</code> table is the central record of this journey. Four timestamps together describe the complete lifecycle of an attendee's relationship to one event. Understanding who sets each one — and when — is essential for debugging door-checkin issues and reconciling post-event attendance reports.</p>
+
+    <table class="fields-table">
+        <thead>
+            <tr>
+                <th style="width:140px">Field</th>
+                <th style="width:130px">Set By</th>
+                <th>When</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="field-name">checkedInAt</span></td>
+                <td>The attendee</td>
+                <td>Clicks "I'm here" — issues the 8-char code (window: startsAt−2h → endsAt+6h)</td>
+            </tr>
+            <tr>
+                <td><span class="field-name">approvedAt</span></td>
+                <td>Co-host (optional)</td>
+                <td>Optional vetting field on the admin registrants page — no longer gates door check-in. The confirmation at the door IS the approval.</td>
+            </tr>
+            <tr>
+                <td><span class="field-name">doorCheckedAt</span></td>
+                <td>Door staff (Admin/CoHost)</td>
+                <td>Set by POST /api/admin/check-in/confirm after the staffer reviews the member info + non-transferrable-code warning. Single-use, race-safe via <code>updateMany where doorCheckedAt: null</code></td>
+            </tr>
+            <tr>
+                <td><span class="field-name">attendedAt</span></td>
+                <td>Admin</td>
+                <td>Post-event attendance mark — independent of door check-in</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3 class="subsection" style="margin-top:22px;">Edge Cases Worth Knowing</h3>
+
+    <div class="callout amber">
+        <span class="co-tag">Edge Case · Late Walk-in (API-only fallback)</span>
+        <p>The server-side check-in endpoint (<code>/api/events/[slug]/check-in</code>) still uses <code>upsert</code> and will create an RSVP on the fly (status=GOING, source=EVENT_PAGE) AND issue the code in one operation. However, <strong>the UI no longer exposes this path</strong> — unregistered members see only a "Register to event" button until they RSVP. The upsert remains as a defensive fallback for direct API calls. Note that this shortcut does NOT fire <code>RSVP_GOING</code> triggers — those flow steps will never be enqueued for the walk-in. This is arguably correct (no point sending a 10-days-before email at event time), but worth understanding when reconciling email queue data.</p>
+    </div>
+
+    <div class="callout teal">
+        <span class="co-tag">Pattern · Race-safe Door Write</span>
+        <p>When two door staffers confirm the same code within milliseconds of each other (common at busy events), the confirm endpoint uses <code>updateMany({ where: { id, doorCheckedAt: null } })</code> instead of <code>update()</code>. The first staffer's call returns <code>count: 1</code> and is treated as the confirmed check-in (returns <code>status: "CONFIRMED"</code>). The second staffer's call returns <code>count: 0</code> (because <code>doorCheckedAt</code> is no longer null), triggering a re-fetch that returns <code>status: "ALREADY_USED"</code> with the original timestamp + checker name. This pattern prevents race conditions without transactions. Note that the lookup step (GET) is a pure read and never writes, so two simultaneous lookups of the same code are both safe and idempotent.</p>
+    </div>
+
+    <div class="callout amber">
+        <span class="co-tag">Edge Case · Stale JWT and "User not found" on Contact</span>
+        <p>Before v1.2, a transient DB failure during login could write the Google OAuth <code>sub</code> (a non-Prisma value) into the JWT cookie as <code>token.id</code>. The cookie is long-lived, so every subsequent API call that did <code>db.user.findUnique({ where: { id: session.user.id } })</code> returned null and the Contact button errored with <strong>"User not found"</strong> — even though the recipient clearly existed. The fix is layered: API routes now go through <code>getMeId(session)</code> in <code>src/lib/session-user.ts</code>, which verifies the JWT id against the DB and falls back to an email lookup if stale; the JWT callback self-heals on subsequent requests via a <code>token.idResolved</code> flag; and the messages dialog translates raw API errors into friendly toast messages. Members who experienced this bug will see it self-resolve on their next page load — no manual cookie clearing required.</p>
+    </div>
+
+</div>
+
+<!-- ============================================================
+     ENDING PAGE
+     ============================================================ -->
+<div class="ending">
+    <div class="ending-shape-1"></div>
+    <div class="ending-shape-2"></div>
+
+    <div class="ending-top">End of Journey · Quick Recap</div>
+
+    <div class="ending-middle">
+        <h2 class="ending-title">Seven stages,<br>four <span class="accent">timestamps</span>,<br>one code.</h2>
+        <p class="ending-body">The flow splits cleanly: the platform handles acquisition (stages 1–3), community engagement (stage 4) bridges members before the event, the attendee owns their check-in code (stages 5–6), and door staff verify with a single atomic write (stage 6). Post-event attendance is a separate concept from door check-in.</p>
+
+        <div class="ending-checklist">
+            <h4>Key Takeaways</h4>
+            <ul>
+                <li>Registration is a one-click RSVP — no long form</li>
+                <li>Unregistered members see only "Register" — no check-in shortcut</li>
+                <li>Onboarded members get a community directory + 1-on-1 DMs + event group chat</li>
+                <li>All messaging is real-time via Socket.io sidecar — no polling</li>
+                <li>Stale JWT <code>token.id</code> self-heals via <code>getMeId()</code> + JWT callback re-resolution</li>
+                <li>The 8-char code is <strong>globally unique</strong> across all events</li>
+                <li>Check-in window opens <strong>2 hours before</strong> the event starts</li>
+                <li>Door check-in is two-step: look up → review + warning → confirm</li>
+                <li>Any Admin/CoHost can confirm at the door — no pre-approval gate</li>
+                <li><code>doorCheckedAt</code> is single-use and race-safe</li>
+                <li>Post-event attendance is independent of door check-in</li>
+                <li><code>DOOR_CHECKED_IN</code> trigger is defined but never fires — wire it up</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="ending-bottom">
+        <span>AI Salon Tel Aviv · Engineering Reference</span>
+        <span class="doc-id">DOC-JOURNEY-001 · v1.2</span>
+    </div>
+</div>
+
+</body>
+</html>
