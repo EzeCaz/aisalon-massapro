@@ -1730,3 +1730,63 @@ Stage Summary:
   - NEW scripts/drive-backup.py (Python service-account Drive uploader)
   - NEW scripts/setup-drive-backup.sh (interactive setup helper)
   - MODIFIED scripts/db-backup.sh (auto-calls drive-backup.py when AUTO_SYNC_DRIVE=1)
+
+---
+Task ID: fix-user-not-found-on-contact
+Agent: main
+Task: Fix "User not found" error when clicking Contact button on community members that the user has previously messaged.
+
+Work Log:
+- Reproduced the symptom: clicking Contact → opens dialog → user types
+  and hits Send → toast says "User not found" (NOT "Failed to load
+  conversation" — the raw API error string is surfaced verbatim by
+  sendMessage's error handler at messages-dialog.tsx:396).
+- Root cause traced via src/lib/auth.ts jwt callback (line 209-228):
+  when a user logs in, the callback tries db.user.findUnique({where:
+  {email: user.email}}). If that returns null (transient DB issue, or
+  signIn callback hadn't committed the row yet), it falls back to
+  `token.id = user.id || token.sub` — which is the Google OAuth `sub`
+  (e.g. "111234567890123456789"), NOT a Prisma UUID. Once that bad
+  value lands in the JWT cookie, every downstream API that does
+  `db.user.findUnique({ where: { id: session.user.id } })` returns
+  null, and POST /api/messages/[userId] returns 403 "User not found"
+  — even though the user is logged in and the partner exists in DB.
+- The GET endpoints (GET /api/messages/[userId], /conversations,
+  /unread-count) had a related bug: they trusted session.user.id
+  without verifying it resolves to a real DB row. With a stale
+  Google-sub id, GET silently returned an empty thread / 0 unread,
+  hiding the problem.
+- Fix applied:
+  1. NEW src/lib/session-user.ts — exports getMeId(session) and
+     getMe(session, select) helpers that verify session.user.id
+     resolves to a real DB row, falling back to email lookup if not.
+     Verified ids are cached on the session object (WeakSet) so
+     subsequent calls in the same request skip the re-verification.
+  2. All 4 message API routes updated to use these helpers:
+     - GET /api/messages/[userId]
+     - POST /api/messages/[userId]
+     - GET /api/messages/conversations
+     - GET /api/messages/unread-count
+  3. auth.ts jwt callback now self-heals on subsequent requests
+     (when `user` is undefined): if token.idResolved is false, re-
+     resolve from DB by email and mark the token as resolved. This
+     means users with a stale token.id get it corrected on the next
+     page load — no logout/login required.
+  4. messages-dialog.tsx sendMessage() now translates raw API
+     errors into user-friendly toast messages (e.g. "User not
+     found" → "Your session is stale — please refresh the page and
+     try again.").
+- Verified type-check: no new TS errors in the modified files.
+  (Pre-existing errors in unrelated files like skills/ and
+  admin/dashboard were untouched.)
+
+Stage Summary:
+- Commit bc32366 pushed to main; Vercel auto-deploying.
+- After deploy, users who were hitting "User not found" will:
+  - On next page load: their JWT self-heals (token.id is re-resolved
+    from the DB by email, token.idResolved is set).
+  - On any API call: even if the JWT hasn't healed yet, getMeId()
+    falls back to email lookup so the API succeeds.
+- The friendly toast message guides users to refresh if they still
+  see an error, which is the simplest workaround if the JWT cookie
+  is somehow malformed beyond what self-heal can fix.
