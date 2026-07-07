@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>From RSVP to Inbox — Email System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PAGE SETUP — Creative Flow (720 × 1020 px)
+   ============================================================ */
+@page {
+    size: 720px 1020px;
+    margin: 0;
+}
+
+:root {
+    --brand-pink:   #FF005A;
+    --brand-teal:   #007E72;
+    --brand-amber:  #FFB800;
+    --ink:          #0F0F1A;
+    --ink-soft:     #1F2235;
+    --ink-mute:     #5C6172;
+    --line:         #E6E6EC;
+    --bg-soft:      #F7F7FA;
+    --bg-card:      #FFFFFF;
+    --bg-pink-soft: #FFF1F5;
+    --bg-teal-soft: #E6F4F2;
+    --bg-amber-soft:#FFF8E6;
+    --bg-red-soft:  #FFEEEE;
+    --red:          #D7263D;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 720px;
+    background: var(--bg-soft);
+    color: var(--ink);
+    font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    font-size: 13.5px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+@media screen {
+    html {
+        height: auto;
+        display: flex;
+        justify-content: center;
+        background: #2a2a2e;
+    }
+    body {
+        margin: 20px auto;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+}
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+.cover {
+    width: 720px;
+    height: 1020px;
+    box-sizing: border-box;
+    break-after: page;
+    overflow: hidden;
+    position: relative;
+    background:
+        radial-gradient(circle at 85% 12%, rgba(255, 184, 0, 0.35) 0%, transparent 35%),
+        radial-gradient(circle at 12% 88%, rgba(0, 126, 114, 0.55) 0%, transparent 45%),
+        linear-gradient(135deg, #FF005A 0%, #C20047 60%, #7A0030 100%);
+    color: #FFFFFF;
+    padding: 64px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.cover-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+    z-index: 2;
+}
+
+.cover-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.cover-brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #FFB800;
+    box-shadow: 0 0 12px rgba(255, 184, 0, 0.7);
+}
+
+.cover-middle {
+    z-index: 2;
+    margin-top: 60px;
+}
+.cover-eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #FFB800;
+    margin-bottom: 22px;
+}
+.cover-title {
+    font-size: 64px;
+    font-weight: 900;
+    line-height: 1.0;
+    letter-spacing: -1.5px;
+    margin: 0 0 24px 0;
+    color: #FFFFFF;
+}
+.cover-title .accent {
+    color: #FFB800;
+    font-style: italic;
+}
+.cover-subtitle {
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.92);
+    max-width: 540px;
+    margin-bottom: 32px;
+}
+
+.cover-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+.cover-tag {
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #FFFFFF;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.cover-bottom {
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+    letter-spacing: 1px;
+}
+.cover-bottom .doc-id {
+    font-family: 'JetBrains Mono', monospace;
+    color: #FFB800;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+.cover-shape-1 {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 110px;
+    height: 110px;
+    border: 2px solid rgba(255, 184, 0, 0.35);
+    border-radius: 50%;
+    z-index: 1;
+}
+.cover-shape-2 {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 130px;
+    height: 130px;
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    border-radius: 50%;
+    z-index: 1;
+}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+.main-content {
+    padding: 56px 56px 40px 56px;
+    background: var(--bg-soft);
+}
+
+.chapter-header {
+    break-after: avoid;
+    break-inside: avoid;
+    margin-top: 28px;
+    margin-bottom: 18px;
+}
+.chapter-header:first-child { margin-top: 0; }
+
+.chapter-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--brand-pink);
+    margin-bottom: 8px;
+}
+.chapter-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 10px 0;
+    letter-spacing: -0.4px;
+    line-height: 1.2;
+}
+.chapter-divider {
+    width: 48px;
+    height: 3px;
+    background: var(--brand-pink);
+    border-radius: 2px;
+    margin-bottom: 14px;
+}
+
+h3.subsection {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 18px 0 8px 0;
+    break-after: avoid;
+}
+
+p.body {
+    margin: 0 0 10px 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.65;
+    text-align: left;
+}
+p.body strong {
+    color: var(--ink);
+    font-weight: 700;
+}
+p.body code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    background: var(--bg-pink-soft);
+    color: var(--brand-pink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* Summary callout */
+.summary-callout {
+    background: linear-gradient(135deg, #FFFFFF 0%, var(--bg-pink-soft) 100%);
+    border-left: 4px solid var(--brand-pink);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 22px;
+    break-inside: avoid;
+}
+.summary-callout p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--ink);
+}
+.summary-callout strong { color: var(--brand-pink); }
+.summary-callout code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* ============================================================
+   STAGE CARDS
+   ============================================================ */
+.stage-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    break-inside: avoid;
+    position: relative;
+}
+.stage-card .stage-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.stage-card .stage-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--brand-pink);
+    background: var(--bg-pink-soft);
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+.stage-card .stage-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+}
+.stage-card .stage-sub {
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+}
+.stage-card p {
+    margin: 0 0 8px 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+}
+.stage-card p:last-child { margin-bottom: 0; }
+.stage-card code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    background: var(--bg-pink-soft);
+    color: var(--brand-pink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+.stage-card.teal { border-left: 4px solid var(--brand-teal); }
+.stage-card.teal .stage-num { color: var(--brand-teal); background: var(--bg-teal-soft); }
+.stage-card.teal code { background: var(--bg-teal-soft); color: var(--brand-teal); }
+.stage-card.amber { border-left: 4px solid var(--brand-amber); }
+.stage-card.amber .stage-num { color: #B07700; background: var(--bg-amber-soft); }
+.stage-card.amber code { background: var(--bg-amber-soft); color: #B07700; }
+
+.info-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+    font-size: 11.5px;
+}
+.info-row .k {
+    color: var(--ink-mute);
+    font-weight: 600;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.info-row .v {
+    color: var(--ink-soft);
+    font-size: 11.5px;
+}
+.info-row .v code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-soft);
+    color: var(--ink);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* ============================================================
+   CODE BLOCK
+   ============================================================ */
+.code-block {
+    background: #1A1D2E;
+    color: #E8E8F0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 8px 0 4px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    line-height: 1.55;
+    overflow: hidden;
+    break-inside: avoid;
+    white-space: pre;
+}
+.code-block .kw { color: #FF6FB5; }
+.code-block .str { color: #FFD479; }
+.code-block .com { color: #6E7390; font-style: italic; }
+.code-block .fn { color: #7EEAD0; }
+.code-block .num { color: #FFB800; }
+.code-caption {
+    font-size: 10px;
+    color: var(--ink-mute);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ============================================================
+   TWO-COLUMN BLOCK
+   ============================================================ */
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 10px;
+    break-inside: avoid;
+}
+.col-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 14px 12px 14px;
+}
+.col-card h4 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: var(--ink);
+}
+.col-card .col-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+.col-card.legacy .col-tag { background: var(--bg-amber-soft); color: #B07700; }
+.col-card.flows .col-tag  { background: var(--bg-teal-soft); color: var(--brand-teal); }
+.col-card.pink .col-tag { background: var(--bg-pink-soft); color: var(--brand-pink); }
+.col-card p {
+    font-size: 11.5px;
+    line-height: 1.55;
+    margin: 0 0 6px 0;
+    color: var(--ink-soft);
+}
+.col-card ul {
+    margin: 6px 0 0 0;
+    padding-left: 14px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+}
+.col-card li { margin-bottom: 2px; }
+.col-card li code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: var(--bg-soft);
+    color: var(--brand-pink);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
+/* ============================================================
+   TIMELINE DIAGRAM (5-stage)
+   ============================================================ */
+.timeline {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 16px 14px 16px;
+    margin-top: 8px;
+    break-inside: avoid;
+}
+.timeline-axis {
+    position: relative;
+    height: 14px;
+    margin: 18px 0 6px 0;
+}
+.timeline-axis::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--line);
+}
+.timeline-axis .marker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--ink);
+    z-index: 2;
+}
+.timeline-axis .marker.start { background: var(--brand-amber); }
+.timeline-axis .marker.event { background: var(--brand-pink); width: 14px; height: 14px; }
+.timeline-axis .marker.end { background: var(--brand-teal); }
+.timeline-stages {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+}
+.tl-stage {
+    text-align: center;
+    padding: 8px 4px;
+    border-radius: 8px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+}
+.tl-stage .num {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    border-radius: 50%;
+    background: var(--brand-pink);
+    color: #FFFFFF;
+    font-size: 9.5px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.tl-stage .name {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+.tl-stage .offset {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--ink-mute);
+}
+.tl-stage.teal .num { background: var(--brand-teal); }
+.tl-stage.amber .num { background: var(--brand-amber); color: var(--ink); }
+
+/* ============================================================
+   CALLOUTS
+   ============================================================ */
+.callout {
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 12px 0;
+    break-inside: avoid;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.callout .co-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+.callout.red {
+    background: var(--bg-red-soft);
+    border-left: 4px solid var(--red);
+}
+.callout.red .co-tag { background: var(--red); color: #FFFFFF; }
+.callout.amber {
+    background: var(--bg-amber-soft);
+    border-left: 4px solid var(--brand-amber);
+}
+.callout.amber .co-tag { background: var(--brand-amber); color: var(--ink); }
+.callout.teal {
+    background: var(--bg-teal-soft);
+    border-left: 4px solid var(--brand-teal);
+}
+.callout.teal .co-tag { background: var(--brand-teal); color: #FFFFFF; }
+.callout.pink {
+    background: var(--bg-pink-soft);
+    border-left: 4px solid var(--brand-pink);
+}
+.callout.pink .co-tag { background: var(--brand-pink); color: #FFFFFF; }
+.callout p { margin: 0; color: var(--ink-soft); }
+.callout p + p { margin-top: 6px; }
+.callout strong { color: var(--ink); }
+.callout code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: rgba(255,255,255,0.7);
+    color: var(--ink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* ============================================================
+   TABLES
+   ============================================================ */
+.api-table, .fields-table, .env-table, .ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin-top: 6px;
+    break-inside: avoid;
+    background: var(--bg-card);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+}
+.api-table thead, .fields-table thead, .ref-table thead {
+    background: var(--ink);
+    color: #FFFFFF;
+}
+.env-table thead { background: var(--brand-teal); color: #FFFFFF; }
+.api-table th, .fields-table th, .env-table th, .ref-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+.api-table td, .fields-table td, .env-table td, .ref-table td {
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+    color: var(--ink-soft);
+    line-height: 1.45;
+}
+.api-table tr:nth-child(even) td,
+.fields-table tr:nth-child(even) td,
+.env-table tr:nth-child(even) td,
+.ref-table tr:nth-child(even) td { background: #FAFAFC; }
+.api-table .method, .ref-table .method {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #FFFFFF;
+    display: inline-block;
+    min-width: 38px;
+    text-align: center;
+}
+.api-table .m-post, .ref-table .m-post { background: var(--brand-pink); }
+.api-table .m-get, .ref-table .m-get  { background: var(--brand-teal); }
+.api-table .m-del, .ref-table .m-del  { background: var(--red); }
+.api-table .m-patch, .ref-table .m-patch{ background: var(--brand-amber); color: var(--ink); }
+.api-table .path, .ref-table .path {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ink);
+    word-break: break-all;
+}
+.env-table .vname, .ref-table .field-name, .fields-table .field-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--brand-pink);
+    font-weight: 600;
+    font-size: 10.5px;
+}
+.env-table .req {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--red);
+    text-transform: uppercase;
+}
+.env-table .opt {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+}
+
+/* ============================================================
+   CHECKLIST
+   ============================================================ */
+.check-list {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 8px;
+    break-inside: avoid;
+}
+.check-list ol {
+    margin: 0;
+    padding-left: 22px;
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.7;
+}
+.check-list li { margin-bottom: 6px; }
+.check-list li strong { color: var(--ink); }
+.check-list li code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    background: var(--bg-pink-soft);
+    color: var(--brand-pink);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* ============================================================
+   TRIGGER KIND LIST
+   ============================================================ */
+.trigger-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+.trigger-item {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    break-inside: avoid;
+}
+.trigger-item .tk {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--brand-pink);
+    margin-bottom: 3px;
+}
+.trigger-item .td {
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+}
+.trigger-item.fired .tk { color: var(--brand-teal); }
+.trigger-item.unfired { border-left: 3px solid var(--red); }
+.trigger-item.unfired .tk { color: var(--red); }
+
+/* ============================================================
+   ENDING PAGE
+   ============================================================ */
+.ending {
+    width: 720px;
+    height: 1020px;
+    box-sizing: border-box;
+    break-before: page;
+    overflow: hidden;
+    position: relative;
+    background:
+        radial-gradient(circle at 90% 10%, rgba(255, 184, 0, 0.25) 0%, transparent 35%),
+        linear-gradient(160deg, #007E72 0%, #004D45 100%);
+    color: #FFFFFF;
+    padding: 64px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.ending-shape-1 {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 120px;
+    height: 120px;
+    border: 2px solid rgba(255, 184, 0, 0.3);
+    border-radius: 50%;
+}
+.ending-shape-2 {
+    position: absolute;
+    top: 80px;
+    right: 60px;
+    width: 90px;
+    height: 90px;
+    background: rgba(255, 0, 90, 0.18);
+    border-radius: 16px;
+    transform: rotate(-12deg);
+}
+.ending-top {
+    z-index: 2;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #FFB800;
+}
+.ending-middle { z-index: 2; }
+.ending-title {
+    font-size: 44px;
+    font-weight: 900;
+    line-height: 1.05;
+    margin: 0 0 18px 0;
+    letter-spacing: -1px;
+}
+.ending-title .accent { color: #FFB800; font-style: italic; }
+.ending-body {
+    font-size: 14px;
+    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.92);
+    max-width: 540px;
+    margin-bottom: 20px;
+}
+.ending-checklist {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 18px 22px;
+    max-width: 540px;
+}
+.ending-checklist h4 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 0 0 10px 0;
+    color: #FFB800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+.ending-checklist ul {
+    margin: 0;
+    padding-left: 18px;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 12px;
+    line-height: 1.75;
+}
+.ending-checklist li { margin-bottom: 4px; }
+.ending-checklist li code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    background: rgba(255, 184, 0, 0.18);
+    color: #FFB800;
+    padding: 0 4px;
+    border-radius: 2px;
+}
+.ending-bottom {
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 1px;
+}
+.ending-bottom .doc-id {
+    font-family: 'JetBrains Mono', monospace;
+    color: #FFB800;
+    font-weight: 700;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     COVER PAGE
+     ============================================================ -->
+<div class="cover">
+
+    <div class="cover-top">
+        <div class="cover-brand">
+            <div class="cover-brand-dot"></div>
+            <span>AI Salon · Tel Aviv</span>
+        </div>
+        <span>Engineering Reference</span>
+    </div>
+
+    <div class="cover-middle">
+        <div class="cover-eyebrow">Email System · v1.0</div>
+        <h1 class="cover-title">From RSVP<br>to <span class="accent">Inbox</span></h1>
+        <p class="cover-subtitle">The email system on the AI Salon Tel Aviv platform — from the moment a member clicks Register to the moment the 5-stage sequence lands in their inbox. Two parallel subsystems, one audit question: <em>was this email actually sent?</em></p>
+        <div class="cover-tags">
+            <span class="cover-tag">Engineering</span>
+            <span class="cover-tag">Operations</span>
+            <span class="cover-tag">Mixed Audience</span>
+            <span class="cover-tag">2 Subsystems</span>
+        </div>
+    </div>
+
+    <div class="cover-bottom">
+        <span>Updated · 2026-07-07</span>
+        <span class="doc-id">DOC-EMAIL-001</span>
+    </div>
+</div>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<div class="main-content">
+
+    <!-- =========== 01 · EXECUTIVE SUMMARY =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">01 · Executive Summary</div>
+        <h2 class="chapter-title">Two Parallel Subsystems</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <div class="summary-callout">
+        <p>The platform has <strong>two independent email subsystems that do not share state</strong>. The Legacy subsystem (<code>src/lib/email.ts</code>, Nodemailer/SMTP) handles transactional sends — RSVP confirmations, signup passwords, DM notifications, speaker messages — and writes <strong>nothing</strong> to the database. The Orchestrator subsystem (<code>src/lib/email-orchestrator/*</code> + <code>src/lib/email-campaign/*</code>, Gmail OAuth2 or mock) handles the 5-stage sequence, admin-built flows, and bulk campaigns — and writes <strong>everything</strong>: queue rows, sent snapshots, open/click tracking, reply matching. The central question this document answers is: <strong>"How do I know a specific email was actually delivered?"</strong> — and the answer depends entirely on which subsystem sent it.</p>
+    </div>
+
+    <h3 class="subsection">Side-by-Side Comparison</h3>
+    <div class="two-col">
+        <div class="col-card legacy">
+            <span class="col-tag">Legacy · SMTP</span>
+            <h4>src/lib/email.ts</h4>
+            <p>Nodemailer v9, SMTP transport. Fire-and-forget. Returns <code>{ ok, error? }</code>.</p>
+            <ul>
+                <li>RSVP confirmation (with .ics attachment)</li>
+                <li>Signup / password reset</li>
+                <li>DM notification (to recipient + cc ADMIN_EMAIL)</li>
+                <li>Speaker-message relay (to ADMIN_EMAIL)</li>
+            </ul>
+            <p style="margin-top:8px;"><strong style="color:var(--red);">No DB log.</strong> Cannot answer "was this sent?" from the database.</p>
+        </div>
+        <div class="col-card flows">
+            <span class="col-tag">Orchestrator · Gmail</span>
+            <h4>email-orchestrator/*</h4>
+            <p>Gmail API v1 (OAuth2 refresh token) OR mock. Queue/worker model with full tracking.</p>
+            <ul>
+                <li>5-stage sequence (Awareness → Recap)</li>
+                <li>Admin-built EmailFlow steps (A/B test)</li>
+                <li>Bulk campaigns via email-campaign/*</li>
+                <li>Writes EmailQueue + TrackingLog + EmailRecipient + EmailEvent</li>
+            </ul>
+            <p style="margin-top:8px;"><strong style="color:var(--brand-teal);">Fully auditable.</strong> Per-recipient status, open pixel, click wrap, reply matching.</p>
+        </div>
+    </div>
+
+    <h3 class="subsection" style="margin-top:18px;">The 5-Stage Sequence Timeline</h3>
+    <div class="timeline">
+        <div class="timeline-stages">
+            <div class="tl-stage">
+                <div class="num">1</div>
+                <div class="name">Awareness</div>
+                <div class="offset">-240h</div>
+            </div>
+            <div class="tl-stage teal">
+                <div class="num">2</div>
+                <div class="name">Reminder</div>
+                <div class="offset">-48h</div>
+            </div>
+            <div class="tl-stage amber">
+                <div class="num">3</div>
+                <div class="name">Final Prep</div>
+                <div class="offset">-4h</div>
+            </div>
+            <div class="tl-stage amber">
+                <div class="num">4</div>
+                <div class="name">Day-Of</div>
+                <div class="offset">0h</div>
+            </div>
+            <div class="tl-stage teal">
+                <div class="num">5</div>
+                <div class="name">Recap</div>
+                <div class="offset">+24h</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========== 02 · 5-STAGE SEQUENCE + TEMPLATES =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">02 · The 5-Stage Sequence</div>
+        <h2 class="chapter-title">Templates, Tokens, Stop Rules</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">The 5-stage sequence is the platform's automated email nurture for event attendees. It is <strong>seeded into the <code>EmailStageTemplate</code> table</strong> by <code>src/lib/email-orchestrator/seed.ts</code> on every page load of <code>/admin/email</code> and <code>/admin/email/flows</code> (idempotent — safe to re-run). Each stage fires at a fixed offset relative to <code>Event.startsAt</code>, processed by the worker at <code>src/lib/email-orchestrator/worker.ts</code>. Two stages carry a "stop if not opened" rule: if the previous email was sent more than N hours ago and the recipient never opened it, all subsequent stages for that RSVP are marked SKIPPED. This prevents the platform from nagging disengaged members.</p>
+
+    <div class="stage-card">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 1</span>
+            <h3 class="stage-title">Awareness</h3>
+            <span class="stage-sub">-240h · stopIfNotOpened: 5h</span>
+        </div>
+        <p>Sent <strong>10 days before</strong> the event. Subject: <code>"You're in! Here's what to expect at {{eventTitle}}"</code>. Body includes event title, formatted date, venue, address, speaker list, and a high-level agenda. This is the warmest touch — the member just registered, so engagement is highest here. If they don't open within 5 hours, Stage 2 will be SKIPPED.</p>
+        <div class="info-row">
+            <span class="k">Tokens used</span>
+            <span class="v"><code>{{firstName}}</code>, <code>{{eventTitle}}</code>, <code>{{eventDate}}</code>, <code>{{eventVenue}}</code>, <code>{{speakers}}</code>, <code>{{agenda}}</code></span>
+        </div>
+    </div>
+
+    <div class="stage-card teal">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 2</span>
+            <h3 class="stage-title">Reminder</h3>
+            <span class="stage-sub">-48h · stopIfNotOpened: 24h</span>
+        </div>
+        <p>Sent <strong>48 hours before</strong> the event. Subject: <code>"Reminder: {{eventTitle}} is in 48 hours"</code>. Lighter content — date, time, venue, agenda. If the recipient opened Stage 1 but doesn't open Stage 2 within 24 hours, Stages 3+4 still fire (the stop rule only checks the immediately-prior stage).</p>
+    </div>
+
+    <div class="stage-card amber">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 3</span>
+            <h3 class="stage-title">Final Prep</h3>
+            <span class="stage-sub">-4h · no stop rule</span>
+        </div>
+        <p>Sent <strong>4 hours before</strong> the event. Subject: <code>"Final prep for {{eventTitle}} — see you soon"</code>. This is where the <code>{{checkInCode}}</code> token first appears — the email explicitly tells the recipient to show this code at the door. Doors-open timing is included.</p>
+        <div class="info-row">
+            <span class="k">Visual bug</span>
+            <span class="v">If the user RSVP'd but never clicked "Check in" on the event page, <code>{{checkInCode}}</code> resolves to empty string. The template still prints the <code>"Check-in code:"</code> label, leaving a dangling label with no value.</span>
+        </div>
+    </div>
+
+    <div class="stage-card amber">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 4</span>
+            <h3 class="stage-title">Day-Of</h3>
+            <span class="stage-sub">0h (event start) · no stop rule</span>
+        </div>
+        <p>Sent <strong>at event start time</strong>. Subject: <code>"Starting now: {{eventTitle}}"</code>. Includes the <code>{{checkInCode}}</code> token in monospace pink and the agenda. Same empty-token bug as Stage 3 if the user never self-checked-in.</p>
+    </div>
+
+    <div class="stage-card teal">
+        <div class="stage-head">
+            <span class="stage-num">STAGE 5</span>
+            <h3 class="stage-title">Recap</h3>
+            <span class="stage-sub">+24h · no stop rule</span>
+        </div>
+        <p>Sent <strong>24 hours after</strong> the event. Subject: <code>"Thanks for coming to {{eventTitle}}"</code>. Includes links to event photos and recordings (when available). This stage fires regardless of door-checkin state — the worker's stop check only looks at <code>doorCheckedAt</code> for SKIPPING forward stages, not for halting the recap.</p>
+    </div>
+
+    <h3 class="subsection" style="margin-top:18px;">Template Tokens &amp; Tracking Injection</h3>
+    <p class="body">The <code>renderTemplate()</code> function in <code>src/lib/email-orchestrator/templates.ts</code> performs simple <code>{{token}}</code> replacement against a context built from the RSVP, Event, and User rows. Supported tokens: <code>{{firstName}}</code>, <code>{{name}}</code>, <code>{{eventTitle}}</code>, <code>{{eventDate}}</code>, <code>{{eventVenue}}</code>, <code>{{eventAddress}}</code>, <code>{{eventUrl}}</code>, <code>{{checkInCode}}</code>, <code>{{speakers}}</code>, <code>{{agenda}}</code>. After token replacement, the renderer automatically injects an <strong>open tracking pixel</strong> (<code>&lt;img src="{baseUrl}/api/track/email-open?id={queueId}"&gt;</code> — a 1×1 GIF appended before <code>&lt;/body&gt;</code>) and <strong>rewrites every <code>href</code></strong> to route through <code>/api/track/email-click?id={queueId}&amp;target={encodeURIComponent(url)}</code> — skipping <code>mailto:</code>, <code>tel:</code>, and already-wrapped URLs. This is how the platform knows who opened and who clicked, without third-party tracking pixels.</p>
+
+    <!-- =========== 03 · RSVP → EMAIL ORCHESTRATION =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">03 · End-to-End Flow</div>
+        <h2 class="chapter-title">RSVP → Email Orchestration</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">When a member clicks "Register to event" on <code>/e/[slug]</code>, the <code>POST /api/events/[slug]/rsvp</code> handler does two distinct email-related things: (1) it <strong>synchronously sends the RSVP confirmation email</strong> via the Legacy SMTP path (with a <code>.ics</code> calendar attachment), and (2) it <strong>synchronously enqueues any matching flow steps</strong> via <code>triggerFlowsForRsvp({triggerKind: "RSVP_GOING"})</code>. The 5-stage sequence is NOT triggered from this route — it's enqueued by the worker's bootstrap phase on the next worker tick. This split is the source of much confusion when debugging "why didn't the awareness email send?" — the answer is almost always "the worker hasn't run since the RSVP was created."</p>
+
+    <div class="code-caption">// RSVP route — email-related code paths (simplified)</div>
+    <div class="code-block"><span class="com">// 1. Synchronous RSVP confirmation email (Legacy SMTP, blocks response)</span>
+<span class="kw">if</span> (!wasAlreadyRegistered &amp;&amp; <span class="fn">emailConfigured</span>()) {
+  <span class="kw">const</span> ics = <span class="fn">generateIcs</span>(event);
+  <span class="kw">await</span> <span class="fn">sendRsvpConfirmationEmail</span>({
+    to: user.email, firstName, eventTitle, ...,
+    attachments: [{ filename: <span class="str">"event.ics"</span>, content: ics }],
+  });  <span class="com">// NOT logged to DB. Returns {ok, error?}.</span>
+}
+
+<span class="com">// 2. Synchronous flow-trigger enqueue (does NOT send — just creates PENDING rows)</span>
+<span class="kw">if</span> (!wasAlreadyRegistered) {
+  <span class="kw">await</span> <span class="fn">triggerFlowsForRsvp</span>({
+    rsvpId: rsvp.id,
+    triggerKind: <span class="str">"RSVP_GOING"</span>,
+  });  <span class="com">// Creates EmailQueue rows for matching ACTIVE flow steps</span>
+}
+
+<span class="com">// 3. The 5-stage sequence is NOT triggered here.</span>
+<span class="com">//    worker.ts::bootstrapStage1ForNewRsvps finds new RSVPs on each worker run.</span></div>
+
+    <h3 class="subsection" style="margin-top:18px;">Flow Builder Trigger Kinds &amp; Where They Fire</h3>
+    <div class="trigger-list">
+        <div class="trigger-item fired">
+            <div class="tk">RSVP_GOING</div>
+            <div class="td">Fires from <code>/api/events/[slug]/rsvp</code> on first registration only.</div>
+        </div>
+        <div class="trigger-item unfired">
+            <div class="tk">DOOR_CHECKED_IN</div>
+            <div class="td">Defined but never fires — see Known Issues.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MARKED_ATTENDED</div>
+            <div class="td">Fires from <code>/api/admin/rsvps/[id]/attendance</code> on transition to ATTENDED.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MARKED_NO_SHOW</div>
+            <div class="td">Fires from <code>/api/admin/rsvps/[id]/attendance</code> on transition to NO_SHOW.</div>
+        </div>
+        <div class="trigger-item fired">
+            <div class="tk">MANUAL</div>
+            <div class="td">Admin-triggered from the flow reports dashboard.</div>
+        </div>
+    </div>
+
+    <div class="callout red" style="margin-top:14px;">
+        <span class="co-tag">Critical · Worker Not Cron-Scheduled</span>
+        <p>The orchestrator worker endpoint at <code>/api/email-orchestrator/run</code> is <strong>not registered in <code>vercel.json</code></strong>. It only fires when an admin clicks "Run worker" on the Orchestrator admin tab. The 5-stage sequence + flow-builder steps will not fire automatically until either (a) an admin clicks the button, or (b) someone adds the route to <code>vercel.json</code> with a cron schedule. Vercel Hobby tier only allows daily crons.</p>
+    </div>
+
+    <!-- =========== 04 · AUDIT QUERY COOKBOOK =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">04 · Audit Query Cookbook</div>
+        <h2 class="chapter-title">"Was This Email Actually Sent?"</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">This is the central question. The answer depends entirely on which subsystem sent the email. Below are the exact Prisma queries for each subsystem — copy-paste these into <code>npx prisma studio</code> or your SQL client to verify delivery.</p>
+
+    <h3 class="subsection">A. Legacy SMTP (RSVP confirmation, signup password, DM, speaker message)</h3>
+    <div class="callout red">
+        <span class="co-tag">Audit Gap · High Severity</span>
+        <p>There is <strong>no query</strong>. The DB writes nothing. <code>sendMail()</code> returns <code>{ ok, error? }</code> but writes no row. The only signal is server logs (<code>console.log</code> / <code>console.error</code> in the Vercel runtime logs). If a user reports "I never got my RSVP confirmation email", the only way to verify is to check Vercel logs for the request timestamp and look for the <code>[rsvp-confirmation]</code> log line or any SMTP error. There is no per-recipient delivery record. This is the single biggest audit gap in the email system.</p>
+    </div>
+
+    <h3 class="subsection" style="margin-top:14px;">B. Orchestrator 5-stage / Flow steps — query EmailQueue</h3>
+    <p class="body">The <code>EmailQueue</code> table (<code>prisma/schema.prisma</code>) holds one row per (RSVP × stage) or per (flow step × RSVP). The <code>status</code> field tells you exactly what happened.</p>
+
+    <table class="fields-table">
+        <thead>
+            <tr>
+                <th style="width:110px">Status</th>
+                <th>Meaning</th>
+                <th style="width:120px">How to verify</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="field-name">PENDING</span></td>
+                <td>Enqueued, waiting for <code>scheduledFor</code> to pass + worker tick</td>
+                <td>Check <code>scheduledFor</code> timestamp</td>
+            </tr>
+            <tr>
+                <td><span class="field-name">SENT</span></td>
+                <td>Gmail API accepted the send. <code>sentAt</code> is set.</td>
+                <td><code>sentAt IS NOT NULL</code></td>
+            </tr>
+            <tr>
+                <td><span class="field-name">OPENED</span></td>
+                <td>Recipient loaded the tracking pixel (1×1 GIF)</td>
+                <td><code>openedAt IS NOT NULL</code></td>
+            </tr>
+            <tr>
+                <td><span class="field-name">CLICKED</span></td>
+                <td>Recipient clicked a wrapped link</td>
+                <td><code>clickedAt IS NOT NULL</code></td>
+            </tr>
+            <tr>
+                <td><span class="field-name">SKIPPED</span></td>
+                <td>Stop rule fired (door checked, or prior stage not opened in time)</td>
+                <td>Check <code>errorMessage</code> for reason</td>
+            </tr>
+            <tr>
+                <td><span class="field-name">FAILED</span></td>
+                <td>Gmail API rejected (quota, invalid address, etc.)</td>
+                <td>Check <code>errorMessage</code> + <code>attemptCount</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="code-caption">// Prisma — was Stage 3 (Final Prep) sent to this RSVP?</div>
+    <div class="code-block"><span class="kw">const</span> q = <span class="kw">await</span> db.<span class="fn">emailQueue</span>.<span class="fn">findMany</span>({
+  <span class="kw">where</span>: { rsvpId, stage: <span class="num">3</span> },
+  <span class="kw">select</span>: {
+    status: <span class="kw">true</span>, sentAt: <span class="kw">true</span>, openedAt: <span class="kw">true</span>,
+    subject: <span class="kw">true</span>, htmlBody: <span class="kw">true</span>,  <span class="com">// full rendered snapshot</span>
+    errorMessage: <span class="kw">true</span>, attemptCount: <span class="kw">true</span>,
+  },
+});
+<span class="com">// status === "SENT" &amp;&amp; sentAt !== null  →  actually sent.</span>
+<span class="com">// htmlBody contains the EXACT HTML that was sent — copy-paste to replay.</span></div>
+
+    <h3 class="subsection" style="margin-top:14px;">C. Bulk Campaigns — query EmailRecipient + EmailEvent</h3>
+    <p class="body">The campaign subsystem (<code>src/lib/email-campaign/*</code>) has its own audit trail: <code>EmailRecipient</code> (one row per campaign × email) for per-recipient state, and <code>EmailEvent</code> (one row per event) for the event stream.</p>
+
+    <div class="code-caption">// Prisma — was this email sent in campaign X to user Y?</div>
+    <div class="code-block"><span class="kw">const</span> rec = <span class="kw">await</span> db.<span class="fn">emailRecipient</span>.<span class="fn">findFirst</span>({
+  <span class="kw">where</span>: { campaignId, email: <span class="str">"eze@massapro.com"</span> },
+  <span class="kw">include</span>: { <span class="kw">events</span>: { <span class="kw">orderBy</span>: { createdAt: <span class="str">"asc"</span> } } },
+});
+<span class="com">// rec.status === "SENT" &amp;&amp; rec.sentAt !== null  →  actually sent.</span>
+<span class="com">// rec.openCount, rec.clickCount, rec.repliedAt  →  engagement.</span>
+<span class="com">// rec.messageId  →  SMTP Message-ID, used for IMAP reply matching.</span>
+<span class="com">// rec.events[]  →  full event stream: SENT, OPEN, CLICK, REPLY, BOUNCE, …</span></div>
+
+    <h3 class="subsection" style="margin-top:14px;">Worked Example: "Show me every email sent to eze@massapro.com in the last 7 days"</h3>
+    <div class="code-caption">// Three separate queries — there is no unified email log</div>
+    <div class="code-block"><span class="com">// 1. Orchestrator (5-stage + flow steps)</span>
+<span class="kw">await</span> db.<span class="fn">emailQueue</span>.<span class="fn">findMany</span>({
+  <span class="kw">where</span>: { email: <span class="str">"eze@massapro.com"</span>, sentAt: { gte: <span class="kw">new</span> <span class="fn">Date</span>(Date.<span class="fn">now</span>() - <span class="num">7</span>*<span class="num">24</span>*<span class="num">3600</span>*<span class="num">1000</span>) } },
+});
+
+<span class="com">// 2. Campaigns</span>
+<span class="kw">await</span> db.<span class="fn">emailRecipient</span>.<span class="fn">findMany</span>({
+  <span class="kw">where</span>: { email: <span class="str">"eze@massapro.com"</span>, sentAt: { gte: <span class="kw">new</span> <span class="fn">Date</span>(Date.<span class="fn">now</span>() - <span class="num">7</span>*<span class="num">24</span>*<span class="num">3600</span>*<span class="num">1000</span>) } },
+});
+
+<span class="com">// 3. Legacy SMTP (RSVP confirmations, signup, DMs, speaker messages)</span>
+<span class="com">//    → CANNOT BE QUERIED. Check Vercel runtime logs.</span></div>
+
+    <!-- =========== 05 · ADMIN UI WALKTHROUGH =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">05 · Admin UI Walkthrough</div>
+        <h2 class="chapter-title">Where to Click in /admin/email</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">The email admin lives at <code>/admin/email</code> (server page: <code>src/app/admin/email/page.tsx</code>). It auto-seeds stage templates + the built-in Test audience on every load. The top-level nav (<code>EmailAdminNav</code> component) has three tabs, each backed by a different client component. Below is what each tab is for and the key actions on it.</p>
+
+    <div class="stage-card">
+        <div class="stage-head">
+            <span class="stage-num">CAMPAIGNS</span>
+            <h3 class="stage-title">Bulk Campaigns</h3>
+            <span class="stage-sub">/admin/email (default tab)</span>
+        </div>
+        <p>Use this when you want to send a one-off email blast to a list — a newsletter, an announcement, a sponsor spotlight. The Campaign Composer lets you pick a recipient list (all_members / non_members / event_rsvp / manual_upload / specific_users), write a subject + WYSIWYG HTML body, pick a From address, and either send immediately or schedule. After sending, the Campaign Stats view shows sent/failed/opened/clicked/replied/unsubscribed counts, a timeline chart, top-clicked-links map, recipient list (with CSV export), recent events stream, and a full email preview.</p>
+        <div class="info-row">
+            <span class="k">Key buttons</span>
+            <span class="v">Refresh · Send due (triggers <code>/api/cron/email/send-scheduled</code>) · Poll replies (triggers <code>/api/cron/email/imap-poll</code>) · New campaign</span>
+        </div>
+    </div>
+
+    <div class="stage-card teal">
+        <div class="stage-head">
+            <span class="stage-num">ORCHESTRATOR</span>
+            <h3 class="stage-title">5-Stage Queue + Worker Control</h3>
+            <span class="stage-sub">/admin/email?tab=orchestrator</span>
+        </div>
+        <p>Use this when you want to inspect or debug the 5-stage sequence. Shows every <code>EmailQueue</code> row with filters by status, stage, event, and free-text search on email. Per-row actions: simulate open, simulate click (useful for testing the stop-rule logic without waiting for a real open). The top toolbar has the worker controls.</p>
+        <div class="info-row">
+            <span class="k">Run worker</span>
+            <span class="v">Triggers <code>/api/email-orchestrator/run</code> — runs both <code>runWorker()</code> (5-stage state machine) and <code>runFlowWorker()</code> (flow steps) in parallel. <strong>This button MUST be clicked manually — there is no cron.</strong></span>
+        </div>
+        <div class="info-row">
+            <span class="k">Pause / Resume</span>
+            <span class="v">Toggles <code>emailSendPaused</code> SiteSetting. <strong>Orchestrator only — does NOT pause Legacy SMTP.</strong></span>
+        </div>
+    </div>
+
+    <div class="stage-card amber">
+        <div class="stage-head">
+            <span class="stage-num">FLOWS</span>
+            <h3 class="stage-title">Flow Builder + Audiences + Templates</h3>
+            <span class="stage-sub">/admin/email/flows</span>
+        </div>
+        <p>Use this to build custom automated sequences beyond the 5-stage defaults. The Flow Builder canvas lets you chain up to 8 steps, each with: an audience (STATIC email list or DYNAMIC filter spec), a trigger kind (RSVP_GOING / DOOR_CHECKED_IN / MARKED_ATTENDED / MARKED_NO_SHOW / MANUAL), a template, an A/B subject variant test, and a delay (minutes/hours/days). Flow status: DRAFT / ACTIVE / PAUSED / ARCHIVED. Per-flow Report dialog shows per-step send counts + open rates with A/B variant breakdown.</p>
+        <div class="info-row">
+            <span class="k">Sub-tabs</span>
+            <span class="v">Flows (canvas) · Audiences (STATIC + DYNAMIC lists, includes built-in Test audience) · Templates (EmailStageTemplate editor)</span>
+        </div>
+    </div>
+
+    <div class="callout amber" style="margin-top:14px;">
+        <span class="co-tag">Gap · No Unified Email Log</span>
+        <p>There is <strong>no single page</strong> where you can see "every email sent across all subsystems in one list". The Orchestrator tab shows only <code>EmailQueue</code> rows (5-stage + flows). The Campaigns tab shows only <code>EmailRecipient</code> rows (bulk campaigns). Legacy SMTP sends (RSVP confirmation, signup password, DMs, speaker messages) are invisible to all admin UIs. To audit a Legacy SMTP send you have to dig through Vercel runtime logs.</p>
+    </div>
+
+    <!-- =========== 06 · KNOWN ISSUES =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">06 · Known Issues</div>
+        <h2 class="chapter-title">Audit Gaps &amp; Bugs to Fix</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">These are the gaps found during code review. Each is real, each affects either deliverability auditing or actual email delivery. Listed by severity. Fix recommendations are included where the fix is small.</p>
+
+    <div class="callout red">
+        <span class="co-tag">High · Legacy SMTP Not Logged</span>
+        <p>The Legacy SMTP path (<code>sendMail()</code> in <code>src/lib/email.ts</code>) writes nothing to the DB. RSVP confirmations, signup passwords, DM notifications, and speaker-message relays are completely invisible to the audit trail. You cannot answer "was the RSVP confirmation sent to user X on date Y?" from the database. <strong>Fix:</strong> add an <code>EmailLog</code> table (or extend <code>EmailQueue</code> with a <code>source</code> field) and write a row in <code>sendMail()</code> with <code>to</code>, <code>subject</code>, <code>status</code>, <code>error</code>, <code>sentAt</code>. This is the single biggest audit gap.</p>
+    </div>
+
+    <div class="callout red">
+        <span class="co-tag">High · Worker Not Cron-Scheduled</span>
+        <p><code>/api/email-orchestrator/run</code> is missing from <code>vercel.json</code>. The 5-stage sequence + flow-builder steps only fire when an admin clicks "Run worker" manually. If nobody clicks the button for a day, no stages fire that day. <strong>Fix:</strong> add <code>{ "path": "/api/email-orchestrator/run", "schedule": "0 */1 * * *" }</code> to <code>vercel.json</code> (Vercel Hobby allows daily crons; Pro allows more frequent). Ensure <code>CRON_SECRET</code> is set in Vercel env and the route accepts it as <code>Authorization: Bearer &lt;secret&gt;</code>.</p>
+    </div>
+
+    <div class="callout red">
+        <span class="co-tag">High · DOOR_CHECKED_IN Trigger Never Fires</span>
+        <p>The <code>DOOR_CHECKED_IN</code> trigger kind is defined in the flow-builder UI and the data model, but <code>/api/admin/check-in/confirm/route.ts</code> never calls <code>triggerFlowsForRsvp({triggerKind: "DOOR_CHECKED_IN"})</code> after setting <code>doorCheckedAt</code>. Any flow step configured with this trigger will silently never fire. <strong>Fix:</strong> after the <code>updateMany</code> succeeds (when <code>updateResult.count === 1</code> and the response status is <code>CONFIRMED</code>), call <code>triggerFlowsForRsvp({ rsvpId, triggerKind: "DOOR_CHECKED_IN" })</code>. Guard with <code>count === 1</code> so re-scans of an already-used code don't re-fire the trigger.</p>
+    </div>
+
+    <div class="callout amber">
+        <span class="co-tag">Medium · Pause Button Only Pauses Orchestrator</span>
+        <p>The "Pause/Resume email sends" toggle on the Orchestrator admin tab sets the <code>emailSendPaused</code> SiteSetting, which is checked only in <code>src/lib/email-orchestrator/sender.ts::sendEmail()</code>. The Legacy <code>sendMail()</code> function does NOT check this flag — RSVP confirmations, signup passwords, DMs, and speaker messages keep sending regardless. <strong>Fix:</strong> add the same pause check at the top of <code>sendMail()</code> in <code>src/lib/email.ts</code>, OR document clearly that the pause only applies to the orchestrator.</p>
+    </div>
+
+    <div class="callout amber">
+        <span class="co-tag">Medium · Cancel RSVP Doesn't Cancel Pending Emails</span>
+        <p>The DELETE handler at <code>/api/events/[slug]/rsvp</code> removes the <code>EventRsvp</code> row but does NOT cancel pending <code>EmailQueue</code> rows for that RSVP. Subsequent stages may still fire to a deleted RSVP — the worker's stop-awareness only checks <code>doorCheckedAt</code>, not RSVP existence. <strong>Fix:</strong> in the DELETE handler, run <code>db.emailQueue.updateMany({ where: { rsvpId, status: "PENDING" }, data: { status: "SKIPPED", errorMessage: "RSVP cancelled" } })</code> before deleting the RSVP row.</p>
+    </div>
+
+    <div class="callout teal">
+        <span class="co-tag">Low · Empty Check-In Code Label</span>
+        <p>Stages 3 and 4 hardcode the label <code>"Check-in code:"</code> even when <code>{{checkInCode}}</code> resolves to empty string (user RSVP'd but never clicked "Check in" on the event page). Recipients see a dangling label with no value. <strong>Fix:</strong> in <code>src/lib/email-orchestrator/templates.ts</code>, wrap the check-in-code block in a conditional that only renders if the token is non-empty. Either use a <code>{{#if checkInCode}}</code> handlebars-style directive (requires upgrading the renderer) or do a string-replace pass that strips the label if the token was empty.</p>
+    </div>
+
+    <!-- =========== 07 · ENVIRONMENT VARIABLES =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">07 · Environment Variables</div>
+        <h2 class="chapter-title">SMTP, Gmail, IMAP, Cron, Meta</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">All email-related env vars. Note that <code>.env.example</code> only documents the <code>SMTP_*</code> vars — the rest are only discoverable from source. <strong>Production gotcha:</strong> if <code>EMAIL_PROVIDER</code> is unset or set to anything other than <code>"gmail"</code>, the orchestrator silently runs in mock mode — it writes <code>EmailQueue</code> rows with <code>status=SENT</code> but no actual email goes out. Always verify <code>EMAIL_PROVIDER=gmail</code> in Vercel env before relying on orchestrator sends.</p>
+
+    <table class="env-table">
+        <thead>
+            <tr>
+                <th style="width:200px">Variable</th>
+                <th style="width:60px">Req?</th>
+                <th>Purpose</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><span class="vname">SMTP_HOST</span></td><td><span class="req">req</span></td><td>SMTP server hostname (e.g. <code>smtp.gmail.com</code>) — Legacy subsystem</td></tr>
+            <tr><td><span class="vname">SMTP_PORT</span></td><td><span class="opt">opt</span></td><td>SMTP port (default 587)</td></tr>
+            <tr><td><span class="vname">SMTP_SECURE</span></td><td><span class="opt">opt</span></td><td><code>"true"</code> for SSL (465), else STARTTLS (587)</td></tr>
+            <tr><td><span class="vname">SMTP_USER</span></td><td><span class="req">req</span></td><td>SMTP username</td></tr>
+            <tr><td><span class="vname">SMTP_PASS</span></td><td><span class="req">req</span></td><td>SMTP password / app-specific password</td></tr>
+            <tr><td><span class="vname">SMTP_FROM</span></td><td><span class="opt">opt</span></td><td>Default From for Legacy. Falls back to <code>AI Salon Chat &lt;chat@aisalon.massapro.com&gt;</code></td></tr>
+            <tr><td><span class="vname">EMAIL_PROVIDER</span></td><td><span class="req">req</span></td><td><code>"gmail"</code> for real sends, anything else → mock (silent!). Orchestrator only.</td></tr>
+            <tr><td><span class="vname">EMAIL_SEND_ENABLED</span></td><td><span class="opt">opt</span></td><td><code>"false"</code> = hard kill switch for orchestrator (escapes even DB pause)</td></tr>
+            <tr><td><span class="vname">EMAIL_FROM</span></td><td><span class="opt">opt</span></td><td>From for orchestrator sends. Default: <code>AI Salon &lt;noreply@aisalon.massapro.com&gt;</code></td></tr>
+            <tr><td><span class="vname">GOOGLE_CLIENT_ID</span></td><td><span class="req">req</span></td><td>Google OAuth2 client ID (shared with NextAuth)</td></tr>
+            <tr><td><span class="vname">GOOGLE_CLIENT_SECRET</span></td><td><span class="req">req</span></td><td>Google OAuth2 client secret (shared with NextAuth)</td></tr>
+            <tr><td><span class="vname">GOOGLE_REFRESH_TOKEN</span></td><td><span class="req">req</span></td><td>Offline refresh token for the sender Gmail account — get via the OAuth2 playground</td></tr>
+            <tr><td><span class="vname">IMAP_HOST</span></td><td><span class="opt">opt</span></td><td>IMAP server for reply polling (campaign subsystem)</td></tr>
+            <tr><td><span class="vname">IMAP_USER</span></td><td><span class="opt">opt</span></td><td>IMAP username — the inbox to scan for replies</td></tr>
+            <tr><td><span class="vname">IMAP_PASS</span></td><td><span class="opt">opt</span></td><td>IMAP password</td></tr>
+            <tr><td><span class="vname">CRON_SECRET</span></td><td><span class="req">req</span></td><td>Shared secret for <code>/api/cron/*</code> + <code>/api/email-orchestrator/*</code> routes. Checked as <code>Authorization: Bearer &lt;secret&gt;</code> or <code>X-CRON-SECRET</code> header.</td></tr>
+            <tr><td><span class="vname">ADMIN_EMAIL</span></td><td><span class="opt">opt</span></td><td>Where DM notifications + speaker messages are CC'd/relayed. Default: <code>eze@massapro.com</code></td></tr>
+            <tr><td><span class="vname">META_ACCESS_TOKEN</span></td><td><span class="opt">opt</span></td><td>Meta Graph API token for Conversions API (email open/click → Meta CAPI)</td></tr>
+            <tr><td><span class="vname">META_PIXEL_ID</span></td><td><span class="opt">opt</span></td><td>Meta Pixel ID — paired with access token</td></tr>
+        </tbody>
+    </table>
+
+    <div class="callout amber" style="margin-top:14px;">
+        <span class="co-tag">Gotcha · Inconsistent From Defaults</span>
+        <p>The default From address varies across 5 code paths: <code>SMTP_FROM</code> → <code>EMAIL_FROM</code> → <code>campaign.fromEmail</code> → <code>SMTP_USER</code> → hardcoded fallbacks like <code>chat@aisalon.massapro.com</code>, <code>noreply@aisalon.massapro.com</code>, <code>no-reply@aisalon.massapro.com</code>, <code>noreply@massapro.com</code>. <strong>Production should set BOTH <code>SMTP_FROM</code> and <code>EMAIL_FROM</code> explicitly</strong> so recipients see a consistent sender.</p>
+    </div>
+
+    <!-- =========== 08 · VERIFICATION CHECKLIST =========== -->
+    <div class="chapter-header">
+        <div class="chapter-tag">08 · Verification Checklist</div>
+        <h2 class="chapter-title">"I Just Sent a Campaign — How Do I Prove It Landed?"</h2>
+        <div class="chapter-divider"></div>
+    </div>
+
+    <p class="body">Step-by-step ops checklist. Walk through this every time you send a campaign or want to verify a specific email was delivered. The numbered steps below assume you are signed in as an admin on <code>aisalon.massapro.com</code>.</p>
+
+    <div class="check-list">
+        <ol>
+            <li><strong>Before sending — verify env.</strong> In Vercel project settings → Environment Variables, confirm <code>EMAIL_PROVIDER=gmail</code>, <code>GOOGLE_REFRESH_TOKEN</code> is set, and <code>EMAIL_SEND_ENABLED</code> is not <code>"false"</code>. If <code>EMAIL_PROVIDER</code> is missing or set to anything other than <code>"gmail"</code>, the orchestrator runs in mock mode — <code>EmailQueue</code> rows will be marked SENT but no actual email goes out.</li>
+            <li><strong>Before sending — verify pause is off.</strong> Go to <code>/admin/email?tab=orchestrator</code> and confirm the "Pause email sends" button reads <em>Pause</em> (not <em>Resume</em>). If it reads Resume, the orchestrator is currently paused — click to resume.</li>
+            <li><strong>After sending — open the campaign.</strong> Go to <code>/admin/email</code> (Campaigns tab). Click the campaign row. The Overview tab shows Sent / Failed / Opened / Clicked / Replied / Unsubscribed / Queued cards. A non-zero Sent count means the Gmail API accepted the send.</li>
+            <li><strong>Drill into a specific recipient.</strong> Click the Recipients tab. Search by email. The status column shows per-recipient delivery state. <code>openCount</code> and <code>clickCount</code> confirm engagement. <code>repliedAt</code> confirms a reply was matched via IMAP polling.</li>
+            <li><strong>See the actual email that was sent.</strong> Click the Email Preview tab. This shows the rendered HTML snapshot — the exact bytes that went out. If a recipient reports "I didn't get this", compare what they show you against this snapshot.</li>
+            <li><strong>For orchestrator stages — check the queue.</strong> Go to <code>/admin/email?tab=orchestrator</code>. Filter by event. Each row shows status, scheduledFor, sentAt, openedAt. Click a row to see the rendered <code>htmlBody</code> snapshot. If status is <code>PENDING</code> past <code>scheduledFor</code>, the worker hasn't run — click "Run worker" at the top.</li>
+            <li><strong>Prove it's not demo data.</strong> The built-in Test audience (3 hardcoded emails: <code>eze@massapro.com</code>, <code>ezeszna@gmail.com</code>, <code>eze@hi4.ai</code>) is the only "demo" artifact. Real campaign recipients come from the list-builder (all_members / event_rsvp / specific_users). The <code>EmailRecipient.email</code> field is the actual recipient email, not a placeholder. To confirm: filter the Recipients tab by any email — if you see real member emails with <code>status=SENT</code> and non-null <code>sentAt</code>, those are real sends.</li>
+            <li><strong>If something failed — check the event stream.</strong> Click the Recent Events tab on the campaign. Each event has a <code>details</code> JSON with the failure reason. Common failures: Gmail quota exhausted, invalid email address, OAuth token expired (re-generate <code>GOOGLE_REFRESH_TOKEN</code>).</li>
+            <li><strong>If you cannot find an EmailQueue or EmailRecipient row — it was a Legacy SMTP send.</strong> RSVP confirmations, signup passwords, DMs, and speaker messages go through <code>sendMail()</code> which writes nothing to the DB. Check Vercel runtime logs for the request timestamp and look for <code>[rsvp-confirmation]</code>, <code>[signup]</code>, <code>[dm]</code>, or <code>[speaker-message]</code> log lines.</li>
+        </ol>
+    </div>
+
+</div>
+
+<!-- ============================================================
+     ENDING PAGE — REFERENCE CARD
+     ============================================================ -->
+<div class="ending">
+    <div class="ending-shape-1"></div>
+    <div class="ending-shape-2"></div>
+
+    <div class="ending-top">End of Reference · Quick Recap</div>
+
+    <div class="ending-middle">
+        <h2 class="ending-title">Two subsystems,<br>one <span class="accent">audit</span> question.</h2>
+        <p class="ending-body">Legacy SMTP sends transactional emails with no DB log. The orchestrator + campaigns subsystem tracks everything — queue rows, sent snapshots, opens, clicks, replies. When asked "was this email sent?", first identify which subsystem sent it, then query the right table.</p>
+
+        <div class="ending-checklist">
+            <h4>Key Takeaways</h4>
+            <ul>
+                <li>Legacy <code>sendMail()</code> writes <strong>nothing</strong> to the DB — Vercel logs only</li>
+                <li>Orchestrator writes <code>EmailQueue</code> + <code>TrackingLog</code> — query by <code>(rsvpId, stage)</code></li>
+                <li>Campaigns write <code>EmailRecipient</code> + <code>EmailEvent</code> — query by <code>(campaignId, email)</code></li>
+                <li><code>EMAIL_PROVIDER=gmail</code> required or orchestrator runs in mock mode</li>
+                <li>Worker at <code>/api/email-orchestrator/run</code> is <strong>not cron-scheduled</strong> — click "Run worker" manually</li>
+                <li><code>DOOR_CHECKED_IN</code> trigger is defined but never fires — bug</li>
+                <li>Pause button only pauses orchestrator, not Legacy SMTP</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="ending-bottom">
+        <span>AI Salon Tel Aviv · Engineering Reference</span>
+        <span class="doc-id">DOC-EMAIL-001 · v1.0</span>
+    </div>
+</div>
+
+</body>
+</html>
