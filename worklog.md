@@ -1925,3 +1925,27 @@ Stage Summary:
 - Footer credit "MassaPro" replaces "Platform by MassaPro".
 - Branding asset defaults to AI Salon mark at bottom-left corner with height 48px.
 - TO VERIFY LOCALLY: open /admin/mockups/speaker-intro → click "Reset" → confirm brand colors, footer, branding position, and section positions match spec. Then pick any event from the dropdown → confirm Ezequiel Sznaider (if present) is hidden by default.
+
+---
+Task ID: fix-hero-image-spec-A
+Agent: main
+Task: User reported "when I select the event, the hero image is directly taking the event image, and not the default image" — fix the hero image to ALWAYS use the canonical default hero per spec A.
+
+Work Log:
+- Read /home/z/my-project/src/app/admin/mockups/speaker-intro/event-mapper.ts
+- Located the bug at line 376: `imageUrl: event.mainImage?.fileUrl ?? DEFAULT_HERO` — this used the event's own mainImage when present, only falling back to DEFAULT_HERO when the event had no image.
+- Per spec A, the canonical default hero (https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782987131384-reozea.png) must ALWAYS be used regardless of the event's mainImage.
+- Changed line 376 to `imageUrl: DEFAULT_HERO` (always).
+- Updated the JSDoc field-mapping comment at line 38 to reflect the new behavior.
+- Updated the inline comment block above the change to explain why event.mainImage is deliberately ignored.
+- Verified no TypeScript errors in event-mapper.ts (npx tsc --noEmit | grep speaker-intro/event-mapper → empty).
+- Verified Next.js production build succeeded: "✓ Compiled successfully in 34.4s".
+- Verified the editor's event-pick flow (handleEventPick at line 234) calls mapEventToSpeakerIntroData() and applyData() directly — no intermediate code overwrites the hero. The fix in the mapper will propagate cleanly.
+- Committed as 0a0abab: "fix(speaker-intro): always use default hero image (spec A)".
+- Pushed to origin/main (993e7e6..0a0abab). Vercel auto-deploy triggered.
+
+Stage Summary:
+- Root cause: `event.mainImage?.fileUrl ?? DEFAULT_HERO` was preferring the event's own image when present.
+- Fix: Always use DEFAULT_HERO. The user can still override in the editor's form view.
+- Files changed: src/app/admin/mockups/speaker-intro/event-mapper.ts (1 file, +7 / -6 lines).
+- Deploy: Vercel auto-deploy from commit 0a0abab on main. Live at https://aisalon.massapro.com shortly.
