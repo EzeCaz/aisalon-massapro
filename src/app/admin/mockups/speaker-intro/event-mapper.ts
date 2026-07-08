@@ -35,7 +35,7 @@ import type {
  *   speakers[].sessionTime  ← HH:MM of their first agenda item's startsAt
  *                              (empty string when no agenda item exists)
  *   speakers[].visible  ← true (user can toggle off in the editor)
- *   heroOverlay.imageUrl ← Event.mainImage?.fileUrl ?? DEFAULT_HERO
+ *   heroOverlay.imageUrl ← DEFAULT_HERO (always — per spec A, ignore Event.mainImage)
  *   qrCodeUrl          ← Event.rsvpUrl ?? /events/<slug>
  */
 
@@ -369,11 +369,12 @@ export function mapEventToSpeakerIntroData(
     collaborators: [],
     sponsors: [],
     heroOverlay: {
-      // Per user spec 2026-07-09 (item A): default hero image for all
-      // events is the AI Salon brand asset on Vercel Blob. When the
-      // event has its own mainImage, that takes precedence — but if not,
-      // we fall back to the canonical hero (not a Tel Aviv skyline).
-      imageUrl: event.mainImage?.fileUrl ?? DEFAULT_HERO,
+      // Per user spec 2026-07-09 (item A): the default hero image is the
+      // canonical brand asset on Vercel Blob. This MUST always be used for
+      // every event — we deliberately ignore event.mainImage so the canvas
+      // never shows the event's own photo as the hero background. The user
+      // can still override this in the editor's form view.
+      imageUrl: DEFAULT_HERO,
       gradientColors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
       gradientOpacity: 0.55,
       imagePlacement: { ...DEFAULT_PLACEMENT },
