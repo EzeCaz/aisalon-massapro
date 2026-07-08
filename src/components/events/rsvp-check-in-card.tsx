@@ -254,6 +254,12 @@ export function RsvpCheckInCard({
               </>
             )}
           </button>
+          <a
+            href={`/e/${eventSlug}/my-code`}
+            className="block text-center text-[0.65rem] text-black/50 hover:text-black/80 underline"
+          >
+            Open full-screen code page
+          </a>
         </div>
       );
     }
@@ -304,6 +310,12 @@ export function RsvpCheckInCard({
             </>
           )}
         </button>
+        <a
+          href={`/e/${eventSlug}/my-code`}
+          className="block text-center text-[0.65rem] text-black/50 hover:text-black/80 underline"
+        >
+          Open full-screen code page
+        </a>
       </div>
     );
   }
