@@ -33,6 +33,7 @@ import {
   Download,
 } from "lucide-react";
 import { AdminAgendaTab } from "@/app/events/[slug]/tabs/admin-agenda-tab";
+import { useHashTab } from "@/hooks/use-hash-tab";
 
 // ------------------------------------------------------------------
 // Types — shared between this file, admin-event-manager.tsx, and the
@@ -100,6 +101,20 @@ type Props = {
  * Each section is its own component below so the file stays readable.
  */
 export function EventManagerPanel({ event, members, onBack }: Props) {
+  // Sub-tab state synced to URL hash so admins can deep-link to a specific
+  // section (#speakers, #registrations, ...) of a specific event's panel.
+  // The outer "Manage event" / "Add new event" tabs in <AdminEventManager>
+  // use a disjoint value set (["manage","new"]), so there's no collision —
+  // each hook just ignores hashes that aren't in its own allowed list.
+  const [section, setSection] = useHashTab("details", [
+    "details",
+    "agenda",
+    "speakers",
+    "presentations",
+    "cohosts",
+    "registrations",
+  ]);
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -139,7 +154,7 @@ export function EventManagerPanel({ event, members, onBack }: Props) {
       </div>
 
       {/* Sub-tabs */}
-      <Tabs defaultValue="details" className="w-full">
+      <Tabs value={section} onValueChange={setSection} className="w-full">
         <TabsList className="bg-black/5 p-1 h-auto flex-wrap">
           <SectionTrigger value="details" icon={Settings} label="Details" />
           <SectionTrigger value="agenda" icon={CalendarDays} label={`Sessions (${event._count.agenda})`} />

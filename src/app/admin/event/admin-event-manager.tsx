@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { NewEventForm } from "../events/new/new-event-form";
 import { EventManagerPanel, type AdminEventRow, type AdminMemberRow } from "./event-manager-panel";
+import { useHashTab } from "@/hooks/use-hash-tab";
 
 type Props = {
   events: AdminEventRow[];
@@ -50,8 +51,11 @@ export function AdminEventManager({ events, members }: Props) {
     [events, selectedId]
   );
 
+  // Tab state synced to URL hash so admins can deep-link to /admin/event#new
+  const [tab, setTab] = useHashTab("manage", ["manage", "new"]);
+
   return (
-    <Tabs defaultValue="manage" className="w-full">
+    <Tabs value={tab} onValueChange={setTab} className="w-full">
       <TabsList className="bg-black/5 p-1 h-auto">
         <TabsTrigger
           value="manage"
