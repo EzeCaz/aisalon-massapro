@@ -83,3 +83,32 @@ Each entry:
 The next commit after `40d8a0c` is the first V6 commit. V6 has no
 predefined scope yet — it will be shaped by user requests going forward.
 
+### 2026-07-08 14:45 UTC — V6 SNAPSHOT (mid-series, no tag)
+
+| Field | Value |
+|---|---|
+| Task | v6-snapshot-backup |
+| Environment | production |
+| Vercel project | aisalon-massapro |
+| Commit | `a98ae0d` |
+| Git tag | (none — V6 series still in progress; latest tag remains `v5.15`) |
+| New URL | https://aisalon.massapro.com |
+| Previous URL (rollback target) | (v5-final deploy at commit `40d8a0c`) |
+| Build status | PASSED (last build green; `a98ae0d` was a hotfix for a Vercel build break) |
+| Sentinel prod verify | not run for snapshot |
+| Rolled back? | no |
+| Summary | Mid-V6 snapshot backup. 38 commits into V6. Backup tarball at `download/backups/aisalon-massapro-v6-snapshot-20260708-1445UTC-a98ae0d.tar.gz` (10 MB, sha256 `637ff516…`). Off-site copy at `/home/sync/`. In-repo manifest at `download/backups/MANIFEST.md`. Backup script at `scripts/make-v6-snapshot-backup.sh`. |
+
+#### V6 cumulative changes since V5-final (38 commits)
+
+- **Quiz engine (V6 flagship)**: admin Control Room + member mobile UI; Show-next-question, reveal leaderboard; Restart, Clear responses, Duplicate; unified Start button + Radix Select empty-value crash fix; full results view (leaderboard + per-question answer matrix) when host clicks Finish.
+- **Community**: member directory + Contact button → 1-on-1 DM dialog.
+- **Chat**: event group chat rooms + real-time DMs + DB backup scripts; WebSocket sidecar with latency elimination (kill poll storm, parallelize queries); stale-JWT self-heal for "User not found" on Contact button.
+- **Email orchestrator**: no-code variant + WYSIWYG editor + brand logo + alt-subject re-send; behaviour-based audience targeting (open/click on a specific email); `{{myCodeUrl}}` / `{{event.myCodeUrl}}` token added to all email templates.
+- **Check-in**: dedicated `/e/[slug]/my-code` page for mobile door entry.
+- **Navigation**: hash-based deep links for all event + admin tabs (e.g. `#tab=agenda`).
+- **Backup infra**: Google Drive sync via service account + setup helper.
+- **CI/CD**: GitHub Actions cron to replace the removed 15-min Vercel cron (Hobby plan blocks >1 cron/day).
+- **Build fixes**: removed prisma migrate deploy from build (needs `_prisma_migrations` table); fixed mismatched quote in `applyMergeTags` that broke Vercel build.
+- **Docs**: published v1.2 register-to-checkin PDF (7-stage + community + stale-JWT self-heal); exposed email-system PDF + source HTML as downloadable public assets.
+
