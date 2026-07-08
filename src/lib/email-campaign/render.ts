@@ -93,7 +93,7 @@ export function applyMergeTags(
   recipient: { email: string; name: string | null },
   event?: MergeEventContext,
 ): string {
-  const firstName = recipient.name?.split(" ')[0] || "";
+  const firstName = recipient.name?.split(" ")[0] || "";
   const fullName = recipient.name || "";
   let out = text
     .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
