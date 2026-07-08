@@ -1872,3 +1872,56 @@ Stage Summary:
 - notOpened / notClicked correctly exclude users who never received the email (standard email-marketing semantics) — the rule resolves to "receivedEmails minus openedEmails" not "all users minus openedEmails".
 - Works for any source (users / rsvps / both) because the resolver produces an email set that's injected as an `email: { in: [...] }` filter on either User or EventRsvp.
 - All engagement resolvers run in parallel via Promise.all, so adding multiple engagement rules to a single audience doesn't increase latency linearly.
+
+---
+Task ID: speaker-intro-mockup-spec-A-I
+Agent: main
+Task: Implement 9 Speaker Intro Mockup visual specifications (A–I) per user spec 2026-07-09:
+  A. Default hero image for all events → https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782987131384-reozea.png
+  B. Hide "Ezequiel Sznaider" by default
+  C. Auto-column speaker grid (1–4→1col, 5–8→2col, 9–12→3col, every 4 speakers)
+  D. Speaker grid pos X=-7.5%, Y=29.3%, box W=891px, scale 0.76, layer front
+  E. Header pos X=1.7%, Y=0.5%, box 100% width
+  F. Topic pos X=-12.8%, Y=23.5%, box W=951px, scale 0.65
+  G. Brand colors #ff0056 + #8f0080
+  H. Branding asset bottom-left (H=48px, X≈3.1021%, Y≈87.5657%)
+  I. Footer credit "MassaPro"
+
+Work Log:
+- Reviewed existing speaker-intro mockup implementation:
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx (1717 lines) — data-driven canvas renderer at 1200×800
+  * src/app/admin/mockups/speaker-intro/types.ts — SpeakerIntroData shape with sectionLayout, brandingAsset
+  * src/app/admin/mockups/speaker-intro/event-mapper.ts — auto-fills mockup from DB event
+  * src/app/admin/mockups/speaker-intro/sample-data.ts — SAMPLE_DATA used on first load + Reset
+  * src/app/admin/mockups/shared/section-edit.tsx — SectionBox reads pos (in % of canvas) + boxSize (canvas px) + scale (multiplier) + z (z-index)
+- Verified spec C already implemented in canvas (lines 549–592): autoColumns = ceil(visibleCount/4), capped 1–6. 1-4→1, 5-8→2, 9-12→3 ✓
+- Verified spec A: DEFAULT_HERO constant in event-mapper.ts (line 53) and SAMPLE_DATA.heroOverlay.imageUrl both already point at the user-specified URL ✓
+- Verified spec H default canvas fallback already exists (lines 826–827): X=3.1021%, Y=87.5657% when brandingAsset.pos is unset ✓
+- Updated src/app/admin/mockups/speaker-intro/event-mapper.ts:
+  * Added HIDDEN_BY_DEFAULT_NAMES = ["ezequiel sznaider"] constant
+  * Added DEFAULT_SECTION_LAYOUT with header/topic/speakers pos + boxSize + scale + z
+  * Added DEFAULT_BRANDING_ASSET_POS = { x: 3.1021..., y: 87.5657... }
+  * Added DEFAULT_BRAND_COLORS = ["#ff0056", "#8f0080"]
+  * Added DEFAULT_FOOTER_CREDIT = "MassaPro"
+  * Added DEFAULT_BRANDING_ASSET_IMAGE = "...1782505047256-bpy1ln.png"
+  * In mapEventToSpeakerIntroData: filter speakers by name → set visible:false if matches HIDDEN_BY_DEFAULT_NAMES
+  * In return object: brandColors, footerCredit, brandingAsset (with pos), sectionLayout all populated from defaults
+  * Exported all new constants via _internals for tests
+- Updated src/app/admin/mockups/speaker-intro/sample-data.ts to mirror the same defaults:
+  * brandColors: ["#ff0056", "#8f0080"] (was ["#00FFFF", "#8B00FF"])
+  * footerCredit: "MassaPro" (was "Platform by MassaPro")
+  * brandingAsset.pos: { x: 3.1021447721179625, y: 87.5656836461126 }
+  * sectionLayout: header/topic/speakers defaults per spec D/E/F
+- TypeScript: zero new errors in speaker-intro files (confirmed via npx tsc --noEmit | grep speaker-intro = empty)
+- Next.js production build: ✓ Compiled successfully in 33.3s
+
+Stage Summary:
+- All 9 specs (A–I) implemented in 2 files (event-mapper.ts + sample-data.ts).
+- Specs A, C, H were already partially or fully implemented in the canvas — verified and documented.
+- Specs B, D, E, F, G, I required new defaults in event-mapper.ts (auto-fill path) + sample-data.ts (initial load + Reset path).
+- Ezequiel Sznaider (and any case-insensitive match) is now marked visible:false on auto-fill — users can re-enable in the editor's form view per-speaker "Visible" dropdown.
+- Section layout defaults (header pos 1.7%,0.5% / topic pos -12.8%,23.5% / speakers pos -7.5%,29.3%) render on first event-pick and on Reset. User drags/edits override via the same sectionLayout path.
+- Brand colors #ff0056 + #8f0080 propagate to: topic vertical accent bar, speakers label gradient, location pin dot color (all via data.event.brandColors[0..1] in the canvas).
+- Footer credit "MassaPro" replaces "Platform by MassaPro".
+- Branding asset defaults to AI Salon mark at bottom-left corner with height 48px.
+- TO VERIFY LOCALLY: open /admin/mockups/speaker-intro → click "Reset" → confirm brand colors, footer, branding position, and section positions match spec. Then pick any event from the dropdown → confirm Ezequiel Sznaider (if present) is hidden by default.

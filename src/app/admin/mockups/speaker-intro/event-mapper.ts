@@ -62,6 +62,75 @@ const DEFAULT_PINS = [
 const DEFAULT_PLACEMENT: ImagePlacement = { focusX: 50, focusY: 50, zoom: 1 };
 
 /**
+ * Names that should be hidden by default when auto-filling from an event.
+ *
+ * Per user spec 2026-07-09 (item B): "Avoid to show Ezequiel Sznaider by
+ * default". We mark matching speakers as `visible: false` (rather than
+ * removing them from the data) so the user can re-enable them in the
+ * editor if needed.
+ *
+ * Match is case-insensitive on the full name. Trims whitespace.
+ */
+const HIDDEN_BY_DEFAULT_NAMES = ["ezequiel sznaider"];
+
+/**
+ * Default section layout for the Speaker Intro mockup.
+ *
+ * Per user spec 2026-07-09:
+ *   - D (speakers): pos X=-7.5% Y=29.3%, box W=891px, scale=0.76, z=front
+ *   - E (header):   pos X=1.7%  Y=0.5%,  box W=100% (1200px)
+ *   - F (topic):    pos X=-12.8% Y=23.5%, box W=951px, scale=0.65
+ *   - H (branding): pos X≈3.10% Y≈87.57% (handled separately on brandingAsset)
+ *
+ * These defaults are baked into the data so the canvas renders the
+ * canonical layout on first event-pick, before the user has touched
+ * anything. The user can still drag/resize sections in the editor —
+ * their edits override these defaults via the same sectionLayout path.
+ */
+const DEFAULT_SECTION_LAYOUT = {
+  header: {
+    pos: { x: 1.7, y: 0.5 },
+    boxSize: { width: 1200 },
+  },
+  topic: {
+    pos: { x: -12.8, y: 23.5 },
+    boxSize: { width: 951 },
+    scale: 0.65,
+  },
+  speakers: {
+    pos: { x: -7.5, y: 29.3 },
+    boxSize: { width: 891 },
+    scale: 0.76,
+    // "Layer front all" — render the speakers grid above other text
+    // sections (default TEXT_Z=50) and above the branding asset (52).
+    z: 60,
+  },
+} as const;
+
+/**
+ * Default branding-asset position (bottom-left corner) per user spec
+ * 2026-07-09 (item H): X=3.1021447721179625%, Y=87.5656836461126%.
+ */
+const DEFAULT_BRANDING_ASSET_POS = {
+  x: 3.1021447721179625,
+  y: 87.5656836461126,
+} as const;
+
+/**
+ * Brand colors per user spec 2026-07-09 (item G):
+ *   Brand color 1 = #ff0056 (pink/magenta)
+ *   Brand color 2 = #8f0080 (deep purple/magenta)
+ */
+const DEFAULT_BRAND_COLORS: [string, string] = ["#ff0056", "#8f0080"];
+
+/** Footer credit per user spec 2026-07-09 (item I). */
+const DEFAULT_FOOTER_CREDIT = "MassaPro";
+
+/** Branding asset image URL — AI Salon mark on Vercel Blob. */
+const DEFAULT_BRANDING_ASSET_IMAGE =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png";
+
+/**
  * Minimal shape of `event` returned by GET /api/events/[slug].
  * We type it here (instead of importing the Prisma type) so the
  * mapper is decoupled from the DB layer and easier to test.
@@ -258,10 +327,17 @@ export function mapEventToSpeakerIntroData(
   // Build the Speaker[] array — assign new sequential `order` values
   // starting at 1 so the canvas's `sort((a,b) => a.order - b.order)`
   // produces the timeline order we just computed.
+  //
+  // Per user spec 2026-07-09 (item B): speakers whose trimmed name
+  // matches HIDDEN_BY_DEFAULT_NAMES are marked `visible: false` so they
+  // don't render on the canvas by default. The user can re-enable them
+  // in the editor's form view (per-speaker "Visible" dropdown).
   const speakers: Speaker[] = speakersWithSort.map((entry, idx) => {
     const s = entry.s;
     const [title, roleCompany] = splitRole(s.role);
     const company = s.company?.trim() || roleCompany;
+    const normalized = (s.name || "").trim().toLowerCase();
+    const hidden = HIDDEN_BY_DEFAULT_NAMES.some((n) => n === normalized);
     return {
       order: idx + 1,
       role: entry.role,
@@ -272,7 +348,7 @@ export function mapEventToSpeakerIntroData(
       photoUrl: s.photoUrl ?? DEFAULT_AVATAR,
       sessionTitle: s.topic ?? undefined,
       sessionTime: entry.sessionTime || undefined,
-      visible: true,
+      visible: !hidden,
       photoPlacement: { ...DEFAULT_PLACEMENT },
     } satisfies Speaker;
   });
@@ -284,7 +360,8 @@ export function mapEventToSpeakerIntroData(
       time: formatTime(event.startsAt),
       venue: formatVenue(event),
       topic: event.subtitle?.trim() || event.description?.trim() || "",
-      brandColors: ["#00FFFF", "#8B00FF"],
+      // Per user spec 2026-07-09 (item G): brand colors are #ff0056 + #8f0080.
+      brandColors: [...DEFAULT_BRAND_COLORS] as [string, string],
       sourceEventId: event.id,
       sourceEventSlug: event.slug,
     },
@@ -292,6 +369,10 @@ export function mapEventToSpeakerIntroData(
     collaborators: [],
     sponsors: [],
     heroOverlay: {
+      // Per user spec 2026-07-09 (item A): default hero image for all
+      // events is the AI Salon brand asset on Vercel Blob. When the
+      // event has its own mainImage, that takes precedence — but if not,
+      // we fall back to the canonical hero (not a Tel Aviv skyline).
       imageUrl: event.mainImage?.fileUrl ?? DEFAULT_HERO,
       gradientColors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
       gradientOpacity: 0.55,
@@ -301,7 +382,19 @@ export function mapEventToSpeakerIntroData(
     qrCodeUrl:
       event.rsvpUrl ||
       `https://aisalon.massapro.com/events/${event.slug}`,
-    footerCredit: "Platform by MassaPro",
+    // Per user spec 2026-07-09 (item I): footer credit is "MassaPro".
+    footerCredit: DEFAULT_FOOTER_CREDIT,
+    // Per user spec 2026-07-09 (item H): branding asset at the bottom-left
+    // corner by default — height 48px, X≈3.10% Y≈87.57%.
+    brandingAsset: {
+      imageUrl: DEFAULT_BRANDING_ASSET_IMAGE,
+      height: 48,
+      pos: { ...DEFAULT_BRANDING_ASSET_POS },
+    },
+    // Per user spec 2026-07-09 (items D, E, F): default section layout
+    // for header / topic / speakers. The user can drag/resize in the
+    // editor — their edits override these via the same sectionLayout path.
+    sectionLayout: JSON.parse(JSON.stringify(DEFAULT_SECTION_LAYOUT)),
   };
 }
 
@@ -311,6 +404,12 @@ export const _internals = {
   DEFAULT_HERO,
   DEFAULT_PINS,
   DEFAULT_PLACEMENT,
+  DEFAULT_BRAND_COLORS,
+  DEFAULT_FOOTER_CREDIT,
+  DEFAULT_BRANDING_ASSET_IMAGE,
+  DEFAULT_BRANDING_ASSET_POS,
+  DEFAULT_SECTION_LAYOUT,
+  HIDDEN_BY_DEFAULT_NAMES,
   splitRole,
   deriveRole,
   findFirstSessionTime,

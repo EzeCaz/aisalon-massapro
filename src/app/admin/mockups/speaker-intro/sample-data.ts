@@ -19,7 +19,8 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     time: "18:00",
     venue: "Google For Startups, Ha-Umanim St 12, Tel Aviv-Yafo",
     topic: "The AI CMO Blueprint: Scaling Growth & Agentic Innovation",
-    brandColors: ["#00FFFF", "#8B00FF"],
+    // Per user spec 2026-07-09 (item G): brand colors are #ff0056 + #8f0080.
+    brandColors: ["#ff0056", "#8f0080"],
   },
   speakers: [
     {
@@ -96,15 +97,48 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     { label: "Yafo", x: 70, y: 78 },
   ],
   qrCodeUrl: "https://aisalon.massapro.com/events",
-  footerCredit: "Platform by MassaPro",
+  // Per user spec 2026-07-09 (item I): footer credit is "MassaPro".
+  footerCredit: "MassaPro",
   /**
    * Branding asset at the bottom-LEFT corner of the canvas. Defaults to
    * the AI Salon brand image hosted on Vercel Blob (per user spec
    * 2026-07-02). Replaceable + draggable — see speaker-intro-canvas.tsx.
+   *
+   * Per user spec 2026-07-09 (item H): default position is X≈3.10%,
+   * Y≈87.57% (bottom-left corner). Height=48px.
    */
   brandingAsset: {
     imageUrl:
       "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
     height: 48,
+    pos: { x: 3.1021447721179625, y: 87.5656836461126 },
+  },
+  /**
+   * Default section layout per user spec 2026-07-09:
+   *   - D (speakers): pos X=-7.5% Y=29.3%, box W=891px, scale=0.76, z=front
+   *   - E (header):   pos X=1.7%  Y=0.5%,  box W=100% (1200px)
+   *   - F (topic):    pos X=-12.8% Y=23.5%, box W=951px, scale=0.65
+   * The canvas's SectionBox reads these and overrides the inline default
+   * left/top/width when present. User edits in the editor override these
+   * via the same sectionLayout path.
+   */
+  sectionLayout: {
+    header: {
+      pos: { x: 1.7, y: 0.5 },
+      boxSize: { width: 1200 },
+    },
+    topic: {
+      pos: { x: -12.8, y: 23.5 },
+      boxSize: { width: 951 },
+      scale: 0.65,
+    },
+    speakers: {
+      pos: { x: -7.5, y: 29.3 },
+      boxSize: { width: 891 },
+      scale: 0.76,
+      // "Layer front all" — render above other text sections (TEXT_Z=50)
+      // and above the branding asset (z=52).
+      z: 60,
+    },
   },
 };
