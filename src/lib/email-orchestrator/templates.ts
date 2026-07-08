@@ -11,6 +11,8 @@
  *   {{eventVenue}}     — event.venue or "TBD"
  *   {{eventAddress}}   — event.address or ""
  *   {{eventUrl}}       — full URL to /e/{slug}
+ *   {{myCodeUrl}}      — full URL to /e/{slug}/my-code (mobile-first check-in page)
+ *   {{event.myCodeUrl}} — alias for {{myCodeUrl}} (dotted form)
  *   {{checkInCode}}    — RSVP.checkInCode or ""
  *   {{speakers}}       — comma-separated list of speaker names
  *   {{agenda}}         — newline-separated agenda items
@@ -70,6 +72,8 @@ export type TemplateContext = {
   eventVenue: string;
   eventAddress: string;
   eventUrl: string;
+  /** Mobile-first /e/<slug>/my-code page — shows the user's check-in code. */
+  myCodeUrl: string;
   checkInCode: string;
   speakers: string;
   agenda: string;
@@ -92,6 +96,7 @@ export function buildContext(args: {
   const firstName = (rsvp.name || rsvp.email.split("@")[0]).split(" ")[0];
   const eventDate = formatDate(event.startsAt);
   const eventUrl = `${baseUrl}/e/${event.slug}`;
+  const myCodeUrl = `${eventUrl}/my-code`;
   const openPixelUrl = `${baseUrl}/api/track/email-open?id=${queueId}`;
 
   return {
@@ -101,6 +106,7 @@ export function buildContext(args: {
     eventVenue: event.venue || "TBD",
     eventAddress: event.address || "",
     eventUrl,
+    myCodeUrl,
     checkInCode: rsvp.checkInCode || "",
     speakers: speakers.map((s) => s.name).join(", "),
     agenda: agenda
@@ -153,6 +159,10 @@ export function renderTemplate(
     .replace(/{{eventVenue}}/g, escapeHtml(ctx.eventVenue))
     .replace(/{{eventAddress}}/g, escapeHtml(ctx.eventAddress))
     .replace(/{{eventUrl}}/g, escapeHtml(ctx.eventUrl))
+    // {{myCodeUrl}} and {{event.myCodeUrl}} are aliases — both resolve to
+    // the mobile-first /e/<slug>/my-code page.
+    .replace(/{{event\.myCodeUrl}}/g, escapeHtml(ctx.myCodeUrl))
+    .replace(/{{myCodeUrl}}/g, escapeHtml(ctx.myCodeUrl))
     .replace(/{{checkInCode}}/g, escapeHtml(ctx.checkInCode))
     .replace(/{{speakers}}/g, escapeHtml(ctx.speakers))
     .replace(/{{agenda}}/g, escapeHtml(ctx.agenda).replace(/\n/g, "<br/>"));
@@ -204,6 +214,8 @@ export function renderSubject(subject: string, ctx: TemplateContext): string {
     .replace(/{{eventVenue}}/g, ctx.eventVenue)
     .replace(/{{eventAddress}}/g, ctx.eventAddress)
     .replace(/{{eventUrl}}/g, ctx.eventUrl)
+    .replace(/{{event\.myCodeUrl}}/g, ctx.myCodeUrl)
+    .replace(/{{myCodeUrl}}/g, ctx.myCodeUrl)
     .replace(/{{checkInCode}}/g, ctx.checkInCode)
     .replace(/{{speakers}}/g, ctx.speakers)
     .replace(/{{agenda}}/g, ctx.agenda);

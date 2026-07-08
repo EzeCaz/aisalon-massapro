@@ -42,6 +42,7 @@ const TOKENS = [
   { label: "Venue", token: "{{eventVenue}}" },
   { label: "Address", token: "{{eventAddress}}" },
   { label: "Event URL", token: "{{eventUrl}}" },
+  { label: "My check-in code URL", token: "{{myCodeUrl}}" },
   { label: "Check-in code", token: "{{checkInCode}}" },
   { label: "Speakers", token: "{{speakers}}" },
   { label: "Agenda", token: "{{agenda}}" },

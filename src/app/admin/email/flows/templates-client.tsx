@@ -417,6 +417,8 @@ function TemplateEditorDialog({
       .replace(/{{eventVenue}}/g, "Massa TLV")
       .replace(/{{eventAddress}}/g, "Ahad Ha'am 34, Tel Aviv")
       .replace(/{{eventUrl}}/g, "https://aisalon.massapro.com/e/demo-day")
+      .replace(/{{event\.myCodeUrl}}/g, "https://aisalon.massapro.com/e/demo-day/my-code")
+      .replace(/{{myCodeUrl}}/g, "https://aisalon.massapro.com/e/demo-day/my-code")
       .replace(/{{checkInCode}}/g, "ABCD-1234")
       .replace(/{{speakers}}/g, "Eze Schloss, Sarah Chen")
       .replace(/{{agenda}}/g, "• 6:00 PM — Doors open<br/>• 6:30 PM — Welcome<br/>• 7:00 PM — Demos<br/>• 8:30 PM — Networking");
@@ -462,7 +464,7 @@ function TemplateEditorDialog({
               className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
             />
             <p className="mt-1 text-[10px] text-neutral-500">
-              Supports tokens: {"{{firstName}}"}, {"{{eventTitle}}"}, {"{{eventDate}}"}, {"{{eventVenue}}"}, {"{{checkInCode}}"}, {"{{speakers}}"}, {"{{agenda}}"}.
+              Supports tokens: {"{{firstName}}"}, {"{{eventTitle}}"}, {"{{eventDate}}"}, {"{{eventVenue}}"}, {"{{eventUrl}}"}, {"{{myCodeUrl}}"}, {"{{checkInCode}}"}, {"{{speakers}}"}, {"{{agenda}}"}.
             </p>
           </div>
 

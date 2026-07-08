@@ -101,6 +101,19 @@ export async function sendCampaignBatch(
     signatureHtml: campaign.signatureHtmlSnapshot,
   };
 
+  // If the campaign targets an event (listSource === "EVENT:<eventId>"),
+  // look up the event once so we can resolve {{eventUrl}}, {{myCodeUrl}},
+  // {{event.myCodeUrl}}, {{eventTitle}}, etc. merge tags. When the campaign
+  // is event-bound but the event was deleted, we fall through to "no event
+  // context" — those tokens resolve to empty strings instead of erroring.
+  const eventMatch = campaign.listSource.match(/^EVENT:(.+)$/);
+  const eventCtx = eventMatch
+    ? await db.event.findUnique({
+        where: { id: eventMatch[1] },
+        select: { slug: true, title: true, venue: true, address: true },
+      }).then((e) => e ? { slug: e.slug, title: e.title, venue: e.venue, address: e.address } : undefined)
+    : undefined;
+
   let sent = 0;
   let failed = 0;
 
@@ -117,6 +130,7 @@ export async function sendCampaignBatch(
         snapshot,
         from: { name: fromName, email: fromEmail },
         baseUrl,
+        ...(eventCtx ? { event: eventCtx } : {}),
       });
 
       const result = await sendMail({

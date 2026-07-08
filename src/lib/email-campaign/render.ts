@@ -33,6 +33,23 @@ export type RenderInput = {
     email: string;
   };
   baseUrl: string;
+  /**
+   * Optional event context — when the campaign targets an event
+   * (listSource === "EVENT:<eventId>"), pass the event slug + title here
+   * so the renderer can resolve {{eventUrl}}, {{myCodeUrl}},
+   * {{event.myCodeUrl}}, and {{eventTitle}} merge tags.
+   *
+   * When omitted (e.g. ALL_MEMBERS / TAG / MANUAL campaigns), these tags
+   * resolve to empty strings — same as how {{first_name}} resolves to ""
+   * when the recipient has no name.
+   */
+  event?: {
+    slug: string;
+    title?: string | null;
+    startsAt?: string | null;
+    venue?: string | null;
+    address?: string | null;
+  };
 };
 
 export type RenderedEmail = {
@@ -50,16 +67,62 @@ export function generateMessageId(domain: string): string {
   return `<${rand}.${Date.now()}@${domain}>`;
 }
 
+/**
+ * Optional event context for the merge-tag resolver. When provided,
+ * the following additional tokens resolve:
+ *   {{eventUrl}}        — full URL to /e/<slug>
+ *   {{myCodeUrl}}       — full URL to /e/<slug>/my-code (mobile check-in page)
+ *   {{event.myCodeUrl}} — alias for {{myCodeUrl}} (dotted form)
+ *   {{eventTitle}}      — event.title
+ *   {{eventVenue}}      — event.venue
+ *   {{eventAddress}}    — event.address
+ * When omitted (or when slug is empty), all of the above resolve to "".
+ */
+export type MergeEventContext = {
+  slug: string;
+  title?: string | null;
+  venue?: string | null;
+  address?: string | null;
+  /** Base URL for building absolute links — typically the same baseUrl
+   *  passed to renderEmail(). */
+  baseUrl: string;
+};
+
 export function applyMergeTags(
   text: string,
-  recipient: { email: string; name: string | null }
+  recipient: { email: string; name: string | null },
+  event?: MergeEventContext,
 ): string {
-  const firstName = recipient.name?.split(" ")[0] || "";
+  const firstName = recipient.name?.split(" ')[0] || "";
   const fullName = recipient.name || "";
-  return text
+  let out = text
     .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
     .replace(/\{\{\s*full_name\s*\}\}/g, fullName)
     .replace(/\{\{\s*email\s*\}\}/g, recipient.email);
+
+  if (event && event.slug) {
+    const eventUrl = `${event.baseUrl}/e/${event.slug}`;
+    const myCodeUrl = `${eventUrl}/my-code`;
+    out = out
+      .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
+      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*eventTitle\s*\}\}/g, event.title || "")
+      .replace(/\{\{\s*eventVenue\s*\}\}/g, event.venue || "")
+      .replace(/\{\{\s*eventAddress\s*\}\}/g, event.address || "");
+  } else {
+    // No event context — strip these tokens to empty strings so they
+    // don't leak as literal "{{eventUrl}}" text in the sent email.
+    out = out
+      .replace(/\{\{\s*eventUrl\s*\}\}/g, "")
+      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, "")
+      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, "")
+      .replace(/\{\{\s*eventTitle\s*\}\}/g, "")
+      .replace(/\{\{\s*eventVenue\s*\}\}/g, "")
+      .replace(/\{\{\s*eventAddress\s*\}\}/g, "");
+  }
+
+  return out;
 }
 
 export function wrapClickLinks(
@@ -122,16 +185,20 @@ export function htmlToText(html: string): string {
 }
 
 export function renderEmail(input: RenderInput): RenderedEmail {
-  const { recipient, snapshot, from, baseUrl, campaignId, trackToken } = input;
+  const { recipient, snapshot, from, baseUrl, campaignId, trackToken, event } = input;
 
-  const subject = applyMergeTags(snapshot.subject, recipient);
-  let html = applyMergeTags(snapshot.bodyHtml, recipient);
+  const eventCtx: MergeEventContext | undefined = event
+    ? { slug: event.slug, title: event.title, venue: event.venue, address: event.address, baseUrl }
+    : undefined;
+
+  const subject = applyMergeTags(snapshot.subject, recipient, eventCtx);
+  let html = applyMergeTags(snapshot.bodyHtml, recipient, eventCtx);
   const text = snapshot.bodyText
-    ? applyMergeTags(snapshot.bodyText, recipient)
+    ? applyMergeTags(snapshot.bodyText, recipient, eventCtx)
     : htmlToText(snapshot.bodyHtml);
 
   if (snapshot.signatureHtml) {
-    const sig = applyMergeTags(snapshot.signatureHtml, recipient);
+    const sig = applyMergeTags(snapshot.signatureHtml, recipient, eventCtx);
     html = html + `\n<div style="margin-top: 24px;">${sig}</div>`;
   }
 

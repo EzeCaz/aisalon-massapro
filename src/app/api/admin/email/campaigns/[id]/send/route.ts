@@ -81,6 +81,25 @@ export async function POST(
   const from = `${fromName} <${fromEmail}>`;
   const replyTo = campaign.replyTo || undefined;
 
+  // If the campaign targets an event (listSource === "EVENT:<eventId>"),
+  // look up the event slug + title so we can resolve {{eventUrl}},
+  // {{myCodeUrl}}, {{event.myCodeUrl}}, {{eventTitle}} merge tags.
+  // Falls through to "no event context" (tokens resolve to "") if the
+  // event was deleted or the campaign isn't event-bound.
+  const eventMatch = campaign.listSource.match(/^EVENT:(.+)$/);
+  const eventCtx = eventMatch
+    ? await db.event.findUnique({
+        where: { id: eventMatch[1] },
+        select: { slug: true, title: true, venue: true, address: true },
+      })
+    : null;
+  const baseUrl =
+    process.env.EMAIL_TRACKING_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "https://aisalon.massapro.com";
+  const eventUrl = eventCtx ? `${baseUrl}/e/${eventCtx.slug}` : "";
+  const myCodeUrl = eventCtx ? `${eventUrl}/my-code` : "";
+
   let sentCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
@@ -99,15 +118,30 @@ export async function POST(
       },
     });
 
-    // Personalize the body — replace {{name}} and {{email}} merge fields
+    // Personalize the body — replace merge fields. {{name}}/{{email}} are
+    // always available; {{eventUrl}}, {{myCodeUrl}}, {{event.myCodeUrl}},
+    // {{eventTitle}}, {{eventVenue}}, {{eventAddress}} only resolve when
+    // the campaign targets an event (otherwise stripped to "").
     const personalizedHtml = campaign.bodyHtmlSnapshot
       .replace(/\{\{name\}\}/g, r.name || "there")
-      .replace(/\{\{email\}\}/g, r.email);
+      .replace(/\{\{email\}\}/g, r.email)
+      .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
+      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*eventTitle\s*\}\}/g, eventCtx?.title || "")
+      .replace(/\{\{\s*eventVenue\s*\}\}/g, eventCtx?.venue || "")
+      .replace(/\{\{\s*eventAddress\s*\}\}/g, eventCtx?.address || "");
+    const personalizedSubject = campaign.subjectSnapshot
+      .replace(/\{\{name\}\}/g, r.name || "there")
+      .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
+      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
+      .replace(/\{\{\s*eventTitle\s*\}\}/g, eventCtx?.title || "");
 
     const result = await sendMail({
       to: r.email,
       cc: undefined,
-      subject: campaign.subjectSnapshot,
+      subject: personalizedSubject,
       html: personalizedHtml,
       from,
       ...(replyTo ? { cc: replyTo } : {}),
