@@ -147,10 +147,23 @@ export type SpeakerIntroData = {
   /** Vertical stack of speakers on the left column. */
   speakers: Speaker[];
   /**
-   * Speaker grid layout controls. When omitted, the canvas renders the
-   * speakers as a single vertical column (the original behavior).
+   * Speaker grid layout controls.
    *
-   *   - columns: 1 | 2 | 3 — how many speaker cards per row.
+   * Per user spec 2026-07-09 (item C): "Over 4 speakers, generate
+   * automatically another Speaker grid layout column every 4 speakers".
+   * The canvas auto-computes `columns` from the visible speaker count
+   * when `columns` is not explicitly set:
+   *   - 1-4 speakers  → 1 column
+   *   - 5-8 speakers  → 2 columns
+   *   - 9-12 speakers → 3 columns
+   *   - 13-16         → 4 columns
+   *   - 17-20         → 5 columns
+   *   - 21-24         → 6 columns
+   * Setting `columns` explicitly in the JSON or via the form dropdown
+   * overrides the auto-computed value.
+   *
+   *   - columns: 1 | 2 | 3 | 4 | 5 | 6 — explicit column count. When
+   *       undefined, the canvas auto-computes from visible speaker count.
    *   - rowsPerColumn: explicit row count per column index (1-indexed).
    *       Example: columns=3, rowsPerColumn=[2, 1, 2] means col 1 has 2
    *       rows, col 2 has 1 row, col 3 has 2 rows. When omitted or
@@ -164,7 +177,7 @@ export type SpeakerIntroData = {
    *       "spread" (per user spec).
    */
   speakersLayout?: {
-    columns?: 1 | 2 | 3;
+    columns?: 1 | 2 | 3 | 4 | 5 | 6;
     rowsPerColumn?: number[];
     flowDirection?: "row" | "col";
     lastRowAlign?: "left" | "center" | "spread";

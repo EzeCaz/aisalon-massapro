@@ -537,7 +537,20 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col gap-3"
-          style={{ left: "48px", top: "260px", width: `${(data.speakersLayout?.columns ?? 1) === 1 ? 400 : (data.speakersLayout?.columns ?? 1) === 2 ? 700 : 1000}px`, zIndex: sectionZFor("speakers") }}
+          style={{ left: "48px", top: "260px", width: `${(() => {
+            // Per user spec 2026-07-09 (item C): auto-compute columns from
+            // visible speaker count when not explicitly set. The width
+            // here is a fallback — when `sectionLayout.speakers.boxSize.width`
+            // is set (default in event-mapper / sample-data), it overrides
+            // this inline width. We still compute a sensible width for
+            // the case where the user has cleared boxSize.
+            //
+            // Column width ~280px + 12px gap. Capped to ~96% of canvas (1152px).
+            const visibleCount = data.speakers.filter(s => s.visible !== false).length;
+            const autoCols = Math.min(6, Math.max(1, Math.ceil(visibleCount / 4)));
+            const cols = data.speakersLayout?.columns ?? autoCols;
+            return Math.min(1152, 280 * cols + 12 * (cols - 1));
+          })()}px`, zIndex: sectionZFor("speakers") }}
           accentColor="#FF005A"
           label="Speakers"
           guideId="speakers"
@@ -569,7 +582,15 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               .filter(({ speaker }) => speaker.visible !== false);
 
             const layout = data.speakersLayout ?? {};
-            const columns = layout.columns ?? 1;
+            // Per user spec 2026-07-09 (item C): auto-compute columns from
+            // visible speaker count when not explicitly set:
+            //   1-4 speakers → 1 col, 5-8 → 2 cols, 9-12 → 3 cols, ...
+            // Explicit `columns` in the JSON or form dropdown overrides this.
+            const autoColumns = Math.min(
+              6,
+              Math.max(1, Math.ceil(sortedSpeakers.length / 4)),
+            ) as 1 | 2 | 3 | 4 | 5 | 6;
+            const columns = layout.columns ?? autoColumns;
             const flow = layout.flowDirection ?? "row";
             const lastRowAlign = layout.lastRowAlign ?? "spread";
             const rowsPerColumn = layout.rowsPerColumn ?? [];
@@ -800,9 +821,10 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         {(() => {
           const height = data.brandingAsset?.height ?? 48;
           const pos = data.brandingAsset?.pos;
-          // Default: bottom-left corner with ~32px margin = ~2.7% left, ~94% top.
-          const leftPct = pos ? pos.x : 2.7;
-          const topPct = pos ? pos.y : 94;
+          // Per user spec 2026-07-09 (item H): default bottom-left corner
+          // position is X=3.1021447721179625%, Y=87.5656836461126%.
+          const leftPct = pos ? pos.x : 3.1021447721179625;
+          const topPct = pos ? pos.y : 87.5656836461126;
           return (
             <DraggablePhotoContainer
               leftPct={leftPct}
