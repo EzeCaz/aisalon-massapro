@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/hooks/use-hash-tab";
 import { OverviewTab } from "./tabs/overview-tab";
 import { AgendaTab } from "./tabs/agenda-tab";
 import { PhotosTab } from "./tabs/photos-tab";
@@ -147,7 +148,18 @@ export function EventTabs({
   /** Whether the viewer can create/host a quiz for this event (admin / super-admin / co-host). */
   canHostQuiz?: boolean;
 }) {
-  const [tab, setTab] = useState("agenda");
+  // Tab state is synced to the URL hash (#quiz, #event-prep, #photos, ...)
+  // so any tab on this event page can be deep-linked and shared.
+  // Only the tabs that are actually visible to this viewer are allowed
+  // — if someone hits #admin-agenda but isn't an admin, the hook falls
+  // back to "agenda" (the default) instead of opening a hidden tab.
+  const visibleTabs: string[] = ["agenda", "overview", "photos", "slideshow", "presentations"];
+  if (quizzes.length > 0 || canHostQuiz) visibleTabs.push("quiz");
+  visibleTabs.push("chat");
+  if (canViewEventPrep) visibleTabs.push("event-prep");
+  if (isAdmin) visibleTabs.push("admin-agenda");
+  if (canManageEvent) visibleTabs.push("manage-event");
+  const [tab, setTab] = useHashTab("agenda", visibleTabs);
   // Force re-mount of agenda tabs when the admin edits agenda so the
   // public agenda view stays in sync.
   const [agendaVersion, setAgendaVersion] = useState(0);
