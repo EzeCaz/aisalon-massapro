@@ -158,6 +158,31 @@ export function FlowBuilderClient({
         const err = await r.json();
         throw new Error(err.error || "Save failed");
       }
+      // CRITICAL: The PATCH endpoint deletes all steps and recreates them,
+      // so every step gets a NEW database id. If we don't update our local
+      // state with the new ids, subsequent "Send to audience" clicks will
+      // send stale step ids → API returns "step not found in this flow".
+      const data = await r.json();
+      if (data.flow?.steps) {
+        setFlow({
+          id: data.flow.id,
+          name: data.flow.name,
+          description: data.flow.description,
+          status: data.flow.status,
+          steps: (data.flow.steps as Array<Record<string, unknown>>).map((s) => ({
+            id: s.id as string,
+            position: s.position as number,
+            audienceId: (s.audienceId as string | null) ?? null,
+            triggerKind: (s.triggerKind as string | null) ?? null,
+            triggerEventId: (s.triggerEventId as string | null) ?? null,
+            templateId: (s.templateId as string | null) ?? null,
+            subjectVariantA: (s.subjectVariantA as string | null) ?? null,
+            subjectVariantB: (s.subjectVariantB as string | null) ?? null,
+            delayValue: (s.delayValue as number) ?? 0,
+            delayUnit: (s.delayUnit as "MINUTES" | "HOURS" | "DAYS") ?? "MINUTES",
+          })),
+        });
+      }
       // Refresh list (run stats may have changed).
       loadFlows();
     } catch (e) {

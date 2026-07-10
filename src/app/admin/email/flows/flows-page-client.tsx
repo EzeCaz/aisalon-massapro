@@ -70,11 +70,14 @@ export function FlowsPageClient({
           events={events}
           onAudiencesChange={(next) => {
             setAudiences(
-              next.map((a: { id: string; name: string; isTest: boolean; emails: string[]; kind: string }) => ({
+              next.map((a: { id: string; name: string; isTest: boolean; emails: string[]; kind: string; emailCount?: number; emailPreview?: string[] }) => ({
                 id: a.id,
                 name: a.name,
                 isTest: a.isTest,
                 emails: a.emails,
+                kind: a.kind as "STATIC" | "DYNAMIC",
+                emailCount: a.emailCount,
+                emailPreview: a.emailPreview,
               })),
             );
           }}

@@ -19,7 +19,8 @@
  *     StepEditor inside (A/B/C/D sections).
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   Plus, X, ArrowRight, Clock, Mail, Pencil, Loader2, Users, Zap,
@@ -41,7 +42,21 @@ export type FlowAudience = {
   isTest: boolean;
   kind?: "STATIC" | "DYNAMIC";
   emails: string[];
+  // For DYNAMIC audiences, the API returns emails: [] + emailCount + emailPreview.
+  // Use `effectiveEmailCount()` helper to get the display count.
+  emailCount?: number;
+  emailPreview?: string[];
 };
+
+/**
+ * Returns the display email count for an audience — uses `emailCount` for
+ * DYNAMIC audiences (where `emails` is always empty), and `emails.length`
+ * for STATIC audiences.
+ */
+export function effectiveEmailCount(a: FlowAudience): number {
+  if (a.kind === "DYNAMIC" && a.emailCount !== undefined) return a.emailCount;
+  return a.emails.length;
+}
 
 export type FlowStep = {
   id?: string;
@@ -251,8 +266,42 @@ function StepCard({
   const triggerLabel = TRIGGER_KINDS.find((t) => t.value === step.triggerKind)?.label ?? step.triggerKind ?? "—";
   const [sending, setSending] = useState(false);
   const [showEventPicker, setShowEventPicker] = useState(false);
+  const sendBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
   const canSend = !!(step.id && step.templateId && step.audienceId && flowStatus === "ACTIVE");
+
+  // Compute popover position when it opens — render below the button, clamped to viewport.
+  useLayoutEffect(() => {
+    if (!showEventPicker || !sendBtnRef.current) {
+      setPopoverPos(null);
+      return;
+    }
+    const rect = sendBtnRef.current.getBoundingClientRect();
+    const POPOVER_W = 280;
+    const POPOVER_H = 180;
+    let left = rect.left;
+    if (left + POPOVER_W > window.innerWidth - 8) left = window.innerWidth - POPOVER_W - 8;
+    if (left < 8) left = 8;
+    let top = rect.bottom + 6;
+    // If it doesn't fit below, put it above.
+    if (top + POPOVER_H > window.innerHeight - 8) top = rect.top - POPOVER_H - 6;
+    if (top < 8) top = 8;
+    setPopoverPos({ top, left });
+  }, [showEventPicker]);
+
+  // Close popover on Escape / outside click / scroll.
+  useEffect(() => {
+    if (!showEventPicker) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowEventPicker(false); };
+    const onScroll = () => setShowEventPicker(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [showEventPicker]);
 
   const handleSendToAudience = async (eventId: string) => {
     if (!step.id) {
@@ -322,7 +371,10 @@ function StepCard({
         </div>
         {audience && (
           <div className="text-[10px] text-neutral-500 truncate">
-            {audience.emails.length} email{audience.emails.length === 1 ? "" : "s"}
+            {effectiveEmailCount(audience)} email{effectiveEmailCount(audience) === 1 ? "" : "s"}
+            {audience.kind === "DYNAMIC" && (
+              <span className="ml-1 italic text-neutral-400">(dynamic)</span>
+            )}
           </div>
         )}
       </div>
@@ -374,6 +426,7 @@ function StepCard({
       {/* Send to audience button — fires this step immediately to all audience members */}
       <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
         <button
+          ref={sendBtnRef}
           onClick={() => {
             if (!step.id) {
               toast.error("Save the flow first, then send.");
@@ -402,50 +455,62 @@ function StepCard({
         </button>
       </div>
 
-      {/* Event picker popover — required because the trigger API needs an eventId to anchor RSVPs */}
-      {showEventPicker && canSend && (
-        <div className="absolute bottom-full left-0 z-20 mb-1 w-[260px] rounded-lg border border-neutral-200 bg-white p-3 shadow-lg">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-            Pick an event to anchor the send
-          </div>
-          <div className="text-[10px] text-neutral-500 mb-2">
-            Each audience member gets (or reuses) an RSVP to this event — that's how the queue tracks them.
-          </div>
-          <select
-            defaultValue={events[0]?.id ?? ""}
-            className="w-full rounded border border-neutral-300 px-2 py-1 text-xs"
-            id={`event-picker-${step.id}`}
+      {/* Event picker popover — rendered via portal at document.body so it is
+          never clipped by the canvas's overflow-x-auto container. */}
+      {showEventPicker && canSend && popoverPos && typeof document !== "undefined" && createPortal(
+        <>
+          {/* Backdrop closes on outside click */}
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setShowEventPicker(false)}
+          />
+          <div
+            className="fixed z-[61] w-[280px] rounded-lg border border-neutral-200 bg-white p-3 shadow-xl"
+            style={{ top: popoverPos.top, left: popoverPos.left }}
           >
-            {events.length === 0 ? (
-              <option value="">(no events — create one first)</option>
-            ) : (
-              events.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.title} — {new Date(ev.startsAt).toLocaleDateString()}
-                </option>
-              ))
-            )}
-          </select>
-          <div className="mt-2 flex justify-end gap-1">
-            <button
-              onClick={() => setShowEventPicker(false)}
-              className="rounded px-2 py-1 text-[10px] text-neutral-500 hover:text-neutral-800"
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+              Pick an event to anchor the send
+            </div>
+            <div className="text-[10px] text-neutral-500 mb-2">
+              Each audience member gets (or reuses) an RSVP to this event — that&apos;s how the queue tracks them.
+            </div>
+            <select
+              defaultValue={events[0]?.id ?? ""}
+              className="w-full rounded border border-neutral-300 px-2 py-1 text-xs"
+              id={`event-picker-${step.id}`}
             >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                const sel = document.getElementById(`event-picker-${step.id}`) as HTMLSelectElement | null;
-                const eventId = sel?.value;
-                if (eventId) handleSendToAudience(eventId);
-              }}
-              disabled={events.length === 0}
-              className="rounded bg-[#FF005A] px-2 py-1 text-[10px] font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
-            >
-              Confirm send
-            </button>
+              {events.length === 0 ? (
+                <option value="">(no events — create one first)</option>
+              ) : (
+                events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} — {new Date(ev.startsAt).toLocaleDateString()}
+                  </option>
+                ))
+              )}
+            </select>
+            <div className="mt-2 flex justify-end gap-1">
+              <button
+                onClick={() => setShowEventPicker(false)}
+                className="rounded px-2 py-1 text-[10px] text-neutral-500 hover:text-neutral-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const sel = document.getElementById(`event-picker-${step.id}`) as HTMLSelectElement | null;
+                  const eventId = sel?.value;
+                  if (eventId) handleSendToAudience(eventId);
+                }}
+                disabled={events.length === 0}
+                className="rounded bg-[#FF005A] px-2 py-1 text-[10px] font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
+              >
+                Confirm send
+              </button>
+            </div>
           </div>
-        </div>
+        </>,
+        document.body,
       )}
 
       {/* A/B badge */}
@@ -508,7 +573,7 @@ function StepEditorSheet({
                 <option value="">Everyone (no audience filter)</option>
                 {audiences.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}{a.isTest ? " (Test)" : ""}{a.kind === "DYNAMIC" ? " (dynamic)" : ""} — {a.emails.length} email{a.emails.length === 1 ? "" : "s"}
+                    {a.name}{a.isTest ? " (Test)" : ""}{a.kind === "DYNAMIC" ? " (dynamic)" : ""} — {effectiveEmailCount(a)} email{effectiveEmailCount(a) === 1 ? "" : "s"}
                   </option>
                 ))}
               </select>
@@ -526,18 +591,26 @@ function StepEditorSheet({
             </p>
             {step.audienceId && (() => {
               const a = audiences.find((x) => x.id === step.audienceId);
-              return a ? (
+              if (!a) return null;
+              const count = effectiveEmailCount(a);
+              const previewEmails = a.kind === "DYNAMIC" ? (a.emailPreview ?? []) : a.emails;
+              return (
                 <div className="mt-2 rounded bg-neutral-50 p-2 text-[10px] text-neutral-600">
                   <div className="font-semibold mb-1">
-                    {a.emails.length} email(s) in &ldquo;{a.name}&rdquo;{a.kind === "DYNAMIC" ? " (dynamic — resolved live)" : ""}
+                    {count} email(s) in &ldquo;{a.name}&rdquo;{a.kind === "DYNAMIC" ? " (dynamic — resolved live)" : ""}
                   </div>
-                  {a.emails.length > 0 ? (
-                    <div className="truncate">{a.emails.join(", ")}</div>
+                  {previewEmails.length > 0 ? (
+                    <div className="truncate">
+                      {previewEmails.join(", ")}
+                      {a.kind === "DYNAMIC" && count > previewEmails.length && (
+                        <span className="ml-1 text-neutral-400">+{count - previewEmails.length} more</span>
+                      )}
+                    </div>
                   ) : (
                     <div className="italic text-neutral-400">No emails resolved yet — DYNAMIC audiences are evaluated when the flow fires.</div>
                   )}
                 </div>
-              ) : null;
+              );
             })()}
           </section>
 

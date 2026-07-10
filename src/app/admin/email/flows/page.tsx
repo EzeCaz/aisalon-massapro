@@ -8,6 +8,10 @@ import { AdminTabs } from "@/components/ais/admin-tabs";
 import { FlowsPageClient } from "./flows-page-client";
 import { runSeed } from "@/lib/email-orchestrator/seed";
 import { EmailAdminNav } from "@/components/ais/email-admin-nav";
+import {
+  parseSpec,
+  resolveAudienceEmails,
+} from "@/lib/email-orchestrator/audience-filter";
 
 export const metadata = { title: "Email Flows — Admin — AI Salon Tel Aviv" };
 
@@ -59,6 +63,7 @@ export default async function FlowBuilderPage() {
         name: true,
         slug: true,
         emailsJson: true,
+        filtersJson: true,
         kind: true,
         isTest: true,
       },
@@ -66,15 +71,51 @@ export default async function FlowBuilderPage() {
   ]);
 
   // Parse audience emails for the client. For STATIC audiences, parse emailsJson.
-  // For DYNAMIC, the client should call /api/email-audiences/[id]/emails to resolve.
-  const audiencesParsed = audiences.map((a) => ({
-    id: a.id,
-    name: a.name,
-    slug: a.slug,
-    kind: a.kind as "STATIC" | "DYNAMIC",
-    isTest: a.isTest,
-    emails: safeParseEmails(a.emailsJson),
-  }));
+  // For DYNAMIC audiences, resolve the live email list + count so the flow
+  // builder can display how many recipients each audience currently matches
+  // (instead of showing 0 — DYNAMIC audiences store filtersJson, not emails).
+  const audiencesParsed = await Promise.all(
+    audiences.map(async (a) => {
+      if (a.kind === "STATIC") {
+        const emails = safeParseEmails(a.emailsJson);
+        return {
+          id: a.id,
+          name: a.name,
+          slug: a.slug,
+          kind: a.kind as "STATIC" | "DYNAMIC",
+          isTest: a.isTest,
+          emails,
+          emailCount: emails.length,
+          emailPreview: emails.slice(0, 3),
+        };
+      }
+      // DYNAMIC — resolve live email list + count.
+      let emailCount = 0;
+      let emailPreview: string[] = [];
+      try {
+        if (a.filtersJson) {
+          const spec = parseSpec(a.filtersJson);
+          if (spec) {
+            const all = await resolveAudienceEmails(spec);
+            emailCount = all.length;
+            emailPreview = all.slice(0, 3);
+          }
+        }
+      } catch {
+        // ignore resolution errors — UI still renders with 0.
+      }
+      return {
+        id: a.id,
+        name: a.name,
+        slug: a.slug,
+        kind: a.kind as "STATIC" | "DYNAMIC",
+        isTest: a.isTest,
+        emails: [] as string[],
+        emailCount,
+        emailPreview,
+      };
+    }),
+  );
 
   return (
     <div className="min-h-screen bg-neutral-50">
