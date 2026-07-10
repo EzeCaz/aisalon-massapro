@@ -376,7 +376,9 @@ function TemplateEditorDialog({
         : `/api/email-templates/${target.id}`;
       const method = isCreate ? "POST" : "PATCH";
       const body: Record<string, unknown> = {
-        name: isSaveAs ? name : undefined,
+        // Always send `name` so that renaming an existing template via PATCH
+        // actually persists. The API validates non-empty for both POST and PATCH.
+        name,
         subject,
         htmlBody,
         stopIfNotOpenedHours,
@@ -386,9 +388,6 @@ function TemplateEditorDialog({
         altSubject: altSubject.trim() || null,
         altNotOpenedHours,
       };
-      // For PATCH we don't send `name: undefined` — but the API allows it
-      // (it skips undefined fields). For POST, name is required.
-      if (isCreate) body.name = name;
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
