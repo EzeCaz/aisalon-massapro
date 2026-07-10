@@ -242,6 +242,25 @@ export function opsForField(field: FieldDef): FilterOp[] {
 // Spec → Prisma where translation
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Non-nullable fields per model. Used by `is_set` / `is_not_set` operators:
+ * checking "IS NULL" on a non-nullable column is invalid Prisma syntax, so
+ * we short-circuit (is_set → match all, is_not_set → match none).
+ *
+ * Source of truth: prisma/schema.prisma — keep in sync if schema changes.
+ */
+const NON_NULLABLE_USER_FIELDS = new Set([
+  "id", "email", "role", "createdAt", "updatedAt",
+]);
+const NON_NULLABLE_RSVP_FIELDS = new Set([
+  "id", "eventId", "userId", "email", "status", "source", "noShow", "createdAt", "updatedAt",
+]);
+
+/** Returns true if the field is non-nullable on BOTH User and EventRsvp. */
+function isNonNullableField(field: string): boolean {
+  return NON_NULLABLE_USER_FIELDS.has(field) && NON_NULLABLE_RSVP_FIELDS.has(field);
+}
+
 /** Parse + validate the JSON spec. Returns null on malformed input. */
 export function parseSpec(json: string | null | undefined): AudienceFilterSpec | null {
   if (!json) return null;
@@ -284,11 +303,28 @@ function ruleToPrisma(rule: FilterRule, ctx: EngagementContext, ruleKey: string)
     return { email: { in: list } } as Prisma.UserWhereInput;
   }
 
-  // is_set / is_not_set apply to any field
+  // is_set / is_not_set apply to any field.
+  //
+  // NOTE on Prisma null-checks:
+  //  - For NULLABLE fields, `{ [field]: { not: null } }` is INVALID — Prisma
+  //    serializes `null` as missing, so it raises "Argument `not` is missing".
+  //    The correct pattern is `{ NOT: { [field]: null } }`.
+  //  - For NON-NULLABLE fields (User.email, EventRsvp.email, etc.), Prisma
+  //    rejects `NOT: { [field]: null }` with "Argument `<field>` is missing"
+  //    because null isn't a valid value for a non-nullable field. In that case
+  //    `is_set` is trivially TRUE (always set) → return {} to match everything,
+  //    and `is_not_set` is trivially FALSE → return a never-match sentinel.
   if (op === "is_set") {
-    return { [field]: { not: null } } as Prisma.UserWhereInput;
+    if (isNonNullableField(field)) {
+      return {} as Prisma.UserWhereInput;
+    }
+    return { NOT: { [field]: null } } as Prisma.UserWhereInput;
   }
   if (op === "is_not_set") {
+    if (isNonNullableField(field)) {
+      // Impossible — non-nullable field is always set. Return a never-match.
+      return { id: "__impossible__" } as Prisma.UserWhereInput;
+    }
     return { [field]: null } as Prisma.UserWhereInput;
   }
 
@@ -453,7 +489,7 @@ async function resolveOpenedEmails(target: { kind: "template" | "campaign"; id: 
     const queues = await db.emailQueue.findMany({
       where: {
         OR: [
-          { openedAt: { not: null } },
+          { NOT: { openedAt: null } },
           { status: { in: ["OPENED", "CLICKED"] } },
         ],
         AND: [
@@ -478,7 +514,7 @@ async function resolveOpenedEmails(target: { kind: "template" | "campaign"; id: 
   const recipients = await db.emailRecipient.findMany({
     where: {
       campaignId: target.id,
-      OR: [{ openCount: { gt: 0 } }, { firstOpenedAt: { not: null } }],
+      OR: [{ openCount: { gt: 0 } }, { NOT: { firstOpenedAt: null } }],
     },
     select: { email: true },
   });
@@ -504,7 +540,7 @@ async function resolveClickedEmails(target: { kind: "template" | "campaign"; id:
 
     const queues = await db.emailQueue.findMany({
       where: {
-        OR: [{ clickedAt: { not: null } }, { status: "CLICKED" }],
+        OR: [{ NOT: { clickedAt: null } }, { status: "CLICKED" }],
         AND: [
           {
             OR: [
@@ -527,7 +563,7 @@ async function resolveClickedEmails(target: { kind: "template" | "campaign"; id:
   const recipients = await db.emailRecipient.findMany({
     where: {
       campaignId: target.id,
-      OR: [{ clickCount: { gt: 0 } }, { firstClickedAt: { not: null } }],
+      OR: [{ clickCount: { gt: 0 } }, { NOT: { firstClickedAt: null } }],
     },
     select: { email: true },
   });

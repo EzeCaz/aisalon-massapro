@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   // Build a lookup by (stage, flowStep.templateId) — we need templateId, so
   // also fetch the flow steps.
   const flowSteps = await db.emailFlowStep.findMany({
-    where: { templateId: { not: null } },
+    where: { NOT: { templateId: null } },
     select: { id: true, templateId: true },
   });
   const stepIdToTemplateId = new Map(flowSteps.map((s) => [s.id, s.templateId]));

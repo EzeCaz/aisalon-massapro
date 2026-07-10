@@ -80,6 +80,8 @@ type QueueResponse = {
   items: QueueItem[];
   summary: Summary;
   events: { id: string; title: string; slug: string; startsAt: string }[];
+  totalMatching?: number;  // total rows matching current filters (independent of pagination)
+  hasMore?: boolean;       // true when more rows are available beyond the current page
 };
 
 // ----------------------------------------------------------------------------
@@ -92,7 +94,10 @@ export function OrchestratorPanel() {
   const [events, setEvents] = React.useState<
     QueueResponse["events"]
   >([]);
+  const [totalMatching, setTotalMatching] = React.useState<number>(0);
+  const [hasMore, setHasMore] = React.useState<boolean>(false);
   const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const [running, setRunning] = React.useState(false);
   const [seeding, setSeeding] = useStateWithLabel(false);
   const [clearing, setClearing] = useStateWithLabel(false);
@@ -108,7 +113,12 @@ export function OrchestratorPanel() {
   // Selected queue item (for detail dialog)
   const [selected, setSelected] = React.useState<QueueItem | null>(null);
 
-  // ── Refresh ──
+  // ── Refresh (resets to first page) ──
+  // Page size is 200 — large enough to cover most events in one shot, but
+  // not so large that the table becomes unscrollable. The "Load more" button
+  // fetches the next 200 (cumulative) so admins can page through arbitrarily
+  // large queues.
+  const PAGE_SIZE = 200;
   const refresh = React.useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -116,7 +126,8 @@ export function OrchestratorPanel() {
       if (stageFilter !== "ALL") params.set("stage", stageFilter);
       if (eventFilter !== "ALL") params.set("eventId", eventFilter);
       if (search.trim()) params.set("search", search.trim());
-      params.set("limit", "100");
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", "0");
       const res = await fetch(
         `/api/email-orchestrator/queue?${params.toString()}`,
         { cache: "no-store" },
@@ -129,6 +140,8 @@ export function OrchestratorPanel() {
       setItems(data.items);
       setSummary(data.summary);
       setEvents(data.events);
+      setTotalMatching(data.totalMatching ?? data.items.length);
+      setHasMore(Boolean(data.hasMore));
     } catch (e) {
       console.error(e);
       toast.error("Failed to load queue");
@@ -150,6 +163,39 @@ export function OrchestratorPanel() {
       }
     })();
   }, [statusFilter, stageFilter, eventFilter, search]);
+
+  // ── Load more (appends next page) ──
+  const loadMore = React.useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      if (stageFilter !== "ALL") params.set("stage", stageFilter);
+      if (eventFilter !== "ALL") params.set("eventId", eventFilter);
+      if (search.trim()) params.set("search", search.trim());
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(items.length));
+      const res = await fetch(
+        `/api/email-orchestrator/queue?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) {
+        toast.error("Failed to load more");
+        return;
+      }
+      const data: QueueResponse = await res.json();
+      setItems((prev) => [...prev, ...data.items]);
+      setHasMore(Boolean(data.hasMore));
+      // totalMatching is filter-dependent, not page-dependent — safe to refresh.
+      if (typeof data.totalMatching === "number") setTotalMatching(data.totalMatching);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load more");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, statusFilter, stageFilter, eventFilter, search, items.length]);
 
   // ── Toggle email pause ──
   const handleTogglePause = async () => {
@@ -634,6 +680,42 @@ export function OrchestratorPanel() {
             </tbody>
           </table>
         </div>
+
+        {/* ── Pagination footer ── */}
+        {items.length > 0 && (
+          <div className="flex items-center justify-between gap-3 border-t border-black/5 bg-black/[0.02] px-3 py-2 text-xs text-black/70">
+            <div>
+              Showing <strong className="text-black">{items.length}</strong>{" "}
+              of <strong className="text-black">{totalMatching}</strong>{" "}
+              {totalMatching === 1 ? "email" : "emails"}
+              {hasMore && (
+                <span className="ml-1 text-black/50">
+                  · {totalMatching - items.length} more available
+                </span>
+              )}
+            </div>
+            {hasMore && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="h-7"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    Loading…
+                  </>
+                ) : (
+                  <>
+                    Load {Math.min(PAGE_SIZE, totalMatching - items.length)} more
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Detail dialog ── */}
