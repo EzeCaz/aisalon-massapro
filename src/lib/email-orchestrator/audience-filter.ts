@@ -286,8 +286,26 @@ type EngagementContext = {
   emailSets: Map<string, Set<string>>;
 };
 
+/**
+ * Sentinel returned by `ruleToPrisma` for rules that match ALL rows
+ * (e.g. `is_set` on a non-nullable field — the field is always set, so
+ * the rule is trivially true).
+ *
+ * We can't return `{}` here because Prisma 6.x treats `{}` inside an `OR`
+ * array as "match nothing" (`WHERE 1=0`) instead of "match all". The
+ * `MATCH_ALL` sentinel lets `groupToPrisma` / `buildXxxWhere` short-circuit
+ * correctly: in an AND context it's a no-op, in an OR context it makes the
+ * whole OR match all.
+ */
+const MATCH_ALL: unique symbol = Symbol("MATCH_ALL");
+type RuleResult =
+  | Prisma.UserWhereInput
+  | Prisma.EventRsvpWhereInput
+  | typeof MATCH_ALL
+  | null;
+
 /** Translate a single rule into a Prisma fragment. Returns null if rule is invalid. */
-function ruleToPrisma(rule: FilterRule, ctx: EngagementContext, ruleKey: string): Prisma.UserWhereInput | Prisma.EventRsvpWhereInput | null {
+function ruleToPrisma(rule: FilterRule, ctx: EngagementContext, ruleKey: string): RuleResult {
   const { field, op, value } = rule;
   if (!field || !op) return null;
 
@@ -312,11 +330,11 @@ function ruleToPrisma(rule: FilterRule, ctx: EngagementContext, ruleKey: string)
   //  - For NON-NULLABLE fields (User.email, EventRsvp.email, etc.), Prisma
   //    rejects `NOT: { [field]: null }` with "Argument `<field>` is missing"
   //    because null isn't a valid value for a non-nullable field. In that case
-  //    `is_set` is trivially TRUE (always set) → return {} to match everything,
+  //    `is_set` is trivially TRUE (always set) → return MATCH_ALL sentinel,
   //    and `is_not_set` is trivially FALSE → return a never-match sentinel.
   if (op === "is_set") {
     if (isNonNullableField(field)) {
-      return {} as Prisma.UserWhereInput;
+      return MATCH_ALL;
     }
     return { NOT: { [field]: null } } as Prisma.UserWhereInput;
   }
@@ -369,36 +387,70 @@ function ruleToPrisma(rule: FilterRule, ctx: EngagementContext, ruleKey: string)
   }
 }
 
-/** Translate a group (rules combined by its combinator) into a Prisma fragment. */
-function groupToPrisma(group: FilterGroup, ctx: EngagementContext, groupIdx: number): Prisma.UserWhereInput | Prisma.EventRsvpWhereInput | null {
+/**
+ * Translate a group (rules combined by its combinator) into a Prisma fragment.
+ *
+ * Returns the MATCH_ALL sentinel if the group logically matches all rows
+ * (e.g. an OR group containing a MATCH_ALL rule, or an AND group where all
+ * rules are MATCH_ALL). Returns null if the group has no valid rules.
+ */
+function groupToPrisma(group: FilterGroup, ctx: EngagementContext, groupIdx: number): RuleResult {
   const rules = group.rules
     .map((rule, ruleIdx) => ruleToPrisma(rule, ctx, `${groupIdx}:${ruleIdx}`))
-    .filter(Boolean) as Prisma.UserWhereInput[];
+    .filter((r) => r !== null) as RuleResult[];
   if (rules.length === 0) return null;
+
   if (group.combinator === "AND") {
-    return { AND: rules } as Prisma.UserWhereInput;
+    // AND: drop MATCH_ALL sentinels (they don't constrain). If all rules
+    // were MATCH_ALL, the group matches all. Otherwise AND the real conditions.
+    const real = rules.filter((r) => r !== MATCH_ALL) as Prisma.UserWhereInput[];
+    if (real.length === 0) return MATCH_ALL;
+    return { AND: real } as Prisma.UserWhereInput;
   }
-  return { OR: rules } as Prisma.UserWhereInput;
+
+  // OR: if ANY rule is MATCH_ALL, the whole OR matches all.
+  if (rules.some((r) => r === MATCH_ALL)) return MATCH_ALL;
+  const real = rules as Prisma.UserWhereInput[];
+  if (real.length === 0) return null;
+  return { OR: real } as Prisma.UserWhereInput;
 }
 
 /** Translate the full spec into a Prisma `where` for the User model. */
 function buildUserWhere(spec: AudienceFilterSpec, ctx: EngagementContext): Prisma.UserWhereInput {
-  const groups = spec.groups.map((g, i) => groupToPrisma(g, ctx, i)).filter(Boolean) as Prisma.UserWhereInput[];
+  const groups = spec.groups
+    .map((g, i) => groupToPrisma(g, ctx, i))
+    .filter((g) => g !== null) as RuleResult[];
   if (groups.length === 0) return {};
+
   if (spec.combinator === "AND") {
-    return { AND: groups };
+    const real = groups.filter((g) => g !== MATCH_ALL) as Prisma.UserWhereInput[];
+    if (real.length === 0) return {}; // all groups matched all → match all
+    return { AND: real };
   }
-  return { OR: groups };
+
+  // OR: if any group is MATCH_ALL, the whole where matches all.
+  if (groups.some((g) => g === MATCH_ALL)) return {};
+  const real = groups as Prisma.UserWhereInput[];
+  return { OR: real };
 }
 
 /** Translate the full spec into a Prisma `where` for the EventRsvp model. */
 function buildRsvpWhere(spec: AudienceFilterSpec, ctx: EngagementContext): Prisma.EventRsvpWhereInput {
-  const groups = spec.groups.map((g, i) => groupToPrisma(g, ctx, i)).filter(Boolean) as Prisma.EventRsvpWhereInput[];
+  const groups = spec.groups
+    .map((g, i) => groupToPrisma(g, ctx, i))
+    .filter((g) => g !== null) as RuleResult[];
   if (groups.length === 0) return {};
+
   if (spec.combinator === "AND") {
-    return { AND: groups };
+    const real = groups.filter((g) => g !== MATCH_ALL) as Prisma.EventRsvpWhereInput[];
+    if (real.length === 0) return {}; // all groups matched all → match all
+    return { AND: real };
   }
-  return { OR: groups };
+
+  // OR: if any group is MATCH_ALL, the whole where matches all.
+  if (groups.some((g) => g === MATCH_ALL)) return {};
+  const real = groups as Prisma.EventRsvpWhereInput[];
+  return { OR: real };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2285,3 +2285,112 @@ Stage Summary:
   will show up to 200 emails initially + a "Load 200 more" button at the
   bottom of the table when more rows match the current filters. The
   "Showing X of Y emails" counter makes it clear how many total rows match.
+
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: Three follow-ups from user:
+  (1) Retrieve the EARLIER version of the Awareness email HTML (the version
+      from the deployment BEFORE the last edit at 2026-07-10T17:52:32Z).
+  (2) Booklet cover image — remove the "transparent box with shadow" around
+      the meerkat-with-book image on the cover page; place image as-is.
+  (3) Registers audience still returns 0 + Prisma error
+      "Argument `not` is missing" — the previous fix (e88573a) didn't fully
+      cover the OR-combinator case.
+
+Work Log:
+
+(1) Earlier Awareness email HTML
+- Connected to production Neon Postgres and queried EmailStageTemplate +
+  EmailQueue rows for stage=1 (Awareness).
+- Timeline of deployed versions:
+    * 2026-07-04T20:13:33  → earliest batch, htmlBody length 3558
+      (original seeded template, subject "You're in! Here's what to expect...")
+    * 2026-07-10T14:08:58  → second batch, htmlBody length ~3752
+      (after brand-logo commit, same subject)
+    * 2026-07-10T17:52:32  → user's latest edit saved to DB, length 3794
+      (subject changed to "How to buil AI systems while maximizing human
+      potential?", body rewritten to talk about the interactive system,
+      tools section, register link)
+    * 2026-07-10T18:11:24  → single test send using latest template, length 5574
+- The "deployment one before the last" = the version sending at
+  2026-07-10T14:08:58 (before the user's 17:52 edit).
+- Extracted that email's htmlBody, stripped worker-injected cruft
+  (click-redirects restored to original URLs, open-tracking pixel removed).
+- Replaced recipient-specific data (Clara, event details, agenda) with
+  {{tokens}} so the result is a clean template the user can paste back
+  into the editor.
+- Saved 3 files to /home/z/my-project/download/:
+    * awareness-email-PREVIOUS-raw.html       — exactly what was sent
+    * awareness-email-PREVIOUS-clean.html     — tracking cruft stripped
+    * awareness-email-PREVIOUS-template.html  — clean + tokens restored
+- The template HTML was also pasted directly in the chat reply.
+
+(2) Booklet cover image — remove transparent box + shadow
+- Located the offending CSS in /home/z/my-project/public/ai-human-flourishing-booklet.html
+  line 237: `.cover-hero-img` had:
+    width: 280px; height: 280px; object-fit: cover;
+    border-radius: 4px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+- The fixed 280x280 + object-fit: cover was forcing the meerkat image
+  into a square crop (visible "transparent box" effect), and the
+  box-shadow + border-radius added the "shadow around it".
+- Fix: changed to width: 280px; height: auto; display: block;
+  (no box-shadow, no border-radius, no object-fit). Image now displays
+  at its natural aspect ratio, no effects around it.
+- Re-rendered PDF via node skills/pdf/scripts/html2pdf-next.js --nopaged.
+  Result: 9 pages, 2.4 MB, same layout otherwise.
+- VLM-verified the cover (download/booklet-cover-v2-1.png at 110 DPI):
+  "The meerkat image (on the right) appears 'clean' with no visible box,
+   border, shadow, or other visual effects around it. It is integrated
+   directly into the design without additional framing or styling."
+
+(3) Registers audience — fix the OR-combinator case
+- Reproduced locally: resolveAudienceEmails with the Registers spec
+  (source=rsvps, is_set on email) works fine when combinator=AND but
+  returns 0 emails when combinator=OR.
+- Root cause: Prisma 6.19.3 treats `{}` inside an OR array as
+  "match nothing" (WHERE 1=0) instead of "match all" (WHERE 1=1).
+  Verified by direct probe:
+    { OR: [{}] }             → WHERE 1=0  (BUG)
+    { OR: [{ AND: [{}] }] }  → WHERE 1=0  (BUG)
+    { AND: [{}] }            → WHERE 1=1  ✓
+    { AND: [{ AND: [{}] }] } → WHERE 1=1  ✓
+- The previous fix (e88573a) returned `{}` for is_set on non-nullable
+  fields, which worked for AND but broke for OR. The user's error
+  structure `{ OR: [ { AND: [ { email: { not: null } } ] } ] }`
+  was the OLD code path (before e88573a deployed), but even after
+  deploy, the OR case would have silently returned 0 emails.
+- Fix: introduced a MATCH_ALL sentinel (unique symbol). ruleToPrisma
+  returns MATCH_ALL for is_set on non-nullable fields. groupToPrisma
+  and buildUserWhere / buildRsvpWhere handle the sentinel:
+    * AND context: drop MATCH_ALL sentinels (they don't constrain).
+      If all rules were MATCH_ALL, return MATCH_ALL.
+    * OR context: if ANY rule is MATCH_ALL, the whole OR matches all.
+  At the top level, MATCH_ALL becomes `{}` (which Prisma correctly
+  treats as 1=1).
+- Verified against production DB with all 4 spec variants:
+    * Registers + AND combinator   → 220 emails ✓ (WHERE 1=1)
+    * Registers + OR combinator    → 220 emails ✓ (WHERE 1=1, was 0)
+    * Members + AND combinator     → 240 emails ✓
+    * is_set on nullable field     → 205 emails ✓ (NOT field IS NULL)
+- All 5 audiences verified:
+    All Emails (Reg+Members) → 240, Members → 240, Registers → 220,
+    Test → 3, Old all lists → 226.
+- TypeScript: zero new errors in audience-filter.ts.
+- Next.js production build: ✓ Compiled successfully in 46s.
+
+Stage Summary:
+- (1) Earlier Awareness HTML: clean template saved to
+  /home/z/my-project/download/awareness-email-PREVIOUS-template.html
+  (2566 chars, with {{name}}, {{eventTitle}}, {{eventDate}},
+  {{eventVenue}}, {{eventAddress}}, {{speakers}}, {{agenda}},
+  {{eventUrl}} tokens). Also pasted in chat reply. The raw rendered
+  version (with tracking cruft) is at awareness-email-PREVIOUS-raw.html.
+- (2) Booklet: HTML + PDF re-rendered. Cover meerkat image now displays
+  at natural aspect ratio, no box-shadow, no border-radius. Live at
+  https://aisalon.massapro.com/ai-human-flourishing-booklet.pdf + .html
+  after the next deploy.
+- (3) Registers audience: FIXED. Now returns 220 emails regardless of
+  AND/OR combinator. The fix also future-proofs against any other
+  is_set-on-non-nullable + OR combination.
