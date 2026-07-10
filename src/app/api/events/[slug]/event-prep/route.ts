@@ -16,11 +16,12 @@ import { can, isEventCoHost, isEventSpeaker, isSuperAdmin, ROLES, normalizeRole 
  *          { mode: "replaceOne", questionId, text, tag }
  *          { mode: "create", scope, speakerId, text, tag }
  *          { mode: "delete", questionId }
- * POST — Super Admin OR Co-host/Admin. Create a SUGGESTION (not a direct
- *        edit). Body: { questionId?, proposedText, proposedScope?,
- *        proposedSpeakerId?, proposedTag? }. Used by Admins/Co-hosts to
- *        suggest changes; Super Admin can also use this flow but typically
- *        uses PUT to edit directly.
+ * POST — Super Admin OR Admin/Co-host OR Speaker of this event. Create a
+ *        SUGGESTION (not a direct edit). Body: { questionId?, proposedText,
+ *        proposedScope?, proposedSpeakerId?, proposedTag? }. Used by
+ *        Admins/Co-hosts/Speakers to suggest changes; Super Admin reviews +
+ *        applies via PATCH .../suggestions/[id]. Super Admin can also use PUT
+ *        to edit directly (skipping the suggestion queue).
  */
 
 async function authorize(meId: string, meRole: string, meEmail: string | null, eventId: string) {
@@ -33,35 +34,19 @@ async function authorize(meId: string, meRole: string, meEmail: string | null, e
     return await isEventCoHost(meId, eventId);
   }
   // Anyone linked as a Speaker on this event (via Speaker.userId) gets
-  // read-only access — regardless of User.role. This mirrors the
-  // V5.16 fix in /events/[slug]/page.tsx (canViewEventPrep).
+  // access — regardless of User.role. This mirrors the V5.16 fix in
+  // /events/[slug]/page.tsx (canViewEventPrep).
   //
   // Rationale: convert-to-speaker / link-speaker never mutate
   // User.role — they only create a Speaker row with userId. So a
-  // MEMBER who is invited to speak must still be able to read the
+  // MEMBER who is invited to speak must still be able to access the
   // prep questions for that event. The authoritative check is the
   // Speaker row link, NOT User.role.
   //
-  // Read-only enforcement happens in the POST/PUT/PATCH handlers via
-  // isSpeakerOnly() below.
-  return await isEventSpeaker(meId, eventId);
-}
-
-/**
- * Returns true iff the user's ONLY access to this event is via the
- * Speaker row link (i.e., they are NOT an admin-tier or co-host).
- * Used by the POST/PUT/PATCH handlers to enforce "speakers are
- * read-only" — but unlike the old `me.role === "SPEAKER"` check, this
- * correctly catches MEMBERs who were invited to speak.
- */
-async function isSpeakerOnly(meId: string, meRole: string, meEmail: string | null, eventId: string): Promise<boolean> {
-  if (can(meRole, "events.edit") || isSuperAdmin({ email: meEmail, role: meRole })) {
-    return false;
-  }
-  if (normalizeRole(meRole) === ROLES.CO_HOST) {
-    const isCoHost = await isEventCoHost(meId, eventId);
-    if (isCoHost) return false;
-  }
+  // Per user spec 2026-07-10, speakers can now both READ the questions
+  // AND POST suggestions (comment/edit proposals) — same flow as
+  // Admins/Co-hosts. Direct PUT (instant edit) remains Super Admin
+  // only — that gate is enforced in the PUT handler below.
   return await isEventSpeaker(meId, eventId);
 }
 
@@ -249,15 +234,20 @@ export async function POST(
 
   const authorized = await authorize(me.id, me.role, me.email, event.id);
   if (!authorized) {
-    return NextResponse.json({ error: "Forbidden — Super Admin, Admin, or Co-host of this event only" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden — Super Admin, Admin, Co-host, or Speaker of this event only" }, { status: 403 });
   }
-  // Speakers (anyone whose ONLY access is via Speaker.userId) are
-  // read-only — they can GET but not POST suggestions. This catches
-  // MEMBERs invited to speak, not just users with User.role === SPEAKER.
-  const speakerOnly = await isSpeakerOnly(me.id, me.role, me.email, event.id);
-  if (speakerOnly) {
-    return NextResponse.json({ error: "Speakers have read-only access to Event Prep" }, { status: 403 });
-  }
+  // Per user spec 2026-07-10: "Make sure all speakers marked as
+  // speakers [...] are able to comment or edit their questions or the
+  // generic questions". We interpret this as: speakers can create
+  // SUGGESTIONS (same flow as Admins/Co-hosts). The Super Admin still
+  // reviews + applies the suggestion via PATCH
+  // /api/events/[slug]/event-prep/suggestions/[id]. Direct PUT (instant
+  // edit) remains Super Admin only — that gate is enforced in the PUT
+  // handler below.
+  //
+  // The previous "speakers are read-only" guard is intentionally
+  // removed so speakers can submit suggestions on their own questions
+  // AND on the generic questions.
   const body = await req.json();
   const { questionId, proposedText, proposedScope, proposedSpeakerId, proposedTag } = body as {
     questionId?: string | null;

@@ -268,8 +268,11 @@ export function EventPrepTab({ event, me, isSpeaker = false }: { event: EventDat
     );
   }
 
+  // Role label — per user spec 2026-07-10, speakers can now suggest edits
+  // (same flow as Admins/Co-hosts). Super Admin can still edit directly.
+  // The "read-only" label is gone; speakers see "can suggest edits".
   const roleLabel = isSpeaker
-    ? "Speaker — read-only view"
+    ? "Speaker — can suggest edits"
     : isSuperAdmin
       ? "Super Admin — can edit directly"
       : me.role + " — can suggest";
@@ -345,7 +348,10 @@ export function EventPrepTab({ event, me, isSpeaker = false }: { event: EventDat
               <h3 className="text-xs font-bold uppercase tracking-widest text-black/70">
                 Generic questions ({genericQs.length})
               </h3>
-              {isSpeaker ? null : isSuperAdmin ? (
+              {/* Per user spec 2026-07-10: speakers can now suggest new
+                  generic questions too. The button was previously hidden
+                  when isSpeaker was true. */}
+              {isSuperAdmin ? (
                 <Button size="sm" variant="outline" onClick={() => setSuggestFor("new-generic")}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add
                 </Button>
@@ -485,11 +491,12 @@ function SpeakerBox({
           <p className="text-xs text-black/80 truncate">{roleCompany}</p>
         </div>
         <div className="flex items-center gap-1.5">
-          {!isSpeaker && (
-            <Button size="sm" variant="outline" onClick={onAddNew}>
-              {isSuperAdmin ? <><Plus className="h-3.5 w-3.5 mr-1" /> Add</> : <><MessageSquare className="h-3.5 w-3.5 mr-1" /> Suggest</>}
-            </Button>
-          )}
+          {/* Per user spec 2026-07-10: speakers can now suggest new
+              questions too (same flow as Admins/Co-hosts). The button
+              was previously hidden when isSpeaker was true. */}
+          <Button size="sm" variant="outline" onClick={onAddNew}>
+            {isSuperAdmin ? <><Plus className="h-3.5 w-3.5 mr-1" /> Add</> : <><MessageSquare className="h-3.5 w-3.5 mr-1" /> Suggest</>}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -506,7 +513,7 @@ function SpeakerBox({
           {questions.length === 0 && (
             <p className="text-xs text-black/80 italic py-2 text-center">
               {isSpeaker
-                ? "No personalized questions yet."
+                ? "No personalized questions yet. Click Suggest to propose one."
                 : isSuperAdmin
                   ? "No personalized questions yet. Click Add to create one."
                   : "No personalized questions yet. Click Suggest to propose one."}
@@ -581,7 +588,12 @@ function QuestionCard({
           )}
         </div>
         <div className="flex flex-col gap-1">
-          {isSpeaker ? null : isSuperAdmin ? (
+          {/* Per user spec 2026-07-10: speakers can now suggest edits too
+              (same flow as Admins/Co-hosts). The button was previously
+              hidden when isSpeaker was true. Only Super Admin gets the
+              instant-edit (Pencil) + delete (X) icons — those skip the
+              review queue and require Super Admin privileges on the API. */}
+          {isSuperAdmin ? (
             <>
               <Button size="sm" variant="ghost" onClick={onEdit} className="h-7 px-2" title="Edit">
                 <Pencil className="h-3.5 w-3.5" />
