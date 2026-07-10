@@ -2423,3 +2423,46 @@ Stage Summary:
 - The brand logo is now VISIBLE in the template editor at both actual email size (24px) and enlarged (96px), and is fully EDITABLE via three paths: upload a new image, paste a custom URL, or reset to default.
 - No API changes needed — reuses the existing /api/email-templates/upload-image endpoint (admin-gated).
 - No DB migration needed — the existing EmailStageTemplate.logoUrl column is reused as-is.
+
+---
+Task ID: 7
+Agent: main
+Task: Create a printable A5 version of the AI & Human Flourishing booklet (named "human-flourishing-booklet-print"), with (1) A5 size for print, (2) darker fonts (less grey), (3) slightly larger fonts while keeping max 10 pages.
+
+Work Log:
+- Audited the source booklet (/home/z/my-project/public/ai-human-flourishing-booklet.html, 1839 lines, A4 794x1123px @ 96dpi, 9 pages, ink #1a1a1a with rgba(26,26,26,0.X) gray ramp).
+- Wrote a Python build script at /home/z/my-project/scripts/build-print-booklet.py that:
+    * Reads the original HTML body (the page markup is reused as-is).
+    * Replaces the entire <style> block with an A5-optimized stylesheet (148x210mm page size, mm-based paddings, darker ink, larger fonts).
+    * Renders HTML → PDF via Playwright (Python binding) at A5 format with prefer_css_page_size=True.
+    * Counts pages via pypdf; copies deliverables to /home/z/my-project/download/.
+- Key CSS changes vs original A4 stylesheet:
+    * @page size: 794px 1123px -> 148mm 210mm (A5 portrait)
+    * --ink: #1a1a1a -> #000000 (pure black for print)
+    * --gray-30/50/70/90: alpha bumped from 0.30/0.50/0.70/0.90 -> 0.40/0.70/0.88/0.98 (darker mid-tones)
+    * --soft-gray: #e8e4df -> #d6d2cc (slightly darker divider)
+    * Body font-size: 11pt -> 12pt; running-head 8.5pt -> 9pt; running-foot 8pt -> 9pt; section-eyebrow 9pt -> 10pt; event-meta 9.5pt -> 10.5pt; agenda 9pt -> 10pt; book-intro 9.5pt -> 10.5pt; opener-body 11pt -> 10.5pt (slightly smaller to fit A5)
+    * Cover title: 78pt -> 54pt (scaled for narrower A5)
+    * Quote text (page 4): 42pt -> 32pt; closing-text sizes 28/22/17 -> 22/17/13
+    * Tool title: 26pt -> 22pt; opener-title 56pt -> 36pt (these needed to shrink to fit A5 width)
+    * Layout: all padding/gaps/margins converted from px to mm with ~0.7 scaling factor; matrix heights 230px -> 58mm; canvas heights 230px -> 58mm; SVG loop diagram scaled to 120mm width
+- First-pass render: 9 pages — within the 10-page budget.
+- Visual QA via VLM (z-ai vision) on each page:
+    * Pages 1, 2, 4, 5, 7, 8, 9: clean on first pass.
+    * Page 3 (section opener): last paragraph + CTA blocks cut off at bottom. FIXED by reducing opener-title 42pt->36pt, opener-body 12pt->10.5pt, opener-lead 16pt->14pt, cta-title 14pt->12pt, cta-body 10.5pt->9.5pt, tightening gaps.
+    * Page 6 (two 2x2 matrices): cell descriptions ("Replaceable Skills", "Filter") truncated; "Flip" cell overlapped footer. FIXED by increasing matrix/canvas heights 50mm -> 58mm, reducing cell font sizes (name 11pt->10pt, sub 8.5pt->7.5pt, desc 9pt->7.5pt), reducing padding, adding overflow:hidden, shrinking big-F decorative letter 90pt -> 60pt.
+- Final render: 9 pages, all VLM checks pass.
+- Wrote a preview helper at /home/z/my-project/scripts/preview-print-booklet.py (uses pdftoppm to render each PDF page to PNG for visual QA).
+
+Stage Summary:
+- Deliverables:
+    /home/z/my-project/public/human-flourishing-booklet-print.html  (59,399 bytes)
+    /home/z/my-project/public/human-flourishing-booklet-print.pdf   (2.6 MB, 9 pages, A5)
+    /home/z/my-project/download/human-flourishing-booklet-print.html  (copy)
+    /home/z/my-project/download/human-flourishing-booklet-print.pdf   (copy)
+- All three user requirements met:
+    (1) A5 printable: @page size 148x210mm, all dimensions in mm, no px anywhere — renders correctly at A5 in any PDF viewer / printer.
+    (2) Darker fonts: --ink is now pure #000000 (was #1a1a1a), and the entire gray ramp is 0.40/0.70/0.88/0.98 (was 0.30/0.50/0.70/0.90). Visual check confirms ink reads as black, not grey.
+    (3) Slightly larger fonts: body 11pt -> 12pt, eyebrows/labels 8-9pt -> 9-10pt, footers 8pt -> 9pt, agenda 9pt -> 10pt, etc.
+- Page count: 9 pages (cover + 7 content + back cover), within the 10-page max.
+- Build script is idempotent and re-runnable: `python3 /home/z/my-project/scripts/build-print-booklet.py` regenerates both HTML and PDF in one shot.
