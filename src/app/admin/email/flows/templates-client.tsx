@@ -20,8 +20,13 @@ import { toast } from "sonner";
 import {
   Plus, Loader2, Trash2, Save, Eye, X, Copy, Pencil,
   AlertCircle, FileText, BarChart3, Power, Save as SaveIcon, FilePlus2,
+  Upload, RotateCcw,
 } from "lucide-react";
 import { RichTextEmailEditor } from "@/components/ais/rich-text-email-editor";
+import {
+  DEFAULT_BRAND_LOGO_URL,
+  resolveLogoUrl,
+} from "@/lib/email-orchestrator/templates";
 
 // Full template type — fetched from /api/email-templates (not the
 // minimal FlowTemplate shape used by the flow builder).
@@ -560,23 +565,8 @@ function TemplateEditorDialog({
             </span>
           </div>
 
-          {/* Feature 2: Logo override */}
-          <div className="mb-4 rounded border border-cyan-200 bg-cyan-50/40 p-3">
-            <label className="mb-1 block text-xs font-semibold text-cyan-900">
-              Brand logo URL (top-right, 24px tall) — leave empty to use the default
-            </label>
-            <input
-              type="text"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://... (defaults to the AI Salon mark on Vercel Blob)"
-              className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs"
-            />
-            <p className="mt-1 text-[10px] text-cyan-800">
-              The logo is injected at the top-right of every email at render time. Override per-template here,
-              or set the <code>EMAIL_BRAND_LOGO_URL</code> env var to override globally.
-            </p>
-          </div>
+          {/* Feature 2: Logo override with visual preview + upload */}
+          <LogoEditorField value={logoUrl} onChange={setLogoUrl} />
 
           <div className="mb-3 flex items-center justify-between">
             <label className="text-xs font-semibold text-neutral-700">Email body (WYSIWYG)</label>
@@ -907,6 +897,202 @@ function MetricCard({
       <div className="text-[10px] font-semibold uppercase tracking-wider opacity-70">{label}</div>
       <div className="text-2xl font-bold">{value}</div>
       {sub && <div className="text-[10px] opacity-70">{sub}</div>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logo editor field — visual preview + upload + URL override
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * LogoEditorField — replaces the old plain text-input for the per-template
+ * brand logo override. Lets the admin:
+ *   1. SEE the current logo (both at actual email-render size 24px tall AND
+ *      an enlarged preview so they can tell what the source image looks like)
+ *   2. UPLOAD a new logo image directly from the editor (POSTs the file to
+ *      /api/email-templates/upload-image, which stores it in Vercel Blob
+ *      under email-assets/ and returns the public URL)
+ *   3. PASTE a custom URL by hand (advanced — e.g. for images hosted elsewhere)
+ *   4. RESET to the default logo (clears the override)
+ *
+ * The "resolved URL" (the one that will actually be injected at render time)
+ * is computed via `resolveLogoUrl()` — per-template override → env var →
+ * hardcoded DEFAULT_BRAND_LOGO_URL. The preview reflects that resolved URL,
+ * so what you see here is exactly what shows up in the sent email.
+ */
+function LogoEditorField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [uploading, setUploading] = React.useState(false);
+  const [imgError, setImgError] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Reset the broken-image flag whenever the URL changes so the preview
+  // retries loading.
+  React.useEffect(() => {
+    setImgError(false);
+  }, [value]);
+
+  // The URL that will actually be used at render time.
+  const resolvedUrl = resolveLogoUrl(value);
+  const isOverride =
+    value.trim().length > 0 && value.trim() !== DEFAULT_BRAND_LOGO_URL;
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/email-templates/upload-image", {
+        method: "POST",
+        body: fd,
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error ?? `Upload failed (${r.status})`);
+      }
+      const data = await r.json();
+      if (!data.url) throw new Error("Upload succeeded but no URL returned");
+      onChange(data.url);
+      toast.success("Logo uploaded", { description: file.name });
+    } catch (e) {
+      toast.error("Upload failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded border border-cyan-200 bg-cyan-50/40 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs font-semibold text-cyan-900">
+          Brand logo (top-right of every email)
+        </label>
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+            isOverride
+              ? "bg-[#FF005A]/10 text-[#FF005A]"
+              : "bg-neutral-200 text-neutral-600"
+          }`}
+        >
+          {isOverride ? "CUSTOM OVERRIDE" : "DEFAULT"}
+        </span>
+      </div>
+
+      {/* Image preview — actual email size + enlarged */}
+      <div className="mb-3 flex items-center gap-4 rounded border border-cyan-100 bg-white p-3">
+        {/* Actual email render size (24px tall, 120px wide) — exactly what
+            shows up in the sent email. */}
+        <div className="flex flex-col items-center gap-1">
+          {imgError ? (
+            <div
+              className="flex items-center justify-center text-[9px] text-red-500"
+              style={{ height: "24px", width: "120px" }}
+            >
+              failed to load
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={resolvedUrl}
+              alt="Logo at email size"
+              height={24}
+              width={120}
+              style={{ height: "24px", width: "120px", objectFit: "contain" }}
+              onError={() => setImgError(true)}
+            />
+          )}
+          <span className="text-[9px] text-neutral-500">Actual email size</span>
+        </div>
+
+        <div className="h-12 w-px bg-neutral-200" />
+
+        {/* Enlarged preview so the source image is actually visible.
+            Scaled up proportionally (4x the email height). */}
+        <div className="flex flex-col items-center gap-1">
+          {imgError ? (
+            <div
+              className="flex items-center justify-center text-[9px] text-red-500"
+              style={{ height: "96px", width: "200px" }}
+            >
+              failed to load
+            </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={resolvedUrl}
+              alt="Logo enlarged"
+              style={{ height: "96px", width: "auto", maxWidth: "240px", objectFit: "contain" }}
+              onError={() => setImgError(true)}
+            />
+          )}
+          <span className="text-[9px] text-neutral-500">Enlarged (4×)</span>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Upload + Reset buttons */}
+        <div className="flex flex-col items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              // reset input value so re-uploading the same file fires onChange
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-1.5 rounded bg-[#FF005A] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
+          >
+            {uploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Upload className="h-3 w-3" />
+            )}
+            Upload new logo
+          </button>
+          {isOverride && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              disabled={uploading}
+              className="inline-flex items-center gap-1 text-[10px] text-neutral-500 underline hover:text-neutral-800"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset to default
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* URL text input — for manual entry / advanced use */}
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Custom URL — leave empty to use the default AI Salon mark"
+        className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs font-mono"
+      />
+      <p className="mt-1 text-[10px] text-cyan-800">
+        The logo is injected at the top-right of every email at render time
+        (24px tall, 120px wide). Upload a new image above, paste a custom URL,
+        or leave empty to use the default. The default can also be overridden
+        globally via the <code>EMAIL_BRAND_LOGO_URL</code> env var.
+      </p>
     </div>
   );
 }

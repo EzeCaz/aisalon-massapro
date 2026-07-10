@@ -2394,3 +2394,32 @@ Stage Summary:
 - (3) Registers audience: FIXED. Now returns 220 emails regardless of
   AND/OR combinator. The fix also future-proofs against any other
   is_set-on-non-nullable + OR combination.
+
+---
+Task ID: 6
+Agent: main
+Task: Make the brand logo image (the 24px AI Salon mark shown in every email template) visible and editable directly inside the template editor. User reports the default logo "looks bad" at 24px and wants to (a) see it in the editor and (b) edit/replace it from there.
+
+Work Log:
+- Audited /home/z/my-project/src/lib/email-orchestrator/templates.ts: confirmed the default logo URL is https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png, rendered at 24px tall × 120px wide via buildLogoBlock(). Per-template override is stored in EmailStageTemplate.logoUrl and resolved via resolveLogoUrl().
+- Audited /home/z/my-project/src/app/admin/email/flows/templates-client.tsx: the existing editor had a plain text input bound to logoUrl with no visual preview and no upload affordance. Users had to know the URL by hand.
+- Discovered /home/z/my-project/src/app/api/email-templates/upload-image/route.ts already exists: POST multipart "file" → { url }. ADMIN-or-SUPER_ADMIN gated (matches template editor permission). Reuses the same Vercel Blob / local-fs fallback as the rest of the email-assets pipeline. Perfect for reusing here.
+- Implemented LogoEditorField component (appended at bottom of templates-client.tsx) which:
+    * Shows the resolved logo image at TWO sizes side-by-side:
+        - Actual email-render size (24px × 120px) — exactly what recipients see
+        - Enlarged 4× (96px tall) — so the source image is actually visible
+    * Badges whether the template is using the DEFAULT or a CUSTOM OVERRIDE
+    * Has an "Upload new logo" button that POSTs the file to /api/email-templates/upload-image and auto-fills logoUrl with the returned Blob URL
+    * Has a "Reset to default" button (only shown when an override is set) that clears logoUrl
+    * Keeps the manual URL text input for advanced users (paste external URL)
+    * Shows a "failed to load" placeholder if the URL is broken (with auto-retry on URL change)
+- Imported DEFAULT_BRAND_LOGO_URL + resolveLogoUrl from @/lib/email-orchestrator/templates so the editor's preview matches what the email worker will actually inject.
+- Imported Upload + RotateCcw from lucide-react.
+- Replaced the old plain text-input block (Feature 2: Logo override) with `<LogoEditorField value={logoUrl} onChange={setLogoUrl} />`.
+- Verified zero new TypeScript errors in templates-client.tsx and templates.ts (filtered `npx tsc --noEmit` output — only pre-existing unrelated errors in dashboard/skills files remain).
+
+Stage Summary:
+- Single-file change: /home/z/my-project/src/app/admin/email/flows/templates-client.tsx (+~175 lines, -15 lines).
+- The brand logo is now VISIBLE in the template editor at both actual email size (24px) and enlarged (96px), and is fully EDITABLE via three paths: upload a new image, paste a custom URL, or reset to default.
+- No API changes needed — reuses the existing /api/email-templates/upload-image endpoint (admin-gated).
+- No DB migration needed — the existing EmailStageTemplate.logoUrl column is reused as-is.
