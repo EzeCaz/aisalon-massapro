@@ -402,6 +402,37 @@ export function PublicEventPage({ event, me }: Props) {
         </div>
       </section>
 
+      {/* === Prominent below-hero CTA — visible on ALL screen sizes ===
+          Per user spec 2026-07-10: "below all events hero image there
+          must be either a register button or the already registered flow
+          with the add to calendar/checkin flow". On mobile, the sidebar
+          aside is rendered far below the long content sections, so users
+          who only see the hero + title would have no visible register
+          CTA. This block fixes that by re-rendering the same CtaCard
+          right below the hero, full-width, with extra visual weight on
+          small screens. The sticky aside on desktop keeps its existing
+          copy. Both share state (rsvp, registering, etc.) from the
+          parent so a click in either updates both. */}
+      <section className="border-b border-black/10 bg-white lg:hidden">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <CtaCard
+            event={event}
+            me={me}
+            rsvp={rsvp}
+            windowOpen={windowOpen}
+            isPast={isPast}
+            hasRsvped={hasRsvped}
+            hasCheckedIn={hasCheckedIn}
+            registering={registering}
+            checkingIn={checkingIn}
+            copied={copied}
+            onRegister={handleRegisterClick}
+            onCheckIn={handleCheckInClick}
+            onCopyCode={handleCopyCode}
+          />
+        </div>
+      </section>
+
       <main className="flex-1 mx-auto max-w-6xl w-full px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid lg:grid-cols-[1fr_360px] gap-10">
           <div className="space-y-10 min-w-0">
@@ -651,13 +682,13 @@ function PublicHeader({ me }: { me: Me }) {
               <>
                 <Link
                   href="/login"
-                  className="px-3 py-1.5 text-sm font-semibold text-black/70 hover:text-black hover:bg-black/5 rounded-md transition-colors"
+                  className="px-3 sm:px-3 py-2 sm:py-1.5 text-sm sm:text-sm font-semibold text-black/70 hover:text-black hover:bg-black/5 rounded-md transition-colors"
                 >
                   Sign in
                 </Link>
                 <Link
                   href="/login"
-                  className="px-3 py-1.5 text-sm font-semibold bg-[#FF005A] text-white rounded-md hover:bg-[#FF005A]/90 transition-colors"
+                  className="px-4 sm:px-3 py-2 sm:py-1.5 text-sm sm:text-sm font-semibold bg-[#FF005A] text-white rounded-md hover:bg-[#FF005A]/90 transition-colors shadow-sm sm:shadow-none"
                 >
                   Join the community
                 </Link>

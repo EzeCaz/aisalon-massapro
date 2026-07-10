@@ -541,6 +541,36 @@ export default async function EventDetailPage({ params }: Params) {
         </div>
       </section>
 
+      {/* === Mobile-only register / check-in widget below the hero ===
+          Per user spec 2026-07-10: "below all events hero image there
+          is either a register button or the already registered flow
+          with the add to calendar/checkin flow".
+
+          On /events/[slug] (the authenticated event page), the existing
+          RsvpCheckInCard is wrapped in `hidden lg:flex` (above), so
+          mobile users see NOTHING for register/check-in in the header.
+          This block adds the same widget in a full-width container that
+          is ONLY visible on mobile (lg:hidden), so authenticated users
+          on phones get an inline register/check-in card right below the
+          hero. The desktop version (above) remains unchanged. */}
+      <section className="lg:hidden border-b border-black/10 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
+          <RsvpCheckInCard
+            eventSlug={event.slug}
+            eventTitle={event.title}
+            eventStartsAt={event.startsAt.toISOString()}
+            eventEndsAt={event.endsAt.toISOString()}
+            initialRsvp={serializedRsvp}
+            eventDescription={event.description}
+            eventVenue={event.venue}
+            eventAddress={event.address}
+            eventCity={event.city}
+            eventCountry={event.country}
+            variant="card"
+          />
+        </div>
+      </section>
+
       {/* Tabs */}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Referral share link — compact variant. Lets members share THIS
