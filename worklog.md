@@ -1949,3 +1949,39 @@ Stage Summary:
 - Fix: Always use DEFAULT_HERO. The user can still override in the editor's form view.
 - Files changed: src/app/admin/mockups/speaker-intro/event-mapper.ts (1 file, +7 / -6 lines).
 - Deploy: Vercel auto-deploy from commit 0a0abab on main. Live at https://aisalon.massapro.com shortly.
+
+---
+Task ID: mobile-register-button-urgent
+Agent: main
+Task: URGENT — mobile users on /events/[slug] and /e/[slug] had no visible register button below the hero. Add a prominent register CTA below the hero for non-connected users, ensure header Sign in / Join buttons are 100% visible on mobile, and below all event hero images show either a register button or the already-registered flow (add-to-calendar / check-in).
+
+Work Log:
+- Read /home/z/my-project/src/app/events/[slug]/page.tsx — authenticated event page.
+  - Found that the RsvpCheckInCard (lines 524-538) is wrapped in `hidden lg:flex flex-col items-center` (line 499). On mobile, authenticated users see NOTHING for register/check-in in the header.
+- Read /home/z/my-project/src/app/e/[slug]/page.tsx + public-event-page.tsx — public event page (where anonymous users get redirected to from /events/[slug]).
+  - Found that the CtaCard (with the "Join AI Salon" / "Register to event" button) is in the `<aside>` (line 541+) which renders AFTER all the description / speakers / agenda sections in the main column. On mobile (below lg breakpoint), users have to scroll past all that content to find the register button.
+  - The PublicHeader has "Sign in" + "Join the community" buttons that are sticky (top-0 z-40) but small (px-3 py-1.5 text-sm) — easy to miss on mobile.
+- Implemented fix in /home/z/my-project/src/app/e/[slug]/public-event-page.tsx:
+  - Added a new <section className="lg:hidden border-b border-black/10 bg-white"> right after the hero section (after line 403), containing the existing CtaCard component. This makes the CtaCard visible full-width below the hero on mobile only. The sticky aside CtaCard on desktop remains unchanged.
+  - Both the below-hero CtaCard and the sidebar CtaCard share the same props (rsvp, registering, etc.) so a click in either updates both via the parent's React state.
+  - Updated PublicHeader "Sign in" + "Join the community" buttons: on mobile they're now py-2 (vs py-1.5) with shadow-sm — larger tap target, more prominent.
+- Implemented fix in /home/z/my-project/src/app/events/[slug]/page.tsx:
+  - Added a new <section className="lg:hidden border-b border-black/10 bg-white"> right after the hero section, containing the existing RsvpCheckInCard with variant="card" (full card, not the compact header variant). Mobile-only. The existing desktop header variant remains unchanged.
+- Verified no TypeScript errors in edited files (npx tsc --noEmit | grep -E "(public-event-page|events/\[slug\]/page)" → empty).
+- Verified Next.js production build succeeded: "✓ Compiled successfully in 32.4s".
+- Committed as 097c231: "fix(mobile): always show register/RSVP CTA below hero image".
+- Pushed to origin/main (0a0abab..097c231). Vercel auto-deploy triggered.
+
+Stage Summary:
+- Files changed:
+  - src/app/e/[slug]/public-event-page.tsx (+33 / -2): added below-hero CtaCard section (lg:hidden), enlarged PublicHeader buttons on mobile.
+  - src/app/events/[slug]/page.tsx (+30 / -0): added below-hero RsvpCheckInCard section (lg:hidden).
+- Behavior on mobile (below lg breakpoint):
+  - /e/[slug] (anonymous): big pink "Join AI Salon" button right below the hero, full-width. Click → /login?callbackUrl=/e/[slug].
+  - /e/[slug] (authenticated, not RSVP'd): "Register to event" button right below the hero.
+  - /e/[slug] (RSVP'd, not checked in): "You're registered" + check-in button (if window open) right below the hero.
+  - /e/[slug] (checked in): green code panel right below the hero.
+  - /events/[slug] (authenticated): RsvpCheckInCard (full card variant) right below the hero — register / registered / check-in / checked-in with code.
+- Behavior on desktop (lg+): unchanged. The lg:hidden class ensures no duplicate CTAs.
+- Header buttons on /e/[slug]: slightly larger + shadow on mobile for better tap target. Sticky at top so always visible.
+- Deploy: Vercel auto-deploy from commit 097c231 on main. Live at https://aisalon.massapro.com within ~1-2 minutes.
