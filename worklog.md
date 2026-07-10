@@ -2148,3 +2148,74 @@ Stage Summary:
 - Title "AI & Human Flourishing" remains prominent on left.
 - All other pages (2-9) untouched from previous version.
 - All 5 user-requested changes now complete. Booklet is final.
+
+---
+Task ID: 8
+Agent: Super Z (main)
+Task: Three follow-ups from user:
+  (1) Swap booklet cover image to user-provided URL https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1783707737806-k0s0bs.png
+  (2) Find the latest backup of the Awareness email HTML (user erased it in the editor and wants the full HTML back to copy in)
+  (3) Fix bug — renaming "Awareness (Copy)" to "Tools Launch Email" via the editor doesn't save
+
+Work Log:
+- (1) Cover image swap:
+  * Edited /home/z/my-project/public/ai-human-flourishing-booklet.html — replaced
+    src="/images/meerkat-book.png" with the user-provided Vercel blob URL.
+  * Re-rendered PDF via node skills/pdf/scripts/html2pdf-next.js (Playwright +
+    Paged.js, 9 pages, 2.4 MB).
+  * pdf_qa.py --no-tables: 9/9 critical checks PASS, 2 minor warnings
+    (missing author metadata — cosmetic; CJK punctuation rule false-positive
+    on English em-dash — not applicable).
+  * VLM-verified cover preview PNG (rendered via pdftoppm at 110 DPI):
+    "Yes, the cover features a meerkat image on the right side (holding a book
+    titled 'AI and the Art of Being Human'). Title 'AI & Human Flourishing'
+    visible on the left. Layout clean, no broken images."
+
+- (2) Awareness email HTML retrieval:
+  * Connected to production Neon Postgres (DATABASE_URL from
+    /tmp/my-project/.env.production-verbatim).
+  * Queried EmailStageTemplate — found 6 rows including "Awareness" (stage=1,
+    id=cmr7tlrcn0000tbw0thmzymoi) and "Awareness (copy)" (stage=null,
+    id=cmrf8eyrw0000l40403frmnrr). Both have identical htmlBody of 3794 chars.
+  * The Awareness template htmlBody is NOT empty in production — the user's
+    "erase" was likely UI-only (cleared textarea, never saved). The latest
+    saved version (updatedAt 2026-07-10T17:52:32Z) is the user's re-edited
+    version. Also captured the most recent sent EmailQueue row for stage=1
+    (sent to adibenami9@gmail.com at 2026-07-10T18:11Z, rendered HTML 5574
+    chars with tracking pixels + logo) as a reference for what was actually
+    sent to recipients.
+  * Saved the template HTML (with {{name}}, {{eventDate}}, {{eventVenue}},
+    {{eventAddress}}, {{speakers}}, {{agenda}}, {{eventUrl}} tokens intact)
+    to /home/z/my-project/download/awareness-email.html.
+  * Also pasted the full HTML into the chat reply for the user to copy.
+
+- (3) Rename bug fix:
+  * Located bug in src/app/admin/email/flows/templates-client.tsx line 379:
+    `name: isSaveAs ? name : undefined` — when mode="save" (PATCH existing
+    template), isSaveAs is false, so name was set to undefined. The PATCH
+    API sees body.name === undefined and skips the name update → rename
+    silently fails.
+  * Fix: always send `name` in the request body. The PATCH API already
+    validates non-empty and the POST API requires it, so this is safe for
+    both code paths.
+  * Removed the redundant `if (isCreate) body.name = name;` line.
+
+- Committed (976aba6) and pushed to main. Vercel auto-deploying.
+
+Stage Summary:
+- Booklet: new PDF (2.4 MB, 9 pages) live at
+  https://aisalon.massapro.com/ai-human-flourishing-booklet.pdf and .html
+  within ~1-2 minutes of deploy. Cover now uses user-provided meerkat URL
+  from Vercel blob storage.
+- Awareness email HTML: full template HTML saved at
+  /home/z/my-project/download/awareness-email.html and pasted in chat reply.
+  Contains 3794 chars with all tokens intact ({{name}}, {{eventDate}},
+  {{eventVenue}}, {{eventAddress}}, {{speakers}}, {{agenda}}, {{eventUrl}}).
+  This is the user's edited version that's currently saved in production
+  (updatedAt 2026-07-10T17:52:32Z). The duplicate "Awareness (copy)"
+  template has the identical htmlBody.
+- Rename bug: deployed. After Vercel rebuild (~2 min), renaming a template
+  via the editor's Save button will actually persist. The "Awareness (copy)"
+  template can now be renamed to "Tools Launch Email" — open it in the
+  Templates tab, change the Template name field, click Save, refresh to
+  confirm.
