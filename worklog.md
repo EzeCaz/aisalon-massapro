@@ -2466,3 +2466,25 @@ Stage Summary:
     (3) Slightly larger fonts: body 11pt -> 12pt, eyebrows/labels 8-9pt -> 9-10pt, footers 8pt -> 9pt, agenda 9pt -> 10pt, etc.
 - Page count: 9 pages (cover + 7 content + back cover), within the 10-page max.
 - Build script is idempotent and re-runnable: `python3 /home/z/my-project/scripts/build-print-booklet.py` regenerates both HTML and PDF in one shot.
+
+---
+Task ID: 8
+Agent: main
+Task: Fix the broken https://aisalon.massapro.com/ai-human-flourishing-booklet-print.html URL — files were saved with wrong name (no `ai-` prefix) and weren't deployed to Vercel. Save both PDF + HTML at the correct URL.
+
+Work Log:
+- Discovered previous session created files at `public/human-flourishing-booklet-print.{html,pdf}` (WITHOUT the `ai-` prefix), but user wanted them at `ai-human-flourishing-booklet-print.{html,pdf}` to match the existing `ai-human-flourishing-booklet.{html,pdf}` naming.
+- Confirmed user-supplied URL returned HTTP 404 with `x-matched-path: /404` from Vercel.
+- Renamed local files in `public/` and `download/` from `human-flourishing-booklet-print.*` to `ai-human-flourishing-booklet-print.*`.
+- Updated `/home/z/my-project/scripts/build-print-booklet.py` output paths to use the new `ai-` prefixed names (so future re-runs are consistent).
+- First push (commit 81e84ed): renamed files via `git mv` (100644 mode). Vercel rebuilt (confirmed by the original `ai-human-flourishing-booklet.pdf` getting a new `last-modified` timestamp 21:15:18), but the new files STILL returned 404.
+- Root cause: git tracked the files as a rename + the file mode was 100644 (regular), while the working originals `ai-human-flourishing-booklet.{html,pdf}` had mode 100755 (executable). Vercel's deploy of "rename-only" changes with mismatched mode didn't properly include the new files in the static asset bundle.
+- Fix (commit 8c24ac8): `git update-index --chmod=+x` on both new files to make them 100755 (matching the originals). Pushed → Vercel rebuilt → both URLs now return HTTP 200.
+
+Stage Summary:
+- Both URLs now live and serving correct content:
+  * https://aisalon.massapro.com/ai-human-flourishing-booklet-print.html  → 200, 59,699 bytes, text/html, title "AI & Human Flourishing — Reading Companion (Print, A5)"
+  * https://aisalon.massapro.com/ai-human-flourishing-booklet-print.pdf   → 200, 2,644,977 bytes, application/pdf, 9 pages, A5
+- Local copies also at /home/z/my-project/download/ai-human-flourishing-booklet-print.{html,pdf}
+- Build script (/home/z/my-project/scripts/build-print-booklet.py) updated to use the new `ai-` prefixed output paths, so re-running it will regenerate files at the correct names.
+- Lesson for future: when renaming static assets in `public/` for Vercel deployment, also `git update-index --chmod=+x` to match the mode of similar existing files — a rename-only commit with mismatched file mode can cause Vercel to silently skip the file in the static asset bundle while still serving a stale 404 from the previous deployment's CDN cache.
