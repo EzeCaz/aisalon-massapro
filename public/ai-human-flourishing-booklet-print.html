@@ -200,11 +200,11 @@ html, body {
 .cover-center {
   margin-top: 6mm;
   display: grid;
-  grid-template-columns: 1fr 70mm;   /* was 1fr 280px */
+  grid-template-columns: minmax(0, 1fr) 70mm;   /* minmax(0,1fr) prevents text column from expanding beyond its share and pushing the image off the page */
   gap: 8mm;
   align-items: center;
 }
-.cover-text { text-align: left; }
+.cover-text { text-align: left; min-width: 0; overflow-wrap: break-word; }
 .cover-eyebrow {
   font-family: 'Inter', sans-serif;
   font-size: 10pt;                /* was 9pt */
