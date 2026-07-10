@@ -35,8 +35,71 @@ import {
   Sparkles,
   PauseCircle,
   PlayCircle,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Search,
 } from "lucide-react";
 import { STAGES, statusLabel } from "@/lib/email-orchestrator/stages";
+
+// ----------------------------------------------------------------------------
+// Sort + filter helpers
+// ----------------------------------------------------------------------------
+
+type SortKey =
+  | "stage"
+  | "recipient"
+  | "event"
+  | "variant"
+  | "status"
+  | "scheduled"
+  | "sent"
+  | "logs";
+
+type SortDir = "asc" | "desc";
+
+const STATUS_RANK: Record<string, number> = {
+  PENDING: 1,
+  QUEUED: 2,
+  SENT: 3,
+  OPENED: 4,
+  CLICKED: 5,
+  FAILED: 6,
+  SKIPPED: 7,
+};
+
+function getItemValue(item: QueueItem, key: SortKey): string | number {
+  switch (key) {
+    case "stage":
+      return item.stage;
+    case "recipient":
+      return (item.rsvp.name || "").toLowerCase() + item.email.toLowerCase();
+    case "event":
+      return (item.event?.title || "").toLowerCase();
+    case "variant":
+      return item.subjectVariant || "";
+    case "status":
+      return STATUS_RANK[item.status] ?? 99;
+    case "scheduled":
+      return item.scheduledFor;
+    case "sent":
+      return item.sentAt || "";
+    case "logs":
+      return item._count?.trackingLogs ?? 0;
+  }
+}
+
+function compareItems(a: QueueItem, b: QueueItem, key: SortKey, dir: SortDir): number {
+  const va = getItemValue(a, key);
+  const vb = getItemValue(b, key);
+  let cmp: number;
+  if (typeof va === "number" && typeof vb === "number") {
+    cmp = va - vb;
+  } else {
+    cmp = String(va).localeCompare(String(vb));
+  }
+  return dir === "asc" ? cmp : -cmp;
+}
 
 // ----------------------------------------------------------------------------
 // Types — mirror server-side EmailQueue serialization.
@@ -110,8 +173,61 @@ export function OrchestratorPanel() {
   const [eventFilter, setEventFilter] = React.useState<string>("ALL");
   const [search, setSearch] = React.useState("");
 
+  // Sort + per-column text filters (client-side, on loaded items)
+  const [sortKey, setSortKey] = React.useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = React.useState<SortDir>("asc");
+  const [colFilters, setColFilters] = React.useState<Partial<Record<SortKey, string>>>({});
+
   // Selected queue item (for detail dialog)
   const [selected, setSelected] = React.useState<QueueItem | null>(null);
+
+  // Derived: sorted + filtered view of `items`
+  const visibleItems = React.useMemo(() => {
+    let out = items.slice();
+    // Apply per-column text filters
+    for (const [k, q] of Object.entries(colFilters)) {
+      if (!q || !q.trim()) continue;
+      const key = k as SortKey;
+      const needle = q.trim().toLowerCase();
+      out = out.filter((it) => String(getItemValue(it, key)).toLowerCase().includes(needle));
+    }
+    // Apply sort
+    if (sortKey) {
+      out.sort((a, b) => compareItems(a, b, sortKey, sortDir));
+    }
+    return out;
+  }, [items, colFilters, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else {
+      // third click → clear sort
+      setSortKey(null);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-40" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1 inline text-[#FF005A]" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline text-[#FF005A]" />;
+  };
+
+  const ColFilterInput = ({ k, placeholder }: { k: SortKey; placeholder: string }) => (
+    <input
+      type="text"
+      value={colFilters[k] ?? ""}
+      onChange={(e) => setColFilters((prev) => ({ ...prev, [k]: e.target.value }))}
+      placeholder={placeholder}
+      onClick={(e) => e.stopPropagation()}
+      className="mt-1 w-full rounded border border-black/10 bg-white px-1.5 py-0.5 text-[0.65rem] font-normal lowercase tracking-normal text-black/80 placeholder:text-black/30 focus:border-[#FF005A] focus:outline-none"
+    />
+  );
 
   // ── Refresh (resets to first page) ──
   // Page size is 200 — large enough to cover most events in one shot, but
@@ -561,19 +677,59 @@ export function OrchestratorPanel() {
           <table className="w-full text-sm">
             <thead className="bg-black/[0.03] text-black/80 text-xs uppercase tracking-wider">
               <tr>
-                <th className="text-left font-semibold px-3 py-2">Stage/Step</th>
-                <th className="text-left font-semibold px-3 py-2">Recipient</th>
-                <th className="text-left font-semibold px-3 py-2">Event</th>
-                <th className="text-left font-semibold px-3 py-2">Var</th>
-                <th className="text-left font-semibold px-3 py-2">Status</th>
-                <th className="text-left font-semibold px-3 py-2">Scheduled</th>
-                <th className="text-left font-semibold px-3 py-2">Sent</th>
-                <th className="text-left font-semibold px-3 py-2">Logs</th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("stage")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Stage/Step <SortIcon k="stage" />
+                  </button>
+                  <ColFilterInput k="stage" placeholder="1–5" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("recipient")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Recipient <SortIcon k="recipient" />
+                  </button>
+                  <ColFilterInput k="recipient" placeholder="name or email" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("event")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Event <SortIcon k="event" />
+                  </button>
+                  <ColFilterInput k="event" placeholder="event title" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("variant")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Var <SortIcon k="variant" />
+                  </button>
+                  <ColFilterInput k="variant" placeholder="A or B" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("status")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Status <SortIcon k="status" />
+                  </button>
+                  <ColFilterInput k="status" placeholder="sent, pending…" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("scheduled")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Scheduled <SortIcon k="scheduled" />
+                  </button>
+                  <ColFilterInput k="scheduled" placeholder="yyyy-mm-dd" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("sent")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Sent <SortIcon k="sent" />
+                  </button>
+                  <ColFilterInput k="sent" placeholder="yyyy-mm-dd" />
+                </th>
+                <th className="text-left font-semibold px-3 py-2">
+                  <button onClick={() => toggleSort("logs")} className="inline-flex items-center hover:text-[#FF005A]">
+                    Logs <SortIcon k="logs" />
+                  </button>
+                  <ColFilterInput k="logs" placeholder="≥ N" />
+                </th>
                 <th className="text-right font-semibold px-3 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 && !loading ? (
+              {visibleItems.length === 0 && !loading ? (
                 <tr>
                   <td
                     colSpan={9}
@@ -584,7 +740,7 @@ export function OrchestratorPanel() {
                   </td>
                 </tr>
               ) : (
-                items.map((item) => (
+                visibleItems.map((item) => (
                   <tr
                     key={item.id}
                     className="border-t border-black/5 hover:bg-black/[0.02] cursor-pointer"
@@ -685,13 +841,24 @@ export function OrchestratorPanel() {
         {items.length > 0 && (
           <div className="flex items-center justify-between gap-3 border-t border-black/5 bg-black/[0.02] px-3 py-2 text-xs text-black/70">
             <div>
-              Showing <strong className="text-black">{items.length}</strong>{" "}
-              of <strong className="text-black">{totalMatching}</strong>{" "}
+              Showing <strong className="text-black">{visibleItems.length}</strong>
+              {visibleItems.length !== items.length && (
+                <span className="text-black/50"> (of {items.length} loaded)</span>
+              )}
+              {" "}of <strong className="text-black">{totalMatching}</strong>{" "}
               {totalMatching === 1 ? "email" : "emails"}
               {hasMore && (
                 <span className="ml-1 text-black/50">
                   · {totalMatching - items.length} more available
                 </span>
+              )}
+              {(sortKey || Object.values(colFilters).some((v) => v && v.trim())) && (
+                <button
+                  onClick={() => { setSortKey(null); setSortDir("asc"); setColFilters({}); }}
+                  className="ml-2 text-[#FF005A] hover:underline"
+                >
+                  Clear sort/filter
+                </button>
               )}
             </div>
             {hasMore && (

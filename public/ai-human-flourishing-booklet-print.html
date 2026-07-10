@@ -244,7 +244,10 @@ html, body {
 .cover-hero-img {
   width: 70mm;                    /* was 280px */
   height: auto;
+  max-height: 95mm;               /* NEW — clamp so the meerkat never overflows the cover */
+  object-fit: contain;            /* NEW — preserve aspect ratio, letterbox if needed */
   display: block;
+  margin: 0 auto;
 }
 
 .cover-bottom {
@@ -374,14 +377,14 @@ html, body {
 
 .agenda {
   font-family: 'Inter', sans-serif;
-  font-size: 10pt;                /* was 9pt */
-  line-height: 1.5;
+  font-size: 9pt;                  /* was 10pt — smaller so 19:45 + 20:00 fit above the footer */
+  line-height: 1.35;              /* was 1.5 — tighter */
 }
 .agenda-row {
   display: grid;
   grid-template-columns: 14mm 1fr;   /* was 56px 1fr */
   gap: 2mm;
-  padding: 1.5mm 0;
+  padding: 1mm 0;                /* was 1.5mm 0 — tighter */
   border-bottom: 0.3mm solid var(--soft-gray);
 }
 .agenda-row:last-child { border-bottom: 0; }
@@ -390,24 +393,24 @@ html, body {
   font-variant-numeric: tabular-nums;
   font-weight: 800;               /* was 700 */
   color: var(--pink);
-  font-size: 9.5pt;               /* was 8.5pt */
+  font-size: 8.5pt;               /* was 9.5pt — smaller */
   letter-spacing: 0.04em;
 }
 .agenda-title {
   color: var(--ink);
   font-weight: 600;               /* was 500 — darker/bolder */
-  font-size: 10pt;                /* was 9pt */
+  font-size: 9pt;                 /* was 10pt — smaller */
 }
 .agenda-title .sub {
   display: block;
-  font-size: 9pt;                 /* was 8pt */
+  font-size: 8pt;                 /* was 9pt — smaller */
   color: var(--gray-70);          /* was gray-50 — darker */
   font-weight: 400;
   margin-top: 0.3mm;
 }
 .agenda-type {
   display: inline-block;
-  font-size: 7.5pt;               /* was 6.5pt */
+  font-size: 7pt;                 /* was 7.5pt — smaller */
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -763,7 +766,7 @@ html, body {
   line-height: 1.4;
 }
 
-/* Chapter card (Quote 2) */
+/* Chapter card (Quote 2) — with one-phrase explanation under each Curiosity Loop step */
 .chapter-card {
   margin-top: 6mm;
   padding: 6mm 7mm 6mm 7mm;
@@ -791,25 +794,36 @@ html, body {
 .chapter-card .ch-steps {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 3mm;
+  gap: 2.5mm;                     /* was 3mm — slightly tighter to fit phrases */
   margin-top: 1.5mm;
 }
 .chapter-card .ch-step {
   font-family: 'Playfair Display', serif;
   font-weight: 800;
-  font-size: 13pt;                /* was 16pt — scaled for A5 */
+  font-size: 12pt;                /* was 13pt — slightly smaller to fit phrase below */
   color: var(--ink);
   text-align: center;
   letter-spacing: 0.04em;
   position: relative;
-  padding: 1.5mm 0;
+  padding: 1mm 0;
+}
+.chapter-card .ch-step .ch-phrase {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;               /* NEW — one-phrase explanation per step */
+  font-weight: 500;
+  color: var(--gray-90);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  line-height: 1.3;
+  margin-top: 1mm;
 }
 .chapter-card .ch-step::before {
   content: "";
   position: absolute;
-  top: 50%; right: -2.5mm;
+  top: 50%; right: -1.5mm;
   transform: translateY(-50%);
-  width: 1.6mm; height: 1.6mm;
+  width: 1.4mm; height: 1.4mm;
   background: var(--pink);
   border-radius: 50%;
   opacity: 0.6;
@@ -842,7 +856,7 @@ html, body {
   grid-template-rows: 5mm 1fr 1fr;
   gap: 0;
   width: 100%;
-  height: 58mm;                   /* was 50mm — give cells more room */
+  height: 50mm;                   /* was 58mm — shrunk so the bottom row + footer don't collide */
   position: relative;
 }
 
@@ -939,7 +953,7 @@ html, body {
   gap: 1.5mm;
   margin-top: 2mm;
   position: relative;
-  height: 58mm;                   /* was 50mm — match matrix */
+  height: 50mm;                   /* was 58mm — shrunk to match matrix + keep bottom cells visible */
 }
 .canvas-cell {
   position: relative;
@@ -959,7 +973,7 @@ html, body {
   right: 2mm; bottom: -4mm;
   font-family: 'Playfair Display', serif;
   font-weight: 900;
-  font-size: 60pt;                /* was 90pt — much smaller so it doesn't bleed */
+  font-size: 50pt;                /* was 60pt — shrunk so the F doesn't crowd the bottom cells */
   line-height: 1;
   color: var(--pink);
   opacity: 0.85;
@@ -1025,12 +1039,18 @@ html, body {
 /* ====================================================================
    PAGE 7 — TOOL 03 (Curiosity Loop) + Quotes 3 & 4
    ==================================================================== */
+/* On page 7, the big italic '03' tool number crowds the running-head above.
+   Push the tool-header down so there's clear breathing room. */
+.page:nth-of-type(7) .tool-header {
+  margin-top: 6mm;                /* NEW — was 0 (default) — adds space below running-head */
+}
+
 .loop-wrap {
   margin: 2mm auto 3mm auto;
   display: flex;
   justify-content: center;
 }
-.loop-svg { display: block; width: 120mm; height: auto; }
+.loop-svg { display: block; width: 110mm; height: auto; }    /* was 120mm — slightly smaller to give the page breathing room */
 
 .loop-caption {
   font-family: 'Playfair Display', serif;
@@ -1538,10 +1558,10 @@ html, body {
     <div class="ch-tag">Quote 02 · Chapter 1</div>
     <h3 class="ch-title">The Curiosity Loop</h3>
     <div class="ch-steps">
-      <div class="ch-step">Notice</div>
-      <div class="ch-step">Reflect</div>
-      <div class="ch-step">Question</div>
-      <div class="ch-step">Experiment</div>
+      <div class="ch-step">Notice<span class="ch-phrase">Observe your reaction.</span></div>
+      <div class="ch-step">Reflect<span class="ch-phrase">What surprised you?</span></div>
+      <div class="ch-step">Question<span class="ch-phrase">Challenge your assumptions.</span></div>
+      <div class="ch-step">Experiment<span class="ch-phrase">Take one small action.</span></div>
     </div>
   </div>
 
@@ -1567,7 +1587,7 @@ html, body {
       <span class="tool-eyebrow">Tool · Model</span>
     </div>
     <h2 class="tool-title" style="font-size: 22pt;">Identity Matrix</h2>
-    <p class="tool-desc" style="font-size: 11pt; margin-bottom: 8px;">A map to help distinguish what AI can automate from what makes you irreducibly you.</p>
+    <p class="tool-desc" style="font-size: 11pt; margin-bottom: 8px;">Defining the line between AI automation and your unique self.</p>
 
     <div class="matrix-canvas">
       <div class="matrix">

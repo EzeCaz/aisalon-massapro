@@ -20,9 +20,10 @@
  */
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Plus, X, ArrowRight, Clock, Mail, Pencil, Loader2, Users, Zap,
-  Copy, Trash2, FlaskConical,
+  Copy, Trash2, FlaskConical, Send,
 } from "lucide-react";
 
 export type FlowTemplate = {
@@ -151,6 +152,9 @@ export function FlowBuilderCanvas({
                 step={step}
                 template={templates.find((t) => t.id === step.templateId)}
                 audience={audiences.find((a) => a.id === step.audienceId)}
+                events={events}
+                flowId={flow.id ?? ""}
+                flowStatus={flow.status}
                 onClick={() => setEditingStep(step.position)}
                 onDelete={() => {
                   onChange({
@@ -229,16 +233,53 @@ function StepCard({
   step,
   template,
   audience,
+  events,
+  flowId,
+  flowStatus,
   onClick,
   onDelete,
 }: {
   step: FlowStep;
   template?: FlowTemplate;
   audience?: FlowAudience;
+  events: { id: string; title: string; slug: string; startsAt: string }[];
+  flowId: string;
+  flowStatus: string;
   onClick: () => void;
   onDelete: () => void;
 }) {
   const triggerLabel = TRIGGER_KINDS.find((t) => t.value === step.triggerKind)?.label ?? step.triggerKind ?? "—";
+  const [sending, setSending] = useState(false);
+  const [showEventPicker, setShowEventPicker] = useState(false);
+
+  const canSend = !!(step.id && step.templateId && step.audienceId && flowStatus === "ACTIVE");
+
+  const handleSendToAudience = async (eventId: string) => {
+    if (!step.id) {
+      toast.error("Save the flow first, then send.");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/email-flows/${flowId}/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepId: step.id, eventId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send to audience");
+        return;
+      }
+      toast.success(`Scheduled ${data.created} email(s) · ${data.skipped} already queued`);
+      setShowEventPicker(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to send to audience");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div
@@ -329,6 +370,83 @@ function StepCard({
           ? `${step.delayValue}${step.delayUnit[0].toLowerCase()} after trigger`
           : "Immediate"}
       </div>
+
+      {/* Send to audience button — fires this step immediately to all audience members */}
+      <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => {
+            if (!step.id) {
+              toast.error("Save the flow first, then send.");
+              return;
+            }
+            if (flowStatus !== "ACTIVE") {
+              toast.error(`Flow is ${flowStatus} — set it to Active to enable sending.`);
+              return;
+            }
+            if (!step.templateId || !step.audienceId) {
+              toast.error("Step needs an audience + template before sending.");
+              return;
+            }
+            setShowEventPicker((v) => !v);
+          }}
+          disabled={sending}
+          className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition-colors ${
+            canSend
+              ? "bg-[#FF005A] text-white hover:bg-[#d8004d]"
+              : "bg-neutral-200 text-neutral-500 hover:bg-neutral-300"
+          }`}
+          title={canSend ? "Send this step now to every member of the audience" : "Requires: saved step + audience + template + Active flow"}
+        >
+          {sending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+          Send to audience
+        </button>
+      </div>
+
+      {/* Event picker popover — required because the trigger API needs an eventId to anchor RSVPs */}
+      {showEventPicker && canSend && (
+        <div className="absolute bottom-full left-0 z-20 mb-1 w-[260px] rounded-lg border border-neutral-200 bg-white p-3 shadow-lg">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+            Pick an event to anchor the send
+          </div>
+          <div className="text-[10px] text-neutral-500 mb-2">
+            Each audience member gets (or reuses) an RSVP to this event — that's how the queue tracks them.
+          </div>
+          <select
+            defaultValue={events[0]?.id ?? ""}
+            className="w-full rounded border border-neutral-300 px-2 py-1 text-xs"
+            id={`event-picker-${step.id}`}
+          >
+            {events.length === 0 ? (
+              <option value="">(no events — create one first)</option>
+            ) : (
+              events.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title} — {new Date(ev.startsAt).toLocaleDateString()}
+                </option>
+              ))
+            )}
+          </select>
+          <div className="mt-2 flex justify-end gap-1">
+            <button
+              onClick={() => setShowEventPicker(false)}
+              className="rounded px-2 py-1 text-[10px] text-neutral-500 hover:text-neutral-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                const sel = document.getElementById(`event-picker-${step.id}`) as HTMLSelectElement | null;
+                const eventId = sel?.value;
+                if (eventId) handleSendToAudience(eventId);
+              }}
+              disabled={events.length === 0}
+              className="rounded bg-[#FF005A] px-2 py-1 text-[10px] font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
+            >
+              Confirm send
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* A/B badge */}
       {step.subjectVariantB && (
