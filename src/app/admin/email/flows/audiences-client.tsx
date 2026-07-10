@@ -52,6 +52,8 @@ type Audience = {
   kind: "STATIC" | "DYNAMIC";
   isTest: boolean;
   emails: string[];
+  emailCount?: number;
+  emailPreview?: string[];
   filters: FilterSpec | null;
   flowStepsCount: number;
   createdAt: string;
@@ -403,9 +405,16 @@ export function AudiencesClient({
                     <div className="text-[10px] text-neutral-500">
                       {a.kind === "STATIC"
                         ? `${a.emails.length} email${a.emails.length === 1 ? "" : "s"}`
-                        : a.filters && a.filters.groups.length > 0
-                          ? `${a.filters.groups.length} group${a.filters.groups.length === 1 ? "" : "s"} · ${a.filters.source}`
-                          : "no filters"}
+                        : a.emailCount !== undefined
+                          ? <>
+                              <span className="font-semibold text-[#FF005A]">{a.emailCount} email{a.emailCount === 1 ? "" : "s"}</span>
+                              {a.emailPreview && a.emailPreview.length > 0 && (
+                                <span className="text-neutral-400"> · {a.emailPreview[0]}{a.emailCount > 1 ? ` +${a.emailCount - 1}` : ""}</span>
+                              )}
+                            </>
+                          : a.filters && a.filters.groups.length > 0
+                            ? `${a.filters.groups.length} group${a.filters.groups.length === 1 ? "" : "s"} · ${a.filters.source}`
+                            : "no filters"}
                       {" · "}{a.flowStepsCount} flow step{a.flowStepsCount === 1 ? "" : "s"}
                     </div>
                   </button>

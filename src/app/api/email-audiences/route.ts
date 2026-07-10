@@ -14,6 +14,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   parseSpec,
+  resolveAudienceEmails,
   type AudienceFilterSpec,
 } from "@/lib/email-orchestrator/audience-filter";
 
@@ -61,23 +62,60 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // For STATIC audiences, parse emailsJson. For DYNAMIC, leave emails empty
-  // (the client can call /api/email-audiences/[id]/emails to resolve them).
-  return NextResponse.json({
-    audiences: audiences.map((a) => ({
-      id: a.id,
-      name: a.name,
-      slug: a.slug,
-      description: a.description,
-      kind: a.kind,
-      isTest: a.isTest,
-      emails: a.kind === "STATIC" ? safeParseEmails(a.emailsJson) : [],
-      filters: a.kind === "DYNAMIC" && a.filtersJson ? parseSpec(a.filtersJson) : null,
-      flowStepsCount: a._count.flowSteps,
-      createdAt: a.createdAt,
-      updatedAt: a.updatedAt,
-    })),
-  });
+  // For STATIC audiences, parse emailsJson. For DYNAMIC audiences, also resolve
+  // the live email count on read so the admin UI can show how many recipients
+  // the filter currently matches (auto-updates as users/RSVPs change).
+  const resolved = await Promise.all(
+    audiences.map(async (a) => {
+      if (a.kind === "STATIC") {
+        const emails = safeParseEmails(a.emailsJson);
+        return {
+          id: a.id,
+          name: a.name,
+          slug: a.slug,
+          description: a.description,
+          kind: a.kind,
+          isTest: a.isTest,
+          emails,
+          emailCount: emails.length,
+          filters: null,
+          flowStepsCount: a._count.flowSteps,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+        };
+      }
+      // DYNAMIC — resolve live count
+      let emailCount = 0;
+      let emailPreview: string[] = [];
+      try {
+        if (a.filtersJson) {
+          const spec = parseSpec(a.filtersJson);
+          const all = await resolveAudienceEmails(spec);
+          emailCount = all.length;
+          emailPreview = all.slice(0, 3); // first 3 for inline preview
+        }
+      } catch {
+        // If resolution fails (e.g. invalid filter), fall back to 0 — UI will still render.
+      }
+      return {
+        id: a.id,
+        name: a.name,
+        slug: a.slug,
+        description: a.description,
+        kind: a.kind,
+        isTest: a.isTest,
+        emails: [] as string[],
+        emailCount,
+        emailPreview,
+        filters: a.filtersJson ? parseSpec(a.filtersJson) : null,
+        flowStepsCount: a._count.flowSteps,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      };
+    }),
+  );
+
+  return NextResponse.json({ audiences: resolved });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
