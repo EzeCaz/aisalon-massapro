@@ -1039,7 +1039,104 @@ html, body {
 }
 
 /* ====================================================================
-   PAGE 8 — BACK COVER (QR + citation + branding)
+   PAGE 3 — SECTION OPENER ("Why this section")
+   ==================================================================== */
+.section-opener {
+  padding: 56px 64px 40px 64px;
+  display: flex;
+  flex-direction: column;
+}
+.opener-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.opener-eyebrow .num {
+  font-family: 'Playfair Display', serif;
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink);
+  text-transform: none;
+  line-height: 1;
+}
+.opener-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 56pt;
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 8px 0 28px 0;
+}
+.opener-title .it {
+  font-style: italic;
+  color: var(--pink);
+}
+.opener-body {
+  max-width: 580px;
+  margin-bottom: 8px;
+}
+.opener-body p {
+  font-family: 'Inter', sans-serif;
+  font-size: 11pt;
+  line-height: 1.65;
+  color: var(--gray-70);
+  margin: 0 0 12px 0;
+}
+.opener-body .opener-lead {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 16pt;
+  line-height: 1.4;
+  color: var(--ink);
+  margin-bottom: 18px;
+}
+.opener-cta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 4px;
+}
+.cta-block {
+  border-left: 2px solid var(--pink);
+  padding: 4px 0 4px 18px;
+}
+.cta-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 6px;
+}
+.cta-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 16pt;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px 0;
+  line-height: 1.15;
+}
+.cta-body {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  line-height: 1.55;
+  color: var(--gray-70);
+  margin: 0;
+}
+.cta-body strong { color: var(--ink); font-weight: 600; }
+
+/* ====================================================================
+   PAGE 9 — BACK COVER (QR + citation + branding)
    ==================================================================== */
 .back-cover {
   padding: 56px 64px 56px 64px;
@@ -1199,9 +1296,9 @@ html, body {
   </div>
 
   <div class="cover-center">
-    <div class="cover-eyebrow">A booklet for the <span class="pink">100 invitees</span> of the AI Salon TLV event</div>
+    <div class="cover-eyebrow">A reading companion from the <span class="pink">AI Salon TLV</span> community</div>
     <h1 class="cover-title">AI <span class="amp">&amp;</span><br>Human<br>Flourishing</h1>
-    <p class="cover-sub">A reading companion — six quotes and four models from <em>AI and the Art of Being Human</em>, curated for the conversation on July 13.</p>
+    <p class="cover-sub">Seven quotes and four models from <em>AI and the Art of Being Human</em> — curated to encourage and inspire AI builders to build conscious AI systems.</p>
   </div>
 
   <div class="cover-bottom">
@@ -1212,11 +1309,6 @@ html, body {
         <span class="ba">Jeffrey Abbott &amp; Andrew Maynard</span><br>
         A practical guide to thriving with AI while rediscovering yourself in the process.
       </div>
-    </div>
-    <div class="cover-event">
-      <div class="label">The Event</div>
-      <div class="date">July 13, 2026<br>18:00 — 21:30</div>
-      <div class="venue">Elementor Offices · Ramat Gan</div>
     </div>
   </div>
 </div>
@@ -1304,7 +1396,46 @@ html, body {
 </div>
 
 <!-- ================================================================
-     PAGE 3 — QUOTE 1 (dramatic opener)
+     PAGE 3 — SECTION OPENER ("Why this section")
+     ================================================================ -->
+<div class="page section-opener">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Why this section</span>
+  </div>
+
+  <div class="opener-eyebrow"><span class="num">03</span> Why this section</div>
+  <h2 class="opener-title">Build <span class="it">consciously.</span></h2>
+
+  <div class="opener-body">
+    <p class="opener-lead">This section is here to encourage and inspire AI builders to build conscious AI systems.</p>
+    <p>The quotes and models that follow are not abstractions. They are working tools for people who ship AI products and want to ship better ones — sharper questions, clearer boundaries, a more honest map of what AI can do and what only humans can do.</p>
+    <p>Read them slowly. Argue with them. Notice which one lands and which one stings. The point is not to agree with the authors — it is to leave the page with sharper questions than you brought to it.</p>
+  </div>
+
+  <hr class="pink-rule pink-rule--full" style="margin: 28px 0 22px 0;">
+
+  <div class="opener-cta">
+    <div class="cta-block">
+      <div class="cta-label">Engage</div>
+      <h3 class="cta-title">Explore the interactive platform</h3>
+      <p class="cta-body">Visit the <strong>Human Flourishing</strong> interactive site to work with the four models yourself: locate your work on the spectrum, map your identity, run a curiosity loop, scaffold a real prompt. Scan the QR code on the back cover.</p>
+    </div>
+    <div class="cta-block">
+      <div class="cta-label">Go deeper</div>
+      <h3 class="cta-title">Get a copy of the book</h3>
+      <p class="cta-body">If the seven quotes leave you wanting more, the full framework lives in <em>AI and the Art of Being Human</em> by Jeffrey Abbott &amp; Andrew Maynard — available on Amazon. The book is the source for every quote and model in this companion.</p>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">03</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 4 — QUOTE 1 (dramatic opener)
      ================================================================ -->
 <div class="page quote-page">
   <div class="running-head">
@@ -1332,12 +1463,12 @@ html, body {
 
   <div class="running-foot">
     <span>AI &amp; Human Flourishing · Reading Companion</span>
-    <span class="rf-page">03</span>
+    <span class="rf-page">04</span>
   </div>
 </div>
 
 <!-- ================================================================
-     PAGE 4 — TOOL 01 (Spectrum) + Quote 2 (Chapter 1 card)
+     PAGE 5 — TOOL 01 (Spectrum) + Quote 2 (Chapter 1 card)
      ================================================================ -->
 <div class="page">
   <div class="running-head">
@@ -1393,12 +1524,12 @@ html, body {
 
   <div class="running-foot">
     <span>AI &amp; Human Flourishing · Reading Companion</span>
-    <span class="rf-page">04</span>
+    <span class="rf-page">05</span>
   </div>
 </div>
 
 <!-- ================================================================
-     PAGE 5 — TOOLS 02 + 04 (two 2x2 matrices)
+     PAGE 6 — TOOLS 02 + 04 (two 2x2 matrices)
      ================================================================ -->
 <div class="page">
   <div class="running-head">
@@ -1498,12 +1629,12 @@ html, body {
 
   <div class="running-foot">
     <span>AI &amp; Human Flourishing · Reading Companion</span>
-    <span class="rf-page">05</span>
+    <span class="rf-page">06</span>
   </div>
 </div>
 
 <!-- ================================================================
-     PAGE 6 — TOOL 03 (Curiosity Loop) + Quotes 3 & 4
+     PAGE 7 — TOOL 03 (Curiosity Loop) + Quotes 3 & 4
      ================================================================ -->
 <div class="page">
   <div class="running-head">
@@ -1590,12 +1721,12 @@ html, body {
 
   <div class="running-foot">
     <span>AI &amp; Human Flourishing · Reading Companion</span>
-    <span class="rf-page">06</span>
+    <span class="rf-page">07</span>
   </div>
 </div>
 
 <!-- ================================================================
-     PAGE 7 — QUOTES 5, 6, 7 (closing spread)
+     PAGE 8 — QUOTES 5, 6, 7 (closing spread)
      ================================================================ -->
 <div class="page">
   <div class="running-head">
@@ -1647,12 +1778,12 @@ html, body {
 
   <div class="running-foot">
     <span>AI &amp; Human Flourishing · Reading Companion</span>
-    <span class="rf-page">07</span>
+    <span class="rf-page">08</span>
   </div>
 </div>
 
 <!-- ================================================================
-     PAGE 8 — BACK COVER (QR + citation + branding)
+     PAGE 9 — BACK COVER (QR + citation + branding)
      ================================================================ -->
 <div class="page back-cover">
   <div class="back-spine"></div>
@@ -1663,12 +1794,12 @@ html, body {
   </div>
 
   <div class="back-center">
-    <div class="back-eyebrow">Continue the conversation</div>
+    <div class="back-eyebrow">Explore the platform</div>
     <div class="qr-wrap">
-      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&color=1a1a1a&bgcolor=faf8f5&data=https%3A%2F%2Faisalon.massapro.com%2Fevents%2Fai-salon-human" alt="QR code to event page">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&color=1a1a1a&bgcolor=faf8f5&data=https%3A%2F%2Faisalon.massapro.com%2Fresources%2Fai-human-flourishing" alt="QR code to Human Flourishing interactive platform">
     </div>
-    <p class="qr-caption">Scan to register, RSVP, or check in.</p>
-    <p class="qr-sub">aisalon.massapro.com/events/ai-salon-human</p>
+    <p class="qr-caption">Scan to work with the four models yourself.</p>
+    <p class="qr-sub">aisalon.massapro.com/resources/ai-human-flourishing</p>
   </div>
 
   <div class="back-citation">
@@ -1681,12 +1812,10 @@ html, body {
 
   <div class="back-bottom">
     <div class="back-event">
-      <span class="strong">AI &amp; Human Flourishing</span> · AI Salon TLV event<br>
-      Monday, July 13, 2026 · 18:00 — 21:30 IDT<br>
-      Elementor Offices, Ramat Gan · Israel<br>
-      <span style="opacity:0.6;">100 printed copies for AI Salon TLV invitees.</span>
+      <span class="strong">AI &amp; Human Flourishing</span> · A reading companion from the AI Salon TLV community.<br>
+      Curated to encourage and inspire AI builders to build conscious AI systems.
     </div>
-    <div class="back-see-you">See you at<br>the event.</div>
+    <div class="back-see-you">Build<br>consciously.</div>
   </div>
 </div>
 
