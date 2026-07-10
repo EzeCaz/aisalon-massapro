@@ -2041,3 +2041,37 @@ Stage Summary:
   - Direct PUT (instant edit) remains Super Admin only — unchanged.
   - PATCH /suggestions/[id] (accept/reject) remains Super Admin only — unchanged.
 - Deploy: Vercel auto-deploy from commit 543b4e7 on main. Live at https://aisalon.massapro.com within ~1-2 minutes.
+
+---
+Task ID: event-booklet-printable
+Agent: main
+Task: Create a printable 8-page A4 booklet for the AI Salon TLV "AI & Human Flourishing" event (July 13, 2026, 100 invitees). Booklet contains 7 curated quotes from "AI and the Art of Being Human" by Jeffrey Abbott & Andrew Maynard + 4 cleanly recreated tool diagrams (Human Qualities Spectrum, Identity Matrix, Curiosity Loop, Prompt-Scaffolding Canvas) + book cover + event details + QR code to event page.
+
+Work Log:
+- Loaded PDF skill, routed to Creative Flow brief (briefs/creative-flow.md) — guide/handbook type with text + design.
+- Read configs/fonts.md and typesetting/overflow.md (MUST READ per brief).
+- Asked 8 clarifying questions via AskUserQuestion. User selected: A4 portrait, Lean 8pp, 1 spot color (black + AI Salon pink #ff0056), Editorial minimal style, Full-page spreads for quotes, Recreate cleanly for tool diagrams, Event details + QR to event page extras, English only.
+- Launched 2 parallel subagents:
+  (a) Fetched all 4 tool pages via web-reader → got detailed structured info for each diagram (spectrum bar with 3 anchors, 2x2 matrix with axes, circular loop with 4 nodes + central hub, 2x2 canvas with big F letters). All labels, colors, captions captured.
+  (b) Got book cover URL (https://sfile.chatglm.cn/images-ppt/04838abe19cf.jpg, 1707×2560px portrait) + corrected book title "AI and the Art of Being Human" + full event details (July 13 2026, 18:00-21:30, Elementor Offices Ramat Gan, 7-item agenda with speakers).
+- Set outline via Outline tool: 8 sections — Cover, Event+Book, Quote 1, Tool 1+Quote 2, Tools 2+4, Tool 3+Quotes 3-4, Quotes 5-6-7, Back cover.
+- Wrote HTML to /home/z/my-project/scripts/build-booklet.html (1700+ lines, single-file with inline CSS + SVG Curiosity Loop diagram).
+- Color palette: paper #faf8f5 (cream), ink #1a1a1a (near-black), pink #ff0056 (single spot color). All pink opacity variants derived via rgba().
+- Typography: Playfair Display (serif, for headlines + pull-quotes) + Inter (sans, for body + captions + labels).
+- Diagrams recreated as native HTML/CSS (spectrum bar via gradient, matrices via CSS grid, canvas via positioned F letters) + 1 inline SVG (Curiosity Loop with curved arrows + central hub).
+- First render: Google Fonts CDN failed to load → title rendered as generic sans-serif. Fix: downloaded Playfair Display + Inter variable TTFs to /home/z/.fonts/, added @font-face declarations with file:// URLs as fallback, set font-display: block to force wait.
+- Re-rendered: VLM verified title now renders in "elegant editorial serif font" with "high contrast strokes, similar to Playfair Display" and pull-quote in "flowing cursive serif (italic)" — typography confirmed as "professional magazine/booklet" with "editorial sophistication".
+- VLM verified all 8 pages individually: all clean, no bugs, clear visual hierarchy.
+- VLM verified key elements: book cover image loaded (p1), SVG Curiosity Loop diagram rendered with 4 nodes + curved arrows (p6), QR code visible (p8).
+- Set PDF metadata via pdf.py meta.set: Title, Author (AI Salon TLV), Subject, Creator, Keywords.
+- Final QA: 10/10 critical checks passed (title, author, creator metadata; page size consistent; no blank pages; fonts embedded; no content overflow; content fill ratio adequate; cover full-bleed; symmetric margins). 2 minor warnings: line-start em-dash and middle-dot (CJK punctuation rules, not applicable to English text).
+- Copied HTML source to /home/z/my-project/download/ai-human-flourishing-booklet.html per brief requirement ("HTML source file delivered alongside PDF").
+
+Stage Summary:
+- Deliverables (in /home/z/my-project/download/):
+  - ai-human-flourishing-booklet.pdf — 8 pages, A4 portrait, 2.07 MB, vector PDF
+  - ai-human-flourishing-booklet.html — 49 KB editable source
+- Print specs: A4 (210×297mm), 1 spot color (pink #ff0056) + black on cream paper, 4 sheets duplex or 2 sheets saddle-stitched. Recommended for digital print at ~3-5 NIS/copy or 2-color offset at ~1-2 NIS/copy.
+- Content: 7 quotes from "AI and the Art of Being Human" + 4 cleanly recreated tool diagrams + book cover + event details (date/venue/agenda) + QR code to /events/ai-salon-human.
+- Fonts: Playfair Display (serif, locally installed at /home/z/.fonts/) for headlines/quotes; Inter (sans, locally installed) for body/captions. Both embedded as variable TTFs.
+- All 4 tool diagrams recreated as native HTML/CSS or inline SVG (no screenshots, fully vector, print-ready).
