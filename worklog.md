@@ -2126,3 +2126,25 @@ Stage Summary:
 - Page 2 (agenda) untouched
 - Original 7 quotes + 4 tool diagrams intact, just shifted +1 page
 - AWAITING: cover image URL from user
+
+---
+Task ID: 7
+Agent: Super Z (main)
+Task: Swap cover image to user-uploaded "Meerkat book 2.png"
+
+Work Log:
+- Found uploaded file at /home/z/my-project/upload/Meerkat book 2.png (1024×1024 RGBA PNG, 479KB).
+- VLM-inspected image: colorful geometric meerkat holding the book "AI and the Art of Being Human" — perfect fit for cover.
+- Copied to /home/z/my-project/public/images/meerkat-book.png so Next.js can serve it.
+- Restructured cover CSS: changed .cover-center from stacked layout to 2-column grid (text left, 280×280 hero image right). Reduced cover title from 92pt → 78pt to fit alongside image.
+- Updated cover HTML: wrapped text in .cover-text div, added <img class="cover-hero-img" src="/images/meerkat-book.png"> as second grid column.
+- Retained small book cover thumbnail at cover-bottom for citation.
+- Rendered PDF via Playwright + Paged.js → 9 pages, 1.9 MB (3 figures embedded, was 2).
+- VLM-verified cover: meerkat image visible on right, title on left, eyebrow text correct, no event mention, layout clean.
+- Committed (c97691d) and pushed to main. Vercel rebuilt and now serves new PDF (1998518 bytes) + meerkat image (479702 bytes, HTTP 200).
+
+Stage Summary:
+- Cover now features playful meerkat-with-book artwork as hero image on right side.
+- Title "AI & Human Flourishing" remains prominent on left.
+- All other pages (2-9) untouched from previous version.
+- All 5 user-requested changes now complete. Booklet is final.
