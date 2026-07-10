@@ -2100,3 +2100,29 @@ Stage Summary:
 - Booklet: served at /ai-human-flourishing-booklet.pdf and .html via Next.js dev server on port 3000 (proxied via Caddy on 81). User must refresh preview panel to see updated link.
 - "Tool launch" template: confirmed DOES NOT EXIST in production. User must re-duplicate via /admin/email/flows → Templates tab → Duplicate button, then rename via PATCH (or just edit the name field after duplication).
 - Audience lists: code fix deployed. After Vercel rebuild (~2 min), the list at /admin/email/flows → Audiences tab will show "231 emails · adam@vectisbuild.co +230" for Members, "219 emails · clara@savantconsulting.net +218" for Registers, "288 emails · ..." for All Emails. Auto-updates as new users/RSVPs arrive.
+
+---
+Task ID: 6
+Agent: Super Z (main)
+Task: Booklet revisions per user request: (1) cover image swap [pending user URL], (2) no event mention on cover/back-cover, (3) QR code → /resources/ai-human-flourishing, (4) keep page 2 agenda, (5) new page 3 section opener framing.
+
+Work Log:
+- Backed up /public/ai-human-flourishing-booklet.html → .bak
+- Cover: removed "100 invitees of the AI Salon TLV event" eyebrow + event date/venue block. Replaced with "A reading companion from the AI Salon TLV community". Updated sub-text to mention "encourage and inspire AI builders to build conscious AI systems".
+- Inserted new PAGE 3 between page 2 and old page 3: section opener with "Build consciously." headline, framing paragraphs, and two CTA blocks (Engage / Go deeper).
+- Renumbered subsequent pages 4-8 (was 3-7). Updated rf-page numbers and page-section comments.
+- Back cover: repointed QR from /events/ai-salon-human → /resources/ai-human-flourishing. Changed caption from "Scan to register, RSVP, or check in." → "Scan to work with the four models yourself." Removed event date/venue/100 copies mention. Replaced "See you at the event." tagline with "Build consciously."
+- Added CSS for .section-opener, .opener-eyebrow/title/body, .opener-cta, .cta-block/label/title/body. All using existing palette (ink, pink, gray-70) and fonts (Playfair Display + Inter).
+- Rendered PDF via Playwright + Paged.js → 9 pages, 1.9 MB. Installed pagedjs dependency (--legacy-peer-deps).
+- VLM-verified pages 1, 2, 3, 9 (cover, agenda, new section opener, back cover) — all checks pass.
+- Committed (bde7dbf) and pushed to main. Vercel rebuilt and now serves new PDF (1974357 bytes).
+- Cover image still pending user URL — currently using existing book cover image.
+
+Stage Summary:
+- Booklet is now 9 pages (was 8), live at https://aisalon.massapro.com/ai-human-flourishing-booklet.pdf and .html
+- New page 3 frames the section as "Build consciously." with two CTAs (engage with interactive platform / get the book)
+- Cover and back-cover no longer mention the event (only community)
+- QR code points to /resources/ai-human-flourishing
+- Page 2 (agenda) untouched
+- Original 7 quotes + 4 tool diagrams intact, just shifted +1 page
+- AWAITING: cover image URL from user
