@@ -192,8 +192,12 @@ html, body {
 
 .cover-center {
   margin-top: 28px;
-  text-align: left;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 36px;
+  align-items: center;
 }
+.cover-text { text-align: left; }
 .cover-eyebrow {
   font-family: 'Inter', sans-serif;
   font-size: 9pt;
@@ -208,7 +212,7 @@ html, body {
 .cover-title {
   font-family: 'Playfair Display', serif;
   font-weight: 900;
-  font-size: 92pt;
+  font-size: 78pt;
   line-height: 0.92;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -223,11 +227,19 @@ html, body {
   font-family: 'Playfair Display', serif;
   font-style: italic;
   font-weight: 400;
-  font-size: 17pt;
-  line-height: 1.35;
+  font-size: 14pt;
+  line-height: 1.4;
   color: var(--gray-70);
-  margin-top: 28px;
-  max-width: 560px;
+  margin-top: 24px;
+  max-width: 460px;
+}
+
+.cover-hero-img {
+  width: 280px;
+  height: 280px;
+  object-fit: cover;
+  border-radius: 4px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
 }
 
 .cover-bottom {
@@ -235,15 +247,16 @@ html, body {
   justify-content: space-between;
   align-items: flex-end;
   gap: 32px;
+  margin-top: 16px;
 }
 .cover-book {
   display: flex;
   gap: 18px;
   align-items: flex-end;
-  max-width: 460px;
+  max-width: 560px;
 }
 .cover-book-img {
-  width: 92px;
+  width: 76px;
   height: auto;
   flex-shrink: 0;
   box-shadow: 0 8px 22px rgba(0,0,0,0.18), 0 1px 0 rgba(0,0,0,0.05);
@@ -1296,9 +1309,12 @@ html, body {
   </div>
 
   <div class="cover-center">
-    <div class="cover-eyebrow">A reading companion from the <span class="pink">AI Salon TLV</span> community</div>
-    <h1 class="cover-title">AI <span class="amp">&amp;</span><br>Human<br>Flourishing</h1>
-    <p class="cover-sub">Seven quotes and four models from <em>AI and the Art of Being Human</em> — curated to encourage and inspire AI builders to build conscious AI systems.</p>
+    <div class="cover-text">
+      <div class="cover-eyebrow">A reading companion from the <span class="pink">AI Salon TLV</span> community</div>
+      <h1 class="cover-title">AI <span class="amp">&amp;</span><br>Human<br>Flourishing</h1>
+      <p class="cover-sub">Seven quotes and four models from <em>AI and the Art of Being Human</em> — curated to encourage and inspire AI builders to build conscious AI systems.</p>
+    </div>
+    <img class="cover-hero-img" src="/images/meerkat-book.png" alt="Meerkat holding AI and the Art of Being Human book">
   </div>
 
   <div class="cover-bottom">
