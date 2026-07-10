@@ -2488,3 +2488,65 @@ Stage Summary:
 - Local copies also at /home/z/my-project/download/ai-human-flourishing-booklet-print.{html,pdf}
 - Build script (/home/z/my-project/scripts/build-print-booklet.py) updated to use the new `ai-` prefixed output paths, so re-running it will regenerate files at the correct names.
 - Lesson for future: when renaming static assets in `public/` for Vercel deployment, also `git update-index --chmod=+x` to match the mode of similar existing files — a rename-only commit with mismatched file mode can cause Vercel to silently skip the file in the static asset bundle while still serving a stale 404 from the previous deployment's CDN cache.
+
+---
+Task ID: 9
+Agent: main
+Task: Three user requests:
+  1. Make the orchestrator tab table filterable + sortable by any column header (Stage/Step, Recipient, Event, Var, Status, Scheduled, Sent, Logs, Actions).
+  2. Diagnose why a flow called "Launch" doesn't auto-schedule emails to its audience.
+  3. Five print-booklet fixes on ai-human-flourishing-booklet-print:
+     A. Cover meerkat hero image cut — show in entirety
+     B. Page 2 agenda font too big — footer overlaps 19:45 + 20:00
+     C. Page 5 Curiosity Loop needs one-phrase explanation per step (Notice/Reflect/Question/Experiment)
+     D. Page 6 Prompt-Scaffolding Canvas bottom boxes cut + footer overlap; shrink both graphs; update Identity Matrix subtitle to "Defining the line between AI automation and your unique self."
+     E. Page 7 "03" too close to "AI SALON TLV · READING COMPANION" running header
+
+Work Log:
+- Research (Explore subagent): confirmed the entire email flow architecture:
+  * EmailFlow.status ∈ {DRAFT, ACTIVE, PAUSED, ARCHIVED}
+  * Queue rows are ONLY created by (a) real RSVP/attendance events triggering triggerFlowsForRsvp, or (b) manual admin call to POST /api/email-flows/[id]/trigger with {stepId, eventId} (the "send to audience" mode).
+  * There is NO auto-send on flow creation. Flow defaults to DRAFT.
+  * The "MANUAL" triggerKind is a label only — never auto-fires.
+  * manuallyTriggerStepForAudience(stepId, eventId, adminUserId) fans a step out to its entire audience, creating synthetic RSVPs anchored to the given eventId.
+- Task 1 — Orchestrator panel (src/app/admin/email/orchestrator-panel.tsx):
+  * Added imports: ArrowUp, ArrowDown, ArrowUpDown, Search from lucide-react.
+  * Added SortKey type (8 keys matching the 8 sortable columns), SortDir type, STATUS_RANK map, getItemValue() + compareItems() helpers.
+  * Added state: sortKey, sortDir, colFilters (per-column text filter dict).
+  * Added visibleItems useMemo — applies per-column text filters then sort to the loaded `items`.
+  * Added toggleSort() — click cycles asc → desc → clear (3-state).
+  * Added SortIcon + ColFilterInput inline components.
+  * Replaced the 9 <th> headers with sortable buttons + filter inputs (Actions column has no sort/filter — it's the action buttons).
+  * Updated the pagination footer to show visibleItems.length vs items.length vs totalMatching, plus a "Clear sort/filter" link when any sort/filter is active.
+  * TypeScript check passed (no new errors).
+- Task 2 — Diagnosis + fix:
+  * Diagnosed: Launch flow doesn't auto-send because (a) flow defaults to DRAFT, (b) even when ACTIVE, queue rows are only created by per-RSVP triggers or the manual /trigger endpoint.
+  * Fix: added a "Send to audience" button to each StepCard in src/components/ais/flow-builder/flow-builder-canvas.tsx.
+    - Button is disabled (grey) unless: step is saved + has audienceId + has templateId + flow status is ACTIVE.
+    - On click, shows an event-picker popover (the trigger API requires an eventId to anchor RSVPs).
+    - Calls POST /api/email-flows/{flowId}/trigger with {stepId, eventId}.
+    - Toast shows "Scheduled N email(s) · M already queued" on success.
+    - If flow is not ACTIVE, toast says "Flow is DRAFT — set it to Active to enable sending."
+  * Passed flow.id + flow.status down to StepCard as new props (flowId, flowStatus).
+  * TypeScript check passed (one type fix: flow.id is optional, used flow.id ?? "").
+- Task 3 — Booklet fixes (scripts/build-print-booklet.py):
+  * Fix A — Cover: .cover-hero-img now has max-height: 95mm + object-fit: contain + margin: 0 auto. VLM confirmed meerkat is fully visible (head + body + feet).
+  * Fix B — Page 2 agenda: shrank .agenda 10pt→9pt, .agenda-time 9.5pt→8.5pt, .agenda-title 10pt→9pt, .agenda-title .sub 9pt→8pt, .agenda-type 7.5pt→7pt; row padding 1.5mm→1mm; line-height 1.5→1.35. VLM confirmed 19:45 + 20:00 rows are visible and footer doesn't overlap.
+  * Fix C — Page 5 chapter card: added .ch-phrase CSS rule (7.5pt Inter, gray-90). In build_print_html(), string-replaced the 4 ch-step divs to add <span class="ch-phrase">…</span> under each: Notice→"Observe your reaction.", Reflect→"What surprised you?", Question→"Challenge your assumptions.", Experiment→"Take one small action." VLM confirmed all 4 phrases visible.
+  * Fix D — Page 6: shrank .matrix height 58mm→50mm, .canvas height 58mm→50mm, .canvas-cell .big-F 60pt→50pt. String-replaced the Identity Matrix subtitle in build_print_html() from "A map to help distinguish what AI can automate from what makes you irreducibly you." → "Defining the line between AI automation and your unique self." VLM confirmed all 4 Prompt-Scaffolding cells (Frame/Fuel/Flip/Filter) fully visible, no footer overlap, subtitle updated.
+  * Fix E — Page 7: added CSS rule .page:nth-of-type(7) .tool-header { margin-top: 6mm; } to push the big italic "03" down away from the running-head. Also shrank .loop-svg width 120mm→110mm for breathing room. VLM confirmed clear vertical space between header and "03".
+  * Re-ran python3 scripts/build-print-booklet.py → 9 pages (within 10-page budget), 2.67 MB.
+  * VLM QA passed on all 5 fixes.
+- Commit + push: 782441c on origin/main.
+- Vercel deploy verified: https://aisalon.massapro.com/ai-human-flourishing-booklet-print.html returns 200 with last-modified 21:56:59, contains "Defining the line between AI automation" (1 match) + "ch-phrase" (5 matches: CSS rule + 4 step phrases).
+
+Stage Summary:
+- Orchestrator table: every column is sortable (3-state click: asc → desc → clear) + has a per-column text filter. "Clear sort/filter" link in footer resets all.
+- Launch flow diagnosis: there is NO auto-send in the current architecture. User must (1) set flow status to ACTIVE, (2) click the new "Send to audience" button on each step, (3) pick an event to anchor the RSVPs. The button is grey/disabled until the prerequisites are met, with a toast explaining what's missing.
+- Booklet: all 5 visual fixes applied + VLM-verified. PDF stays at 9 pages (within 10-page max). Live at https://aisalon.massapro.com/ai-human-flourishing-booklet-print.html and .pdf.
+- Files modified:
+  * src/app/admin/email/orchestrator-panel.tsx (sort + filter on every column)
+  * src/components/ais/flow-builder/flow-builder-canvas.tsx (Send to audience button + event picker)
+  * scripts/build-print-booklet.py (5 CSS + 2 HTML body fixes)
+  * public/ai-human-flourishing-booklet-print.html (regenerated)
+  * public/ai-human-flourishing-booklet-print.pdf (regenerated)
