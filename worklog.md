@@ -2219,3 +2219,69 @@ Stage Summary:
   template can now be renamed to "Tools Launch Email" — open it in the
   Templates tab, change the Template name field, click Save, refresh to
   confirm.
+
+---
+Task ID: 9
+Agent: Super Z (main)
+Task: Two email-system bugs reported by user:
+  (1) Members + Registers audience preview lists broken with Prisma error
+      "Argument `not` is missing" — only All Emails (Reg+Members) works (240 emails)
+  (2) Orchestrator at /admin/email?tab=orchestrator stops showing emails after
+      ~100 rows, no pagination to see the rest
+
+Work Log:
+
+(1) Audience preview Prisma bug
+- Located root cause in src/lib/email-orchestrator/audience-filter.ts line 289:
+  the `is_set` operator generated `{ [field]: { not: null } }`. Prisma
+  serializes JSON null as "missing", so it raised `Argument 'not' is missing`.
+- Queried production DB to confirm: Members + Registers audiences both have
+  spec `{ groups: [{ rules: [{ field: "email", op: "is_set" }] }] }` — exactly
+  the rule that triggered the bug.
+- Initial fix: use `{ NOT: { [field]: null } }` (the documented Prisma pattern
+  for "IS NOT NULL" on nullable fields).
+- Verification run against production hit a SECOND error: "Argument `email`
+  is missing." This is because `email` is non-nullable on both User and
+  EventRsvp (per schema.prisma: `email String @unique`). Prisma rejects null
+  checks on non-nullable columns.
+- Final fix: added a NON_NULLABLE_USER_FIELDS + NON_NULLABLE_RSVP_FIELDS allowlist
+  (synced with schema.prisma). For non-nullable fields, `is_set` short-circuits
+  to `{}` (match all, since the field is always set) and `is_not_set` returns
+  `{ id: "__impossible__" }` (never-match sentinel).
+- Also fixed 5 other `{ field: { not: null } }` patterns in the same file
+  (engagement resolvers: resolveOpenedEmails, resolveClickedEmails) and 1 in
+  src/app/api/email-audiences/email-options/route.ts (templateId is_set).
+- Wrote scripts/verify-audience-fix.ts to validate against production.
+  Results after fix:
+    * All Emails (Reg+Members): 240 emails ✓
+    * Members: 240 emails ✓ (was: Prisma error)
+    * Registers: 220 emails ✓ (was: Prisma error)
+
+(2) Orchestrator pagination
+- Root cause: orchestrator-panel.tsx line 119 hardcoded `limit=100`, no
+  pagination UI. API route capped at 200.
+- API changes (src/app/api/email-orchestrator/queue/route.ts):
+  * Bumped max limit from 200 → 1000 (admin-only endpoint, larger pages OK)
+  * Added `db.emailQueue.count({ where })` to compute filter-aware total
+  * Response now includes `totalMatching` (int) and `hasMore` (boolean)
+- UI changes (src/app/admin/email/orchestrator-panel.tsx):
+  * Added `PAGE_SIZE = 200` constant (was 100)
+  * Added `totalMatching`, `hasMore`, `loadingMore` state
+  * Added `loadMore()` callback that fetches next page and APPENDS to items
+  * Added pagination footer below the table: "Showing X of Y emails" counter
+    + "Load N more" button (shows exact count to load, capped at PAGE_SIZE)
+  * Counter dynamically shows "· N more available" hint when hasMore=true
+  * Button shows spinner + "Loading…" during fetch
+
+- TypeScript: zero new errors in modified files (verified via npx tsc --noEmit)
+- Next.js production build: ✓ Compiled successfully in 45s
+- Committed (e88573a) and pushed. Vercel auto-deploying.
+
+Stage Summary:
+- Audience preview: FIXED. Members (240 emails), Registers (220 emails), and
+  All Emails (240 emails) all resolve successfully against production data.
+  Test script at scripts/verify-audience-fix.ts can be re-run anytime.
+- Orchestrator pagination: FIXED. After deploy, /admin/email?tab=orchestrator
+  will show up to 200 emails initially + a "Load 200 more" button at the
+  bottom of the table when more rows match the current filters. The
+  "Showing X of Y emails" counter makes it clear how many total rows match.
