@@ -1985,3 +1985,59 @@ Stage Summary:
 - Behavior on desktop (lg+): unchanged. The lg:hidden class ensures no duplicate CTAs.
 - Header buttons on /e/[slug]: slightly larger + shadow on mobile for better tap target. Sticky at top so always visible.
 - Deploy: Vercel auto-deploy from commit 097c231 on main. Live at https://aisalon.massapro.com within ~1-2 minutes.
+
+---
+Task ID: speaker-event-prep-edit-access
+Agent: main
+Task: Per user spec 2026-07-10 — "Make sure all speakers marked as speakers they have the access to /events/[slug]#event-prep and are able to comment or edit their questions or the generic questions".
+
+Work Log:
+- Read /home/z/my-project/src/app/events/[slug]/tabs/event-prep-tab.tsx (879 lines). Found that `isSpeaker = true` was used in THREE places to suppress edit/suggest UI:
+  - SpeakerBox: `!isSpeaker && (...)` hid the "Add"/"Suggest" button (line 488).
+  - QuestionCard: `isSpeaker ? null : isSuperAdmin ? ... : ...` returned null (no buttons) for speakers (line 584).
+  - Generic questions card header: `isSpeaker ? null : isSuperAdmin ? ... : ...` returned null (no Add/Suggest button) for speakers (line 348).
+  - Empty-state copy in SpeakerBox said "No personalized questions yet." (no call to action for speakers).
+  - Role label was "Speaker — read-only view".
+- Read /home/z/my-project/src/app/api/events/[slug]/event-prep/route.ts. Found:
+  - GET: speakers authorized via authorize() which calls isEventSpeaker(). OK.
+  - POST (create suggestion): had an `isSpeakerOnly()` guard that returned 403 "Speakers have read-only access to Event Prep" (lines 254-260). This blocked speakers from suggesting.
+  - PUT (direct edit): Super Admin only. Appropriate — kept as-is.
+  - PATCH /suggestions/[id] (accept/reject): Super Admin only. Appropriate — kept as-is.
+- Confirmed the Event Prep tab access control (page.tsx lines 228-232): `canViewEventPrep = canManageEvent || isSpeakerOfThisEvent`. Speakers could already VIEW the tab; they just couldn't DO anything.
+
+Changes implemented:
+
+1. /home/z/my-project/src/app/api/events/[slug]/event-prep/route.ts:
+   - Removed the `speakerOnly` guard in POST. Speakers can now create suggestions on any question (their own + generic).
+   - Removed the now-unused `isSpeakerOnly()` helper function (lines 51-66 in old version).
+   - Updated the `authorize()` JSDoc comment block to reflect that speakers can now both READ and SUGGEST.
+   - Updated the route-level JSDoc to mention speakers in the POST description.
+
+2. /home/z/my-project/src/app/events/[slug]/tabs/event-prep-tab.tsx:
+   - QuestionCard (line ~587): replaced `isSpeaker ? null : isSuperAdmin ? ... : ...` with `isSuperAdmin ? ... : ...`. Speakers now see the same "Suggest" button as Admins/Co-hosts.
+   - SpeakerBox (line ~490): removed `!isSpeaker && (...)` wrapper. Speakers now see the "Suggest" button to propose new questions for themselves.
+   - Generic questions card header (line ~351): replaced `isSpeaker ? null : isSuperAdmin ? ... : ...` with `isSuperAdmin ? ... : ...`. Speakers now see "Suggest new" to propose generic questions.
+   - Updated role label from "Speaker — read-only view" → "Speaker — can suggest edits".
+   - Updated SpeakerBox empty-state copy for speakers: was "No personalized questions yet." → now "No personalized questions yet. Click Suggest to propose one." (matches Admins/Co-hosts).
+
+Verification:
+- TypeScript: npx tsc --noEmit | grep -E "(event-prep|events/\[slug\]/page|events/\[slug\]/tabs)" → empty (no errors).
+- Next.js build: "✓ Compiled successfully in 33.6s".
+- Committed as 543b4e7: "feat(event-prep): let speakers suggest edits on their + generic questions".
+- Pushed to origin/main (097c231..543b4e7). Vercel auto-deploy triggered.
+
+Stage Summary:
+- Files changed:
+  - src/app/api/events/[slug]/event-prep/route.ts (+18 / -34): removed isSpeakerOnly guard + helper, updated docs.
+  - src/app/events/[slug]/tabs/event-prep-tab.tsx (+24 / -8): un-hid Suggest buttons for speakers, updated labels.
+- Behavior after fix:
+  - Speaker visits /events/ai-salon-human#event-prep → sees "Speaker — can suggest edits" badge.
+  - On each of their own speaker-scoped questions: "Suggest" button → opens SuggestDialog → submits → POST creates PENDING suggestion.
+  - On each generic question: same "Suggest" button.
+  - "Suggest" button on each SpeakerBox header → propose a new question for themselves.
+  - "Suggest new" button on the generic questions card → propose a new generic question.
+  - Super Admin still sees Pencil (instant edit) + X (delete) on each question.
+  - Super Admin still sees "Review" on each pending suggestion → Accept applies it, Reject closes it.
+  - Direct PUT (instant edit) remains Super Admin only — unchanged.
+  - PATCH /suggestions/[id] (accept/reject) remains Super Admin only — unchanged.
+- Deploy: Vercel auto-deploy from commit 543b4e7 on main. Live at https://aisalon.massapro.com within ~1-2 minutes.
