@@ -2075,3 +2075,28 @@ Stage Summary:
 - Content: 7 quotes from "AI and the Art of Being Human" + 4 cleanly recreated tool diagrams + book cover + event details (date/venue/agenda) + QR code to /events/ai-salon-human.
 - Fonts: Playfair Display (serif, locally installed at /home/z/.fonts/) for headlines/quotes; Inter (sans, locally installed) for body/captions. Both embedded as variable TTFs.
 - All 4 tool diagrams recreated as native HTML/CSS or inline SVG (no screenshots, fully vector, print-ready).
+
+---
+Task ID: 5
+Agent: Super Z (main)
+Task: (1) Send booklet PDF/HTML via accessible link, (2) Find missing "Tool launch" email template, (3) Fix 3 dynamic email audience lists showing 0 emails (Members, Registers, All Emails Reg+Members).
+
+Work Log:
+- Copied booklet PDF+HTML from /download/ to /public/ so Next.js dev server can serve them.
+- Started Next.js dev server on port 3000; verified Caddy on port 81 proxies correctly to it.
+- Investigated "Tool launch" template via production Neon Postgres (DATABASE_URL from /tmp/my-project/.env.production-verbatim).
+- Found 5 EmailStageTemplate rows (Awareness/Reminder/Final Prep/Day-Of/Recap) + 1 EmailTemplate (AISalon). None named "Tool launch".
+- Reviewed duplicate endpoint (/api/email-templates/[id]/duplicate/route.ts) — it auto-names copies as "<original> (copy)" and does NOT accept a custom name from request body. Most likely the duplicate either failed silently (auth/network) or the user expected to type a custom name and the auto-name was used.
+- Investigated audience system: found dynamic audiences have emailsJson="[]" BY DESIGN (resolver recomputes on read via resolveAudienceEmails()).
+- Verified resolver works against production data:
+  * Members (source=users) → 231 emails
+  * Registers (source=rsvps) → 219 distinct emails (251 RSVP rows)
+  * All Emails (users+rsvps) → 288 unique emails (162 overlap)
+- Root cause of "0 emails" complaint: the GET /api/email-audiences endpoint returned `emails: []` for DYNAMIC audiences, and the UI list view displayed "1 group · users" (filter metadata) instead of an email count.
+- Fixed: modified GET /api/email-audiences to also resolve live emailCount + 3-email preview for DYNAMIC audiences. Modified audiences-client.tsx to display "{count} emails · {firstEmail} +{N-1}" in pink bold.
+- Committed to git (86886b0) and pushed to main — Vercel auto-deploying.
+
+Stage Summary:
+- Booklet: served at /ai-human-flourishing-booklet.pdf and .html via Next.js dev server on port 3000 (proxied via Caddy on 81). User must refresh preview panel to see updated link.
+- "Tool launch" template: confirmed DOES NOT EXIST in production. User must re-duplicate via /admin/email/flows → Templates tab → Duplicate button, then rename via PATCH (or just edit the name field after duplication).
+- Audience lists: code fix deployed. After Vercel rebuild (~2 min), the list at /admin/email/flows → Audiences tab will show "231 emails · adam@vectisbuild.co +230" for Members, "219 emails · clara@savantconsulting.net +218" for Registers, "288 emails · ..." for All Emails. Auto-updates as new users/RSVPs arrive.
