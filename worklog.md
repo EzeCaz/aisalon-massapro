@@ -2550,3 +2550,80 @@ Stage Summary:
   * scripts/build-print-booklet.py (5 CSS + 2 HTML body fixes)
   * public/ai-human-flourishing-booklet-print.html (regenerated)
   * public/ai-human-flourishing-booklet-print.pdf (regenerated)
+
+---
+Task ID: launch-flow-bugs
+Agent: main
+Task: Fix 3 bugs reported on the Launch flow:
+  1. "step not found in this flow" error when clicking Send to audience
+  2. Send-to-audience popover not visible above the flow card
+  3. Step 1 editor shows 0 emails for all audiences (even though Audiences tab shows correct counts)
+
+Work Log:
+- Located the error string "step not found in this flow" in:
+    * src/lib/email-orchestrator/flow-trigger.ts (manuallyTriggerStep + manuallyTriggerStepForAudience)
+    * src/app/api/email-flows/[id]/trigger/route.ts (mode 1 + mode 2 — verifies stepId belongs to flowId)
+- Read PATCH /api/email-flows/[id]/route.ts and found the root cause:
+    * The PATCH handler does `db.emailFlowStep.deleteMany({ where: { flowId: id } })`
+      followed by `steps: { create: ... }` inside a transaction. So EVERY save
+      deletes all existing steps and creates new ones with NEW database ids.
+- Read flow-builder-client.tsx handleSave and confirmed:
+    * After successful PATCH, only `loadFlows()` is called (refreshes the list,
+      not the open flow). The local `flow` state retains the OLD step ids.
+    * Subsequent Send-to-audience POST sends the stale stepId → API returns 404.
+- Fix #1 (step not found): In handleSave, parse the PATCH response (which returns
+  `{ ok, flow }` with the new steps + ids) and call setFlow with the updated flow.
+  This keeps local state's step.id in sync with the database.
+
+- Located the Send-to-audience popover in flow-builder-canvas.tsx StepCard:
+    * Renders `{showEventPicker && canSend && (<div className="absolute bottom-full left-0 z-20 mb-1 w-[260px] ...">)}`
+    * Parent chain: StepCard > flex items-center gap-2 > flex items-stretch gap-2 >
+      `flex-1 overflow-x-auto bg-neutral-50 p-6` > `flex h-full flex-col` >
+      `flex-1 overflow-hidden rounded-lg border bg-white` (outer)
+    * CSS spec: when one axis is `auto`, the other is computed as `auto` if it was
+      `visible`. So `overflow-x-auto` forces `overflow-y: auto`, clipping the
+      popover that extends above the card (`bottom-full`).
+- Fix #2 (hidden popover): Replaced the inline `absolute bottom-full` popover with
+  a portal-based one. Used `createPortal(...)` to render at document.body with
+  `position: fixed`, positioned via `getBoundingClientRect()` of the Send button
+  (clamped to viewport). Added Escape / outside-click / scroll listeners.
+
+- Located the audience emails display in flow-builder-canvas.tsx:
+    * StepCard: `{audience.emails.length} email(s)` (line 340)
+    * StepEditorSheet dropdown: `— {a.emails.length} email(s)` (line 511)
+    * StepEditorSheet info box: `{a.emails.length} email(s) in "{a.name}"` (line 597)
+- Read /api/email-audiences/route.ts GET and confirmed:
+    * STATIC audiences: returns `emails` (parsed from emailsJson) + `emailCount`
+    * DYNAMIC audiences: returns `emails: []` + `emailCount` + `emailPreview` (first 3)
+      (because DYNAMIC audiences store filtersJson, not emailsJson)
+- Read flows/page.tsx and confirmed:
+    * Server-side load only parsed `emailsJson` for BOTH kinds → DYNAMIC got `emails: []`
+    * The Audiences tab (audiences-client.tsx) correctly uses `emailCount` for DYNAMIC
+      and `emails.length` for STATIC — that's why only the flow builder showed 0.
+- Fix #3 (0 emails): Added `emailCount?: number` + `emailPreview?: string[]` to
+  FlowAudience type. Added `effectiveEmailCount(a)` helper that returns
+  `a.emailCount` for DYNAMIC and `a.emails.length` for STATIC. Updated StepCard,
+  StepEditorSheet dropdown, and info panel to use it. Updated server-side page.tsx
+  to resolve DYNAMIC audience email counts on initial load (calls
+  resolveAudienceEmails + includes filtersJson in the DB select). Updated
+  flows-page-client.tsx onAudiencesChange callback to pass emailCount through.
+
+Stage Summary:
+- 4 files modified:
+    * src/components/ais/flow-builder/flow-builder-canvas.tsx (type + helper + popover portal + display)
+    * src/app/admin/email/flows/flow-builder-client.tsx (handleSave refreshes step ids)
+    * src/app/admin/email/flows/page.tsx (server-side DYNAMIC count resolution)
+    * src/app/admin/email/flows/flows-page-client.tsx (onAudiencesChange preserves emailCount)
+- TypeScript: clean (no errors in changed files)
+- Next.js build: succeeded (only runtime DB warnings during SSG, no compile errors)
+- Commit: 26d70b1
+- Pushed to origin/main → Vercel auto-deploy triggered
+
+Root cause summary for user:
+- "step not found" = PATCH deletes + recreates steps on every save, giving them new
+  ids. The client didn't refresh its local step ids after save, so Send-to-audience
+  POSTed a stale id. Fix: handleSave now updates local state from the PATCH response.
+- Hidden popover = CSS overflow-x-auto clips overflow-y too, so the absolute-positioned
+  popover above the card was clipped. Fix: portal to document.body with fixed positioning.
+- 0 emails = DYNAMIC audiences return emails:[] + emailCount from the API. The flow
+  builder used emails.length (always 0 for DYNAMIC). Fix: use emailCount for DYNAMIC.
