@@ -2757,3 +2757,34 @@ Stage Summary:
   The event's registrant count will drop back from 248 to ~58.
 - Future "Send to Audience" actions will NOT create new synthetic RSVPs
   (the underlying code fix was already deployed in commit d51492a).
+
+---
+Task ID: 11-cleanup-button-visibility
+Agent: Super Z (main)
+Task: User couldn't find the "Cleanup synthetic RSVPs" button — it was
+  only on the Orchestrator tab, but they were looking elsewhere.
+
+Work Log:
+- Verified commit 206a982 IS deployed (API endpoint returns 401, not 404).
+- Confirmed via curl that /admin/email redirects to /login when not
+  authenticated — can't directly verify the button HTML from outside.
+- Root cause: the button was only inside <OrchestratorPanel>, which
+  only renders at /admin/email?tab=orchestrator (default tab is
+  "campaigns"). The user is most active on /admin/email/flows (the
+  Flow Builder page) where the button didn't exist.
+- Created shared component: src/app/admin/email/flows/cleanup-synthetic-rsvps-button.tsx
+  (self-contained button + dialog, same logic as the orchestrator panel
+  version but reusable).
+- Added a prominent amber banner at the top of FlowsPageClient that
+  explains WHY cleanup is needed ("58 → 249 inflation") with the
+  cleanup button right next to it. Visible on all 3 sub-tabs
+  (Flows, Audiences, Templates).
+- TypeScript: fixed variant/size prop types to match shadcn Button
+  (outline/ghost/link/default/destructive/secondary + sm/lg/icon/default).
+- Committed (cc3e96a) and pushed to origin/main.
+
+Stage Summary:
+- After Vercel deploys (~2 min), the cleanup button will be visible at
+  the TOP of /admin/email/flows as a prominent amber banner — impossible
+  to miss. Click it → dry-run report → "Apply cleanup" button in dialog.
+- The orchestrator tab still has its own button too (no regression).
