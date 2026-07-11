@@ -129,6 +129,12 @@ export async function GET(req: NextRequest) {
       ...item.event,
       startsAt: item.event.startsAt.toISOString(),
     },
+    rsvp: item.rsvp
+      ? {
+          ...item.rsvp,
+          doorCheckedAt: item.rsvp.doorCheckedAt?.toISOString() ?? null,
+        }
+      : null,
   }));
 
   return NextResponse.json({

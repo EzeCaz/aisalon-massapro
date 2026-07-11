@@ -2627,3 +2627,61 @@ Root cause summary for user:
   popover above the card was clipped. Fix: portal to document.body with fixed positioning.
 - 0 emails = DYNAMIC audiences return emails:[] + emailCount from the API. The flow
   builder used emails.length (always 0 for DYNAMIC). Fix: use emailCount for DYNAMIC.
+
+---
+Task ID: 11
+Agent: Super Z (main)
+Task: User reports sudden jump from 58 → 248 registered members on the
+"AI and Human Flourishing" event. Suspects audience creation corrupted
+the RSVP list. User chose Option C: fix the code so email sends never
+create RSVPs (make EmailQueue.rsvpId nullable).
+
+Work Log:
+- Searched codebase for every EventRsvp writer. Found 7 sites; identified
+  src/lib/email-orchestrator/flow-trigger.ts → manuallyTriggerStepForAudience
+  as the culprit. It auto-created "synthetic" EventRsvp rows (status=GOING,
+  source=IMPORT, name=null) for every audience email without an existing
+  RSVP, just to satisfy the EmailQueue.rsvpId NOT NULL FK.
+- Numbers match: ~58 real RSVPs + ~190 audience emails without RSVPs =
+  ~248 (the audience "All Emails (Reg+Members)" has ~240 emails).
+- NOT corruption — every row was a deliberate INSERT via the audience-send
+  path. No duplicates (@@unique([eventId, email]) + idempotency on
+  (flowStepId, rsvpId) prevent that).
+- FIX (Option C — make rsvpId nullable):
+  * prisma/schema.prisma: rsvpId String → String?, rsvp EventRsvp → EventRsvp?
+  * prisma/migrations/20260712000000_emailqueue_rsvp_optional/migration.sql:
+    ALTER COLUMN rsvpId DROP NOT NULL + recreate FK with CASCADE.
+  * flow-trigger.ts: manuallyTriggerStepForAudience no longer creates
+    synthetic RSVPs. Sets rsvpId only when an RSVP already exists for
+    (eventId, email); otherwise leaves rsvpId null and uses the
+    denormalized email/eventId/userId columns. Tries to link a userId
+    from User table by email so {{firstName}} token still works.
+    Idempotency: when rsvp is null, dedupes on (flowStepId, email, rsvpId:null).
+  * flow-worker.ts: processQueueRow now handles null rsvp. Fetches event
+    by row.eventId when rsvp is null. Resolves recipient name from
+    rsvp.name → user.name → email. Uses row.email for the to: field.
+  * worker.ts (legacy stage-based): added defensive guards — if a null-
+    rsvp row slips into the stage-based path, skip it cleanly instead of
+    crashing. Updated sendStageEmail signature to accept null rsvp.
+  * queue/route.ts: serialize rsvp.doorCheckedAt as ISO string when non-null,
+    null otherwise. The Prisma include already returns rsvp: {...} | null.
+  * orchestrator-panel.tsx: QueueItem.rsvp type → {...} | null. All
+    item.rsvp.X and selected.rsvp.X accesses → optional chaining (?.).
+- TypeScript: ZERO new errors introduced. Pre-existing errors in
+  worker.ts (rsvpId_stage compound unique lookup) and meta-capi.ts
+  remain unchanged. Build succeeds.
+- Wrote scripts/cleanup-synthetic-rsvps.ts to clean up the existing
+  ~190 synthetic RSVPs already in the DB. Dry-run by default, --apply
+  to actually delete. Preserves email history by nullifying
+  EmailQueue.rsvpId instead of cascade-deleting queue rows.
+
+Stage Summary:
+- Code fix complete and committed. User needs to:
+  1. Run `npx prisma db push` against prod DATABASE_URL to apply the
+     schema change (make rsvpId nullable). This is backward-compatible
+     — old code keeps working because it always sets rsvpId.
+  2. Run `npx tsx scripts/cleanup-synthetic-rsvps.ts` (dry-run first)
+     then with --apply to delete the ~190 synthetic RSVPs already
+     created. This restores the event's registrant count to ~58.
+  3. After deploy, future "Send to Audience" actions will NOT create
+     synthetic RSVPs. The event registrant count stays accurate.

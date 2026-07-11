@@ -264,37 +264,40 @@ export async function manuallyTriggerStepForAudience(
   let skipped = 0;
 
   for (const email of audienceEmails) {
-    // Find existing RSVP for this email + event.
-    let rsvp = await db.eventRsvp.findUnique({
+    // Look up an existing RSVP for this email + event. If one exists, link
+    // the queue row to it. If not, we leave rsvpId null — the queue row
+    // uses the denormalized email/eventId/userId columns directly.
+    // We deliberately DO NOT create a synthetic RSVP here. Creating RSVPs
+    // just to satisfy the FK had the side-effect of polluting the event's
+    // registrant list with hundreds of IMPORT rows whenever an admin sent
+    // a flow email to an audience larger than the RSVP list.
+    let rsvp: { id: string; userId: string | null } | null = await db.eventRsvp.findUnique({
       where: { eventId_email: { eventId: event.id, email } },
       select: { id: true, userId: true },
     });
 
-    if (!rsvp) {
-      // Create a synthetic RSVP so the EmailQueue foreign key is satisfied.
-      // Try to link to an existing user by email.
+    // Try to link a userId from the User table by email (so {{firstName}}
+    // token replacement can use the user's name).
+    let userId: string | null = rsvp?.userId ?? null;
+    if (!userId) {
       const user = await db.user.findUnique({
         where: { email },
         select: { id: true },
       });
-      rsvp = await db.eventRsvp.create({
-        data: {
-          eventId: event.id,
-          userId: user?.id ?? null,
-          email,
-          name: null,
-          status: "GOING",
-          source: "IMPORT",
-        },
-        select: { id: true, userId: true },
-      });
+      userId = user?.id ?? null;
     }
 
     // Idempotency: skip if a queue row already exists for this step + RSVP.
-    const existing = await db.emailQueue.findFirst({
-      where: { flowStepId: step.id, rsvpId: rsvp.id },
-      select: { id: true },
-    });
+    // If rsvp is null, fall back to (flowStepId, email) for dedup.
+    const existing = rsvp
+      ? await db.emailQueue.findFirst({
+          where: { flowStepId: step.id, rsvpId: rsvp.id },
+          select: { id: true },
+        })
+      : await db.emailQueue.findFirst({
+          where: { flowStepId: step.id, email, rsvpId: null },
+          select: { id: true },
+        });
     if (existing) {
       skipped++;
       continue;
@@ -310,9 +313,9 @@ export async function manuallyTriggerStepForAudience(
 
     await db.emailQueue.create({
       data: {
-        rsvpId: rsvp.id,
+        rsvpId: rsvp?.id ?? null,
         eventId: event.id,
-        userId: rsvp.userId,
+        userId,
         email,
         stage: step.position,
         flowStepId: step.id,

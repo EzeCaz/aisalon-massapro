@@ -863,8 +863,15 @@ model ReferralAttribution {
 model EmailQueue {
   id              String   @id @default(cuid())
   // --- who / what ---
-  rsvpId          String
-  rsvp            EventRsvp @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  // rsvpId is OPTIONAL. The legacy stage-based orchestrator always sets it
+  // (queue rows are bootstrapped from real RSVPs). The flow-based system
+  // sets it only when an RSVP already exists for (eventId, email); for
+  // audience sends to emails with no RSVP, rsvpId stays null and we use
+  // the denormalized email/eventId/userId columns directly. This prevents
+  // "Send to Audience" from creating synthetic RSVP rows that pollute the
+  // event's registrant count.
+  rsvpId          String?
+  rsvp            EventRsvp? @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
   eventId         String
   event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   userId          String?

@@ -160,6 +160,18 @@ async function processDuePending(result: WorkerResult): Promise<void> {
   for (const row of due) {
     result.processed++;
     try {
+      // Defensive: stage-based orchestrator rows always have rsvpId set
+      // (bootstrapped from real RSVPs). If we ever encounter a null-rsvp
+      // row here, skip it — it belongs to the flow-based system.
+      if (!row.rsvp) {
+        await db.emailQueue.update({
+          where: { id: row.id },
+          data: { status: "SKIPPED", errorMessage: "stage-based row has no rsvp — belongs to flow system" },
+        });
+        result.skipped++;
+        continue;
+      }
+
       // ── Stop-awareness check 1: RSVP already checked in ──
       if (row.rsvp.doorCheckedAt) {
         await skipRowAndSubsequent(row, "RSVP already checked in");
@@ -258,9 +270,18 @@ async function sendStageEmail(
         address: string | null;
         slug: string;
       };
-    };
+    } | null;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // The legacy stage-based orchestrator only ever creates rows for real
+  // RSVPs (bootstrapped from GOING RSVPs), so rsvp should always be set.
+  // If a null-rsvp row slips through (e.g. a flow row that lost its
+  // flowStepId), bail out cleanly instead of crashing the worker.
+  if (!row.rsvp) {
+    return { ok: false, error: "stage-based row has no rsvp linked" };
+  }
+  const rsvp = row.rsvp;
+
   // Load the template (from DB if seeded, else from defaults).
   const tplRow = await db.emailStageTemplate.findUnique({
     where: { stage: row.stage },
@@ -271,7 +292,7 @@ async function sendStageEmail(
   // Only applies when the template defines a noCodeHtmlBody. Used by stages
   // 3 (Final Prep) and 4 (Day-Of). The variant tells the user to generate
   // their personal, non-transferrable code on the event page.
-  const hasNoCode = !row.rsvp.checkInCode && !!tpl?.noCodeHtmlBody;
+  const hasNoCode = !rsvp.checkInCode && !!tpl?.noCodeHtmlBody;
   const subject = hasNoCode
     ? (tpl?.noCodeSubject ?? tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`)
     : (tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`);
@@ -294,8 +315,8 @@ async function sendStageEmail(
 
   const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
   const ctx = buildContext({
-    event: row.rsvp.event,
-    rsvp: row.rsvp,
+    event: rsvp.event,
+    rsvp,
     speakers,
     agenda,
     baseUrl,
@@ -311,7 +332,7 @@ async function sendStageEmail(
     to: row.email,
     subject: renderedSubject,
     html: renderedHtml,
-    toName: row.rsvp.name || undefined,
+    toName: rsvp.name || undefined,
   });
 
   if (!sendResult.ok) {
@@ -376,6 +397,12 @@ async function processAltResends(result: WorkerResult): Promise<void> {
 
   for (const row of candidates) {
     try {
+      // Defensive: alt-resend logic only applies to stage-based rows that
+      // have a real RSVP linked. Audience-sent flow rows (rsvpId null)
+      // never enter this code path because the `flowStepId: null` filter
+      // excludes them, but guard anyway.
+      if (!row.rsvp) continue;
+
       const tpl = await db.emailStageTemplate.findUnique({
         where: { stage: row.stage },
       });

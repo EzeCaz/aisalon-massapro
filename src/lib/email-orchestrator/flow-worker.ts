@@ -145,7 +145,6 @@ async function processQueueRow(row: DueQueueRow) {
   const step = row.flowStep;
   if (!step) throw new Error(`queue row ${row.id} has no flowStep`);
   if (!step.template) throw new Error(`step ${step.id} has no template`);
-  if (!row.rsvp) throw new Error(`queue row ${row.id} has no rsvp`);
 
   // Skip if the flow is no longer ACTIVE (paused / archived).
   if (step.flow.status !== "ACTIVE") {
@@ -155,6 +154,54 @@ async function processQueueRow(row: DueQueueRow) {
     });
     return;
   }
+
+  // ── Resolve recipient fields ────────────────────────────────────────
+  // The queue row may or may not have a linked RSVP. Audience sends to
+  // emails without an RSVP leave rsvpId null; we use the denormalized
+  // email/eventId/userId columns on EmailQueue directly in that case.
+  // For event context, prefer the included rsvp.event (already loaded via
+  // the include), otherwise fall back to fetching the event by row.eventId.
+  let eventCtx: {
+    id: string;
+    title: string;
+    slug: string;
+    startsAt: Date;
+    venue: string | null;
+    address: string | null;
+  };
+
+  if (row.rsvp) {
+    eventCtx = row.rsvp.event;
+  } else {
+    const fetched = await db.event.findUnique({
+      where: { id: row.eventId },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        startsAt: true,
+        venue: true,
+        address: true,
+      },
+    });
+    if (!fetched) {
+      throw new Error(`queue row ${row.id} has no rsvp and event ${row.eventId} not found`);
+    }
+    eventCtx = fetched;
+  }
+
+  // Recipient display name: prefer rsvp.name, then user.name (if linked),
+  // otherwise fall back to the email address.
+  let recipientName: string | null = row.rsvp?.name ?? null;
+  if (!recipientName && row.userId) {
+    const u = await db.user.findUnique({
+      where: { id: row.userId },
+      select: { name: true },
+    });
+    recipientName = u?.name ?? null;
+  }
+  const recipientEmail = row.email; // always set on EmailQueue
+  const checkInCode = row.rsvp?.checkInCode ?? null;
 
   // Pick the subject based on the assigned variant.
   const variant = row.subjectVariant ?? "A";
@@ -166,11 +213,11 @@ async function processQueueRow(row: DueQueueRow) {
   // Build context.
   const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
   const ctx = buildContext({
-    event: row.rsvp.event,
+    event: eventCtx,
     rsvp: {
-      name: row.rsvp.name ?? row.rsvp.email,
-      email: row.rsvp.email,
-      checkInCode: row.rsvp.checkInCode ?? null,
+      name: recipientName ?? recipientEmail,
+      email: recipientEmail,
+      checkInCode,
     },
     speakers: [],
     agenda: [],
@@ -183,7 +230,7 @@ async function processQueueRow(row: DueQueueRow) {
 
   // Send via the configured provider (mock by default, gmail if env set).
   const sendResult: SendResult = await sendEmail({
-    to: row.rsvp.email,
+    to: recipientEmail,
     subject: renderedSubject,
     html: htmlBody,
   });

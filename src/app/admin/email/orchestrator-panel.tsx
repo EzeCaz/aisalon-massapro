@@ -133,7 +133,7 @@ type QueueItem = {
     email: string;
     doorCheckedAt: string | null;
     checkInCode: string | null;
-  };
+  } | null;
   _count: { trackingLogs: number };
 };
 
@@ -756,7 +756,7 @@ export function OrchestratorPanel() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-xs font-medium text-black">
-                        {item.rsvp.name || "(no name)"}
+                        {item.rsvp?.name || "(no name)"}
                       </div>
                       <div className="text-[0.7rem] text-black/50">
                         {item.email}
@@ -783,7 +783,7 @@ export function OrchestratorPanel() {
                     </td>
                     <td className="px-3 py-2">
                       <StatusBadge status={item.status} />
-                      {item.rsvp.doorCheckedAt && (
+                      {item.rsvp?.doorCheckedAt && (
                         <span
                           className="ml-1 text-[0.65rem] text-zinc-500"
                           title="RSVP was door-checked-in"
@@ -911,10 +911,10 @@ export function OrchestratorPanel() {
                   {selected.event.title}
                 </DetailRow>
                 <DetailRow label="RSVP name">
-                  {selected.rsvp.name || "(no name)"}
+                  {selected.rsvp?.name || "(no name)"}
                 </DetailRow>
                 <DetailRow label="Door checked-in">
-                  {selected.rsvp.doorCheckedAt
+                  {selected.rsvp?.doorCheckedAt
                     ? formatDate(selected.rsvp.doorCheckedAt)
                     : "No"}
                 </DetailRow>
@@ -932,7 +932,7 @@ export function OrchestratorPanel() {
                 </DetailRow>
                 <DetailRow label="Check-in code">
                   <span className="font-mono">
-                    {selected.rsvp.checkInCode || "(none)"}
+                    {selected.rsvp?.checkInCode || "(none)"}
                   </span>
                 </DetailRow>
                 <DetailRow label="Tracking logs">
