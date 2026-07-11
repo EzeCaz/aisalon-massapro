@@ -18,6 +18,7 @@ import * as React from "react";
 import { FlowBuilderClient } from "./flow-builder-client";
 import { AudiencesClient } from "./audiences-client";
 import { TemplatesClient } from "./templates-client";
+import { CleanupSyntheticRsvpsButton } from "./cleanup-synthetic-rsvps-button";
 import type { FlowTemplate, FlowAudience } from "@/components/ais/flow-builder/flow-builder-canvas";
 import type { FlowSubtab } from "@/components/ais/email-admin-nav";
 
@@ -57,6 +58,18 @@ export function FlowsPageClient({
 
   return (
     <div>
+      {/* Cleanup synthetic RSVPs banner — visible on all sub-tabs.
+          The old "Send to Audience" code created fake RSVPs that inflated
+          event registrant counts. This button finds + deletes them. */}
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div className="text-sm text-amber-900">
+          <span className="font-semibold">Cleanup synthetic RSVPs.</span>{" "}
+          The old "Send to Audience" action created fake RSVPs that inflated
+          event registrant counts (e.g. 58 → 249). Click to find and delete them.
+        </div>
+        <CleanupSyntheticRsvpsButton />
+      </div>
+
       {tab === "flows" && (
         <FlowBuilderClient
           templates={templatesState}
