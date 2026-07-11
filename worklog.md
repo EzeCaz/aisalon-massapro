@@ -2788,3 +2788,51 @@ Stage Summary:
   the TOP of /admin/email/flows as a prominent amber banner — impossible
   to miss. Click it → dry-run report → "Apply cleanup" button in dialog.
 - The orchestrator tab still has its own button too (no regression).
+
+---
+Task ID: 12-backup-db
+Agent: Super Z (main)
+Task: Create a database backup, also saved to drive (persistent storage).
+
+Work Log:
+- Audited existing patterns:
+  * Vercel Blob used via `put()` from @vercel/blob (already configured
+    in the project — BLOB_READ_WRITE_TOKEN is set on Vercel).
+  * Admin auth pattern: getServerSession + role check (SUPER_ADMIN/ADMIN).
+  * Reusable button pattern: cleanup-synthetic-rsvps-button.tsx —
+    self-contained button + toast, easy to drop in.
+- Listed all 34 Prisma models from schema.prisma for the export list.
+- Created /api/admin/backup-db endpoint:
+  * Dumps all 34 tables via prisma.findMany (no select = every column)
+  * Serializes Date → ISO string, BigInt → string, Decimal → JSON
+  * Builds a versioned JSON dump: { version:1, createdAt, tables:{name:{count,rows}} }
+  * Uploads to Vercel Blob at `backups/aisalon-backup-<ISO-timestamp>.json`
+    (public URL, persistent offsite storage)
+  * Returns the JSON as a downloadable HTTP attachment
+    (Content-Disposition: attachment; filename=...)
+  * Custom response headers expose: X-Backup-Blob-Url, X-Backup-Bytes,
+    X-Backup-Rows, X-Backup-Filename (so the UI can show a useful toast)
+  * Auth: ADMIN/SUPER_ADMIN only
+  * maxDuration = 120s (in case the DB is large)
+  * Per-table error handling — if one table fails, others still dump
+- Created BackupDbButton component (blue, Database icon):
+  * Triggers the endpoint
+  * Reads metadata from response headers
+  * Triggers browser download via Blob + <a download>
+  * Toasts success with size (KB) + row count + Blob confirmation
+- Updated FlowsPageClient: replaced the amber-only cleanup banner with
+  a unified "Admin actions" banner containing both buttons side-by-side
+  (blue Backup + amber Cleanup).
+- TypeScript: clean on all changed files.
+- Committed (770f4a2) and pushed to origin/main.
+
+Stage Summary:
+- After Vercel deploys (~2 min), the /admin/email/flows page will have
+  a blue "Backup database" button at the top.
+- Clicking it:
+    1. Dumps all 34 tables (~thousands of rows total) as JSON
+    2. Saves to Vercel Blob Storage at
+       backups/aisalon-backup-<timestamp>.json (persistent, offsite)
+    3. Browser downloads the same JSON file to the user's machine
+- The backup format is plain JSON (not SQL) so it can be inspected
+  manually, diff'd, or restored programmatically.
