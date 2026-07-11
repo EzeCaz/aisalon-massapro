@@ -73,7 +73,7 @@ function getItemValue(item: QueueItem, key: SortKey): string | number {
     case "stage":
       return item.stage;
     case "recipient":
-      return (item.rsvp.name || "").toLowerCase() + item.email.toLowerCase();
+      return (item.rsvp?.name || "").toLowerCase() + item.email.toLowerCase();
     case "event":
       return (item.event?.title || "").toLowerCase();
     case "variant":
@@ -166,6 +166,11 @@ export function OrchestratorPanel() {
   const [clearing, setClearing] = useStateWithLabel(false);
   const [paused, setPaused] = React.useState<boolean | null>(null); // null = loading
   const [togglingPause, setTogglingPause] = React.useState(false);
+
+  // Cleanup synthetic RSVPs (created by the old "Send to Audience" path)
+  const [cleanupBusy, setCleanupBusy] = useStateWithLabel(false);
+  const [cleanupReport, setCleanupReport] = React.useState<any | null>(null);
+  const [cleanupOpen, setCleanupOpen] = React.useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
@@ -436,6 +441,54 @@ export function OrchestratorPanel() {
     }
   };
 
+  // ── Cleanup synthetic RSVPs ──
+  const handleCleanup = async (apply: boolean) => {
+    if (apply) {
+      if (
+        !confirm(
+          "This will DELETE all synthetic RSVPs (source=IMPORT, name=null, GOING) " +
+            "that have email-queue rows. Email history is preserved (queue rows " +
+            "get rsvpId=nullified). Real RSVPs are NOT affected. Continue?",
+        )
+      )
+        return;
+    }
+    setCleanupBusy(true);
+    try {
+      const res = await fetch("/api/admin/cleanup-synthetic-rsvps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: !apply }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "request_failed" }));
+        toast.error(`Cleanup failed: ${err.error ?? res.status}`);
+        return;
+      }
+      const data = await res.json();
+      setCleanupReport(data.report);
+      setCleanupOpen(true);
+      if (apply) {
+        const r = data.report;
+        toast.success(
+          `Deleted ${r.rsvpsDeleted ?? 0} synthetic RSVPs · ` +
+            `nullified ${r.queueRowsNullified ?? 0} queue rows`,
+        );
+        await refresh();
+      } else {
+        toast.info(
+          `Dry-run: found ${data.report.synthetic} synthetic RSVPs across ` +
+            `${data.report.byEvent.length} event(s)`,
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Cleanup error");
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
+
   // ── Simulate ──
   const handleSimulate = async (
     item: QueueItem,
@@ -594,6 +647,21 @@ export function OrchestratorPanel() {
             <Trash2 className="h-4 w-4 mr-1.5" />
           )}
           Clear flow data
+        </Button>
+        <Button
+          onClick={() => handleCleanup(false)}
+          disabled={cleanupBusy}
+          variant="outline"
+          size="sm"
+          className="text-amber-700 hover:text-amber-800 border-amber-300 hover:border-amber-400 bg-amber-50"
+          title="Find synthetic RSVPs created by the old 'Send to Audience' path (dry-run)"
+        >
+          {cleanupBusy ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-1.5" />
+          )}
+          Cleanup synthetic RSVPs
         </Button>
       </div>
 
@@ -992,6 +1060,171 @@ export function OrchestratorPanel() {
                   will appear here.
                 </div>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Cleanup report dialog ── */}
+      <Dialog open={cleanupOpen} onOpenChange={setCleanupOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {cleanupReport?.dryRun
+                ? "Cleanup dry-run report"
+                : "Cleanup applied — results"}
+            </DialogTitle>
+            <DialogDescription>
+              {cleanupReport?.dryRun
+                ? "No changes were made. Click 'Apply cleanup' below to actually delete the synthetic RSVPs."
+                : "Synthetic RSVPs have been deleted. Email history was preserved."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {cleanupReport && (
+            <div className="space-y-4">
+              {/* Migration status */}
+              <div className="rounded-lg border bg-neutral-50 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wider text-black/50 mb-1">
+                  Schema migration (EmailQueue.rsvpId nullable)
+                </div>
+                <div className="text-sm">
+                  {cleanupReport.migration.alreadyApplied
+                    ? "✓ Already applied — rsvpId is nullable"
+                    : cleanupReport.migration.applied
+                      ? "✓ Applied just now — rsvpId is now nullable"
+                      : "○ Will be applied when you click 'Apply cleanup'"}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-black/50">
+                    Synthetic RSVPs found
+                  </div>
+                  <div className="text-2xl font-extrabold">
+                    {cleanupReport.synthetic}
+                  </div>
+                  <div className="text-xs text-black/50">
+                    of {cleanupReport.candidates} candidates
+                  </div>
+                </div>
+                {!cleanupReport.dryRun && (
+                  <>
+                    <div className="rounded-lg border bg-white p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-black/50">
+                        RSVPs deleted
+                      </div>
+                      <div className="text-2xl font-extrabold text-red-600">
+                        {cleanupReport.rsvpsDeleted ?? 0}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-white p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-black/50">
+                        Queue rows nullified
+                      </div>
+                      <div className="text-2xl font-extrabold">
+                        {cleanupReport.queueRowsNullified ?? 0}
+                      </div>
+                      <div className="text-xs text-black/50">
+                        email history preserved
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Per-event breakdown */}
+              <div>
+                <div className="text-sm font-semibold mb-2">By event</div>
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-neutral-50 text-xs uppercase tracking-wider text-black/50">
+                      <tr>
+                        <th className="text-left px-3 py-2">Event</th>
+                        <th className="text-right px-3 py-2">Synthetic</th>
+                        {!cleanupReport.dryRun && (
+                          <th className="text-right px-3 py-2">Remaining</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cleanupReport.byEvent.map((e: any) => {
+                        const post = cleanupReport.postCleanup?.find(
+                          (p: any) => p.eventId === e.eventId,
+                        );
+                        return (
+                          <tr key={e.eventId} className="border-t">
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{e.eventTitle}</div>
+                              <div className="text-xs text-black/50">
+                                {new Date(e.startsAt).toLocaleDateString()}
+                              </div>
+                            </td>
+                            <td className="text-right px-3 py-2 font-mono">
+                              {e.count}
+                            </td>
+                            {!cleanupReport.dryRun && (
+                              <td className="text-right px-3 py-2 font-mono">
+                                {post?.remaining ?? "—"}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Sample emails */}
+              {cleanupReport.byEvent.length > 0 && (
+                <div>
+                  <div className="text-sm font-semibold mb-1">
+                    Sample synthetic RSVPs
+                  </div>
+                  <div className="text-xs text-black/60 space-y-0.5 font-mono">
+                    {cleanupReport.byEvent
+                      .flatMap((e: any) =>
+                        e.sample.map((s: string) => `${s}  ·  ${e.eventTitle}`),
+                      )
+                      .slice(0, 8)
+                      .map((line: string, i: number) => (
+                        <div key={i}>— {line}</div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCleanupOpen(false)}
+                >
+                  Close
+                </Button>
+                {cleanupReport.dryRun && cleanupReport.synthetic > 0 && (
+                  <Button
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                    disabled={cleanupBusy}
+                    onClick={() => {
+                      setCleanupOpen(false);
+                      handleCleanup(true);
+                    }}
+                  >
+                    {cleanupBusy ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1.5" />
+                    )}
+                    Apply cleanup (delete {cleanupReport.synthetic} RSVPs)
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>

@@ -180,12 +180,14 @@ async function processDuePending(result: WorkerResult): Promise<void> {
       }
 
       // ── Stop-awareness check 2: previous stage's stop rule ──
-      if (row.stage > 1) {
+      if (row.stage > 1 && row.rsvpId) {
         const prevStageNum = row.stage - 1;
-        const prevRow = await db.emailQueue.findUnique({
+        const prevRow = await db.emailQueue.findFirst({
           where: {
-            rsvpId_stage: { rsvpId: row.rsvpId, stage: prevStageNum },
+            rsvpId: row.rsvpId,
+            stage: prevStageNum,
           },
+          orderBy: { createdAt: "desc" },
         });
         const prevCfg = getStage(prevStageNum);
         if (
