@@ -2970,3 +2970,68 @@ Stage Summary:
   the new ones: header X=3.1, event-meta X=3.1, meerkat graphic 1.70x
   at (100, 60).
 - All three new spec items apply to both Style 1 and Style 2.
+
+---
+Task ID: 15-force-send-stage-2
+Agent: Super Z (main)
+Task: User reported "SEND ALL STAGE 2 REMINDER EMAILS, FOR SOME REASON
+  IS IN SKIPPED". Stage 2 (Reminder) emails were sitting in SKIPPED
+  status and the user wanted them sent anyway.
+
+Work Log:
+- Root cause: stages.ts defines stopIfNotOpenedHours=5 on Stage 1
+  (Awareness). The worker (worker.ts processDuePending) checks: if the
+  previous stage was SENT > N hours ago AND NOT OPENED, skip current +
+  all subsequent stages. So users who didn't open their Stage 1 email
+  within 5h got Stage 2 auto-skipped — that's the design rule to avoid
+  spamming disengaged users.
+- User wants to override that rule for Stage 2 (Reminder). The worker
+  itself can't do this — calling runWorker() again would just re-apply
+  the skip rule. Needed a bypass path.
+- Created /api/admin/email/force-send-stage endpoint:
+  * POST, ADMIN/SUPER_ADMIN only (can() check on members.view)
+  * Body: { stage: number, eventId?, onlySkipped=true, dryRun=true }
+  * Dry-run default: finds all SKIPPED rows at the requested stage
+    (flowStepId IS NULL = stage-based orchestrator only), returns
+    count + sample of 10 for review
+  * Apply mode (dryRun:false): for each SKIPPED row, calls
+    sendStageEmailDirect() — an inlined copy of the worker's
+    sendStageEmail logic that does NOT run stop-awareness checks.
+    Respects door-checkin (skips RSVPs with doorCheckedAt set).
+    Marks row SENT + stores rendered htmlBody + creates next stage's
+    PENDING row if missing.
+  * Returns { stage, dryRun, found, sent, failed, skippedCheckedIn,
+    errors[], sample[] }
+- Added UI to orchestrator-panel.tsx:
+  * New "Force-send Stage 2" blue button in the action bar (next to
+    Cleanup synthetic RSVPs)
+  * New state: forceStage (default 2), forceBusy, forceReport,
+    forceOpen
+  * handleForceSend(apply: boolean): dry-run first → shows report
+    dialog with count + sample + stage picker. Confirm → actually
+    sends. Toast + refresh on success.
+  * Dialog includes a stage picker (1-5) so admin can force-send any
+    stage, not just 2. Re-run dry-run button to refresh counts after
+    changing the stage.
+- TypeScript: had to add userId: string | null to the
+  sendStageEmailDirect row param type because EmailQueue.userId is
+  nullable. One fix, zero remaining errors in changed files.
+- Committed (8fb0d30) and pushed to origin/main. Vercel deploying.
+
+Stage Summary:
+- After Vercel deploys (~2 min), the /admin/email?tab=orchestrator
+  page will have a new blue "Force-send Stage 2" button.
+- Workflow for the user:
+    1. Go to /admin/email?tab=orchestrator
+    2. Click "Force-send Stage 2" (blue button)
+    3. Review the dry-run report — shows how many SKIPPED Stage 2 rows
+       exist + sample of 10 emails
+    4. If the stage is wrong, use the picker in the dialog to switch
+       to any of 1-5 (default is 2)
+    5. Click "Send to all N SKIPPED recipients"
+    6. Toast confirms sent/failed/skipped (checked-in) counts
+- Subsequent stages (3, 4, 5) that were SKIPPED along with Stage 2
+  are NOT auto-sent — the admin can force-send each one separately
+  if desired.
+- The original stop-awareness rule remains in place for NEW RSVPs.
+  This is a manual override for the existing SKIPPED pool only.
