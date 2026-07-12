@@ -46,7 +46,11 @@ import {
  *   4. Download a print-quality PNG.
  */
 
-const STORAGE_KEY = "meet-the-speaker-data-v1";
+// Bumped v1 → v2 on 2026-07-13: sample-data was updated with text style
+// overrides, section positions, branding asset pos, footer text, and
+// layer z-indices per user spec. Bumping the key ensures returning
+// admins see the new defaults instead of their stale localStorage copy.
+const STORAGE_KEY = "meet-the-speaker-data-v2";
 
 type Props = {
   events: EventPickListItem[];
