@@ -2899,3 +2899,74 @@ Stage Summary:
 - Next deploy will pick this up automatically (Next.js dev/prod
   recompile). No DB migration needed — this is pure client-side mockup
   state.
+
+---
+Task ID: 14-meet-the-speaker-v4-header-metagraphic
+Agent: Super Z (main)
+Task: Two-part follow-up on /admin/mockups/meet-the-speaker:
+  (A) User reported "for a split of a second the default looks like
+      trying to load, but then is erased by the old version" — the
+      new Style 1 defaults flash on first paint, then get overwritten
+      by stale localStorage from a previous session.
+  (B) New spec items (apply on BOTH Style 1 and Style 2):
+      - Header (speaker-info section) position X = 3.1
+      - Event context (event-meta) section position X = 3.1 (was 1.9)
+      - Meerkat Brand graphic size = 1.70 (imageScale multiplier),
+        position (100, 60)
+
+Work Log:
+- Root cause of the flash: the previous v3 STORAGE_KEY bump landed in
+  the same commit as the new event-mapper. Before that commit, admins
+  had been running v2 code, which wrote wiped-data (from the OLD
+  mapper that stripped customizations) into the v2 localStorage key.
+  After the v3 deploy, the v3 key was empty, so first paint showed
+  SAMPLE_DATA (new defaults) — BUT, on subsequent visits, the v3 key
+  had been populated by then-current v3 code with whatever data the
+  admin had after picking an event/speaker (which by then was
+  Style-1-complete). So the flash shouldn't have happened with v3…
+  unless the user was seeing a stale service-worker bundle or had
+  manually imported an old JSON. Either way, the fix is the same:
+  start fresh with v4 and explicitly purge older keys.
+- meet-the-speaker-editor.tsx changes:
+  * Bumped STORAGE_KEY: v3 → v4.
+  * Added LEGACY_STORAGE_KEYS = [v1, v2, v3].
+  * In the hydration useEffect, loop over LEGACY_STORAGE_KEYS and
+    localStorage.removeItem(k) BEFORE reading the current key. This
+    guarantees no stale v1/v2/v3 entry can ever leak back into v4.
+- New spec items — applied in BOTH sample-data.ts (initial render)
+  AND event-mapper.ts (so picking event/speaker preserves them):
+  * Header section: sectionLayout["speaker-info"].pos = {x: 3.1, y: 5}.
+    Y=5 matches the default 40px/800px top inset so the header stays
+    at the same vertical position; only X shifts from 5% → 3.1%.
+    (The "Meet the speaker" h2 lives inside the speaker-info SectionBox,
+    so moving the section moves the header along with the name/title/
+    company/role/topic/bio block beneath it.)
+  * Event-meta section: sectionLayout["event-meta"].pos = {x: 3.1, y: 64.5}.
+    X changed 1.9 → 3.1 (Y unchanged). Same X as the header so they
+    visually align.
+  * Meerkat brand graphic: graphic.imageScale = 1.70 (was 1),
+    graphic.pos = {x: 100, y: 60} (was unset, defaulting to bottom-
+    right anchor). imageScale 1.70 makes the container 30.6% of canvas
+    width (18% × 1.70). pos {x:100, y:60} places the container's
+    top-left corner at the right edge of the canvas, 60% down — the
+    graphic extends off the right edge (overflow-hidden on the canvas
+    clips the bleed naturally, per the established pattern).
+- Verified both Style 1 and Style 2: the graphic and section positions
+  are independent of the heroStyle choice (1 = gradient triangles,
+  2 = network graph image), so they apply to both. The heroOverlay /
+  heroStyle2 fields weren't touched.
+- TypeScript check: `npx tsc --noEmit` shows zero errors in any
+  meet-the-speaker file. All remaining tsc errors are pre-existing
+  in unrelated files (chart.tsx, auth-guards.ts, meta-capi.ts,
+  referral/*).
+- Committed (c51ab46) and pushed to origin/main. Vercel auto-deploying.
+
+Stage Summary:
+- After Vercel deploys (~2 min) and the user hard-refreshes
+  /admin/mockups/meet-the-speaker (Ctrl/Cmd+Shift+R to bypass any
+  cached JS), the v4 key will start empty and only the new SAMPLE_DATA
+  (with all spec items 1–11) will be written to it. No more flash.
+- Picking any event or speaker will preserve every spec item including
+  the new ones: header X=3.1, event-meta X=3.1, meerkat graphic 1.70x
+  at (100, 60).
+- All three new spec items apply to both Style 1 and Style 2.
