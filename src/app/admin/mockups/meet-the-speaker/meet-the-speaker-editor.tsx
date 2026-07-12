@@ -46,11 +46,12 @@ import {
  *   4. Download a print-quality PNG.
  */
 
-// Bumped v1 → v2 on 2026-07-13: sample-data was updated with text style
-// overrides, section positions, branding asset pos, footer text, and
-// layer z-indices per user spec. Bumping the key ensures returning
-// admins see the new defaults instead of their stale localStorage copy.
-const STORAGE_KEY = "meet-the-speaker-data-v2";
+// Bumped v2 → v3 on 2026-07-13 (follow-up): the event-mapper now bakes
+// in the same Style 1 defaults (textStyles, sectionLayout, brandingAsset,
+// footerCredit, z-indices) so picking an event/speaker no longer resets
+// them. Bumping again so returning admins ditch any v2 localStorage
+// that was overwritten by the old mapper output.
+const STORAGE_KEY = "meet-the-speaker-data-v3";
 
 type Props = {
   events: EventPickListItem[];

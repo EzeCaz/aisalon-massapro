@@ -2836,3 +2836,66 @@ Stage Summary:
     3. Browser downloads the same JSON file to the user's machine
 - The backup format is plain JSON (not SQL) so it can be inspected
   manually, diff'd, or restored programmatically.
+
+---
+Task ID: 13-meet-the-speaker-style1-preserve
+Agent: Super Z (main)
+Task: User reported that the Style 1 customizations on
+  /admin/mockups/meet-the-speaker were being lost whenever they picked
+  a specific event or speaker from the dropdowns — the mockup reverted
+  to the old default layout. The same 9 Style 1 spec items (topic/bio
+  font size + color + align, event-meta + QR positions, event name/date
+  /time/venue left align + sizes, branding asset height/pos, footer
+  credit "MassaPro", layer z-indices hero=9/photo=3/graphic=10) had
+  been baked into sample-data.ts in a prior pass, but only the initial
+  sample state — not the event-mapper output — carried them.
+
+Work Log:
+- Root cause: meet-the-speaker/event-mapper.ts →
+  mapEventToMeetTheSpeakerData() rebuilds the entire MeetTheSpeakerData
+  object from scratch using only DB event fields. It did NOT carry
+  over textStyles, sectionLayout, brandingAsset, footerCredit, or
+  heroZ/photoZ/graphicZ. So both handleEventPick() and
+  handleSpeakerPick() in meet-the-speaker-editor.tsx replaced the
+  user's customized data with the bare mapper output, wiping every
+  Style 1 override.
+- Also confirmed handleSpeakerPick() routes through the same mapper
+  (no separate path), so fixing the mapper fixes both flows.
+- Fix in event-mapper.ts:
+  * Added 6 module-level constants for the Style 1 spec:
+      STYLE1_TEXT_STYLES (topic/bio/eventName/eventDate/eventTime/venue
+        — fontSize + #000000 + left align per the spec)
+      STYLE1_SECTION_LAYOUT (event-meta → 1.9%,64.5%; qr → 39.8%,2.6%)
+      STYLE1_BRANDING_ASSET (height 48, pos 2.7%,89.576%,
+        default AI Salon blob URL)
+      STYLE1_FOOTER_CREDIT = "MassaPro"
+      STYLE1_HERO_Z = 9, STYLE1_PHOTO_Z = 3, STYLE1_GRAPHIC_Z = 10
+  * Wired all of them into the returned MeetTheSpeakerData so the
+    mapper output is Style-1-complete by default. Replaces the old
+    `footerCredit: "Platform by MassaPro"` with "MassaPro".
+- Bumped STORAGE_KEY in meet-the-speaker-editor.tsx from v2 → v3 so
+  returning admins drop any v2 localStorage that was overwritten by
+  the old (customization-stripping) mapper output. They will fall
+  back to SAMPLE_DATA (already Style-1-complete) on first load.
+- Did NOT touch the canvas — it already reads textStyles, sectionLayout,
+  brandingAsset, heroZ/photoZ/graphicZ correctly. The rendering side
+  was never the problem; only the data source was.
+- Did NOT touch speaker-intro / event-profile / agenda-profile — the
+  user's spec was scoped to meet-the-speaker only.
+- TypeScript check: `npx tsc --noEmit` shows zero errors in any
+  meet-the-speaker file. All remaining tsc errors are pre-existing
+  in unrelated files (chart.tsx, auth-guards.ts, meta-capi.ts,
+  referral/*) — confirmed unchanged by this edit.
+
+Stage Summary:
+- Picking any event or speaker from the dropdowns now preserves all
+  9 Style 1 spec items: topic font 20/black/left, bio font 22/black/
+  left, event-meta at (1.9%, 64.5%), event name/date/time/venue all
+  left-aligned at 22/18/18/20 px black, QR at (39.8%, 2.6%), branding
+  asset 48 px tall at (2.7%, 89.576%), footer credit "MassaPro",
+  layer z-indices hero=9/photo=3/graphic=10.
+- Returning admins will see the new defaults on first load (v3
+  STORAGE_KEY busts stale v2 localStorage).
+- Next deploy will pick this up automatically (Next.js dev/prod
+  recompile). No DB migration needed — this is pure client-side mockup
+  state.
