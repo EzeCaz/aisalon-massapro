@@ -14,13 +14,15 @@ import type { MeetTheSpeakerData } from "./types";
  * === 2026-07-13 update (per user spec, Style 1) ======================
  *   1. Topic:    fontSize 20, color #000000, align left
  *   2. Bio:      fontSize 22, color #000000, align left
- *   3. Event-meta section position → (1.9%, 64.5%)
+ *   3. Event-meta section position → (3.1%, 64.5%)   ← X 1.9 → 3.1
  *   4. Event name / date / time / venue → align left
  *   5. Event name 22px, date 18px, time 18px, venue 20px, color #000000
  *   6. QR code position → (39.8%, 2.6%)
  *   7. Branding asset height 48px, position (2.7%, 89.576%)
  *   8. Footer credit → "MassaPro"
  *   9. Layer z-indices (both styles): hero=9, photo=3, graphic=10
+ *  10. Header (speaker-info section) position X → 3.1%   ← new
+ *  11. Meerkat brand graphic: imageScale 1.70, pos (100, 60)   ← new
  * =======================================================================
  */
 
@@ -66,10 +68,16 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
     venue: "Google For Startups, Ha-Umanim St 12, Tel Aviv-Yafo",
     brandColors: ["#00FFFF", "#8B00FF"],
   },
+  // 2026-07-13 update (item 11): meerkat brand graphic — imageScale 1.70
+  // (size multiplier; 1.70 × default 18% canvas width ≈ 30.6% width),
+  // pos (100, 60) (top-left corner at right edge of canvas, 60% down).
+  // Applies to both Style 1 and Style 2 (the graphic is independent
+  // of the hero style choice).
   graphic: {
     imageUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png",
     imagePlacement: { focusX: 50, focusY: 50, zoom: 1 },
-    imageScale: 1,
+    imageScale: 1.70,
+    pos: { x: 100, y: 60 },
   },
   // Branding asset at the bottom-LEFT corner. Defaults to the AI Salon
   // brand image hosted on Vercel Blob. Replaceable via the canvas Replace
@@ -134,8 +142,16 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
   //   Coordinates are % of canvas (1200×800). Setting pos clears the
   //   inline right/bottom anchors and switches the section to a
   //   left/top-anchored position.
+  // ─── Section layout overrides (user spec 2026-07-13) ────────────────
+  //   3. Event-meta section position → (3.1%, 64.5%)   ← X 1.9 → 3.1
+  //   6. QR code position → (39.8%, 2.6%)
+  //  10. Header (speaker-info section) position X → 3.1%   ← new
+  //      Y kept at 5 (matches the default 40px/800px top inset) so the
+  //      header stays at the same vertical position, only X shifts.
+  //      Applies to both Style 1 and Style 2.
   sectionLayout: {
-    "event-meta": { pos: { x: 1.9, y: 64.5 } },
+    "speaker-info": { pos: { x: 3.1, y: 5 } },
+    "event-meta": { pos: { x: 3.1, y: 64.5 } },
     qr: { pos: { x: 39.8, y: 2.6 } },
   },
   // ─── Layer z-indices (user spec 2026-07-13, item 9 — both styles) ───

@@ -46,12 +46,18 @@ import {
  *   4. Download a print-quality PNG.
  */
 
-// Bumped v2 → v3 on 2026-07-13 (follow-up): the event-mapper now bakes
-// in the same Style 1 defaults (textStyles, sectionLayout, brandingAsset,
-// footerCredit, z-indices) so picking an event/speaker no longer resets
-// them. Bumping again so returning admins ditch any v2 localStorage
-// that was overwritten by the old mapper output.
-const STORAGE_KEY = "meet-the-speaker-data-v3";
+// Bumped v3 → v4 on 2026-07-13 (follow-up #2): user reported a flash
+// where new defaults appear for a split second, then get overwritten
+// by stale localStorage from a previous session. v3 was getting
+// populated by the old mapper output before the v3 push landed.
+// v4 starts fresh, AND the hydration effect now explicitly removes
+// any v1/v2/v3 keys so they can never leak back in.
+const STORAGE_KEY = "meet-the-speaker-data-v4";
+const LEGACY_STORAGE_KEYS = [
+  "meet-the-speaker-data-v1",
+  "meet-the-speaker-data-v2",
+  "meet-the-speaker-data-v3",
+];
 
 type Props = {
   events: EventPickListItem[];
@@ -168,6 +174,12 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
   useEffect(() => {
     try {
+      // Defensive: nuke any stale v1/v2/v3 entries so they can never
+      // leak back into v4 (e.g., if the user manually downgrades or
+      // a stale service-worker bundle restores an old key).
+      for (const k of LEGACY_STORAGE_KEYS) {
+        try { localStorage.removeItem(k); } catch { /* ignore */ }
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as MeetTheSpeakerData;

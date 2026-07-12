@@ -10,13 +10,15 @@ import type { MeetTheSpeakerData, SpeakerRole } from "./types";
  *
  *   1. Topic:    fontSize 20, color #000000, align left
  *   2. Bio:      fontSize 22, color #000000, align left
- *   3. Event-meta section position → (1.9%, 64.5%)
+ *   3. Event-meta section position → (3.1%, 64.5%)   ← X 1.9 → 3.1
  *   4. Event name / date / time / venue → align left
  *   5. Event name 22px, date 18px, time 18px, venue 20px, color #000000
  *   6. QR code position → (39.8%, 2.6%)
  *   7. Branding asset height 48px, position (2.7%, 89.576%)
  *   8. Footer credit → "MassaPro"
  *   9. Layer z-indices (both styles): hero=9, photo=3, graphic=10
+ *  10. Header (speaker-info section) position X → 3.1%   ← new
+ *  11. Meerkat brand graphic: imageScale 1.70, pos (100, 60)   ← new
  */
 const STYLE1_TEXT_STYLES: NonNullable<MeetTheSpeakerData["textStyles"]> = {
   topic: { fontSize: 20, color: "#000000", align: "left" },
@@ -28,7 +30,13 @@ const STYLE1_TEXT_STYLES: NonNullable<MeetTheSpeakerData["textStyles"]> = {
 };
 
 const STYLE1_SECTION_LAYOUT: NonNullable<MeetTheSpeakerData["sectionLayout"]> = {
-  "event-meta": { pos: { x: 1.9, y: 64.5 } },
+  // 2026-07-13 item 10: Header (speaker-info section) X = 3.1%
+  //   Y kept at 5 (matches the default 40px/800px top inset) so the
+  //   header stays at the same vertical position, only X shifts.
+  "speaker-info": { pos: { x: 3.1, y: 5 } },
+  // 2026-07-13 item 3: Event-meta X = 3.1 (was 1.9), Y = 64.5
+  "event-meta": { pos: { x: 3.1, y: 64.5 } },
+  // 2026-07-13 item 6: QR code position
   qr: { pos: { x: 39.8, y: 2.6 } },
 };
 
@@ -239,10 +247,14 @@ export function mapEventToMeetTheSpeakerData(
       sourceEventId: event.id,
       sourceEventSlug: event.slug,
     },
+    // 2026-07-13 item 11: meerkat brand graphic — imageScale 1.70,
+    // pos (100, 60). Applies to both Style 1 and Style 2 (the graphic
+    // is independent of the hero style choice).
     graphic: {
       imageUrl: DEFAULT_GRAPHIC,
       imagePlacement: { focusX: 50, focusY: 50, zoom: 1 },
-      imageScale: 1,
+      imageScale: 1.70,
+      pos: { x: 100, y: 60 },
     },
     // Branding asset at the bottom-LEFT corner. Per user spec 2026-07-02
     // and 2026-07-13: height 48px, position X=2.7%, Y=89.576%.
