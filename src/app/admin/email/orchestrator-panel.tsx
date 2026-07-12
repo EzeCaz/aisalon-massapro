@@ -172,6 +172,13 @@ export function OrchestratorPanel() {
   const [cleanupReport, setCleanupReport] = React.useState<any | null>(null);
   const [cleanupOpen, setCleanupOpen] = React.useState(false);
 
+  // Force-send Stage 2 (or any stage) — bypasses the stop-awareness rule
+  // that skips stages 2-5 when stage 1 isn't opened within 5h.
+  const [forceStage, setForceStage] = React.useState<number>(2);
+  const [forceBusy, setForceBusy] = useStateWithLabel(false);
+  const [forceReport, setForceReport] = React.useState<any | null>(null);
+  const [forceOpen, setForceOpen] = React.useState(false);
+
   // Filters
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
   const [stageFilter, setStageFilter] = React.useState<string>("ALL");
@@ -489,6 +496,59 @@ export function OrchestratorPanel() {
     }
   };
 
+  // ── Force-send stage (bypass stop-awareness rules) ──
+  // Default use case: Stage 2 reminder emails got SKIPPED because users
+  // didn't open Stage 1 within 5h. This bypasses that rule and sends
+  // the email to every SKIPPED recipient at the chosen stage.
+  const handleForceSend = async (apply: boolean) => {
+    if (apply) {
+      if (
+        !confirm(
+          `This will send Stage ${forceStage} emails to ALL recipients ` +
+            `currently in SKIPPED status (bypassing the stop-awareness rule ` +
+            `that skipped them). RSVPs already checked in will be skipped. ` +
+            `Continue?`,
+        )
+      )
+        return;
+    }
+    setForceBusy(true);
+    try {
+      const res = await fetch("/api/admin/email/force-send-stage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: forceStage,
+          dryRun: !apply,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "request_failed" }));
+        toast.error(`Force-send failed: ${err.error ?? res.status}`);
+        return;
+      }
+      const data = await res.json();
+      setForceReport(data);
+      setForceOpen(true);
+      if (apply) {
+        toast.success(
+          `Stage ${data.stage}: sent ${data.sent} · failed ${data.failed} · ` +
+            `skipped (checked-in) ${data.skippedCheckedIn}`,
+        );
+        await refresh();
+      } else {
+        toast.info(
+          `Dry-run Stage ${data.stage}: found ${data.found} SKIPPED rows`,
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Force-send error");
+    } finally {
+      setForceBusy(false);
+    }
+  };
+
   // ── Simulate ──
   const handleSimulate = async (
     item: QueueItem,
@@ -662,6 +722,21 @@ export function OrchestratorPanel() {
             <Sparkles className="h-4 w-4 mr-1.5" />
           )}
           Cleanup synthetic RSVPs
+        </Button>
+        <Button
+          onClick={() => handleForceSend(false)}
+          disabled={forceBusy}
+          variant="outline"
+          size="sm"
+          className="text-blue-700 hover:text-blue-800 border-blue-300 hover:border-blue-400 bg-blue-50"
+          title="Force-send Stage 2 reminders to SKIPPED recipients (bypasses stop-awareness rule)"
+        >
+          {forceBusy ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : (
+            <Mail className="h-4 w-4 mr-1.5" />
+          )}
+          Force-send Stage {forceStage}
         </Button>
       </div>
 
@@ -1222,6 +1297,168 @@ export function OrchestratorPanel() {
                       <Trash2 className="h-4 w-4 mr-1.5" />
                     )}
                     Apply cleanup (delete {cleanupReport.synthetic} RSVPs)
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Force-send stage dialog ── */}
+      <Dialog open={forceOpen} onOpenChange={setForceOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {forceReport?.dryRun
+                ? `Force-send Stage ${forceStage} — dry-run`
+                : `Force-send Stage ${forceStage} — result`}
+            </DialogTitle>
+            <DialogDescription>
+              {forceReport?.dryRun
+                ? "Review the SKIPPED recipients below. Confirm to actually send the email to each one (bypassing the stop-awareness rule that skipped them)."
+                : "Emails sent. RSVPs that have already checked in were skipped."}
+            </DialogDescription>
+          </DialogHeader>
+          {forceReport && (
+            <div className="space-y-3">
+              {/* Stage picker (only show in dry-run so admin can change it) */}
+              {forceReport.dryRun && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-black/60">
+                    Stage:
+                  </span>
+                  <Select
+                    value={String(forceStage)}
+                    onValueChange={(v) => setForceStage(Number(v))}
+                  >
+                    <SelectTrigger className="w-32 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STAGES.map((s) => (
+                        <SelectItem key={s.stage} value={String(s.stage)}>
+                          {s.stage}. {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs ml-auto"
+                    disabled={forceBusy}
+                    onClick={() => handleForceSend(false)}
+                  >
+                    {forceBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Re-run dry-run
+                  </Button>
+                </div>
+              )}
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-black/10 bg-zinc-50 p-3 text-center">
+                  <div className="text-2xl font-extrabold text-zinc-700">
+                    {forceReport.found}
+                  </div>
+                  <div className="text-[0.65rem] uppercase tracking-wider text-black/50">
+                    SKIPPED found
+                  </div>
+                </div>
+                {!forceReport.dryRun && (
+                  <>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
+                      <div className="text-2xl font-extrabold text-emerald-700">
+                        {forceReport.sent}
+                      </div>
+                      <div className="text-[0.65rem] uppercase tracking-wider text-emerald-700/70">
+                        Sent
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
+                      <div className="text-2xl font-extrabold text-amber-700">
+                        {forceReport.skippedCheckedIn}
+                      </div>
+                      <div className="text-[0.65rem] uppercase tracking-wider text-amber-700/70">
+                        Skipped (checked-in)
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Errors */}
+              {!forceReport.dryRun && forceReport.failed > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <div className="text-xs font-bold text-red-700 mb-1">
+                    {forceReport.failed} failed
+                  </div>
+                  <div className="text-xs text-red-700/80 space-y-0.5 font-mono">
+                    {forceReport.errors.slice(0, 5).map((e: string, i: number) => (
+                      <div key={i}>— {e}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sample recipients */}
+              {forceReport.sample?.length > 0 && (
+                <div className="rounded-lg border border-black/10 bg-white p-3">
+                  <div className="text-xs font-bold text-black/70 mb-1">
+                    Sample (first {forceReport.sample.length})
+                  </div>
+                  <div className="text-xs text-black/60 space-y-0.5 font-mono">
+                    {forceReport.sample.map(
+                      (r: {
+                        id: string;
+                        email: string;
+                        eventName: string;
+                        errorMessage: string | null;
+                      }, i: number) => (
+                        <div key={r.id}>
+                          {i + 1}. {r.email} · {r.eventName}
+                          {r.errorMessage ? (
+                            <span className="text-red-600">
+                              {" "}— {r.errorMessage}
+                            </span>
+                          ) : null}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setForceOpen(false)}
+                >
+                  Close
+                </Button>
+                {forceReport.dryRun && forceReport.found > 0 && (
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={forceBusy}
+                    onClick={() => {
+                      setForceOpen(false);
+                      handleForceSend(true);
+                    }}
+                  >
+                    {forceBusy ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-1.5" />
+                    )}
+                    Send to all {forceReport.found} SKIPPED recipients
                   </Button>
                 )}
               </div>
