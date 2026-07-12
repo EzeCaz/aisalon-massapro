@@ -422,7 +422,7 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 }
 .agenda-row {
   display: grid;
-  grid-template-columns: 22mm 18mm 1fr;
+  grid-template-columns: 22mm 24mm 1fr;   /* type col widened 18→24mm so NETWORKING fits without bleeding into body */
   gap: 3mm;
   padding: 2mm 0;
   border-bottom: 0.25pt solid var(--soft-gray);
@@ -1032,14 +1032,17 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
   font-size: 8pt;
   line-height: 1.45;
   color: var(--ink);
-  max-width: 80mm;
+  max-width: 72mm;        /* narrowed from 80mm so tag fits on the same row */
 }
 .back-cover .footer .tag {
   font-family: 'Playfair Display', serif;
   font-style: italic;
-  font-size: 16pt;
+  font-size: 12pt;        /* shrunk from 16pt so it fits on one line next to desc */
   font-weight: 700;
   color: var(--pink);
+  white-space: nowrap;    /* never wrap "Build consciously." */
+  text-align: right;
+  flex-shrink: 0;
 }
 </style>
 </head>
@@ -1250,7 +1253,7 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 
   <p class="body-text small" style="margin-top:3mm;"><strong>For builders:</strong> a system that never asks these questions doesn't become neutral — it becomes a mirror with someone else's values baked in. Conscious building starts by naming the tint.</p>
 
-  <div class="runfoot">
+  <div class="runfoot" style="bottom:3mm;">
     <span>AI &amp; HUMAN FLOURISHING · READING COMPANION</span>
     <span class="num">04</span>
   </div>
@@ -1500,18 +1503,18 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
      PAGE 9 — TOOL 06 · ORCHESTRATION TRIANGLE
      (with The Arc intro merged at top)
      ============================================================ -->
-<section class="page">
+<section class="page" style="padding-top:11mm;">
   <div class="runhead">
     <span class="left">AI SALON TLV · READING COMPANION</span>
     <span class="right">STEP II · INDIVIDUAL → ORGANIZATIONAL</span>
   </div>
 
-  <div class="arc-intro">
+  <div class="arc-intro" style="margin:1mm 0 2mm 0;padding:2mm 0;">
     <div class="h">From you, to the room, to the world.</div>
     <p>The five models so far pointed inward — they helped you see what AI reflects, locate your work, map your identity, turn defensiveness into curiosity, and shape how you talk with AI. A conscious builder who stops at themselves has done only half the work. The last two models carry the practice outward: first into the organization where you make real decisions, then into a community you convene yourself. <strong>This is how a reader becomes a convener.</strong></p>
   </div>
 
-  <div class="tool-header" style="margin-top:2mm;">
+  <div class="tool-header" style="margin-top:2mm;margin-bottom:2mm;">
     <div class="num">06</div>
     <div class="h-sub">Conduct AI where stakes are real</div>
   </div>
@@ -1520,9 +1523,9 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
     <span class="label">06 TOOL · MODEL</span>
     <span class="title">The Orchestration Triangle</span>
   </div>
-  <p class="tool-subtitle">Three ways of knowing — Data, Intuition, Context. The point is not to pick one but to conduct all three, so you stay the conductor of AI instead of being conducted by it.</p>
+  <p class="tool-subtitle" style="margin:1mm 0 2mm 0;">Three ways of knowing — Data, Intuition, Context. The point is not to pick one but to conduct all three, so you stay the conductor of AI instead of being conducted by it.</p>
 
-  <div class="triangle-wrap">
+  <div class="triangle-wrap" style="margin:1mm 0;">
     <svg class="triangle-svg" viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
       <polygon points="100,20 180,170 20,170" fill="none" stroke="#000000" stroke-width="1.2"/>
       <circle cx="100" cy="20" r="3" fill="#ff0056"/>
@@ -1550,18 +1553,18 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
     </div>
   </div>
 
-  <div class="run-it">
+  <div class="run-it" style="margin:2mm 0;padding:2mm 4mm;">
     <div class="label">RUN IT · 15 MINUTES</div>
     <div class="body">Write tomorrow's biggest decision in the center of a triangle. Mark where it's currently landing — and name the corner going silent. If you're leaning entirely on the model's data, say so out loud. Then ask what changes when intuition and context are given a vote again.</div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin-top:3mm;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin-top:2mm;">
     <blockquote class="quote-block" style="font-size:11pt;">"The real returns come from integration. Not balance — integration."</blockquote>
     <blockquote class="quote-block" style="font-size:11pt;">"Locally intelligent, not just artificially intelligent."</blockquote>
   </div>
   <div class="chapter-ref" style="margin-top:1mm;">CHAPTER 8 · P.204–206</div>
 
-  <div class="runfoot">
+  <div class="runfoot" style="bottom:2mm;">
     <span>AI &amp; HUMAN FLOURISHING · READING COMPANION</span>
     <span class="num">09</span>
   </div>
@@ -1571,13 +1574,13 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 <!-- ============================================================
      PAGE 10 — TOOL 07 · MICRO-CIRCLE STARTER KIT
      ============================================================ -->
-<section class="page">
+<section class="page" style="padding-top:11mm;">
   <div class="runhead">
     <span class="left">AI SALON TLV · READING COMPANION</span>
     <span class="right">STEP III · ORGANIZATIONAL → COMMUNITY · TOOL 07 / 07</span>
   </div>
 
-  <div class="tool-header">
+  <div class="tool-header" style="margin-top:2mm;margin-bottom:2mm;">
     <div class="num">07</div>
     <div class="h-sub">Gather others — start a circle of your own</div>
   </div>
@@ -1586,9 +1589,9 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
     <span class="label">07 TOOL · MODEL</span>
     <span class="title">The Micro-Circle Starter Kit</span>
   </div>
-  <p class="tool-subtitle">The smallest viable community is three people and a check-in. You don't need thirty, a venue, or permission — just two others willing to show up, and a way to open the room.</p>
+  <p class="tool-subtitle" style="margin:1mm 0 2mm 0;">The smallest viable community is three people and a check-in. You don't need thirty, a venue, or permission — just two others willing to show up, and a way to open the room.</p>
 
-  <div class="venn-wrap">
+  <div class="venn-wrap" style="margin:1mm 0 1mm 0;">
     <svg class="venn-svg" viewBox="0 0 200 160" xmlns="http://www.w3.org/2000/svg">
       <circle cx="70" cy="80" r="55" fill="#ff0056" fill-opacity="0.15" stroke="#ff0056" stroke-width="1"/>
       <circle cx="130" cy="80" r="55" fill="#000000" fill-opacity="0.10" stroke="#000000" stroke-width="1"/>
@@ -1599,7 +1602,7 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
   </div>
 
   <h3 class="h-sub" style="margin-top:1mm;">OPEN THE CIRCLE · THE THREE-QUESTION CHECK-IN</h3>
-  <div class="checkin-3">
+  <div class="checkin-3" style="margin:1mm 0 1mm 0;">
     <div class="box">
       <div class="name">CURIOSITY</div>
       <div class="desc">What made you curious this week — one thing AI did that you didn't expect?</div>
@@ -1614,8 +1617,8 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
     </div>
   </div>
 
-  <h3 class="h-sub" style="margin-top:3mm;">THE STARTER CHARTER · FOUR QUESTIONS, 30 MINUTES</h3>
-  <div class="charter-4">
+  <h3 class="h-sub" style="margin-top:2mm;">THE STARTER CHARTER · FOUR QUESTIONS, 30 MINUTES</h3>
+  <div class="charter-4" style="margin:1mm 0;">
     <div class="box">
       <div class="roman">i.</div>
       <div class="name">PURPOSE</div>
@@ -1638,9 +1641,9 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
     </div>
   </div>
 
-  <p class="body-text small" style="margin-top:3mm;text-align:center;">Start or find a circle in your city. <strong>AI Salon</strong> is a global community of AI enthusiasts across 70+ cities — and always room for one more. <strong style="color:var(--pink);">aisalon.ai</strong></p>
+  <p class="body-text small" style="margin-top:2mm;text-align:center;font-size:8.5pt;">Start or find a circle in your city. <strong>AI Salon</strong> is a global community of AI enthusiasts across 70+ cities — and always room for one more. <strong style="color:var(--pink);">aisalon.ai</strong></p>
 
-  <div class="runfoot">
+  <div class="runfoot" style="bottom:3mm;">
     <span>AI &amp; HUMAN FLOURISHING · READING COMPANION</span>
     <span class="num">10</span>
   </div>
