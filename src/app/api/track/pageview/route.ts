@@ -4,18 +4,11 @@
  * Records a page view in the local Prisma DB. Fire-and-forget —
  * clients call this via sendBeacon on every page load.
  *
- * Also updates User.lastActiveAt when userId is provided, so the admin
- * activity-report page can show "last seen on the platform at X".
- *
  * Body: {
  *   sessionId, affId?, userId?, pageUrl, pagePath, referrer?, userAgent?,
  *   utmSource?, utmMedium?, utmCampaign?, utmContent?, utmTerm?,
  *   ftUtmSource?, ftUtmMedium?, ftUtmCampaign?, ftUtmContent?, ftUtmTerm?
  * }
- *
- * Returns: { ok: true, pageViewId: "<cuid>" }
- *   The pageViewId is used by the client to pair a page-leave event
- *   with this pageview (for session-duration tracking).
  */
 
 import { NextRequest, NextResponse } from "next/server"
@@ -37,7 +30,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       null
 
-    const pageView = await db.pageView.create({
+    await db.pageView.create({
       data: {
         sessionId: body.sessionId,
         affId: body.affId || null,
@@ -58,23 +51,9 @@ export async function POST(request: NextRequest) {
         ftUtmContent: body.ftUtmContent || null,
         ftUtmTerm: body.ftUtmTerm || null,
       },
-      select: { id: true },
     })
 
-    // Update User.lastActiveAt so "last seen" is fresher than lastLoginAt.
-    // Fire-and-forget — if this fails, we still return ok to the client.
-    if (body.userId) {
-      try {
-        await db.user.update({
-          where: { id: body.userId },
-          data: { lastActiveAt: new Date() },
-        })
-      } catch {
-        // Ignore — user may have been deleted between session start and now.
-      }
-    }
-
-    return NextResponse.json({ ok: true, pageViewId: pageView.id })
+    return NextResponse.json({ ok: true })
   } catch (err) {
     console.error("[track/pageview] error:", err)
     return NextResponse.json({ error: "internal" }, { status: 500 })
