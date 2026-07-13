@@ -51,11 +51,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // 2. If affId is a member referral code, record the ReferralConversion
+    // 2. If affId is a member referral code, record the ReferralConversion.
+    //    The SAL-... code is matched against User.utmUid (the 12-char hex
+    //    share-link id). Strip the "SAL-" prefix before matching.
     const affId = body.affId
     if (affId && affId.startsWith("SAL-")) {
+      const utmUid = affId.slice(4) // strip "SAL-"
       const referrer = await db.user.findFirst({
-        where: { referralCode: affId },
+        where: { utmUid },
         select: { id: true },
       })
       if (referrer) {

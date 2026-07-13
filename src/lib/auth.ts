@@ -148,6 +148,8 @@ export const authOptions: NextAuthOptions = {
                   image: user.image || null,
                   role,
                   utmUid,
+                  lastLoginAt: new Date(),
+                  lastActiveAt: new Date(),
                 },
               });
               break;
@@ -172,6 +174,8 @@ export const authOptions: NextAuthOptions = {
                 name: user.name || null,
                 image: user.image || null,
                 role,
+                lastLoginAt: new Date(),
+                lastActiveAt: new Date(),
               },
             });
           }
@@ -180,13 +184,16 @@ export const authOptions: NextAuthOptions = {
           // (so the SUPER_ADMIN status always matches the hard-coded
           // email list). Otherwise, keep whatever role the admin set.
           const syncedRole = resolveRoleForExistingUser(user.email, existing.role);
-          const patch: Record<string, unknown> = {};
+          const patch: Record<string, unknown> = {
+            // Always update lastLoginAt on every successful sign-in so the
+            // admin activity-report page can show "last logged in at X".
+            lastLoginAt: new Date(),
+            lastActiveAt: new Date(),
+          };
           if (existing.role !== syncedRole) patch.role = syncedRole;
           if (!existing.name && user.name) patch.name = user.name;
           if (!existing.image && user.image) patch.image = user.image;
-          if (Object.keys(patch).length > 0) {
-            await db.user.update({ where: { id: existing.id }, data: patch });
-          }
+          await db.user.update({ where: { id: existing.id }, data: patch });
           // CRITICAL: when the user signed in via a secondary email,
           // overwrite the next-auth `user.email` with the primary email
           // so the rest of the auth flow (JWT callback, session) uses

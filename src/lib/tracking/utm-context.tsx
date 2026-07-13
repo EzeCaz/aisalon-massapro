@@ -26,7 +26,7 @@ import {
 } from "./utm-types"
 import { TRACKING_COOKIES } from "./tracking-ids"
 import { trackPageViewAll } from "./track-event"
-import { getSessionId } from "./backup-tracker"
+import { getSessionId, trackPageLeave } from "./backup-tracker"
 
 type UtmContextValue = {
   /** Last-touch UTMs (from URL on mount, or updated from cookie on subsequent visits). */
@@ -174,13 +174,62 @@ export function UtmProvider({
     setCookie(TRACKING_COOKIES.SESSION, sessionId, 1)
   }, [affId, utmParams, sessionId])
 
-  // Fire pageview on every route change
+  // Track the previous pathname so we can fire a page-leave for it
+  // when the route changes. Stored in a ref so it survives re-renders
+  // without re-triggering the effect.
+  const prevPathRef = React.useRef<string | null>(null)
+
+  // Fire pageview on every route change + page-leave for the previous page
   useEffect(() => {
     if (typeof window === "undefined") return
     if (!pathname) return
+
+    // 1. If we're navigating away from a previous page, fire a page-leave
+    //    so the previous PageView row gets its leftAt + durationMs set.
+    if (prevPathRef.current && prevPathRef.current !== pathname) {
+      trackPageLeave(prevPathRef.current)
+    }
+
+    // 2. Fire the new pageview.
     trackPageViewAll(userId)
+
+    // 3. Remember this pathname for the next route change.
+    prevPathRef.current = pathname
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
+
+  // Fire page-leave on tab close / refresh / navigation away from the app.
+  // Uses both beforeunload (older) and pagehide (newer) for maximum
+  // browser coverage. sendBeacon survives the unload.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleLeave = () => {
+      trackPageLeave()
+    }
+
+    // pagehide is the modern replacement for beforeunload (more reliable
+    // in bfcache-enabled browsers). beforeunload is kept for older Safari.
+    window.addEventListener("pagehide", handleLeave)
+    window.addEventListener("beforeunload", handleLeave)
+    // visibilitychange fires when the user switches tabs (hidden) — best
+    // effort, since the user might come back. We treat hidden as a leave;
+    // if they come back, a new pageview will be fired by the route effect
+    // (no, actually visibilitychange does NOT change the route, so we
+    // intentionally do NOT re-fire a pageview on visible). This means a
+    // tab that's hidden then shown again will have a gap in duration —
+    // acceptable for v1.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        handleLeave()
+      }
+    })
+
+    return () => {
+      window.removeEventListener("pagehide", handleLeave)
+      window.removeEventListener("beforeunload", handleLeave)
+    }
+  }, [])
 
   const value = useMemo<UtmContextValue>(
     () => ({

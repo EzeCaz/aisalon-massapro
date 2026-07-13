@@ -8,7 +8,7 @@ import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
 import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
-import { BarChart3, ArrowRight, Mail, Archive } from "lucide-react";
+import { BarChart3, ArrowRight, Mail, Archive, Activity } from "lucide-react";
 
 export const metadata = { title: "Admin — AI Salon Tel Aviv" };
 
@@ -127,27 +127,49 @@ export default async function AdminPage() {
           <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent="#820A7D" />
         </div>
 
-        {/* Super-Admin-only archive link */}
+        {/* Super-Admin-only archive link + activity report link */}
         {isSuperAdminEmail(me.email) && (
-          <div className="mb-8 rounded-md border border-[#820A7D]/30 bg-[#820A7D]/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Archive className="h-4 w-4 text-[#820A7D]" />
-              <div>
-                <p className="text-sm font-semibold text-black">
-                  Archived members: {archivedCount}
-                </p>
-                <p className="text-xs text-black/50">
-                  Archived members are hidden from the main list. Only Super Admins can view and restore them.
-                </p>
+          <div className="mb-8 grid sm:grid-cols-2 gap-3">
+            <div className="rounded-md border border-[#820A7D]/30 bg-[#820A7D]/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4 text-[#820A7D]" />
+                <div>
+                  <p className="text-sm font-semibold text-black">
+                    Archived members: {archivedCount}
+                  </p>
+                  <p className="text-xs text-black/50">
+                    Archived members are hidden from the main list. Only Super Admins can view and restore them.
+                  </p>
+                </div>
               </div>
+              <Link
+                href="/admin/members/archive"
+                className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D]/90 whitespace-nowrap"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                View archive
+              </Link>
             </div>
-            <Link
-              href="/admin/members/archive"
-              className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D]/90 whitespace-nowrap"
-            >
-              <Archive className="h-3.5 w-3.5" />
-              View archive
-            </Link>
+            <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-[#FF005A]" />
+                <div>
+                  <p className="text-sm font-semibold text-black">
+                    Member activity report
+                  </p>
+                  <p className="text-xs text-black/50">
+                    See every page view, click, email open, RSVP, and DM for any member — by email. Super Admin only.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/admin/members/activity-report"
+                className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-3 py-1.5 text-xs hover:bg-[#FF005A]/90 whitespace-nowrap"
+              >
+                <Activity className="h-3.5 w-3.5" />
+                Open report
+              </Link>
+            </div>
           </div>
         )}
 

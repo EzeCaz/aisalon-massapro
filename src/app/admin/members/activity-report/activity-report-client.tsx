@@ -24,6 +24,10 @@ import {
   Loader2,
   ExternalLink,
   Ticket,
+  Eye,
+  LogIn,
+  Clock,
+  MousePointer,
 } from "lucide-react";
 
 type FeedItem = {
@@ -50,6 +54,8 @@ type ActivityReport = {
     utmUid: string | null;
     createdAt: string;
     onboardedAt: string | null;
+    lastLoginAt: string | null;
+    lastActiveAt: string | null;
     importSource: string | null;
     importedAt: string | null;
     interestedIn: string | null;
@@ -63,6 +69,15 @@ type ActivityReport = {
   summary: {
     accountCreated: string;
     onboardedAt: string | null;
+    lastLoginAt: string | null;
+    lastActiveAt: string | null;
+    totalActiveMs: number;
+    totalActiveMinutes: number;
+    totalPageViews: number;
+    uniqueSessions: number;
+    topPages: { path: string; count: number; totalMs: number; avgSec: number }[];
+    totalClicks: number;
+    totalLeads: number;
     totalEmailsQueued: number;
     emailsSent: number;
     emailsOpened: number;
@@ -92,6 +107,9 @@ type ActivityReport = {
     messagesSent: any[];
     messagesReceived: any[];
     quizHosted: any[];
+    pageViews: any[];
+    clickEvents: any[];
+    trackedLeads: any[];
   };
 };
 
@@ -116,6 +134,10 @@ const TYPE_META: Record<string, { icon: any; color: string; label: string }> = {
   DM_RECEIVED: { icon: MessageCircle, color: "text-zinc-600", label: "DM received" },
   QUIZ_HOSTED: { icon: Activity, color: "text-purple-600", label: "Quiz hosted" },
   MOCKUP_DEFAULT_SAVED: { icon: Save, color: "text-zinc-600", label: "Mockup saved" },
+  LOGIN: { icon: LogIn, color: "text-emerald-600", label: "Login" },
+  PAGE_VIEW: { icon: Eye, color: "text-blue-600", label: "Page view" },
+  CLICK: { icon: MousePointer, color: "text-fuchsia-600", label: "Click" },
+  LEAD: { icon: Sparkles, color: "text-amber-600", label: "Lead" },
 };
 
 export function ActivityReportClient({ initialEmail }: { initialEmail: string }) {
@@ -284,6 +306,12 @@ export function ActivityReportClient({ initialEmail }: { initialEmail: string })
                   {report.profile.onboardedAt
                     ? ` · onboarded ${new Date(report.profile.onboardedAt).toLocaleString()}`
                     : " · NOT YET ONBOARDED"}
+                  {report.profile.lastLoginAt
+                    ? ` · last login ${new Date(report.profile.lastLoginAt).toLocaleString()}`
+                    : " · NEVER LOGGED IN"}
+                  {report.profile.lastActiveAt
+                    ? ` · last active ${new Date(report.profile.lastActiveAt).toLocaleString()}`
+                    : ""}
                   {report.profile.importSource && ` · imported from ${report.profile.importSource}`}
                   {` · resolved via ${report.resolvedVia}`}
                 </p>
@@ -300,20 +328,50 @@ export function ActivityReportClient({ initialEmail }: { initialEmail: string })
           </div>
 
           {/* Summary stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-            <StatCard label="Emails sent" value={report.summary.emailsSent} icon={Mail} color="text-blue-600" />
-            <StatCard label="Emails opened" value={report.summary.emailsOpened} icon={MailOpen} color="text-emerald-600" />
-            <StatCard label="Emails clicked" value={report.summary.emailsClicked} icon={MousePointerClick} color="text-fuchsia-600" />
-            <StatCard label="Emails skipped" value={report.summary.emailsSkipped} icon={Ban} color="text-zinc-500" />
-            <StatCard label="RSVPs" value={report.summary.totalRSVPs} icon={Calendar} color="text-blue-600" />
-            <StatCard label="Door check-ins" value={report.summary.doorCheckIns} icon={DoorOpen} color="text-emerald-600" />
-            <StatCard label="Attended" value={report.summary.attended} icon={CheckCircle2} color="text-emerald-600" />
-            <StatCard label="Co-hosted events" value={report.summary.coHostedEvents} icon={UserCheck} color="text-amber-600" />
-            <StatCard label="Speaker slots" value={report.summary.speakerSlots} icon={Megaphone} color="text-amber-600" />
-            <StatCard label="Referral visits" value={report.summary.referralVisits} icon={ExternalLink} color="text-fuchsia-600" />
-            <StatCard label="Referral signups" value={report.summary.referralConversions} icon={Sparkles} color="text-emerald-600" />
-            <StatCard label="DMs sent / recv" value={`${report.summary.dmsSent} / ${report.summary.dmsReceived}`} icon={MessageSquare} color="text-blue-600" />
+          <div className="rounded-lg border border-black/10 bg-white p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-sm font-bold text-black">Activity summary</h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+              <StatCard label="Last login" value={report.summary.lastLoginAt ? new Date(report.summary.lastLoginAt).toLocaleDateString() : "never"} icon={LogIn} color="text-emerald-600" />
+              <StatCard label="Last active" value={report.summary.lastActiveAt ? new Date(report.summary.lastActiveAt).toLocaleDateString() : "never"} icon={Clock} color="text-emerald-600" />
+              <StatCard label="Active time" value={`${report.summary.totalActiveMinutes}m`} icon={Clock} color="text-emerald-600" />
+              <StatCard label="Page views" value={report.summary.totalPageViews} icon={Eye} color="text-blue-600" />
+              <StatCard label="Sessions" value={report.summary.uniqueSessions} icon={Activity} color="text-purple-600" />
+              <StatCard label="Clicks" value={report.summary.totalClicks} icon={MousePointerClick} color="text-fuchsia-600" />
+              <StatCard label="Emails sent" value={report.summary.emailsSent} icon={Mail} color="text-blue-600" />
+              <StatCard label="Emails opened" value={report.summary.emailsOpened} icon={MailOpen} color="text-emerald-600" />
+              <StatCard label="RSVPs" value={report.summary.totalRSVPs} icon={Calendar} color="text-blue-600" />
+              <StatCard label="Door check-ins" value={report.summary.doorCheckIns} icon={DoorOpen} color="text-emerald-600" />
+              <StatCard label="Attended" value={report.summary.attended} icon={CheckCircle2} color="text-emerald-600" />
+              <StatCard label="DMs sent / recv" value={`${report.summary.dmsSent} / ${report.summary.dmsReceived}`} icon={MessageSquare} color="text-blue-600" />
+            </div>
           </div>
+
+          {/* Top pages */}
+          {report.summary.topPages.length > 0 && (
+            <div className="rounded-lg border border-black/10 bg-white">
+              <div className="border-b border-black/10 px-4 py-3">
+                <h3 className="text-sm font-bold text-black">
+                  Top pages by time spent
+                  <span className="ml-2 text-xs font-normal text-black/50">
+                    {report.summary.topPages.length} unique paths
+                  </span>
+                </h3>
+              </div>
+              <div className="divide-y divide-black/5 max-h-72 overflow-y-auto">
+                {report.summary.topPages.map((p, i) => (
+                  <div key={i} className="px-4 py-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="font-mono text-xs text-black truncate flex-1">{p.path}</span>
+                    <span className="text-xs text-black/50 whitespace-nowrap">
+                      {p.count} {p.count === 1 ? "view" : "views"} · {Math.round(p.totalMs / 60000)}m total · {p.avgSec}s avg
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Feed */}
           <div className="rounded-lg border border-black/10 bg-white">
@@ -331,6 +389,10 @@ export function ActivityReportClient({ initialEmail }: { initialEmail: string })
               >
                 <option value="ALL">All types</option>
                 <option value="ACCOUNT_CREATED">Account</option>
+                <option value="LOGIN">Login</option>
+                <option value="PAGE_VIEW">Page views</option>
+                <option value="CLICK">Clicks</option>
+                <option value="LEAD">Leads</option>
                 <option value="EMAIL_QUEUED">Emails queued</option>
                 <option value="EMAIL_SENT">Emails sent</option>
                 <option value="EMAIL_OPENED">Emails opened</option>
@@ -411,6 +473,9 @@ export function ActivityReportClient({ initialEmail }: { initialEmail: string })
               <RawSection title={`DMs sent (${report.raw.messagesSent.length})`} rows={report.raw.messagesSent} />
               <RawSection title={`DMs received (${report.raw.messagesReceived.length})`} rows={report.raw.messagesReceived} />
               <RawSection title={`Quiz sessions hosted (${report.raw.quizHosted.length})`} rows={report.raw.quizHosted} />
+              <RawSection title={`Page views (${report.raw.pageViews.length})`} rows={report.raw.pageViews} />
+              <RawSection title={`Click events (${report.raw.clickEvents.length})`} rows={report.raw.clickEvents} />
+              <RawSection title={`Tracked leads (${report.raw.trackedLeads.length})`} rows={report.raw.trackedLeads} />
             </div>
           </details>
         </>

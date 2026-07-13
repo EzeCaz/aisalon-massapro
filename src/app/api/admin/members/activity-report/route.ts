@@ -105,6 +105,9 @@ export async function GET(req: NextRequest) {
     messagesSent,
     messagesReceived,
     quizHosted,
+    pageViews,
+    clickEvents,
+    trackedLeads,
   ] = await Promise.all([
     // All EmailQueue rows for this user, with tracking logs inlined.
     db.emailQueue.findMany({
@@ -195,6 +198,27 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     }),
+
+    // Page views (with durationMs where the user navigated away).
+    db.pageView.findMany({
+      where: { userId },
+      orderBy: { enteredAt: "desc" },
+      take: 1000,
+    }),
+
+    // Click events.
+    db.clickEvent.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
+    }),
+
+    // Tracked leads (conversions) for this user.
+    db.trackedLead.findMany({
+      where: { OR: [{ userId }, { email: user.email }] },
+      orderBy: { convertedAt: "desc" },
+      take: 500,
+    }),
   ]);
 
   // 3) Build a unified, chronological activity feed.
@@ -216,6 +240,8 @@ export async function GET(req: NextRequest) {
       name: user.name,
       role: user.role,
       onboardedAt: user.onboardedAt?.toISOString() ?? null,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
       utmUid: user.utmUid,
       importSource: user.importSource,
     },
@@ -226,6 +252,74 @@ export async function GET(req: NextRequest) {
       timestamp: user.onboardedAt.toISOString(),
       type: "PROFILE_ONBOARDED",
       summary: "Completed onboarding",
+    });
+  }
+
+  // Last login (if we have it) — surface as a top-of-feed marker
+  if (user.lastLoginAt) {
+    feed.push({
+      timestamp: user.lastLoginAt.toISOString(),
+      type: "LOGIN",
+      summary: `Logged in (most recent)`,
+    });
+  }
+
+  // Page views — feed entries + raw
+  for (const pv of pageViews) {
+    const durSec = pv.durationMs != null ? Math.round(pv.durationMs / 1000) : null;
+    feed.push({
+      timestamp: pv.enteredAt.toISOString(),
+      type: "PAGE_VIEW",
+      summary: `Viewed ${pv.pagePath}${durSec != null ? ` (${durSec}s)` : " (open)"}`,
+      details: {
+        pageViewId: pv.id,
+        pageUrl: pv.pageUrl,
+        pagePath: pv.pagePath,
+        referrer: pv.referrer,
+        enteredAt: pv.enteredAt.toISOString(),
+        leftAt: pv.leftAt?.toISOString() ?? null,
+        durationMs: pv.durationMs,
+        userAgent: pv.userAgent,
+        ipAddress: pv.ipAddress,
+        utmSource: pv.utmSource,
+        utmMedium: pv.utmMedium,
+        utmCampaign: pv.utmCampaign,
+      },
+    });
+  }
+
+  // Click events — feed entries + raw
+  for (const c of clickEvents) {
+    feed.push({
+      timestamp: c.createdAt.toISOString(),
+      type: "CLICK",
+      summary: `Click: ${c.eventType} on ${c.pagePath}`,
+      details: {
+        clickId: c.id,
+        eventType: c.eventType,
+        eventId: c.eventId,
+        pageUrl: c.pageUrl,
+        pagePath: c.pagePath,
+        metadata: c.metadata,
+      },
+    });
+  }
+
+  // Tracked leads / conversions
+  for (const lead of trackedLeads) {
+    feed.push({
+      timestamp: lead.convertedAt.toISOString(),
+      type: "LEAD",
+      summary: `Lead: ${lead.conversionType}${lead.email ? ` (${lead.email})` : ""}`,
+      details: {
+        leadId: lead.id,
+        name: lead.name,
+        email: lead.email,
+        conversionType: lead.conversionType,
+        conversionRef: lead.conversionRef,
+        planType: lead.planType,
+        initialStatus: lead.initialStatus,
+      },
     });
   }
 
@@ -439,9 +533,40 @@ export async function GET(req: NextRequest) {
   feed.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
 
   // 4) Compute summary stats
+  // Total active time = sum of durationMs across all closed pageviews.
+  const totalActiveMs = pageViews.reduce(
+    (sum, pv) => sum + (pv.durationMs ?? 0),
+    0,
+  );
+  // Top pages — group by pagePath, count + sum duration
+  const pagePathStats: Record<string, { count: number; totalMs: number }> = {};
+  for (const pv of pageViews) {
+    if (!pagePathStats[pv.pagePath]) {
+      pagePathStats[pv.pagePath] = { count: 0, totalMs: 0 };
+    }
+    pagePathStats[pv.pagePath].count += 1;
+    pagePathStats[pv.pagePath].totalMs += pv.durationMs ?? 0;
+  }
+  const topPages = Object.entries(pagePathStats)
+    .map(([path, s]) => ({ path, ...s, avgSec: s.count > 0 ? Math.round(s.totalMs / 1000 / s.count) : 0 }))
+    .sort((a, b) => b.totalMs - a.totalMs)
+    .slice(0, 20);
+
+  // Unique session count (by sessionId)
+  const uniqueSessions = new Set(pageViews.map((pv) => pv.sessionId)).size;
+
   const summary = {
     accountCreated: user.createdAt.toISOString(),
     onboardedAt: user.onboardedAt?.toISOString() ?? null,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
+    totalActiveMs,
+    totalActiveMinutes: Math.round(totalActiveMs / 60000),
+    totalPageViews: pageViews.length,
+    uniqueSessions,
+    topPages,
+    totalClicks: clickEvents.length,
+    totalLeads: trackedLeads.length,
     totalEmailsQueued: emails.length,
     emailsSent: emails.filter((e) => e.status === "SENT" || e.status === "OPENED" || e.status === "CLICKED").length,
     emailsOpened: emails.filter((e) => e.status === "OPENED" || e.status === "CLICKED" || e.trackingLogs.some((l) => l.type === "OPEN")).length,
@@ -479,6 +604,8 @@ export async function GET(req: NextRequest) {
       utmUid: user.utmUid,
       createdAt: user.createdAt.toISOString(),
       onboardedAt: user.onboardedAt?.toISOString() ?? null,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      lastActiveAt: user.lastActiveAt?.toISOString() ?? null,
       importSource: user.importSource,
       importedAt: user.importedAt?.toISOString() ?? null,
       interestedIn: user.interestedIn,
@@ -576,6 +703,40 @@ export async function GET(req: NextRequest) {
         status: q.status,
         eventTitle: q.event?.title ?? null,
         createdAt: q.createdAt.toISOString(),
+      })),
+      pageViews: pageViews.map((pv) => ({
+        id: pv.id,
+        sessionId: pv.sessionId,
+        pageUrl: pv.pageUrl,
+        pagePath: pv.pagePath,
+        referrer: pv.referrer,
+        enteredAt: pv.enteredAt.toISOString(),
+        leftAt: pv.leftAt?.toISOString() ?? null,
+        durationMs: pv.durationMs,
+        userAgent: pv.userAgent,
+        ipAddress: pv.ipAddress,
+        utmSource: pv.utmSource,
+        utmMedium: pv.utmMedium,
+        utmCampaign: pv.utmCampaign,
+      })),
+      clickEvents: clickEvents.map((c) => ({
+        id: c.id,
+        eventType: c.eventType,
+        eventId: c.eventId,
+        pageUrl: c.pageUrl,
+        pagePath: c.pagePath,
+        metadata: c.metadata,
+        createdAt: c.createdAt.toISOString(),
+      })),
+      trackedLeads: trackedLeads.map((l) => ({
+        id: l.id,
+        name: l.name,
+        email: l.email,
+        conversionType: l.conversionType,
+        conversionRef: l.conversionRef,
+        planType: l.planType,
+        initialStatus: l.initialStatus,
+        convertedAt: l.convertedAt.toISOString(),
       })),
     },
   });

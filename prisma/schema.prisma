@@ -64,6 +64,17 @@ model User {
   // onboarding — they already have intake data from the spreadsheet.
   onboardedAt       DateTime?
   // ----------------------------------------------------------------
+  // Login + activity tracking.
+  // `lastLoginAt` is updated by the NextAuth `signIn` callback on
+  // every successful authentication (Google OAuth, email/password,
+  // or dev login). Lets the admin answer "did this user log in?"
+  // without needing a Session table (we use JWT strategy).
+  // `lastActiveAt` is updated by /api/track/pageview whenever a
+  // pageview event comes in with a resolved userId — gives a
+  // finer-grained "last seen on the platform" signal.
+  lastLoginAt       DateTime?
+  lastActiveAt      DateTime?
+  // ----------------------------------------------------------------
   // UTM tracking — a unique 12-char hex string generated server-side
   // on user creation. Used as the `utm_uid` query param on every
   // share link the user generates from /profile or /events so the
@@ -136,6 +147,15 @@ model User {
   chatRoomsCreated      ChatRoom[]            @relation("ChatRoomCreator")
   chatMemberships       ChatRoomMember[]
   chatMessages          ChatMessage[]
+  // ----------------------------------------------------------------
+  // Activity tracking — page views, click events, and tracked leads
+  // recorded by the /api/track/* endpoints. Back-relations let the
+  // admin activity-report page query everything for one user.
+  pageViews             PageView[]            @relation("UserPageViews")
+  clickEvents           ClickEvent[]          @relation("UserClickEvents")
+  trackedLeads          TrackedLead[]         @relation("UserTrackedLeads")
+  referralConversionsAsReferrer  ReferralConversion[] @relation("ReferrerConversions")
+  referralConversionsAsReferred  ReferralConversion[] @relation("ReferredConversions")
   // ----------------------------------------------------------------
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1379,3 +1399,169 @@ model ChatMessage {
   @@index([senderId, createdAt])
   @@index([replyToId])
 }
+
+// ===========================================================================
+// ACTIVITY TRACKING (V5.21 — 2026-07-13)
+// ===========================================================================
+// These four models un-break the /api/track/* endpoints that have been
+// firing since launch but failing with PrismaClientValidationError because
+// the models were never added. Now they exist, so pageviews, click events,
+// tracked leads, and referral conversions all persist to the DB.
+//
+// The activity-report admin page queries these models to answer:
+//   "Did this user access the platform? Clicked on a tab? How long active?"
+// ===========================================================================
+
+/// One row per page view. Written by POST /api/track/pageview on every
+/// client-side route change (see src/lib/tracking/utm-context.tsx).
+///
+/// `enteredAt` is set on insert. `leftAt` + `durationMs` are set by
+/// POST /api/track/page-leave (fired on route change / page unload via
+/// the beforeunload + visibilitychange handlers in utm-context.tsx).
+/// A null `leftAt` means the user is still on the page (or the leave
+/// beacon was lost — fire-and-forget).
+model PageView {
+  id            String   @id @default(cuid())
+  /// Anonymous session id (from sessionStorage). Same value across all
+  /// pageviews in a browser session.
+  sessionId     String
+  /// Optional affiliate id (SAL-... code if the visitor arrived via a
+  /// member's share link).
+  affId         String?
+  /// Resolved user id if the visitor is logged in. Null for anonymous.
+  userId        String?
+  user          User?    @relation("UserPageViews", fields: [userId], references: [id], onDelete: SetNull)
+  pageUrl       String
+  pagePath      String
+  referrer      String?
+  userAgent     String?
+  ipAddress     String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  utmTerm       String?
+  /// First-touch UTMs (captured on the visitor's first landing, never
+  /// overwritten). Read from the `massapro_ft` cookie.
+  ftUtmSource   String?
+  ftUtmMedium   String?
+  ftUtmCampaign String?
+  ftUtmContent  String?
+  ftUtmTerm     String?
+  /// When the pageview started (user landed on the page).
+  enteredAt     DateTime @default(now())
+  /// When the user navigated away. Null = still on page (or leave
+  /// beacon was lost).
+  leftAt        DateTime?
+  /// Computed duration in milliseconds (leftAt - enteredAt). Null
+  /// until leftAt is set.
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, enteredAt])
+  @@index([sessionId, enteredAt])
+  @@index([pagePath, enteredAt])
+  @@index([enteredAt])
+}
+
+/// A click or interaction event (button click, scroll milestone, video
+/// play, funnel step). Written by POST /api/track/click.
+model ClickEvent {
+  id            String   @id @default(cuid())
+  sessionId     String
+  affId         String?
+  userId        String?
+  user          User?    @relation("UserClickEvents", fields: [userId], references: [id], onDelete: SetNull)
+  /// Event type: "button_click" | "scroll" | "video" | "funnel_step".
+  eventType     String
+  /// Optional event id (e.g. the slug of the event page the click
+  /// happened on — NOT a database Event id; just a grouping key).
+  eventId       String?
+  pageUrl       String
+  pagePath      String
+  /// Free-form JSON metadata (label, href, selector, x/y, etc.)
+  metadata      Json?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  utmTerm       String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([pagePath, createdAt])
+  @@index([eventType, createdAt])
+  @@index([createdAt])
+}
+
+/// A tracked lead / conversion (signup, onboarding, RSVP, contact form).
+/// Written by POST /api/track/lead and POST /api/track/conversion.
+model TrackedLead {
+  id              String   @id @default(cuid())
+  sessionId       String
+  affId           String?
+  userId          String?
+  user            User?    @relation("UserTrackedLeads", fields: [userId], references: [id], onDelete: SetNull)
+  name            String
+  email           String?
+  phone           String?
+  company         String?
+  /// "signup" | "onboarding" | "rsvp" | "contact" | "profile_completed" | ...
+  conversionType  String
+  /// Optional reference id (e.g. the RSVP id or user id created).
+  conversionRef   String?
+  initialStatus   String?
+  planType        String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmContent      String?
+  utmTerm         String?
+  ftUtmSource     String?
+  ftUtmMedium     String?
+  ftUtmCampaign   String?
+  ftUtmContent    String?
+  ftUtmTerm       String?
+  convertedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([sessionId])
+  @@index([conversionType, convertedAt])
+  @@index([convertedAt])
+}
+
+/// A referral conversion — a signup/RSVP/purchase attributed to a
+/// member's share link. Written by POST /api/track/conversion when the
+/// visitor's affId starts with "SAL-".
+model ReferralConversion {
+  id              String   @id @default(cuid())
+  /// The member whose share link drove the conversion.
+  referringUserId String
+  referrer        User     @relation("ReferrerConversions", fields: [referringUserId], references: [id], onDelete: Cascade)
+  /// The user who converted (null if they didn't create an account).
+  referredUserId  String?
+  referredUser    User?    @relation("ReferredConversions", fields: [referredUserId], references: [id], onDelete: SetNull)
+  /// The email of the converted visitor (for cross-referencing pre-signup).
+  referredEmail   String?
+  /// "signup" | "rsvp" | "purchase" | ...
+  conversionType  String
+  conversionRef   String?
+  /// The SAL-... affiliate code that was on the share link.
+  affId           String?
+  /// Free-form JSON snapshot of the UTM params + session id at
+  /// conversion time (for forensic analysis).
+  utmSnapshot     Json?
+  sessionId       String?
+  convertedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([referringUserId, convertedAt])
+  @@index([referredUserId])
+  @@index([referredEmail])
+  @@index([conversionType, convertedAt])
+  @@index([convertedAt])
+}
+

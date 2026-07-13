@@ -30,6 +30,27 @@ export function getSessionId(): string {
   }
 }
 
+/**
+ * In-memory map of the most recent PageView id per pathname.
+ * Used by trackPageLeave() to pair a leave event with the pageview
+ * that started on that pathname.
+ *
+ * Keyed by pathname (not pageUrl) so query-string changes don't
+ * confuse the pairing.
+ */
+const pageViewIdByPath: Map<string, string> = new Map()
+
+/**
+ * Returns the pageViewId for the given pathname (or current pathname
+ * if omitted). Set by trackPageView() when /api/track/pageview returns
+ * the new row id.
+ */
+export function getCurrentPageViewId(pathname?: string): string | undefined {
+  if (typeof window === "undefined") return undefined
+  const p = pathname || window.location.pathname
+  return pageViewIdByPath.get(p)
+}
+
 /** Reads the affiliate cookie (last-touch UTMs + affId). */
 function readAffiliateCookie(): {
   affId?: string
@@ -97,13 +118,56 @@ function buildCommonPayload(): CommonPayload {
 
 /**
  * Fires a pageview to /api/track/pageview. Fire-and-forget via sendBeacon
- * (falls back to fetch with keepalive).
+ * (falls back to fetch with keepalive). Captures the returned pageViewId
+ * so a later trackPageLeave() can pair with it for session-duration
+ * tracking.
  */
 export function trackPageView(userId?: string): void {
   safeTrackCall(() => {
     if (typeof window === "undefined") return
     const payload = { ...buildCommonPayload(), userId }
-    postFireAndForget("/api/track/pageview", payload)
+    // Use fetch (not sendBeacon) because we need the response body to
+    // capture the pageViewId. sendBeacon is one-way.
+    try {
+      void fetch("/api/track/pageview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      })
+        .then((r) => r.json())
+        .then((data: { pageViewId?: string }) => {
+          if (data.pageViewId && typeof window !== "undefined") {
+            pageViewIdByPath.set(window.location.pathname, data.pageViewId)
+          }
+        })
+        .catch(() => {
+          /* swallow — fire-and-forget */
+        })
+    } catch {
+      /* swallow */
+    }
+  })
+}
+
+/**
+ * Fires a page-leave event to /api/track/page-leave. Pairs with the
+ * pageview recorded by trackPageView() to compute session duration.
+ *
+ * If no pageViewId is known for the given pathname (or current
+ * pathname), this is a silent no-op.
+ *
+ * Uses sendBeacon so it survives page unload.
+ */
+export function trackPageLeave(pathname?: string): void {
+  safeTrackCall(() => {
+    if (typeof window === "undefined") return
+    const p = pathname || window.location.pathname
+    const pageViewId = pageViewIdByPath.get(p)
+    if (!pageViewId) return
+    postFireAndForget("/api/track/page-leave", { pageViewId })
+    // Clear so a second leave event for the same pathname is a no-op.
+    pageViewIdByPath.delete(p)
   })
 }
 
