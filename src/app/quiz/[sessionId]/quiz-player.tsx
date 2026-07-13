@@ -246,6 +246,30 @@ export function QuizPlayer({ initialSession, user }: Props) {
     },
   });
 
+  // ── Polling fallback (2026-07-13) ──────────────────────────────────
+  // The WebSocket relay (mini-services/quiz-service on port 3003 behind
+  // Caddy) only works on the dev VPS — Vercel serverless can't host a
+  // persistent socket process. In production the socket silently fails
+  // after reconnectionAttempts: 10, leaving the player stranded mid-quiz
+  // with no way to learn the host advanced/revealed/finished.
+  //
+  // Polling is the safety net: every 3s, re-fetch /state + /leaderboard
+  // regardless of WS events. With 100 concurrent users this is ~33
+  // requests/sec spread across the audience — well within Neon + Vercel
+  // limits. The WS hook remains the primary transport where it works.
+  //
+  // We pause polling when the session is FINISHED or ABORTED so we don't
+  // keep hitting the API after the game is over.
+  useEffect(() => {
+    const terminal = session.status === "FINISHED" || session.status === "ABORTED";
+    if (terminal) return;
+    const interval = setInterval(() => {
+      refreshState();
+      refreshLeaderboard();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [session.status, refreshState, refreshLeaderboard]);
+
   // ── Actions ────────────────────────────────────────────────────────
   const handleJoin = async () => {
     setJoining(true);

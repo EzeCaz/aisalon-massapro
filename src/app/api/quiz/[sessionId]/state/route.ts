@@ -95,20 +95,34 @@ export async function GET(
       answeredCount: true,
       avgResponseMs: true,
       isOnline: true,
+      lastSeenAt: true,
       joinedAt: true,
     },
   });
 
-  // Mark them as online + bump lastSeenAt (best-effort — don't block on failure)
+  // Mark them as online + bump lastSeenAt (best-effort — don't block on failure).
+  //
+  // THROTTLED (2026-07-13): for events with ~100 concurrent participants, the
+  // unthrottled write fired on every GET /state (which itself fires on every
+  // WS event) was producing ~300 writes/question purely for stale-cleanup
+  // purposes. We now only write if the existing lastSeenAt is older than 30s
+  // OR isOnline is currently false. This cuts the write load by ~80% while
+  // preserving the "is this participant still here?" signal.
   if (participant) {
-    await db.quizParticipant
-      .update({
-        where: { id: participant.id },
-        data: { isOnline: true, lastSeenAt: new Date() },
-      })
-      .catch(() => {
-        /* ignore — non-critical */
-      });
+    const stale =
+      !participant.isOnline ||
+      !participant.lastSeenAt ||
+      Date.now() - participant.lastSeenAt.getTime() > 30_000;
+    if (stale) {
+      await db.quizParticipant
+        .update({
+          where: { id: participant.id },
+          data: { isOnline: true, lastSeenAt: new Date() },
+        })
+        .catch(() => {
+          /* ignore — non-critical */
+        });
+    }
   }
 
   // Determine current question.
