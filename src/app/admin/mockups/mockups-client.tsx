@@ -189,6 +189,15 @@ const MOCKUP_TEMPLATES: AssetCard[] = [
     editorHref: "/admin/mockups/event-profile",
     editorLabel: "Open editor",
   },
+  {
+    title: "5. QR Salon",
+    description:
+      "QR-code-only mockup: drop in a URL, type a caption below the QR, and the small AI Salon brand mark sits in the bottom-left corner (height 48px, X=2.7%). Editable text, font, colors, and brand mark — drag the mark on the canvas to reposition.",
+    url: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    kind: "template",
+    editorHref: "/admin/mockups/qr-salon",
+    editorLabel: "Open editor",
+  },
 ];
 
 function AssetCardItem({ asset }: { asset: AssetCard }) {
