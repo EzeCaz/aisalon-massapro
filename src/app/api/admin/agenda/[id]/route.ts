@@ -28,9 +28,10 @@ export async function PATCH(
   if (isError(me)) return me;
 
   const body = await req.json();
-  const { title, description, type, startsAt, endsAt, speakerId, panelistIds, newPanelists, mainImageId } = body as {
+  const { title, description, sessionUrl, type, startsAt, endsAt, speakerId, panelistIds, newPanelists, mainImageId } = body as {
     title?: string;
     description?: string | null;
+    sessionUrl?: string | null;
     type?: string;
     startsAt?: string;
     endsAt?: string | null;
@@ -50,6 +51,7 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if (typeof title === "string") data.title = title.trim();
   if (description !== undefined) data.description = description?.trim() || null;
+  if (sessionUrl !== undefined) data.sessionUrl = sessionUrl?.trim() || null;
   if (typeof type === "string") data.type = type;
   if (typeof startsAt === "string") data.startsAt = new Date(startsAt);
   if (endsAt !== undefined) data.endsAt = endsAt ? new Date(endsAt) : null;

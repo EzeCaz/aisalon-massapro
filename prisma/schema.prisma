@@ -322,6 +322,13 @@ model EventAgendaItem {
   // Used by the Photos tab "Link to session" picker so members can
   // organize the community gallery by agenda item, not just by speaker.
   taggedImages   EventImage[] @relation("AgendaItemTaggedImages")
+  // Optional per-session link (e.g. recording, livestream, signup form,
+  // sponsor call-booking link). Rendered as the "Session URL" thumbnail
+  // on the public agenda tab. When null, the public tab falls back to
+  // extracting the first http(s) URL from `description` (legacy behavior
+  // preserved so existing sessions that embed a URL in their description
+  // keep working without migration).
+  sessionUrl      String?
   // Optional pointer to ONE EventImage row to use as the "main picture"
   // for this agenda item on the public agenda tab. Used as a fallback
   // when the session's speaker (or panelists) have no linked images.

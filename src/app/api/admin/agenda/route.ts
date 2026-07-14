@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
   if (isError(me)) return me;
   const title = (formData.get("title") as string | null)?.trim();
   const description = (formData.get("description") as string | null)?.trim() || null;
+  const sessionUrl = (formData.get("sessionUrl") as string | null)?.trim() || null;
   const type = (formData.get("type") as string | null)?.trim() || "FAST_PITCH";
   const startsAt = formData.get("startsAt") as string | null;
   const endsAt = (formData.get("endsAt") as string | null)?.trim() || null;
@@ -276,6 +277,7 @@ export async function POST(req: NextRequest) {
       eventId,
       title,
       description,
+      sessionUrl,
       type,
       startsAt: startsAtDate,
       endsAt: endsAtDate,

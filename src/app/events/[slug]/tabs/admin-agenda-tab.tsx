@@ -78,6 +78,11 @@ type AgendaItem = {
   endsAt: string | null;
   title: string;
   description: string | null;
+  // Per-session link (recording, livestream, signup form, etc.). When
+  // non-null, the public agenda tab renders it as the "Session URL"
+  // thumbnail. When null, the public tab falls back to extracting the
+  // first http(s) URL from `description` (legacy behavior).
+  sessionUrl: string | null;
   type: string;
   speaker: Speaker | null;
   panelists?: Panelist[];
@@ -487,6 +492,7 @@ function CreateAgendaItemDialog({
   // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [sessionUrl, setSessionUrl] = useState("");
   const [type, setType] = useState<string>("FAST_PITCH");
   const [startsAt, setStartsAt] = useState<string>(
     toLocalDatetimeInput(event.startsAt)
@@ -521,6 +527,7 @@ function CreateAgendaItemDialog({
   function reset() {
     setTitle("");
     setDescription("");
+    setSessionUrl("");
     setType("FAST_PITCH");
     setStartsAt(toLocalDatetimeInput(event.startsAt));
     setEndsAt("");
@@ -580,6 +587,14 @@ function CreateAgendaItemDialog({
     formData.append("eventId", event.id);
     formData.append("title", title.trim());
     formData.append("description", description.trim());
+    // Per-session link. Trim + normalize: prepend https:// if the user typed
+    // a bare domain like `hi4.ai/book-call-form`. Empty string becomes null
+    // on the server (so the column stays nullable).
+    const trimmedUrl = sessionUrl.trim();
+    if (trimmedUrl) {
+      const normalized = /^https?:\/\//i.test(trimmedUrl) ? trimmedUrl : `https://${trimmedUrl}`;
+      formData.append("sessionUrl", normalized);
+    }
     formData.append("type", type);
     formData.append("startsAt", fromLocalDatetimeInput(startsAt));
     if (endsAt) formData.append("endsAt", fromLocalDatetimeInput(endsAt));
@@ -728,6 +743,23 @@ function CreateAgendaItemDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          {/* Session URL */}
+          <div>
+            <Label className="text-xs font-semibold text-black/70">Session URL</Label>
+            <Input
+              className="mt-1"
+              type="url"
+              placeholder="https://youtu.be/xyz  ·  hi4.ai/book-call-form  ·  zoom.us/j/123"
+              value={sessionUrl}
+              onChange={(e) => setSessionUrl(e.target.value)}
+            />
+            <p className="text-[0.65rem] text-black/50 mt-1">
+              Optional. Shown as the “Session URL” thumbnail on the public agenda tab
+              (e.g. recording, livestream, sponsor call-booking link). If left blank and
+              the description contains a URL, that URL is used as a fallback.
+            </p>
           </div>
 
           {/* Times */}
@@ -1006,6 +1038,7 @@ function EditAgendaItemDialog({
 }) {
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description || "");
+  const [sessionUrl, setSessionUrl] = useState(item.sessionUrl || "");
   const [type, setType] = useState(item.type);
   const [startsAt, setStartsAt] = useState(toLocalDatetimeInput(item.startsAt));
   const [endsAt, setEndsAt] = useState(
@@ -1054,6 +1087,13 @@ function EditAgendaItemDialog({
       const body: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim() || null,
+        // Per-session link — normalize the same way as the create dialog.
+        // Send null explicitly when empty so the server clears the column.
+        sessionUrl: (() => {
+          const t = sessionUrl.trim();
+          if (!t) return null;
+          return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+        })(),
         type,
         startsAt: fromLocalDatetimeInput(startsAt),
         endsAt: endsAt ? fromLocalDatetimeInput(endsAt) : null,
@@ -1168,6 +1208,22 @@ function EditAgendaItemDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          {/* Session URL */}
+          <div>
+            <Label className="text-xs font-semibold text-black/70">Session URL</Label>
+            <Input
+              className="mt-1"
+              type="url"
+              placeholder="https://youtu.be/xyz  ·  hi4.ai/book-call-form  ·  zoom.us/j/123"
+              value={sessionUrl}
+              onChange={(e) => setSessionUrl(e.target.value)}
+            />
+            <p className="text-[0.65rem] text-black/50 mt-1">
+              Optional. Shown as the “Session URL” thumbnail on the public agenda tab.
+              Leave blank to fall back to the first URL found in the description.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

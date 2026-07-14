@@ -104,6 +104,10 @@ type AgendaItem = {
   endsAt: string | null;
   title: string;
   description: string | null;
+  // Per-session link (recording, livestream, signup form, etc.). When
+  // non-null, rendered as the "Session URL" thumbnail. When null, the
+  // tab falls back to extracting the first http(s) URL from `description`.
+  sessionUrl: string | null;
   type: string;
   speaker: Speaker | null;
   panelists?: Speaker[];
@@ -276,7 +280,11 @@ function agendaItemHasAssets(item: AgendaItem): {
   const firstImage = sessionImages[0] ?? null;
   const firstPresentation =
     itemPresentations[0] ?? speakerPresentations[0] ?? null;
-  const sessionUrl = extractFirstUrl(item.description);
+  // Prefer the dedicated sessionUrl column (set by admin via the
+  // EditAgendaItemDialog "Session URL" field). Fall back to extracting
+  // the first http(s) URL from the description text so existing sessions
+  // that embed a URL in their description keep working without migration.
+  const sessionUrl = item.sessionUrl ?? extractFirstUrl(item.description);
 
   return {
     hasPictures: sessionImages.length > 0,
