@@ -687,11 +687,11 @@ function CreateAgendaItemDialog({
       }}
     >
       <DialogTrigger asChild>{children}</DialogTrigger>
-      {/* max-w-5xl matches the EditAgendaItemDialog so the create + edit
-          flows feel symmetric. Wide enough for the Type/Title grid + the
-          panelist picker (which stacks two-column inputs inside) without
-          horizontal scrolling on standard laptop widths. */}
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto ais-scroll">
+      {/* Matches the EditAgendaItemDialog so the create + edit flows feel
+          symmetric. Doubled from max-w-5xl (1024px) to max-w-[128rem]
+          (2048px) per request, with overflow-x-hidden to guarantee no
+          horizontal scrollbar appears even on narrower viewports. */}
+      <DialogContent className="max-w-[128rem] max-h-[90vh] overflow-y-auto overflow-x-hidden ais-scroll">
         <DialogHeader>
           <DialogTitle>Add agenda item</DialogTitle>
         </DialogHeader>
@@ -1160,14 +1160,12 @@ function EditAgendaItemDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      {/* max-w-5xl (was max-w-4xl, originally max-w-2xl). Widened again
-          because the main-image picker row + the Start/End datetime row
-          were still triggering horizontal scrolling on 1280px-ish laptop
-          widths once the PanelistsPicker + new-panelist two-column inner
-          grids were added. max-w-5xl = 64rem = 1024px gives every grid
-          column enough room to breathe without forcing the user to scroll
-          sideways to reach the Save button. */}
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto ais-scroll">
+      {/* Doubled from max-w-5xl (1024px) to max-w-[128rem] (2048px) per
+          request so the main-image picker row, Start/End datetime row,
+          PanelistsPicker, and new-panelist two-column inner grids all fit
+          without forcing the user to scroll sideways. overflow-x-hidden
+          guarantees no horizontal scrollbar appears regardless of viewport. */}
+      <DialogContent className="max-w-[128rem] max-h-[90vh] overflow-y-auto overflow-x-hidden ais-scroll">
         <DialogHeader>
           <DialogTitle>Edit agenda item</DialogTitle>
         </DialogHeader>
