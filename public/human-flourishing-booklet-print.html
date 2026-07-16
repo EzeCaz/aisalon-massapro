@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI &amp; Human Flourishing — Reading Companion (Print, A5) | AI Salon Tel Aviv</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700;1,900&family=Inter:wght@300;400;500;600;700;800;900&display=block" rel="stylesheet">
+<style>
+/* Local font fallbacks — used if Google Fonts CDN fails to load in time.
+   These are installed at /home/z/.fonts/ and resolved by fontconfig. */
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: block;
+  src: local('Playfair Display'),
+       url('file:///home/z/.fonts/PlayfairDisplay-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400 900;
+  font-display: block;
+  src: local('Playfair Display Italic'),
+       url('file:///home/z/.fonts/PlayfairDisplay-Italic.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: local('Inter'),
+       url('file:///home/z/.fonts/Inter-Variable.ttf') format('truetype');
+}
+
+
+/* ========================================================================
+   AI & Human Flourishing — Reading Companion Booklet (PRINT, A5)
+   9 pages, A5 portrait (148x210mm), pure black ink, single spot pink.
+   Editorial minimal style — Playfair Display + Inter.
+   ======================================================================== */
+
+@page {
+  size: 148mm 210mm;       /* A5 portrait */
+  margin: 0;
+}
+
+:root {
+  --paper:   #faf8f5;       /* warm cream */
+  --ink:     #000000;       /* pure black (was #1a1a1a — darker for print) */
+  --pink:    #ff0056;       /* AI Salon brand pink (single spot color) */
+  --pink-10: rgba(255,0,86,0.10);
+  --pink-20: rgba(255,0,86,0.20);
+  --pink-50: rgba(255,0,86,0.50);
+  --pink-85: rgba(255,0,86,0.85);
+  /* Darker gray ramp — was 0.30/0.50/0.70/0.90, now 0.40/0.70/0.88/0.98 */
+  --gray-30: rgba(0,0,0,0.40);
+  --gray-50: rgba(0,0,0,0.70);
+  --gray-70: rgba(0,0,0,0.88);
+  --gray-90: rgba(0,0,0,0.98);
+  --soft-gray: #d6d2cc;    /* slightly darker than original #e8e4df */
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 148mm;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 12pt;          /* was 11pt — slightly larger for print */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media screen {
+  html {
+    height: auto;
+    display: flex;
+    justify-content: center;
+    background: #2a2a2a;
+  }
+  body {
+    margin: 20px auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+}
+
+/* ----- Page primitives ---------------------------------------------- */
+
+.page {
+  width: 148mm;
+  height: 210mm;
+  box-sizing: border-box;
+  padding: 14mm 12mm 12mm 12mm;   /* scaled from 72px 64px 64px 64px on A4 */
+  position: relative;
+  background: var(--paper);
+  break-after: page;
+  page-break-after: always;
+  overflow: hidden;
+}
+.page:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+
+/* Running header — small wordmark on every body page */
+.running-head {
+  position: absolute;
+  top: 7mm;
+  left: 12mm;
+  right: 12mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8.5pt */
+  font-weight: 700;               /* was 600 */
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+.running-head .rh-mark { color: var(--pink); }
+.running-head .rh-meta {
+  color: var(--ink);              /* was gray-50 — now full black */
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+/* Running footer — page number */
+.running-foot {
+  position: absolute;
+  bottom: 6mm;
+  left: 12mm;
+  right: 12mm;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt */
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* darker than original gray-50 */
+}
+.running-foot .rf-page { color: var(--ink); font-weight: 800; }
+
+/* Pink rule — recurring motif */
+.pink-rule {
+  display: block;
+  width: 12mm;
+  height: 1mm;
+  background: var(--pink);
+  border: 0;
+  margin: 0;
+}
+.pink-rule--full { width: 100%; height: 0.4mm; background: var(--pink); }
+.gray-rule { display:block; width: 100%; height: 0.4mm; background: var(--soft-gray); border:0; margin: 0; }
+
+/* ====================================================================
+   PAGE 1 — COVER
+   ==================================================================== */
+.cover {
+  padding: 12mm 12mm 12mm 12mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.cover-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.cover-mark {
+  font-family: 'Inter', sans-serif;
+  font-size: 11pt;                /* was 10pt */
+  font-weight: 800;               /* was 700 */
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+.cover-mark .dot {
+  display: inline-block;
+  width: 1.6mm; height: 1.6mm;
+  background: var(--pink);
+  border-radius: 50%;
+  margin: 0 2mm 0.6mm 0;
+  vertical-align: middle;
+}
+.cover-edition {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8.5pt */
+  font-weight: 600;               /* was 500 */
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);              /* was gray-50 */
+  text-align: right;
+}
+
+.cover-center {
+  margin-top: 6mm;
+  display: grid;
+  grid-template-columns: 1fr 70mm;   /* was 1fr 280px */
+  gap: 8mm;
+  align-items: center;
+}
+.cover-text { text-align: left; }
+.cover-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.30em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: 6mm;
+}
+.cover-eyebrow .pink { color: var(--pink); }
+
+.cover-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: 54pt;                /* was 78pt — scaled for A5 */
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.cover-title .amp {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--pink);
+}
+.cover-sub {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13pt;                /* was 14pt */
+  line-height: 1.4;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-top: 6mm;
+  max-width: 90mm;
+}
+
+.cover-hero-img {
+  width: 70mm;                    /* was 280px */
+  height: auto;
+  display: block;
+}
+
+.cover-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8mm;
+  margin-top: 4mm;
+}
+.cover-book {
+  display: flex;
+  gap: 4mm;
+  align-items: flex-end;
+  max-width: 120mm;
+}
+.cover-book-img {
+  width: 22mm;                    /* was 76px */
+  height: auto;
+  flex-shrink: 0;
+  box-shadow: 0 2mm 5mm rgba(0,0,0,0.18), 0 0.3mm 0 rgba(0,0,0,0.05);
+  border: 0.3mm solid rgba(0,0,0,0.08);
+}
+.cover-book-caption {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8.5pt */
+  line-height: 1.4;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  padding-bottom: 1mm;
+}
+.cover-book-caption .bt {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 12pt;                /* was 11pt */
+  color: var(--ink);
+  display: block;
+  margin-bottom: 1mm;
+  line-height: 1.2;
+}
+.cover-book-caption .ba {
+  font-weight: 700;               /* was 600 */
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.cover-event {
+  text-align: right;
+  font-family: 'Inter', sans-serif;
+}
+.cover-event .label {
+  font-size: 9pt;                 /* was 8pt */
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 1.5mm;
+}
+.cover-event .date {
+  font-family: 'Playfair Display', serif;
+  font-size: 13pt;                /* was 14pt */
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.cover-event .venue {
+  font-size: 10pt;                /* was 9pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-top: 1mm;
+  letter-spacing: 0.02em;
+}
+
+/* Cover decorative line — anchors bottom-left to top-right visually */
+.cover-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3mm;                     /* was 12px */
+  background: var(--pink);
+}
+
+/* ====================================================================
+   PAGE 2 — EVENT DETAILS + BOOK INTRODUCTION
+   ==================================================================== */
+.p2-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8mm;                       /* was 44px */
+  margin-top: 4mm;
+}
+.section-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 2mm;
+}
+.section-eyebrow .num {
+  display: inline-block;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13pt;                /* was 12pt */
+  color: var(--pink);
+  margin-right: 1.5mm;
+}
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 18pt;                /* was 22pt — slightly smaller to fit A5 */
+  line-height: 1.18;
+  color: var(--ink);
+  margin: 0 0 3mm 0;
+  letter-spacing: -0.01em;
+}
+.section-title .it { font-style: italic; font-weight: 400; }
+
+.event-meta {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5pt;              /* was 9.5pt */
+  line-height: 1.6;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-bottom: 4mm;
+}
+.event-meta strong { color: var(--ink); font-weight: 700; }
+
+.agenda {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  line-height: 1.5;
+}
+.agenda-row {
+  display: grid;
+  grid-template-columns: 14mm 1fr;   /* was 56px 1fr */
+  gap: 2mm;
+  padding: 1.5mm 0;
+  border-bottom: 0.3mm solid var(--soft-gray);
+}
+.agenda-row:last-child { border-bottom: 0; }
+.agenda-time {
+  font-family: 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;               /* was 700 */
+  color: var(--pink);
+  font-size: 9.5pt;               /* was 8.5pt */
+  letter-spacing: 0.04em;
+}
+.agenda-title {
+  color: var(--ink);
+  font-weight: 600;               /* was 500 — darker/bolder */
+  font-size: 10pt;                /* was 9pt */
+}
+.agenda-title .sub {
+  display: block;
+  font-size: 9pt;                 /* was 8pt */
+  color: var(--gray-70);          /* was gray-50 — darker */
+  font-weight: 400;
+  margin-top: 0.3mm;
+}
+.agenda-type {
+  display: inline-block;
+  font-size: 7.5pt;               /* was 6.5pt */
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* was gray-50 — darker */
+  margin-right: 1.5mm;
+}
+
+.book-block {
+  margin-top: 1mm;
+}
+.book-title {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 15pt;                /* was 17pt — scaled for A5 */
+  line-height: 1.18;
+  color: var(--ink);
+  margin: 0 0 1mm 0;
+}
+.book-subtitle {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 11pt;                /* was 11.5pt */
+  line-height: 1.35;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin: 0 0 2.5mm 0;
+}
+.book-authors {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 4mm;
+}
+.book-intro {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5pt;              /* was 9.5pt */
+  line-height: 1.6;
+  color: var(--ink);              /* was gray-90 — now full black */
+}
+.book-intro p { margin: 0 0 2.5mm 0; }
+
+.book-footnote {
+  margin-top: 4mm;
+  padding-top: 3mm;
+  border-top: 0.3mm solid var(--soft-gray);
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 10pt;                /* was 9.5pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  line-height: 1.4;
+}
+
+/* ====================================================================
+   PAGE 3 — SECTION OPENER ("Why this section")
+   ==================================================================== */
+.section-opener {
+  padding: 10mm 12mm 6mm 12mm;   /* was 12mm 12mm 8mm 12mm — tighter */
+  display: flex;
+  flex-direction: column;
+}
+.opener-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.30em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 3mm;             /* was 4mm */
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+}
+.opener-eyebrow .num {
+  font-family: 'Playfair Display', serif;
+  font-size: 20pt;                /* was 22pt — slightly smaller */
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink);
+  text-transform: none;
+  line-height: 1;
+}
+.opener-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 36pt;                /* was 42pt — scaled to fit A5 */
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 2mm 0 4mm 0;            /* was 2mm 0 6mm 0 */
+}
+.opener-title .it {
+  font-style: italic;
+  color: var(--pink);
+}
+.opener-body {
+  max-width: 120mm;
+  margin-bottom: 2mm;
+}
+.opener-body p {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5pt;              /* was 12pt — smaller to fit A5 */
+  line-height: 1.5;               /* was 1.6 */
+  color: var(--ink);              /* was gray-70 — now black */
+  margin: 0 0 2mm 0;              /* was 0 0 3mm 0 */
+}
+.opener-body .opener-lead {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 14pt;                /* was 16pt — slightly smaller */
+  line-height: 1.35;              /* was 1.4 */
+  color: var(--ink);
+  margin-bottom: 3mm;             /* was 4mm */
+}
+.opener-cta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;                       /* was 6mm — tighter */
+  margin-top: 1mm;
+}
+.cta-block {
+  border-left: 0.6mm solid var(--pink);
+  padding: 1mm 0 1mm 3mm;         /* was 1mm 0 1mm 4mm */
+}
+.cta-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 9.5pt */
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 1.5mm;
+}
+.cta-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 12pt;                /* was 14pt — scaled for A5 */
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 1.5mm 0;            /* was 0 0 2mm 0 */
+  line-height: 1.15;
+}
+.cta-body {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 10.5pt — smaller to fit */
+  line-height: 1.4;               /* was 1.5 */
+  color: var(--ink);              /* was gray-70 — now black */
+  margin: 0;
+}
+.cta-body strong { color: var(--ink); font-weight: 700; }
+
+/* ====================================================================
+   PAGE 4 — QUOTE 1 (dramatic opener)
+   ==================================================================== */
+.quote-page {
+  padding: 22mm 18mm 22mm 18mm;   /* was 96px 84px */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.quote-marker {
+  display: flex;
+  align-items: baseline;
+  gap: 3mm;
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.quote-marker .pg {
+  color: var(--pink);
+  font-variant-numeric: tabular-nums;
+}
+.quote-marker .ch {
+  color: var(--gray-70);          /* was gray-50 — darker */
+  font-weight: 600;
+}
+
+.quote-body {
+  margin: 16mm 0 12mm 0;
+}
+.quote-text {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 32pt;                /* was 42pt — scaled for A5 */
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0;
+}
+.quote-text .em {
+  font-style: italic;
+  color: var(--pink);
+  font-weight: 700;
+}
+
+.quote-foot {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+}
+.quote-foot .pink-rule { width: 16mm; }
+.quote-foot .src {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* was gray-50 — darker */
+}
+.quote-foot .src strong { color: var(--ink); }
+
+/* ====================================================================
+   PAGE 5 — TOOL 01 (Spectrum) + Quote 2 (Chapter 1 card)
+   ==================================================================== */
+.tool-header {
+  display: flex;
+  align-items: baseline;
+  gap: 3.5mm;
+  margin-bottom: 1.5mm;
+}
+.tool-num {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 22pt;                /* was 26pt */
+  color: var(--pink);
+  line-height: 1;
+}
+.tool-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.tool-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 22pt;                /* was 26pt — scaled for A5 */
+  line-height: 1.1;
+  color: var(--ink);
+  margin: 0 0 1.5mm 0;
+  letter-spacing: -0.01em;
+}
+.tool-desc {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 11pt;                /* was 12pt */
+  line-height: 1.4;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  max-width: 130mm;
+  margin: 0 0 4mm 0;
+}
+
+/* Spectrum diagram */
+.spectrum-wrap {
+  margin: 4mm 0 4mm 0;
+  padding: 0 2mm;
+}
+.spectrum-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2mm;
+  margin-bottom: 2.5mm;
+}
+.spectrum-label {
+  text-align: center;
+}
+.spectrum-label .name {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 12pt;                /* was 13pt */
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.spectrum-label .name.pink { color: var(--pink); }
+.spectrum-label .name.gray { color: var(--gray-70); }
+.spectrum-label .cap {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-top: 0.6mm;
+  line-height: 1.3;
+}
+.spectrum-bar {
+  height: 9mm;                    /* was 36px */
+  border-radius: 4.5mm;
+  background: linear-gradient(90deg,
+    var(--pink) 0%,
+    var(--pink-50) 50%,
+    var(--gray-30) 100%);
+  position: relative;
+  border: 0.3mm solid var(--gray-30);
+}
+.spectrum-divider {
+  position: absolute;
+  top: -1mm;
+  bottom: -1mm;
+  width: 0.5mm;
+  background: var(--paper);
+}
+.spectrum-divider.d1 { left: 50%; transform: translateX(-0.25mm); }
+.spectrum-divider.d2 { left: 100%; transform: translateX(-0.25mm); }
+
+.spectrum-arrow {
+  margin-top: 4mm;
+  display: flex;
+  align-items: center;
+  gap: 3mm;
+  justify-content: center;
+}
+.spectrum-arrow .line {
+  flex: 0 0 50mm;                 /* was 220px */
+  height: 0.5mm;
+  background: var(--pink);
+  position: relative;
+}
+.spectrum-arrow .line::after {
+  content: "";
+  position: absolute;
+  right: -0.3mm; top: 50%;
+  transform: translateY(-50%);
+  width: 0; height: 0;
+  border-left: 2.4mm solid var(--pink);
+  border-top: 1.3mm solid transparent;
+  border-bottom: 1.3mm solid transparent;
+}
+.spectrum-arrow .lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 9pt */
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+
+.spectrum-caption {
+  margin-top: 3mm;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 10.5pt;              /* was 10pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Chapter card (Quote 2) */
+.chapter-card {
+  margin-top: 6mm;
+  padding: 6mm 7mm 6mm 7mm;
+  background: var(--pink-10);
+  border-left: 1mm solid var(--pink);
+  position: relative;
+}
+.chapter-card .ch-tag {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 8.5pt */
+  font-weight: 800;
+  letter-spacing: 0.30em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 1mm;
+}
+.chapter-card .ch-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 16pt;                /* was 18pt — scaled for A5 */
+  color: var(--ink);
+  margin: 0 0 3mm 0;
+  letter-spacing: -0.005em;
+}
+.chapter-card .ch-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3mm;
+  margin-top: 1.5mm;
+}
+.chapter-card .ch-step {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 13pt;                /* was 16pt — scaled for A5 */
+  color: var(--ink);
+  text-align: center;
+  letter-spacing: 0.04em;
+  position: relative;
+  padding: 1.5mm 0;
+}
+.chapter-card .ch-step::before {
+  content: "";
+  position: absolute;
+  top: 50%; right: -2.5mm;
+  transform: translateY(-50%);
+  width: 1.6mm; height: 1.6mm;
+  background: var(--pink);
+  border-radius: 50%;
+  opacity: 0.6;
+}
+.chapter-card .ch-step:last-child::before { display: none; }
+.chapter-card .ch-pg {
+  position: absolute;
+  top: 5mm; right: 6mm;
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;               /* was 8pt */
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--gray-70);          /* was gray-50 — darker */
+}
+
+/* ====================================================================
+   PAGE 6 — TOOLS 02 + 04 (two 2x2 matrices)
+   ==================================================================== */
+.matrix-block { margin-bottom: 4mm; }    /* was 6mm — tighter */
+
+.matrix-canvas {
+  margin-top: 2mm;
+  padding: 1.5mm;
+  position: relative;
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: 7mm 1fr 1fr;
+  grid-template-rows: 5mm 1fr 1fr;
+  gap: 0;
+  width: 100%;
+  height: 58mm;                   /* was 50mm — give cells more room */
+  position: relative;
+}
+
+.matrix .axis-y {
+  grid-column: 1; grid-row: 2 / 4;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;               /* was 8pt — slightly smaller */
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* was gray-50 — darker */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1mm 0;
+}
+.matrix .axis-x {
+  grid-column: 2 / 4; grid-row: 1;
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;               /* was 8pt — slightly smaller */
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gray-70);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1mm;
+}
+
+.matrix-cell {
+  position: relative;
+  padding: 2mm 2.5mm;             /* was 3mm 3.5mm — tighter */
+  border: 0.3mm solid var(--gray-30);
+  background: var(--paper);
+  margin: 0.5mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;               /* NEW — keep text inside the cell */
+}
+.matrix-cell.filled-pink {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: var(--paper);
+}
+.matrix-cell .num {
+  position: absolute;
+  top: 1.5mm; right: 2mm;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 9pt;                 /* was 10pt — smaller */
+  color: var(--gray-70);
+}
+.matrix-cell.filled-pink .num { color: var(--paper); opacity: 0.75; }
+.matrix-cell .name {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 10pt;                /* was 11pt — smaller to fit cell */
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  line-height: 1.1;
+  max-width: 90%;
+}
+.matrix-cell.filled-pink .name { color: var(--paper); }
+.matrix-cell .sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;               /* was 8.5pt — smaller to fit cell */
+  line-height: 1.3;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-top: 0.8mm;
+}
+.matrix-cell.filled-pink .sub { color: var(--paper); opacity: 0.9; }
+
+.matrix-callout {
+  margin-top: 1.5mm;
+  text-align: right;
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;               /* was 9pt — smaller */
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+
+/* Canvas (Tool 04) — 4 quadrants with big F letters */
+.canvas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1.5mm;
+  margin-top: 2mm;
+  position: relative;
+  height: 58mm;                   /* was 50mm — match matrix */
+}
+.canvas-cell {
+  position: relative;
+  padding: 2.5mm 3mm;             /* was 3.5mm 4mm — tighter */
+  border: 0.5mm solid var(--gray-30);
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;               /* NEW — keep F from spilling out */
+}
+.canvas-cell.tint-pink {
+  background: var(--pink-10);
+  border-color: var(--pink);
+}
+.canvas-cell .big-F {
+  position: absolute;
+  right: 2mm; bottom: -4mm;
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: 60pt;                /* was 90pt — much smaller so it doesn't bleed */
+  line-height: 1;
+  color: var(--pink);
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
+}
+.canvas-cell.tint-gray .big-F { color: var(--gray-30); opacity: 0.95; }
+.canvas-cell .name {
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 13pt;                /* was 15pt — smaller to fit A5 */
+  color: var(--ink);
+  line-height: 1.05;
+  letter-spacing: -0.005em;
+  position: relative;
+  z-index: 1;
+}
+.canvas-cell .pill {
+  display: inline-block;
+  margin-top: 1.2mm;
+  padding: 0.5mm 1.8mm;
+  background: var(--pink);
+  color: var(--paper);
+  font-family: 'Inter', sans-serif;
+  font-size: 7pt;                 /* was 7.5pt — smaller */
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border-radius: 2mm;
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+}
+.canvas-cell.tint-gray .pill { background: var(--ink); }
+.canvas-cell .desc {
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;               /* was 9pt — smaller to fit cell */
+  line-height: 1.35;
+  color: var(--gray-90);          /* was gray-70 — darker */
+  margin-top: 1.5mm;
+  position: relative;
+  z-index: 1;
+  max-width: 75%;
+}
+.canvas-badge {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6.5mm; height: 6.5mm;
+  background: var(--paper);
+  border: 0.5mm solid var(--pink);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 9pt;
+  color: var(--pink);
+  z-index: 5;
+}
+
+/* ====================================================================
+   PAGE 7 — TOOL 03 (Curiosity Loop) + Quotes 3 & 4
+   ==================================================================== */
+.loop-wrap {
+  margin: 2mm auto 3mm auto;
+  display: flex;
+  justify-content: center;
+}
+.loop-svg { display: block; width: 120mm; height: auto; }
+
+.loop-caption {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 10.5pt;              /* was 10pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  text-align: center;
+  line-height: 1.4;
+  margin-top: 1.5mm;
+  max-width: 120mm;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.two-quotes {
+  margin-top: 5mm;
+  padding-top: 5mm;
+  border-top: 0.3mm solid var(--soft-gray);
+  display: grid;
+  grid-template-columns: 1fr 0.3mm 1fr;
+  gap: 6mm;
+}
+.two-quotes .v-rule {
+  background: var(--pink);
+  width: 0.3mm;
+  opacity: 0.7;
+}
+.mini-quote {
+  padding: 0 1mm;
+}
+.mini-quote .marker {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;               /* was 7.5pt — bigger */
+  font-weight: 800;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 2mm;
+  display: block;
+}
+.mini-quote .text {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13pt;                /* was 14pt — slightly smaller for A5 */
+  line-height: 1.3;
+  color: var(--ink);
+  margin: 0 0 2.5mm 0;
+}
+.mini-quote .text .em { font-style: italic; font-weight: 700; color: var(--pink); }
+.mini-quote .src {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt — bigger */
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* was gray-50 — darker */
+}
+
+/* ====================================================================
+   PAGE 8 — QUOTES 5, 6, 7 (closing spread)
+   ==================================================================== */
+.closing-stack {
+  margin-top: 6mm;
+  display: flex;
+  flex-direction: column;
+  gap: 9mm;
+}
+.closing-block {
+  padding-bottom: 6mm;
+  border-bottom: 0.3mm solid var(--soft-gray);
+}
+.closing-block:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.closing-marker {
+  display: flex;
+  align-items: baseline;
+  gap: 3.5mm;
+  margin-bottom: 3.5mm;
+}
+.closing-marker .num {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 14pt;
+  color: var(--pink);
+  line-height: 1;
+}
+.closing-marker .lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt — bigger */
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gray-70);          /* was gray-50 — darker */
+}
+.closing-marker .pg {
+  margin-left: auto;
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt — bigger */
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--pink);
+}
+
+.closing-text {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.closing-text.size-l { font-size: 22pt; }    /* was 28pt */
+.closing-text.size-m { font-size: 17pt; }    /* was 22pt */
+.closing-text.size-s { font-size: 13pt; }    /* was 17pt */
+.closing-text .em { font-style: italic; font-weight: 700; color: var(--pink); }
+.closing-text .quote-mark {
+  color: var(--pink);
+  font-style: italic;
+  font-weight: 700;
+}
+
+/* ====================================================================
+   PAGE 9 — BACK COVER (QR + citation + branding)
+   ==================================================================== */
+.back-cover {
+  padding: 12mm 12mm 12mm 12mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.back-spine {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 3mm;                     /* was 12px */
+  background: var(--pink);
+}
+.back-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.back-mark {
+  font-family: 'Inter', sans-serif;
+  font-size: 11pt;                /* was 10pt */
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+.back-mark .dot {
+  display: inline-block;
+  width: 1.6mm; height: 1.6mm;
+  background: var(--pink);
+  border-radius: 50%;
+  margin: 0 2mm 0.6mm 0;
+  vertical-align: middle;
+}
+.back-tag {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8.5pt */
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);              /* was gray-50 — now black */
+  text-align: right;
+}
+
+.back-center {
+  text-align: center;
+  margin-top: 4mm;
+}
+.back-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;                /* was 9pt */
+  font-weight: 800;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 4mm;
+}
+.qr-wrap {
+  display: inline-block;
+  padding: 4mm;
+  background: var(--paper);
+  border: 0.5mm solid var(--ink);
+  margin-bottom: 4mm;
+}
+.qr-wrap img {
+  display: block;
+  width: 40mm;
+  height: 40mm;
+}
+.qr-caption {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 13pt;                /* was 13pt */
+  color: var(--ink);
+  margin-bottom: 1mm;
+}
+.qr-sub {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 9pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  letter-spacing: 0.04em;
+}
+
+.back-citation {
+  margin: 8mm auto 0 auto;
+  max-width: 120mm;
+  padding: 5mm 6mm;
+  border-top: 0.3mm solid var(--soft-gray);
+  border-bottom: 0.3mm solid var(--soft-gray);
+  text-align: center;
+}
+.back-citation .lbl {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;                 /* was 8pt */
+  font-weight: 800;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--pink);
+  margin-bottom: 2mm;
+}
+.back-citation .cite {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 11pt;                /* was 11.5pt */
+  line-height: 1.45;
+  color: var(--ink);              /* was gray-90 — now black */
+}
+.back-citation .cite strong {
+  font-style: italic;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.back-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 6mm;
+}
+.back-event {
+  font-family: 'Inter', sans-serif;
+  font-size: 9.5pt;               /* was 8.5pt */
+  color: var(--gray-90);          /* was gray-70 — darker */
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+.back-event .strong {
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: 0.06em;
+}
+.back-see-you {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 15pt;                /* was 16pt — scaled for A5 */
+  color: var(--pink);
+  text-align: right;
+  line-height: 1.1;
+}
+
+</style>
+</head>
+<body>
+
+
+<!-- ================================================================
+     PAGE 1 — COVER
+     ================================================================ -->
+<div class="page cover">
+  <div class="cover-spine"></div>
+
+  <div class="cover-top">
+    <div class="cover-mark"><span class="dot"></span>AI Salon Tel Aviv</div>
+    <div class="cover-edition">Reading Companion · 2026</div>
+  </div>
+
+  <div class="cover-center">
+    <div class="cover-text">
+      <div class="cover-eyebrow">A reading companion from the <span class="pink">AI Salon TLV</span> community</div>
+      <h1 class="cover-title">AI <span class="amp">&amp;</span><br>Human<br>Flourishing</h1>
+      <p class="cover-sub">Seven quotes and four models from <em>AI and the Art of Being Human</em> — curated to encourage and inspire AI builders to build conscious AI systems.</p>
+    </div>
+    <img class="cover-hero-img" src="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1783707737806-k0s0bs.png" alt="Meerkat holding AI and the Art of Being Human book">
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-book">
+      <img class="cover-book-img" src="https://sfile.chatglm.cn/images-ppt/04838abe19cf.jpg" alt="Book cover">
+      <div class="cover-book-caption">
+        <span class="bt">AI and the Art of Being Human</span>
+        <span class="ba">Jeffrey Abbott &amp; Andrew Maynard</span><br>
+        A practical guide to thriving with AI while rediscovering yourself in the process.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 2 — EVENT DETAILS + BOOK INTRODUCTION
+     ================================================================ -->
+<div class="page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Event &amp; Book</span>
+  </div>
+
+  <div class="p2-grid">
+    <!-- LEFT: Event -->
+    <div>
+      <div class="section-eyebrow"><span class="num">01</span> The Event</div>
+      <h2 class="section-title">What does it mean<br>to be human <span class="it">in the age of AI?</span></h2>
+
+      <div class="event-meta">
+        <strong>Monday, July 13, 2026</strong> · 18:00 — 21:30 IDT<br>
+        Elementor Offices · 15th floor, Sapir Tower<br>
+        Ramat Gan, Israel
+      </div>
+
+      <div class="agenda">
+        <div class="agenda-row">
+          <div class="agenda-time">18:00</div>
+          <div class="agenda-title"><span class="agenda-type">Networking</span>Door opening</div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">18:30</div>
+          <div class="agenda-title"><span class="agenda-type">Welcome</span>Welcoming community<span class="sub">Ezequiel Sznaider · Chapter Lead, AI Salon TLV</span></div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">18:45</div>
+          <div class="agenda-title"><span class="agenda-type">Talk</span>Real world impact of AI<span class="sub">Nir Lavion · CTO, HI4.AI</span></div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">19:00</div>
+          <div class="agenda-title"><span class="agenda-type">Talk</span>How We Brought AI to Elementor Together<span class="sub">Adi Fine · CHRO, Elementor</span></div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">19:15</div>
+          <div class="agenda-title"><span class="agenda-type">Talk</span>What does it mean to be human in the age of AI?<span class="sub">Dan Ariely · Author and professor, Duke University</span></div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">19:45</div>
+          <div class="agenda-title"><span class="agenda-type">Break</span>Break</div>
+        </div>
+        <div class="agenda-row">
+          <div class="agenda-time">20:00</div>
+          <div class="agenda-title"><span class="agenda-type">Panel</span>Being human in the era of AI<span class="sub">Moderator: Ezequiel Sznaider · Panelists: Dan Ariely, Shuki Cohen, Noam Inbar, Dennis Nerush, Ido Vapner, Eyal Rond</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Book -->
+    <div>
+      <div class="section-eyebrow"><span class="num">02</span> The Book</div>
+      <h2 class="section-title">A practical guide<br>to <span class="it">thriving with AI.</span></h2>
+
+      <div class="book-block">
+        <p class="book-title">AI and the Art of Being Human</p>
+        <p class="book-subtitle">A practical guide to thriving with AI while rediscovering yourself in the process.</p>
+        <p class="book-authors">Jeffrey Abbott &amp; Andrew Maynard</p>
+
+        <div class="book-intro">
+          <p>This booklet distills the book into six of its sharpest sentences and four of its working models — the ones the AI Salon TLV community will be referencing throughout the evening.</p>
+          <p>Each model is a small practice you can run in fifteen minutes: a spectrum to locate your work, a matrix to map your identity, a loop to convert defensiveness into curiosity, and a canvas to shape how you talk with AI.</p>
+          <p>Take notes in the margins. Argue with the quotes. The point of the evening is not to agree — it is to leave with better questions.</p>
+        </div>
+
+        <div class="book-footnote">
+          Scan the QR code on the back cover for the full event page, RSVP, and check-in.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">02</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 3 — SECTION OPENER ("Why this section")
+     ================================================================ -->
+<div class="page section-opener">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Why this section</span>
+  </div>
+
+  <div class="opener-eyebrow"><span class="num">03</span> Why this section</div>
+  <h2 class="opener-title">Build <span class="it">consciously.</span></h2>
+
+  <div class="opener-body">
+    <p class="opener-lead">This section is here to encourage and inspire AI builders to build conscious AI systems.</p>
+    <p>The quotes and models that follow are not abstractions. They are working tools for people who ship AI products and want to ship better ones — sharper questions, clearer boundaries, a more honest map of what AI can do and what only humans can do.</p>
+    <p>Read them slowly. Argue with them. Notice which one lands and which one stings. The point is not to agree with the authors — it is to leave the page with sharper questions than you brought to it.</p>
+  </div>
+
+  <hr class="pink-rule pink-rule--full" style="margin: 28px 0 22px 0;">
+
+  <div class="opener-cta">
+    <div class="cta-block">
+      <div class="cta-label">Engage</div>
+      <h3 class="cta-title">Explore the interactive platform</h3>
+      <p class="cta-body">Visit the <strong>Human Flourishing</strong> interactive site to work with the four models yourself: locate your work on the spectrum, map your identity, run a curiosity loop, scaffold a real prompt. Scan the QR code on the back cover.</p>
+    </div>
+    <div class="cta-block">
+      <div class="cta-label">Go deeper</div>
+      <h3 class="cta-title">Get a copy of the book</h3>
+      <p class="cta-body">If the seven quotes leave you wanting more, the full framework lives in <em>AI and the Art of Being Human</em> by Jeffrey Abbott &amp; Andrew Maynard — available on Amazon. The book is the source for every quote and model in this companion.</p>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">03</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 4 — QUOTE 1 (dramatic opener)
+     ================================================================ -->
+<div class="page quote-page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Quote 01 / 07</span>
+  </div>
+
+  <div class="quote-marker">
+    <span class="pg">P. 25</span>
+    <span class="ch">Chapter 1 · The Curiosity Loop</span>
+  </div>
+
+  <div class="quote-body">
+    <p class="quote-text">
+      But walls don't stop water.<br>
+      They just influence where it <span class="em">flows</span> —<br>
+      and where it <span class="em">floods</span> when they break.
+    </p>
+  </div>
+
+  <div class="quote-foot">
+    <hr class="pink-rule">
+    <span class="src">From <strong>AI and the Art of Being Human</strong> · Abbott &amp; Maynard</span>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">04</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 5 — TOOL 01 (Spectrum) + Quote 2 (Chapter 1 card)
+     ================================================================ -->
+<div class="page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Tool 01 / 04</span>
+  </div>
+
+  <div class="tool-header">
+    <span class="tool-num">01</span>
+    <span class="tool-eyebrow">Tool · Model</span>
+  </div>
+  <h2 class="tool-title">Human Qualities Spectrum</h2>
+  <p class="tool-desc">A way to understand which human qualities AI can replicate — and which remain uniquely ours. Not a hierarchy: we need all three.</p>
+
+  <div class="spectrum-wrap">
+    <div class="spectrum-labels">
+      <div class="spectrum-label">
+        <span class="name pink">Replicable</span>
+        <span class="cap">Skills AI can master — calculation, pattern, style.</span>
+      </div>
+      <div class="spectrum-label">
+        <span class="name">Relational</span>
+        <span class="cap">Presence, context, the room — AI joins but misses the current.</span>
+      </div>
+      <div class="spectrum-label">
+        <span class="name gray">Transcendent</span>
+        <span class="cap">Meaning, moral imagination — what arises from being human.</span>
+      </div>
+    </div>
+    <div class="spectrum-bar">
+      <div class="spectrum-divider d1"></div>
+      <div class="spectrum-divider d2"></div>
+    </div>
+    <div class="spectrum-arrow">
+      <span class="lbl">Invest yourself</span>
+      <span class="line"></span>
+    </div>
+    <p class="spectrum-caption">Not a hierarchy — we need all three. But stop pretending the left end makes you irreplaceable.</p>
+  </div>
+
+  <!-- Quote 2: Chapter 1 card -->
+  <div class="chapter-card">
+    <span class="ch-pg">P. 35</span>
+    <div class="ch-tag">Quote 02 · Chapter 1</div>
+    <h3 class="ch-title">The Curiosity Loop</h3>
+    <div class="ch-steps">
+      <div class="ch-step">Notice</div>
+      <div class="ch-step">Reflect</div>
+      <div class="ch-step">Question</div>
+      <div class="ch-step">Experiment</div>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">05</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 6 — TOOLS 02 + 04 (two 2x2 matrices)
+     ================================================================ -->
+<div class="page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Tools 02 + 04 / 04</span>
+  </div>
+
+  <!-- TOOL 02 — Identity Matrix -->
+  <div class="matrix-block">
+    <div class="tool-header">
+      <span class="tool-num">02</span>
+      <span class="tool-eyebrow">Tool · Model</span>
+    </div>
+    <h2 class="tool-title" style="font-size: 22pt;">Identity Matrix</h2>
+    <p class="tool-desc" style="font-size: 11pt; margin-bottom: 8px;">A map to help distinguish what AI can automate from what makes you irreducibly you.</p>
+
+    <div class="matrix-canvas">
+      <div class="matrix">
+        <div class="axis-y">Stable → Growing</div>
+        <div class="axis-x">Core → Surface</div>
+
+        <div class="matrix-cell filled-pink">
+          <span class="num">01</span>
+          <div>
+            <div class="name">Enduring Essence</div>
+            <div class="sub">Who you are across every context.</div>
+          </div>
+        </div>
+        <div class="matrix-cell">
+          <span class="num">02</span>
+          <div>
+            <div class="name">Evolving Expression</div>
+            <div class="sub">Same core, new manifestations.</div>
+          </div>
+        </div>
+
+        <div class="matrix-cell">
+          <span class="num">03</span>
+          <div>
+            <div class="name">Replaceable Skills</div>
+            <div class="sub">What AI can learn — even the ones you're proud of.</div>
+          </div>
+        </div>
+        <div class="matrix-cell">
+          <span class="num">04</span>
+          <div>
+            <div class="name">Yet To Be Cultivated</div>
+            <div class="sub">Latent abilities you've postponed.</div>
+          </div>
+        </div>
+      </div>
+      <div class="matrix-callout">↑ Focus growth here</div>
+    </div>
+  </div>
+
+  <hr class="gray-rule" style="margin: 14px 0;">
+
+  <!-- TOOL 04 — Prompt-Scaffolding Canvas -->
+  <div class="matrix-block" style="margin-bottom: 0;">
+    <div class="tool-header">
+      <span class="tool-num">04</span>
+      <span class="tool-eyebrow">Tool · Model</span>
+    </div>
+    <h2 class="tool-title" style="font-size: 22pt;">Prompt-Scaffolding Canvas</h2>
+    <p class="tool-desc" style="font-size: 11pt; margin-bottom: 8px;">Four quadrants to shape the full creative partnership with AI — not just the opening prompt.</p>
+
+    <div class="matrix-canvas">
+      <div class="canvas">
+        <div class="canvas-cell tint-pink">
+          <div class="name">Frame</div>
+          <span class="pill">Intentionality</span>
+          <div class="desc">Why you're creating and for whom — the emotional core.</div>
+          <span class="big-F">F</span>
+        </div>
+        <div class="canvas-cell tint-gray">
+          <div class="name">Fuel</div>
+          <span class="pill">Curiosity</span>
+          <div class="desc">Feed unexpected combinations — references, moods, collisions.</div>
+          <span class="big-F">F</span>
+        </div>
+        <div class="canvas-cell tint-gray">
+          <div class="name">Flip</div>
+          <span class="pill">Clarity</span>
+          <div class="desc">Invert an assumption — what if the villain is the hero?</div>
+          <span class="big-F">F</span>
+        </div>
+        <div class="canvas-cell tint-pink">
+          <div class="name">Filter</div>
+          <span class="pill">Care</span>
+          <div class="desc">Practical &amp; ethical boundaries — respects sources, opens possibilities.</div>
+          <span class="big-F">F</span>
+        </div>
+        <div class="canvas-badge">F⁴</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">06</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 7 — TOOL 03 (Curiosity Loop) + Quotes 3 & 4
+     ================================================================ -->
+<div class="page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Tool 03 / 04 · Quotes 03–04</span>
+  </div>
+
+  <div class="tool-header">
+    <span class="tool-num">03</span>
+    <span class="tool-eyebrow">Tool · Model</span>
+  </div>
+  <h2 class="tool-title">The Curiosity Loop</h2>
+  <p class="tool-desc">A repeatable practice that transforms defensive reactions into learning opportunities when facing technological change.</p>
+
+  <div class="loop-wrap">
+    <!-- Curiosity Loop SVG diagram -->
+    <svg class="loop-svg" viewBox="0 0 560 320" width="560" height="320" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff0056" fill-opacity="0.85"/>
+        </marker>
+      </defs>
+
+      <!-- Curved clockwise arrows between nodes (4 arcs) -->
+      <!-- Notice (top) -> Question (right) -->
+      <path d="M 312 70 A 100 100 0 0 1 470 150" stroke="#ff0056" stroke-width="2.5" fill="none" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+      <!-- Question (right) -> Experiment (bottom) -->
+      <path d="M 470 170 A 100 100 0 0 1 312 250" stroke="#ff0056" stroke-width="2.5" fill="none" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+      <!-- Experiment (bottom) -> Reflect (left) -->
+      <path d="M 248 250 A 100 100 0 0 1 90 170" stroke="#ff0056" stroke-width="2.5" fill="none" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+      <!-- Reflect (left) -> Notice (top) -->
+      <path d="M 90 150 A 100 100 0 0 1 248 70" stroke="#ff0056" stroke-width="2.5" fill="none" stroke-opacity="0.7" marker-end="url(#arrow)"/>
+
+      <!-- Central hub -->
+      <circle cx="280" cy="160" r="48" fill="#fff5f8" stroke="#ff0056" stroke-width="1.5" stroke-dasharray="2 4" stroke-opacity="0.6"/>
+      <text x="280" y="156" text-anchor="middle" font-family="Playfair Display, serif" font-weight="700" font-size="13" fill="#1a1a1a">CURIOSITY</text>
+      <text x="280" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-size="7" fill="#1a1a1a" fill-opacity="0.6" letter-spacing="1.5">TURNS REACTION</text>
+      <text x="280" y="180" text-anchor="middle" font-family="Inter, sans-serif" font-size="7" fill="#1a1a1a" fill-opacity="0.6" letter-spacing="1.5">INTO LEARNING</text>
+
+      <!-- Node: Notice (top) -->
+      <circle cx="280" cy="60" r="32" fill="#ff0056"/>
+      <text x="280" y="56" text-anchor="middle" font-family="Playfair Display, serif" font-weight="700" font-size="14" fill="#faf8f5">01</text>
+      <text x="280" y="70" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="7" fill="#faf8f5" letter-spacing="0.5">NOTICE</text>
+      <text x="280" y="22" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">Observe your reaction</text>
+
+      <!-- Node: Question (right) -->
+      <circle cx="480" cy="160" r="32" fill="#ff0056"/>
+      <text x="480" y="156" text-anchor="middle" font-family="Playfair Display, serif" font-weight="700" font-size="14" fill="#faf8f5">02</text>
+      <text x="480" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="7" fill="#faf8f5" letter-spacing="0.5">QUESTION</text>
+      <text x="525" y="164" text-anchor="start" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">Challenge your</text>
+      <text x="525" y="175" text-anchor="start" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">assumptions</text>
+
+      <!-- Node: Experiment (bottom) -->
+      <circle cx="280" cy="260" r="32" fill="#ff0056"/>
+      <text x="280" y="256" text-anchor="middle" font-family="Playfair Display, serif" font-weight="700" font-size="14" fill="#faf8f5">03</text>
+      <text x="280" y="270" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="6.5" fill="#faf8f5" letter-spacing="0.5">EXPERIMENT</text>
+      <text x="280" y="306" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">Take one small action</text>
+
+      <!-- Node: Reflect (left) -->
+      <circle cx="80" cy="160" r="32" fill="#ff0056"/>
+      <text x="80" y="156" text-anchor="middle" font-family="Playfair Display, serif" font-weight="700" font-size="14" fill="#faf8f5">04</text>
+      <text x="80" y="170" text-anchor="middle" font-family="Inter, sans-serif" font-weight="700" font-size="7" fill="#faf8f5" letter-spacing="0.5">REFLECT</text>
+      <text x="35" y="164" text-anchor="end" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">What</text>
+      <text x="35" y="175" text-anchor="end" font-family="Inter, sans-serif" font-size="8.5" fill="#1a1a1a" fill-opacity="0.7">surprised you?</text>
+    </svg>
+  </div>
+
+  <p class="loop-caption">A practice, not a one-time exercise — each pass turns defensiveness into a question.</p>
+
+  <!-- Quotes 3 & 4 -->
+  <div class="two-quotes">
+    <div class="mini-quote">
+      <span class="marker">Quote 03 · P. 35</span>
+      <p class="text">Curiosity isn't only about <span class="em">learning</span> — it's about <span class="em">thriving through change.</span></p>
+      <span class="src">Chapter 1 · The Curiosity Loop</span>
+    </div>
+    <div class="v-rule"></div>
+    <div class="mini-quote">
+      <span class="marker">Quote 04 · P. 39</span>
+      <p class="text">In a world obsessed with having the correct answers, the real competitive advantage might come from <span class="em">asking better questions.</span></p>
+      <span class="src">Chapter 1 · The Curiosity Loop</span>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">07</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 8 — QUOTES 5, 6, 7 (closing spread)
+     ================================================================ -->
+<div class="page">
+  <div class="running-head">
+    <span class="rh-mark">AI Salon TLV · Reading Companion</span>
+    <span class="rh-meta">Quotes 05–07 / 07</span>
+  </div>
+
+  <div class="section-eyebrow" style="margin-bottom: 6px;"><span class="num">·</span> Three Closing Quotes</div>
+  <h2 class="section-title" style="font-size: 24pt; margin-bottom: 0;">From chapter 3 onward.</h2>
+
+  <div class="closing-stack">
+    <!-- Quote 5 -->
+    <div class="closing-block">
+      <div class="closing-marker">
+        <span class="num">05</span>
+        <span class="lbl">Quote · Chapter 3</span>
+        <span class="pg">P. 80</span>
+      </div>
+      <p class="closing-text size-l">
+        The question isn't <span class="quote-mark">"</span>What can't AI do?<span class="quote-mark">"</span><br>
+        It's <span class="quote-mark">"</span><span class="em">What will I choose to cultivate,</span><br>regardless of what AI can do?<span class="quote-mark">"</span>
+      </p>
+    </div>
+
+    <!-- Quote 6 -->
+    <div class="closing-block">
+      <div class="closing-marker">
+        <span class="num">06</span>
+        <span class="lbl">Quote · Chapter 3</span>
+        <span class="pg">P. 84</span>
+      </div>
+      <p class="closing-text size-m">
+        <span class="quote-mark">"</span>If your company disappeared tomorrow, <span class="em">who would miss it</span> and why?<span class="quote-mark">"</span>
+      </p>
+    </div>
+
+    <!-- Quote 7 -->
+    <div class="closing-block">
+      <div class="closing-marker">
+        <span class="num">07</span>
+        <span class="lbl">Quote · Chapter 3</span>
+        <span class="pg">P. 84</span>
+      </div>
+      <p class="closing-text size-s">
+        The leaders we need now don't compete with machines — they use them to <span class="em">amplify what humans alone choose to care about.</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="running-foot">
+    <span>AI &amp; Human Flourishing · Reading Companion</span>
+    <span class="rf-page">08</span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PAGE 9 — BACK COVER (QR + citation + branding)
+     ================================================================ -->
+<div class="page back-cover">
+  <div class="back-spine"></div>
+
+  <div class="back-top">
+    <div class="back-mark"><span class="dot"></span>AI Salon Tel Aviv</div>
+    <div class="back-tag">Reading Companion · 2026</div>
+  </div>
+
+  <div class="back-center">
+    <div class="back-eyebrow">Explore the platform</div>
+    <div class="qr-wrap">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&color=1a1a1a&bgcolor=faf8f5&data=https%3A%2F%2Faisalon.massapro.com%2Fresources%2Fai-human-flourishing" alt="QR code to Human Flourishing interactive platform">
+    </div>
+    <p class="qr-caption">Scan to work with the four models yourself.</p>
+    <p class="qr-sub">aisalon.massapro.com/resources/ai-human-flourishing</p>
+  </div>
+
+  <div class="back-citation">
+    <div class="lbl">Source</div>
+    <p class="cite">
+      <strong>AI and the Art of Being Human</strong> — A practical guide to thriving with AI while rediscovering yourself in the process.<br>
+      Jeffrey Abbott &amp; Andrew Maynard. Available on Amazon.
+    </p>
+  </div>
+
+  <div class="back-bottom">
+    <div class="back-event">
+      <span class="strong">AI &amp; Human Flourishing</span> · A reading companion from the AI Salon TLV community.<br>
+      Curated to encourage and inspire AI builders to build conscious AI systems.
+    </div>
+    <div class="back-see-you">Build<br>consciously.</div>
+  </div>
+</div>
+
+
+</body>
+</html>

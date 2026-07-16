@@ -3,6 +3,8 @@
 > *The constitution for every task that touches this codebase.*
 >
 > **Golden rule**: Every task — no exceptions — flows through the workflow defined in `core/workflow.md`. The DB and the app are released independently. Atlas owns the DB; Beacon owns the app. No deployment of either is allowed without every required agent's signoff.
+>
+> **Triage rule** (added v1.1, 2026-07-17): Before any work starts, every task is categorized as **SMALL**, **MID**, or **HIGH** per [`core/TASK_CATEGORIES.md`](./TASK_CATEGORIES.md). The category determines which agents review the work and how much process is applied. SMALL tasks are handled by Z directly. MID tasks get a post-implementation review by the relevant subset of agents. HIGH tasks run the full 11-gate workflow.
 
 ---
 
@@ -13,6 +15,7 @@ The AI Salon Tel Aviv platform has been bitten repeatedly by silent loss of feat
 1. **A named team of 9 agents**, each with their own folder, job description, and signoff responsibilities.
 2. **An 11-step workflow** that every task must walk through, gate by gate. Skipping a gate requires a written `skipped.md` with a reason.
 3. **A DB-app separation rule**: schema migrations and Vercel deploys are decoupled and run by different agents, each with their own artifacts and rollback path.
+4. **A 3-tier task categorization** (added v1.1) so the right amount of process is applied to each task — SMALL tasks don't need 9 agents, HIGH tasks need all of them.
 
 ---
 
@@ -39,15 +42,16 @@ Each agent's file documents: identity, mission, owned artifacts, refusal rules, 
 ```
 core/
 ├── README.md                  ← you are here — the constitution
+├── TASK_CATEGORIES.md         ← SMALL / MID / HIGH tier definitions (v1.1)
 ├── workflow.md                ← the 11-step lifecycle, expanded
 ├── team/                      ← one .md per agent (9 files)
 ├── tasks/                     ← one folder per task
 │   └── <YYYY-MM-DD>-<slug>/
-│       ├── brief.md           ← Meridian
+│       ├── brief.md           ← Meridian (or Z for SMALL/MID) — includes category
 │       ├── schema-diff.md     ← Atlas (or skipped.md)
 │       ├── design-spec.md     ← Canvas (or skipped.md)
 │       ├── security-review.md ← Aegis (or skipped.md)
-│       ├── implementation.md  ← Forge + Lumen
+│       ├── implementation.md  ← Forge + Lumen (or Z for SMALL/MID)
 │       ├── qa-checklist.md    ← Sentinel
 │       ├── deploy-plan.md     ← Beacon
 │       └── release-notes.md   ← Codex
@@ -129,3 +133,4 @@ This constitution can be amended by the user at any time. When amended:
 ## Changelog
 
 - **v1.0** (2026-06-22) — Initial constitution. 9 agents, 11-step workflow, DB-app separation rule. Approved by the user.
+- **v1.1** (2026-07-17) — Added `core/TASK_CATEGORIES.md` defining three task tiers: SMALL (Z handles directly, no agent review), MID (Z implements, relevant subset of 9 agents reviews post-implementation), HIGH (full 11-gate workflow with all 9 agents). The QR Salon mockup is the first task classified as SMALL.
