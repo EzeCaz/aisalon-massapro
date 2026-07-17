@@ -3094,3 +3094,73 @@ Stage Summary:
 - Next tasks should be triaged into a category BEFORE work starts, and
   the category should be stated in the brief.md. The user can override
   the category at any time.
+
+---
+Task ID: 2026-07-17-qr-salon-fix
+Agent: Super Z (main, on behalf of Codex)
+Task: User reported QR Salon mockup lacked the Edit-position feature
+  matching the other mockups. Re-listed 4 sub-requirements: A) move QR
+  position via Edit position feature (as other mockups), B) text below
+  QR, C) AI Salon logo at bottom-left (h=48, X=2.7%), D) edit text +
+  logo. B/C/D were already satisfiable via form fields; A was the real
+  gap. Also requested: Google Drive backup + downloadable project zip.
+
+Work Log:
+- Triage: SMALL (no DB, no structure, no existing UI/UX change — purely
+  corrective inside the QR Salon feature).
+- Wrote core/tasks/2026-07-17-qr-salon-fix/brief.md with category
+  marked.
+- Investigated the shared SectionBox system in
+  src/app/admin/mockups/shared/section-edit.tsx (1430 lines) and how
+  the other 4 mockups use it (speaker-intro, meet-the-speaker,
+  event-profile, agenda-profile).
+- Root cause: QR Salon canvas (commit 04dad9f) had a custom ad-hoc
+  drag system on the brand mark only. The QR code and caption were
+  fixed-positioned with no drag/resize handles.
+- Updated src/app/admin/mockups/qr-salon/types.ts:
+  * Imported SectionLayout type from shared/section-edit
+  * Added sectionLayout?: SectionLayout field to QrSalonData
+    (keys: "qr", "caption", "branding")
+- Rewrote src/app/admin/mockups/qr-salon/qr-salon-canvas.tsx:
+  * Wrapped QR, caption, and brand mark each in <SectionBox>
+  * Added GuideProvider + GuideOverlay for alignment guides
+  * Added ObjectPropertiesPanel for precise position/size/z control
+  * Two independent edit modes: 'editable' (Edit images — click brand
+    mark to replace from brand library) and 'sectionsEditable'
+    (Edit sections — drag/resize all three with 8 handles)
+  * Per-section z-index defaults: qr=10, caption=20, branding=30
+  * Backward compat: existing data (without sectionLayout) loads fine
+    and uses default positions
+- Updated src/app/admin/mockups/qr-salon/qr-salon-editor.tsx:
+  * Added sectionsEditMode state
+  * Added Edit-sections (pink, #FF005A) button next to Edit-images
+    (blue, #0066FF) — matches the other mockups' pattern
+  * Added handleSectionMove / Resize / BoxResize / ZChange handlers
+    that deep-clone data, mutate sectionLayout[id], and applyData
+  * Bumped localStorage key v1 → v2 to invalidate stale state
+  * Updated PNG export (handleDownloadPng + getPngDataUrl) to strip
+    both edit modes before snapshot, then restore
+- TypeScript: npx tsc --noEmit — zero errors in QR Salon files. All
+  remaining errors are pre-existing in chart.tsx, auth-guards.ts,
+  meta-capi.ts, referral/* (unrelated).
+- Wrote core/tasks/2026-07-17-qr-salon-fix/implementation.md and
+  CLOSED.md.
+- Updated core/tasks/README.md closed-task table.
+- Committed (bd82e86) and pushed to origin/main. Vercel auto-deploying.
+
+Stage Summary:
+- After Vercel deploys (~2 min) and the user hard-refreshes
+  /admin/mockups/qr-salon (Ctrl/Cmd+Shift+R to bypass cached JS), the
+  localStorage v2 key will start empty and only the new SAMPLE_DATA
+  will be written to it.
+- The user will see two buttons above the canvas: Edit images (blue)
+  and Edit sections (pink). Clicking Edit sections makes the QR code,
+  caption, and brand mark each draggable with 8 resize handles and an
+  Object Properties Panel for precise position/size/z control.
+- The brand mark's click-to-replace (Edit images mode) is preserved.
+- All section positions persist in data.sectionLayout and round-trip
+  through the JSON view.
+- Google Drive backup: I have no Drive API access; the user needs to
+  download the project zip from /download/ and upload it manually.
+- Project zip: created at /home/z/my-project/download/ with code +
+  core/ + worklog + tasks + chat logs, organized.
