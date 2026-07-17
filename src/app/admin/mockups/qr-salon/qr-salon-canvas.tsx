@@ -1,28 +1,39 @@
 "use client";
 
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { QrSalonData } from "./types";
 import { DEFAULT_BRANDING_ASSET_URL } from "./types";
+import {
+  GuideProvider,
+  GuideOverlay,
+  SectionBox,
+  ObjectPropertiesPanel,
+  useCanvasScrollIsolation,
+  useNonPassiveWheel,
+  type SectionId,
+  type SectionPos,
+  type SectionBoxSize,
+} from "../shared/section-edit";
 
 /**
  * QrSalonCanvas — the data-driven QR-only mockup renderer.
  *
- * Canvas size: 1200×800 (3:2). Same export-quality approach as the
- * other AI Salon mockups.
+ * Uses the same shared `SectionBox` system as the other mockups
+ * (speaker-intro, meet-the-speaker, event-profile, agenda-profile)
+ * so that every on-canvas element — QR code, caption, brand mark —
+ * supports drag-to-move + 8-handle resize + alignment guides +
+ * Object Properties Panel when `sectionsEditable` is true.
  *
- * Layout (defaults):
- *   - QR code centered horizontally, vertically biased toward the upper
- *     third so the caption has room to breathe underneath.
- *   - Caption printed below the QR (centered, 80%-wide text box).
- *   - Branding asset (small AI Salon logo) anchored at the bottom-left
- *     corner — height 48px, X=2.7%, Y=94% by default.
- *   - White canvas background.
+ * Canvas size: 1200×800 (3:2). PNG export is 2× pixelRatio = 2400×1600.
  *
- * Editable mode (editable=true): the branding asset becomes interactive
- * — click to replace from the brand library, drag to reposition,
- * scroll to resize. The QR code itself is not image-editable (it's
- * generated from `qrCodeUrl`); change the URL in the form / JSON.
+ * Two edit modes (mutually compatible, used independently):
+ *   - `editable` (Edit images): the brand mark becomes click-to-replace
+ *     from the brand library. (Pointer/wheel interactions on the brand
+ *     mark are owned by SectionBox when sectionsEditable is true; the
+ *     Edit-images "click to replace" only fires when NOT in sections mode.)
+ *   - `sectionsEditable` (Edit sections): all three elements get
+ *     drag handles + 8-direction resize + Object Properties Panel.
  */
 const CANVAS_W = 1200;
 const CANVAS_H = 800;
@@ -30,16 +41,21 @@ const CANVAS_H = 800;
 type Props = {
   data: QrSalonData;
   className?: string;
-  /** When true, the branding asset gets hover/replace affordances. */
+  /** Edit-images mode: brand mark shows hover/replace affordances. */
   editable?: boolean;
-  /** Called when the user clicks the branding asset to replace it. */
+  /** Edit-sections mode: drag/resize handles on every section. */
+  sectionsEditable?: boolean;
+  /** Called when the user clicks the brand mark to replace it (Edit-images mode). */
   onPickBranding?: () => void;
-  /** Called when the user drags the branding asset to a new position. */
-  onBrandingPosChange?: (pos: { x: number; y: number }) => void;
-  /** Called when the user scroll-zooms the branding asset. */
-  onBrandingSizeChange?: (heightPx: number) => void;
-  /** Render scale of the canvas in the editor (1 = full size). Used to
-   *  scale drag deltas and hover hit areas. */
+  /** SectionBox drag callback (Edit-sections mode). */
+  onSectionMove?: (id: SectionId, pos: SectionPos) => void;
+  /** SectionBox corner-resize callback (uniform scale). */
+  onSectionResize?: (id: SectionId, scale: number) => void;
+  /** SectionBox mid-edge resize callback (explicit width/height). */
+  onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
+  /** SectionBox z-index change (Front/Back in ObjectPropertiesPanel). */
+  onSectionZChange?: (id: SectionId, z: number) => void;
+  /** Render scale of the canvas in the editor (1 = full size). */
   previewScale?: number;
 };
 
@@ -49,9 +65,12 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
       data,
       className,
       editable = false,
+      sectionsEditable = false,
       onPickBranding,
-      onBrandingPosChange,
-      onBrandingSizeChange,
+      onSectionMove,
+      onSectionResize,
+      onSectionBoxResize,
+      onSectionZChange,
       previewScale = 1,
     },
     ref,
@@ -61,31 +80,19 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const qrDark = data.qrDarkColor ?? "#000000";
     const qrLight = data.qrLightColor ?? "#FFFFFF";
 
-    // ─── QR position ───────────────────────────────────────────────
-    // Default: horizontally centered, vertically biased upward so the
-    // caption fits below. Centered QR occupies roughly (CANVAS_W-qrSize)/2
-    // horizontally and ~120px from the top.
-    const qrPos = data.qrPos;
-    const qrLeftPx = qrPos ? (qrPos.x / 100) * CANVAS_W : (CANVAS_W - qrSize) / 2;
-    const qrTopPx = qrPos ? (qrPos.y / 100) * CANVAS_H : 120;
-
-    // ─── Caption position ──────────────────────────────────────────
-    const captionPos = data.captionPos;
+    // ─── Default positions (canvas px) ────────────────────────────
+    // The QR is centered horizontally and biased upward so the caption
+    // fits below. Caption sits 32px below the QR. Brand mark is at the
+    // bottom-left per user spec.
+    const qrDefaultLeftPx = (CANVAS_W - qrSize) / 2;
+    const qrDefaultTopPx = 120;
     const captionWidthPct = data.captionWidthPct ?? 80;
     const captionWidthPx = (captionWidthPct / 100) * CANVAS_W;
-    // Default: centered horizontally, sits 32px below the QR code.
-    const captionLeftPx = captionPos
-      ? (captionPos.x / 100) * CANVAS_W
-      : (CANVAS_W - captionWidthPx) / 2;
-    const captionTopPx = captionPos
-      ? (captionPos.y / 100) * CANVAS_H
-      : qrTopPx + qrSize + 32;
-
-    // ─── Branding asset ────────────────────────────────────────────
+    const captionDefaultLeftPx = (CANVAS_W - captionWidthPx) / 2;
+    const captionDefaultTopPx = qrDefaultTopPx + qrSize + 32;
     const brandingHeight = data.brandingAsset?.height ?? 48;
-    const brandingPos = data.brandingAsset?.pos ?? { x: 2.7, y: 94 };
-    const brandingLeftPx = (brandingPos.x / 100) * CANVAS_W;
-    const brandingTopPx = (brandingPos.y / 100) * CANVAS_H;
+    const brandingDefaultLeftPx = 0.027 * CANVAS_W; // X = 2.7%
+    const brandingDefaultTopPx = 0.94 * CANVAS_H; // Y = 94%
     const brandingSrc =
       data.brandingAsset?.imageUrl || DEFAULT_BRANDING_ASSET_URL;
 
@@ -95,192 +102,230 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const captionColor = captionStyle.color ?? "#000000";
     const captionAlign = captionStyle.align ?? "center";
     const captionWeight = captionStyle.fontWeight ?? "700";
-
-    // Pre-split the caption into lines so the editor renders newlines
-    // the same way html-to-image does (avoids baseline drift).
     const captionLines = (data.caption.text || "").split("\n");
 
-    return (
-      <div
-        ref={ref}
-        className={className}
-        style={{
-          width: CANVAS_W,
-          height: CANVAS_H,
-          background: data.background ?? "#FFFFFF",
-          position: "relative",
-          overflow: "hidden",
-          fontFamily:
-            "'Inter', 'Helvetica Neue', Arial, sans-serif",
-        }}
-      >
-        {/* ===== QR CODE (centered, top-biased) ===== */}
-        <div
-          style={{
-            position: "absolute",
-            left: qrLeftPx,
-            top: qrTopPx,
-            width: qrSize,
-            height: qrSize,
-            background: qrLight,
-            padding: 0,
-            zIndex: 10,
-          }}
-        >
-          <QrCode
-            url={data.qrCodeUrl}
-            size={qrSize}
-            margin={qrMargin}
-            dark={qrDark}
-            light={qrLight}
-          />
-        </div>
+    // ─── SectionBox state ──────────────────────────────────────────
+    const sectionLayout = data.sectionLayout ?? {};
+    const [selectedId, setSelectedId] = useState<SectionId | null>(null);
 
-        {/* ===== CAPTION (below QR, centered, 80% wide) ===== */}
+    // Per-section z-index resolution: explicit > default by section order.
+    // Branding on top of caption on top of QR (so the brand mark never
+    // gets hidden behind the QR if the user drags them overlapping).
+    function zFor(id: SectionId): number {
+      const explicit = sectionLayout[id]?.z;
+      if (typeof explicit === "number") return explicit;
+      if (id === "branding") return 30;
+      if (id === "caption") return 20;
+      if (id === "qr") return 10;
+      return 0;
+    }
+    const sectionPeerZs: number[] = ["qr", "caption", "branding"].map((id) =>
+      zFor(id),
+    );
+
+    // Lock body scroll when the user is dragging/scrolling inside the canvas.
+    const canvasRefForHooks = ref as React.RefObject<HTMLDivElement | null>;
+    useCanvasScrollIsolation(canvasRefForHooks, sectionsEditable || editable);
+    useNonPassiveWheel(
+      canvasRefForHooks,
+      () => {
+        /* no-op — wheel is just used to prevent parent scroll; SectionBox handles its own resize */
+      },
+      sectionsEditable || editable,
+    );
+
+    return (
+      <GuideProvider
+        canvasRef={ref as React.RefObject<HTMLDivElement | null>}
+        enabled={sectionsEditable}
+      >
         <div
+          ref={ref}
+          className={className}
           style={{
-            position: "absolute",
-            left: captionLeftPx,
-            top: captionTopPx,
-            width: captionWidthPx,
-            textAlign: captionAlign,
-            color: captionColor,
-            fontSize: captionFontSize,
-            fontWeight: captionWeight,
-            lineHeight: 1.3,
-            zIndex: 20,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
+            width: CANVAS_W,
+            height: CANVAS_H,
+            background: data.background ?? "#FFFFFF",
+            position: "relative",
+            overflow: "hidden",
+            fontFamily:
+              "'Inter', 'Helvetica Neue', Arial, sans-serif",
+          }}
+          onPointerDown={(e) => {
+            // Clicking the canvas background (not a section) deselects.
+            if (sectionsEditable && e.target === e.currentTarget) {
+              setSelectedId(null);
+            }
           }}
         >
-          {captionLines.length > 0 ? (
-            captionLines.map((line, i) => (
-              <div key={i}>{line || "\u00A0"}</div>
-            ))
-          ) : (
-            <div>{data.qrCodeUrl}</div>
+          {/* ===== QR CODE ===== */}
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "qr"}
+            onSelect={() => setSelectedId("qr")}
+            pos={sectionLayout.qr?.pos}
+            scale={sectionLayout.qr?.scale ?? 1}
+            boxSize={sectionLayout.qr?.boxSize}
+            onMove={(p) => onSectionMove?.("qr", p)}
+            onResize={(s) => onSectionResize?.("qr", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("qr", sz)}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            label="QR code"
+            zIndex={zFor("qr")}
+            style={{
+              // Default position (used when sectionLayout.qr.pos is unset).
+              position: "absolute",
+              left: qrDefaultLeftPx,
+              top: qrDefaultTopPx,
+              width: qrSize,
+              height: qrSize,
+              background: qrLight,
+            }}
+          >
+            <QrCode
+              url={data.qrCodeUrl}
+              size={qrSize}
+              margin={qrMargin}
+              dark={qrDark}
+              light={qrLight}
+            />
+          </SectionBox>
+
+          {/* ===== CAPTION ===== */}
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "caption"}
+            onSelect={() => setSelectedId("caption")}
+            pos={sectionLayout.caption?.pos}
+            scale={sectionLayout.caption?.scale ?? 1}
+            boxSize={sectionLayout.caption?.boxSize}
+            onMove={(p) => onSectionMove?.("caption", p)}
+            onResize={(s) => onSectionResize?.("caption", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("caption", sz)}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            label="Caption"
+            zIndex={zFor("caption")}
+            style={{
+              position: "absolute",
+              left: captionDefaultLeftPx,
+              top: captionDefaultTopPx,
+              width: captionWidthPx,
+              textAlign: captionAlign,
+              color: captionColor,
+              fontSize: captionFontSize,
+              fontWeight: captionWeight,
+              lineHeight: 1.3,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {captionLines.length > 0 && captionLines[0] !== "" ? (
+              captionLines.map((line, i) => (
+                <div key={i}>{line || "\u00A0"}</div>
+              ))
+            ) : (
+              <div>{data.qrCodeUrl}</div>
+            )}
+          </SectionBox>
+
+          {/* ===== BRANDING ASSET ===== */}
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "branding"}
+            onSelect={() => setSelectedId("branding")}
+            pos={sectionLayout.branding?.pos}
+            scale={sectionLayout.branding?.scale ?? 1}
+            boxSize={sectionLayout.branding?.boxSize}
+            onMove={(p) => onSectionMove?.("branding", p)}
+            onResize={(s) => onSectionResize?.("branding", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("branding", sz)}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            label="Brand mark"
+            zIndex={zFor("branding")}
+            style={{
+              position: "absolute",
+              left: brandingDefaultLeftPx,
+              top: brandingDefaultTopPx,
+              height: brandingHeight,
+              width: "auto",
+              cursor: editable && !sectionsEditable ? "pointer" : "default",
+            }}
+          >
+            <button
+              type="button"
+              onClick={
+                editable && !sectionsEditable
+                  ? (e) => {
+                      e.stopPropagation();
+                      onPickBranding?.();
+                    }
+                  : undefined
+              }
+              style={{
+                display: "block",
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                margin: 0,
+                height: "100%",
+                width: "100%",
+                cursor: editable && !sectionsEditable ? "pointer" : "default",
+              }}
+              aria-label="Replace brand mark"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={brandingSrc}
+                alt="AI Salon brand mark"
+                style={{
+                  display: "block",
+                  height: "100%",
+                  width: "auto",
+                  objectFit: "contain",
+                  pointerEvents: "none",
+                }}
+              />
+            </button>
+          </SectionBox>
+
+          {/* ===== Guide overlay + Object Properties Panel ===== */}
+          <GuideOverlay />
+
+          {sectionsEditable && selectedId && (
+            <ObjectPropertiesPanel
+              label={
+                selectedId === "qr"
+                  ? "QR code"
+                  : selectedId === "caption"
+                    ? "Caption"
+                    : "Brand mark"
+              }
+              pos={sectionLayout[selectedId]?.pos}
+              onPosChange={(p) => onSectionMove?.(selectedId, p)}
+              z={zFor(selectedId)}
+              onZChange={(z) => onSectionZChange?.(selectedId, z)}
+              peers={sectionPeerZs}
+              onDeselect={() => setSelectedId(null)}
+              showBoxSize
+              boxSize={sectionLayout[selectedId]?.boxSize}
+              onBoxSizeChange={(sz) =>
+                onSectionBoxResize?.(selectedId, sz)
+              }
+              scale={sectionLayout[selectedId]?.scale ?? 1}
+              onScaleChange={(s) => onSectionResize?.(selectedId, s)}
+            />
           )}
         </div>
-
-        {/* ===== BRANDING ASSET (bottom-left by default, draggable) ===== */}
-        <BrandingAsset
-          src={brandingSrc}
-          height={brandingHeight}
-          leftPx={brandingLeftPx}
-          topPx={brandingTopPx}
-          editable={editable}
-          previewScale={previewScale}
-          onPick={onPickBranding}
-          onPosChange={onBrandingPosChange}
-          onSizeChange={onBrandingSizeChange}
-        />
-      </div>
+      </GuideProvider>
     );
   },
 );
-
-/**
- * BrandingAsset — renders the small AI Salon logo with optional drag-to-
- * move + wheel-to-resize affordances. The hit area is padded a bit so
- * the user can grab it easily even on small heights.
- */
-function BrandingAsset({
-  src,
-  height,
-  leftPx,
-  topPx,
-  editable,
-  previewScale,
-  onPick,
-  onPosChange,
-  onSizeChange,
-}: {
-  src: string;
-  height: number;
-  leftPx: number;
-  topPx: number;
-  editable: boolean;
-  previewScale: number;
-  onPick?: () => void;
-  onPosChange?: (pos: { x: number; y: number }) => void;
-  onSizeChange?: (heightPx: number) => void;
-}) {
-  // Drag state — kept in a ref so we don't re-render on every mousemove.
-  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
-
-  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (!editable || !onPosChange) return;
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: leftPx, origY: topPx };
-  }
-
-  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!editable || !onPosChange) return;
-    if (!dragRef.current) return;
-    if (e.buttons === 0) return;
-    const dx = (e.clientX - dragRef.current.startX) / previewScale;
-    const dy = (e.clientY - dragRef.current.startY) / previewScale;
-    const newX = Math.max(0, Math.min(CANVAS_W, dragRef.current.origX + dx));
-    const newY = Math.max(0, Math.min(CANVAS_H, dragRef.current.origY + dy));
-    onPosChange({
-      x: (newX / CANVAS_W) * 100,
-      y: (newY / CANVAS_H) * 100,
-    });
-  }
-
-  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (!editable) return;
-    (e.target as Element).releasePointerCapture?.(e.pointerId);
-    dragRef.current = null;
-  }
-
-  function handleWheel(e: React.WheelEvent<HTMLDivElement>) {
-    if (!editable || !onSizeChange) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const delta = e.deltaY > 0 ? -4 : 4;
-    const next = Math.max(16, Math.min(240, height + delta));
-    onSizeChange(next);
-  }
-
-  return (
-    <div
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
-      onClick={editable ? (e) => { e.stopPropagation(); onPick?.(); } : undefined}
-      style={{
-        position: "absolute",
-        left: leftPx,
-        top: topPx,
-        height,
-        // Width is auto — image keeps its natural aspect ratio.
-        width: "auto",
-        cursor: editable ? "move" : "default",
-        zIndex: 30,
-        touchAction: "none",
-        outline: editable ? "1px dashed rgba(255,0,90,0.4)" : "none",
-        outlineOffset: 2,
-      }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt="AI Salon brand mark"
-        style={{
-          display: "block",
-          height: "100%",
-          width: "auto",
-          objectFit: "contain",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-  );
-}
 
 /**
  * QrCode — generates a QR code data URL via the `qrcode` library and

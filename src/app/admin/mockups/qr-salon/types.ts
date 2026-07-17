@@ -10,6 +10,11 @@
  * "for future use"; if it's here, the canvas renders it.
  */
 
+import type { SectionLayout } from "../shared/section-edit";
+
+/** Section IDs used by the QR Salon canvas. */
+export type QrSalonSectionId = "qr" | "caption" | "branding";
+
 /**
  * TextStyle — per-text-section font size + color + alignment overrides.
  * All fields optional; the canvas falls back to per-section defaults
@@ -99,6 +104,15 @@ export type QrSalonData = {
     /** Free-form position as % of canvas. Default = { x: 2.7, y: 94 }. */
     pos?: { x: number; y: number };
   };
+
+  /**
+   * Section layout — drag/resize state for the three on-canvas sections
+   * (qr, caption, branding). Populated by the "Edit sections" mode via
+   * the shared SectionBox component. Round-trips through JSON.
+   *
+   * Keys: "qr", "caption", "branding".
+   */
+  sectionLayout?: SectionLayout;
 };
 
 /** Default branding asset URL — the AI Salon logo on Vercel Blob. */

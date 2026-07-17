@@ -12,6 +12,7 @@ import {
   Wand2,
   FormInput,
   ImageIcon,
+  LayoutPanelTop,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type { QrSalonData } from "./types";
@@ -20,6 +21,11 @@ import { SAMPLE_DATA } from "./sample-data";
 import { QrSalonCanvas } from "./qr-salon-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
+import type {
+  SectionId,
+  SectionPos,
+  SectionBoxSize,
+} from "../shared/section-edit";
 
 /**
  * QrSalonEditor — the editor + live preview surface for the QR-only
@@ -27,15 +33,18 @@ import { ShareButtons } from "../shared/share-buttons";
  *
  * 1. Type a URL → QR code regenerates in the canvas.
  * 2. Type a caption → renders below the QR.
- * 3. Toggle "Edit images" → click the branding asset to replace it from
- *    the brand library. Drag to reposition. Scroll to resize.
- * 4. Edit the JSON directly for fine-grained control.
- * 5. Download a print-quality PNG.
+ * 3. Toggle "Edit images" (blue) → click the branding asset to replace
+ *    it from the brand library.
+ * 4. Toggle "Edit sections" (pink) → drag the QR / caption / brand mark
+ *    to reposition; 8 handles to resize; Object Properties Panel for
+ *    precise position/size/z control. Same pattern as the other mockups.
+ * 5. Edit the JSON directly for fine-grained control.
+ * 6. Download a print-quality PNG.
  *
  * All state persists in localStorage so a refresh doesn't lose work.
  */
 
-const STORAGE_KEY = "qr-salon-data-v1";
+const STORAGE_KEY = "qr-salon-data-v2";
 
 export function QrSalonEditor() {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);
@@ -45,6 +54,7 @@ export function QrSalonEditor() {
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "json">("form");
   const [editImages, setEditImages] = useState(false);
+  const [sectionsEditMode, setSectionsEditMode] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [previewScale, setPreviewScale] = useState(0.5);
 
@@ -150,13 +160,37 @@ export function QrSalonEditor() {
     setPickerOpen(false);
   }
 
-  // ─── Branding canvas interactions ───────────────────────────────
-  function handleBrandingPosChange(pos: { x: number; y: number }) {
-    patchBranding({ pos });
+  // ─── SectionBox handlers (Edit-sections mode) ───────────────────
+  function handleSectionMove(id: SectionId, pos: SectionPos) {
+    const next: QrSalonData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.pos = pos;
+    applyData(next);
   }
 
-  function handleBrandingSizeChange(heightPx: number) {
-    patchBranding({ height: heightPx });
+  function handleSectionResize(id: SectionId, scale: number) {
+    const next: QrSalonData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.scale = scale;
+    applyData(next);
+  }
+
+  function handleSectionBoxResize(id: SectionId, size: SectionBoxSize) {
+    const next: QrSalonData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.boxSize = size;
+    applyData(next);
+  }
+
+  function handleSectionZChange(id: SectionId, z: number) {
+    const next: QrSalonData = JSON.parse(JSON.stringify(data));
+    if (!next.sectionLayout) next.sectionLayout = {};
+    if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
+    next.sectionLayout[id]!.z = z;
+    applyData(next);
   }
 
   // ─── Reset ──────────────────────────────────────────────────────
@@ -170,11 +204,13 @@ export function QrSalonEditor() {
     if (!canvasRef.current) return;
     setDownloading(true);
     try {
-      // Temporarily disable edit mode so the dashed outline doesn't
-      // appear in the exported PNG.
-      const wasEditing = editImages;
+      // Temporarily disable both edit modes so dashed outlines + handles
+      // don't appear in the exported PNG.
+      const wasEditingImages = editImages;
+      const wasEditingSections = sectionsEditMode;
       setEditImages(false);
-      // Wait one frame so React flushes the outline removal before
+      setSectionsEditMode(false);
+      // Wait one frame so React flushes the outline/handle removal before
       // html-to-image snapshots the DOM.
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       const dataUrl = await toPng(canvasRef.current, {
@@ -182,7 +218,8 @@ export function QrSalonEditor() {
         cacheBust: true,
         backgroundColor: data.background ?? "#FFFFFF",
       });
-      if (wasEditing) setEditImages(true);
+      if (wasEditingImages) setEditImages(true);
+      if (wasEditingSections) setSectionsEditMode(true);
       const link = document.createElement("a");
       const slug = (data.caption.text || "qr-salon")
         .toLowerCase()
@@ -203,11 +240,22 @@ export function QrSalonEditor() {
     if (!canvasRef.current) {
       throw new Error("Canvas not ready");
     }
-    return toPng(canvasRef.current, {
-      pixelRatio: 2,
-      cacheBust: true,
-      backgroundColor: data.background ?? "#FFFFFF",
-    });
+    // Strip edit-mode outlines/handles from the share PNG too.
+    const wasEditingImages = editImages;
+    const wasEditingSections = sectionsEditMode;
+    setEditImages(false);
+    setSectionsEditMode(false);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    try {
+      return await toPng(canvasRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: data.background ?? "#FFFFFF",
+      });
+    } finally {
+      if (wasEditingImages) setEditImages(true);
+      if (wasEditingSections) setSectionsEditMode(true);
+    }
   }
 
   async function handleCopyJson() {
@@ -231,12 +279,26 @@ export function QrSalonEditor() {
               onClick={() => setEditImages((v) => !v)}
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                 editImages
-                  ? "bg-[#FF005A] text-white hover:bg-[#FF005A]/90"
+                  ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
                   : "bg-black/5 text-black hover:bg-black/10"
               }`}
+              title="Toggle image edit mode: click the brand mark to replace it from the brand library."
             >
               <ImageIcon className="h-3.5 w-3.5" />
-              {editImages ? "Editing images — click brand mark to replace · drag to move · scroll to resize" : "Edit images"}
+              {editImages ? "Editing images — click brand mark to replace" : "Edit images"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSectionsEditMode((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                sectionsEditMode
+                  ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                  : "bg-black/5 text-black hover:bg-black/10"
+              }`}
+              title="Toggle section edit mode: drag the QR / caption / brand mark to reposition; 8 handles to resize; Object Properties Panel for precise control."
+            >
+              <LayoutPanelTop className="h-3.5 w-3.5" />
+              {sectionsEditMode ? "Editing sections" : "Edit sections"}
             </button>
             <button
               type="button"
@@ -270,19 +332,24 @@ export function QrSalonEditor() {
               ref={canvasRef}
               data={data}
               editable={editImages}
+              sectionsEditable={sectionsEditMode}
               previewScale={previewScale}
               onPickBranding={() => setPickerOpen(true)}
-              onBrandingPosChange={handleBrandingPosChange}
-              onBrandingSizeChange={handleBrandingSizeChange}
+              onSectionMove={handleSectionMove}
+              onSectionResize={handleSectionResize}
+              onSectionBoxResize={handleSectionBoxResize}
+              onSectionZChange={handleSectionZChange}
             />
           </div>
         </div>
 
         <p className="text-[0.7rem] text-black/50 leading-relaxed">
-          Canvas: 1200×800 (3:2). The QR is centered horizontally and biased
-          upward so the caption fits below. Brand mark sits at the bottom-left
-          by default (height 48px, X=2.7%, Y=94%). Drag the brand mark in
-          edit mode to reposition; scroll on it to resize.
+          Canvas: 1200×800 (3:2). <strong>Edit images</strong> (blue) → click
+          the brand mark to swap it from the brand library.{" "}
+          <strong>Edit sections</strong> (pink) → drag the QR / caption / brand
+          mark to reposition; 8 handles to resize; Object Properties Panel for
+          precise position, size, and z-order. Same pattern as the other
+          mockups. Defaults: brand mark height 48px, X=2.7%, Y=94%.
         </p>
       </div>
 
