@@ -3035,3 +3035,62 @@ Stage Summary:
   if desired.
 - The original stop-awareness rule remains in place for NEW RSVPs.
   This is a manual override for the existing SKIPPED pool only.
+
+---
+Task ID: 2026-07-17-qr-salon-mockup
+Agent: Super Z (main, on behalf of Codex)
+Task: First task triaged under the new core/TASK_CATEGORIES.md v1.0 system.
+  User requested a QR-code-only mockup template ("QR Salon") with editable
+  QR URL, caption text, and AI Salon brand mark at bottom-left (h=48px, X=2.7%).
+  User also asked to codify the 3-tier task system (SMALL / MID / HIGH) in core/.
+
+Work Log:
+- Created core/TASK_CATEGORIES.md (v1.0) defining three tiers:
+  * SMALL — no DB/structure/UI-UX impact. Z handles directly. No agent review.
+  * MID — additive UI + DB. Z implements, then relevant subset of 9 agents
+    reviews post-implementation.
+  * HIGH — breaking DB/structure changes, existing UI/UX changes, robust
+    changes. Full 11-gate workflow. All 9 agents engaged. Forge+Lumen
+    implement as subagents; Z coordinates.
+- Added triage rule to core/README.md (v1.1 amendment) — categorization
+  happens BEFORE any work starts; category is stated in the task brief.
+- Updated core/workflow.md (v1.1) — added triage preamble at the top
+  pointing to TASK_CATEGORIES.md. The 11 gates are now explicitly the
+  HIGH-tier path. SMALL and MID have abbreviated paths defined in
+  TASK_CATEGORIES.md.
+- Triaged the QR Salon request as SMALL (no DB, no migration, no
+  existing-UI change, purely additive). Wrote
+  core/tasks/2026-07-17-qr-salon-mockup/brief.md with category marked.
+- Implemented directly:
+  * src/app/admin/mockups/qr-salon/page.tsx — auth gate (ADMIN+SUPER_ADMIN
+    or CO_HOST), same as the other 4 mockup templates
+  * src/app/admin/mockups/qr-salon/qr-salon-editor.tsx — form+JSON editor,
+    PNG export (2x pixelRatio), ShareButtons, ImagePickerModal,
+    localStorage persistence (key: qr-salon-data-v1)
+  * src/app/admin/mockups/qr-salon/qr-salon-canvas.tsx — 1200x800 canvas
+    with QR code (qrcode lib, centered, biased upward), caption below,
+    brand mark at bottom-left (draggable + scroll-resizable in edit mode)
+  * src/app/admin/mockups/qr-salon/types.ts — QrSalonData type +
+    DEFAULT_BRANDING_ASSET_URL constant
+  * src/app/admin/mockups/qr-salon/sample-data.ts — defaults per user
+    spec (URL: /events, caption "Scan to register", brand mark at
+    h=48px X=2.7% Y=94%)
+  * src/app/admin/mockups/mockups-client.tsx — appended 5th card to
+    the templates grid
+- Wrote core/tasks/2026-07-17-qr-salon-mockup/implementation.md (files,
+  routes, schema diff = none, auth/security, deploy, self-review notes).
+- Wrote core/tasks/2026-07-17-qr-salon-mockup/CLOSED.md.
+- Updated core/tasks/README.md closed-task table with QR Salon row.
+- Pushed to origin/main at commit 04dad9f. Vercel auto-deployed.
+
+Stage Summary:
+- core/ now has a 3-tier task classification system that determines
+  process intensity per task. The QR Salon task is the first SMALL
+  task and was handled by Z directly with no agent review, per the
+  new system.
+- The 9 named agents (Atlas, Meridian, Forge, Lumen, Canvas, Sentinel,
+  Beacon, Codex, Aegis) are now invoked only for MID (relevant subset,
+  post-implementation review) and HIGH (full 11-gate workflow, all 9).
+- Next tasks should be triaged into a category BEFORE work starts, and
+  the category should be stated in the brief.md. The user can override
+  the category at any time.

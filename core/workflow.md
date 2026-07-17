@@ -1,6 +1,13 @@
 # Workflow — The 11-Step Task Lifecycle
 
 > *Every task walks this path. No exceptions. No skipping without a written reason.*
+>
+> **Triage first** (added v1.1, 2026-07-17): Before any work starts, Z categorizes the task as **SMALL**, **MID**, or **HIGH** per [`core/TASK_CATEGORIES.md`](./TASK_CATEGORIES.md). The category determines which gates apply:
+> - **SMALL** — Z implements directly, all 9 agents auto-skipped, no 11-gate walk.
+> - **MID** — Z implements directly, then the relevant subset of 9 agents reviews post-implementation.
+> - **HIGH** — Full 11-gate workflow below. All 9 agents engaged. Forge + Lumen implement as subagents.
+>
+> The 11 gates below are the **HIGH** path. SMALL and MID paths are defined in `core/TASK_CATEGORIES.md`.
 
 ---
 
@@ -338,3 +345,4 @@ This workflow can be amended by the user. Codex updates this file, bumps the ver
 ## Changelog
 
 - **v1.0** (2026-06-22) — Initial 11-step workflow. Approved by the user.
+- **v1.1** (2026-07-17) — Added triage preamble pointing to `core/TASK_CATEGORIES.md`. The 11 gates below are now defined as the HIGH-tier path; SMALL and MID tiers have their own abbreviated paths defined in `TASK_CATEGORIES.md`.
