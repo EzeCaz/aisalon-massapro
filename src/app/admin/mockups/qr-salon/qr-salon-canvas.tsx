@@ -214,7 +214,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             active={sectionsEditable}
             selected={selectedId === "qr"}
             onSelect={() => setSelectedId("qr")}
-            pos={sectionLayout.qr?.pos}
+            pos={sectionLayout.qr?.pos ?? data.qrPos}
             scale={sectionLayout.qr?.scale ?? 1}
             boxSize={sectionLayout.qr?.boxSize}
             onMove={(p) => onSectionMove?.("qr", p)}
@@ -226,7 +226,8 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             label="QR code"
             zIndex={zFor("qr")}
             style={{
-              // Default position (used when sectionLayout.qr.pos is unset).
+              // Default position (used when neither sectionLayout.qr.pos
+              // nor data.qrPos is set).
               position: "absolute",
               left: qrDefaultLeftPx,
               top: qrDefaultTopPx,
@@ -249,7 +250,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             active={sectionsEditable}
             selected={selectedId === "caption"}
             onSelect={() => setSelectedId("caption")}
-            pos={sectionLayout.caption?.pos}
+            pos={sectionLayout.caption?.pos ?? data.captionPos}
             scale={sectionLayout.caption?.scale ?? 1}
             boxSize={sectionLayout.caption?.boxSize}
             onMove={(p) => onSectionMove?.("caption", p)}
@@ -261,6 +262,8 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             label="Caption"
             zIndex={zFor("caption")}
             style={{
+              // Default position (used when neither sectionLayout.caption.pos
+              // nor data.captionPos is set).
               position: "absolute",
               left: captionDefaultLeftPx,
               top: captionDefaultTopPx,
@@ -288,7 +291,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             active={sectionsEditable}
             selected={selectedId === "branding"}
             onSelect={() => setSelectedId("branding")}
-            pos={sectionLayout.branding?.pos}
+            pos={sectionLayout.branding?.pos ?? data.brandingAsset?.pos}
             scale={sectionLayout.branding?.scale ?? 1}
             boxSize={sectionLayout.branding?.boxSize}
             onMove={(p) => onSectionMove?.("branding", p)}
@@ -300,6 +303,9 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             label="Brand mark"
             zIndex={zFor("branding")}
             style={{
+              // Default position (used when neither sectionLayout.branding.pos
+              // nor data.brandingAsset.pos is set — centered horizontally
+              // below the QR code).
               position: "absolute",
               left: brandingLeftPx,
               top: brandingTopPx,

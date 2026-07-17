@@ -136,6 +136,25 @@ export function QrSalonEditor() {
     });
   }
 
+  // ─── Patch + clear drag-override ────────────────────────────────
+  // When the user types in a position form field (qrPos / captionPos /
+  // brandingAsset.pos), we want the form value to take effect on the
+  // canvas IMMEDIATELY. The canvas prefers sectionLayout[id].pos over
+  // the form-friendly pos, so we MUST clear the drag-override slot
+  // atomically with the patch — otherwise the last drag position would
+  // keep winning and the form input would appear to do nothing.
+  function patchWithSectionClear(
+    p: Partial<QrSalonData>,
+    sectionId: SectionId,
+  ) {
+    const next: QrSalonData = JSON.parse(JSON.stringify(data));
+    Object.assign(next, p);
+    if (next.sectionLayout?.[sectionId]) {
+      delete next.sectionLayout[sectionId]!.pos;
+    }
+    applyData(next);
+  }
+
   // ─── JSON textarea → data ───────────────────────────────────────
   const handleJsonChange = useCallback((next: string) => {
     setJsonText(next);
@@ -161,11 +180,24 @@ export function QrSalonEditor() {
   }
 
   // ─── SectionBox handlers (Edit-sections mode) ───────────────────
+  // When the user drags a section on the canvas, we write the new pos
+  // to BOTH the drag-override slot (sectionLayout[id].pos) AND the
+  // form-friendly field (qrPos / captionPos / brandingAsset.pos) so the
+  // form fields stay in sync with manual drags.
   function handleSectionMove(id: SectionId, pos: SectionPos) {
     const next: QrSalonData = JSON.parse(JSON.stringify(data));
     if (!next.sectionLayout) next.sectionLayout = {};
     if (!next.sectionLayout[id]) next.sectionLayout[id] = {};
     next.sectionLayout[id]!.pos = pos;
+    // Sync to the form-friendly field so the form reflects drags too.
+    if (id === "qr") {
+      next.qrPos = pos;
+    } else if (id === "caption") {
+      next.captionPos = pos;
+    } else if (id === "branding") {
+      if (!next.brandingAsset) next.brandingAsset = {};
+      next.brandingAsset.pos = pos;
+    }
     applyData(next);
   }
 
@@ -392,6 +424,7 @@ export function QrSalonEditor() {
             onPatchCaption={patchCaption}
             onPatchCaptionStyle={patchCaptionStyle}
             onPatchBranding={patchBranding}
+            onPatchWithSectionClear={patchWithSectionClear}
             onPickBranding={() => setPickerOpen(true)}
           />
         ) : (
@@ -451,6 +484,7 @@ function FormView({
   onPatchCaption,
   onPatchCaptionStyle,
   onPatchBranding,
+  onPatchWithSectionClear,
   onPickBranding,
 }: {
   data: QrSalonData;
@@ -458,6 +492,13 @@ function FormView({
   onPatchCaption: (p: Partial<QrSalonData["caption"]>) => void;
   onPatchCaptionStyle: (p: Partial<NonNullable<QrSalonData["caption"]["style"]>>) => void;
   onPatchBranding: (p: Partial<QrSalonData["brandingAsset"]>) => void;
+  /** Patches data AND clears the matching sectionLayout[id].pos so the
+   *  form-friendly position takes effect on the canvas. Used by the
+   *  position X/Y inputs for QR / caption / branding. */
+  onPatchWithSectionClear: (
+    p: Partial<QrSalonData>,
+    sectionId: SectionId,
+  ) => void;
   onPickBranding: () => void;
 }) {
   const captionStyle = data.caption.style ?? {};
@@ -509,9 +550,12 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatch({ qrPos: undefined });
+                  onPatchWithSectionClear({ qrPos: undefined }, "qr");
                 } else {
-                  onPatch({ qrPos: { x: Number(v), y: data.qrPos?.y ?? 10 } });
+                  onPatchWithSectionClear(
+                    { qrPos: { x: Number(v), y: data.qrPos?.y ?? 10 } },
+                    "qr",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
@@ -526,9 +570,12 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatch({ qrPos: undefined });
+                  onPatchWithSectionClear({ qrPos: undefined }, "qr");
                 } else {
-                  onPatch({ qrPos: { x: data.qrPos?.x ?? 50, y: Number(v) } });
+                  onPatchWithSectionClear(
+                    { qrPos: { x: data.qrPos?.x ?? 50, y: Number(v) } },
+                    "qr",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
@@ -621,9 +668,12 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatch({ captionPos: undefined });
+                  onPatchWithSectionClear({ captionPos: undefined }, "caption");
                 } else {
-                  onPatch({ captionPos: { x: Number(v), y: data.captionPos?.y ?? 60 } });
+                  onPatchWithSectionClear(
+                    { captionPos: { x: Number(v), y: data.captionPos?.y ?? 60 } },
+                    "caption",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
@@ -638,9 +688,12 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatch({ captionPos: undefined });
+                  onPatchWithSectionClear({ captionPos: undefined }, "caption");
                 } else {
-                  onPatch({ captionPos: { x: data.captionPos?.x ?? 10, y: Number(v) } });
+                  onPatchWithSectionClear(
+                    { captionPos: { x: data.captionPos?.x ?? 10, y: Number(v) } },
+                    "caption",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
@@ -693,11 +746,20 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatchBranding({ pos: undefined });
+                  onPatchWithSectionClear(
+                    { brandingAsset: { ...branding, pos: undefined } },
+                    "branding",
+                  );
                 } else {
-                  onPatchBranding({
-                    pos: { x: Number(v), y: branding.pos?.y ?? 77.5 },
-                  });
+                  onPatchWithSectionClear(
+                    {
+                      brandingAsset: {
+                        ...branding,
+                        pos: { x: Number(v), y: branding.pos?.y ?? 77.5 },
+                      },
+                    },
+                    "branding",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
@@ -712,11 +774,20 @@ function FormView({
               onChange={(e) => {
                 const v = e.target.value;
                 if (v === "") {
-                  onPatchBranding({ pos: undefined });
+                  onPatchWithSectionClear(
+                    { brandingAsset: { ...branding, pos: undefined } },
+                    "branding",
+                  );
                 } else {
-                  onPatchBranding({
-                    pos: { x: branding.pos?.x ?? 50, y: Number(v) },
-                  });
+                  onPatchWithSectionClear(
+                    {
+                      brandingAsset: {
+                        ...branding,
+                        pos: { x: branding.pos?.x ?? 50, y: Number(v) },
+                      },
+                    },
+                    "branding",
+                  );
                 }
               }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
