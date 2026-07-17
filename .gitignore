@@ -68,3 +68,7 @@ db/
 set-test-pw.ts
 aisalon-massapro-V*-MANIFEST.txt
 CORE-PRACTICE.md
+
+# Google Drive / GCP credentials (root-level — added 2026-07-17)
+/.gdrive-token.json
+/.gcp-service-account.json
