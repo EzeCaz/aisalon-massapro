@@ -44,7 +44,7 @@ import type {
  * All state persists in localStorage so a refresh doesn't lose work.
  */
 
-const STORAGE_KEY = "qr-salon-data-v2";
+const STORAGE_KEY = "qr-salon-data-v3";
 
 export function QrSalonEditor() {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);
@@ -344,12 +344,14 @@ export function QrSalonEditor() {
         </div>
 
         <p className="text-[0.7rem] text-black/50 leading-relaxed">
-          Canvas: 1200×800 (3:2). <strong>Edit images</strong> (blue) → click
-          the brand mark to swap it from the brand library.{" "}
+          Canvas: 1200×800 (3:2). Default layout: <strong>caption above</strong>,{" "}
+          <strong>QR centered</strong>, <strong>brand mark below</strong> — all
+          horizontally centered. <strong>Edit images</strong> (blue) → click the
+          brand mark to swap it from the brand library.{" "}
           <strong>Edit sections</strong> (pink) → drag the QR / caption / brand
           mark to reposition; 8 handles to resize; Object Properties Panel for
           precise position, size, and z-order. Same pattern as the other
-          mockups. Defaults: brand mark height 48px, X=2.7%, Y=94%.
+          mockups.
         </p>
       </div>
 
@@ -682,37 +684,51 @@ function FormView({
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
             />
           </Field>
-          <Field label="Position X (%)">
+          <Field label="Position X (%) — blank = auto-center">
             <input
               type="number"
               step={0.1}
-              value={branding.pos?.x ?? 2.7}
-              onChange={(e) =>
-                onPatchBranding({
-                  pos: { x: Number(e.target.value), y: branding.pos?.y ?? 94 },
-                })
-              }
+              placeholder="auto"
+              value={branding.pos?.x ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") {
+                  onPatchBranding({ pos: undefined });
+                } else {
+                  onPatchBranding({
+                    pos: { x: Number(v), y: branding.pos?.y ?? 77.5 },
+                  });
+                }
+              }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
             />
           </Field>
-          <Field label="Position Y (%)">
+          <Field label="Position Y (%) — blank = auto">
             <input
               type="number"
               step={0.1}
-              value={branding.pos?.y ?? 94}
-              onChange={(e) =>
-                onPatchBranding({
-                  pos: { x: branding.pos?.x ?? 2.7, y: Number(e.target.value) },
-                })
-              }
+              placeholder="auto"
+              value={branding.pos?.y ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") {
+                  onPatchBranding({ pos: undefined });
+                } else {
+                  onPatchBranding({
+                    pos: { x: branding.pos?.x ?? 50, y: Number(v) },
+                  });
+                }
+              }}
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:border-[#FF005A] focus:outline-none"
             />
           </Field>
         </div>
         <p className="text-[0.7rem] text-black/50 leading-relaxed">
-          Default: AI Salon logo on Vercel Blob · height 48px · X 2.7% ·
-          Y 94%. You can also drag the brand mark on the canvas directly
-          (toggle Edit images) and scroll on it to resize.
+          Default: AI Salon logo on Vercel Blob · height 48px · centered
+          horizontally below the QR. Leave X/Y blank to use the centered
+          default; set them to override. You can also drag the brand mark on
+          the canvas directly (toggle Edit sections) and use the Object
+          Properties Panel for precise control.
         </p>
       </section>
 

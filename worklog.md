@@ -3164,3 +3164,47 @@ Stage Summary:
   download the project zip from /download/ and upload it manually.
 - Project zip: created at /home/z/my-project/download/ with code +
   core/ + worklog + tasks + chat logs, organized.
+
+---
+Task ID: 2026-07-17-qr-salon-layout
+Agent: Super Z (main, on behalf of Codex)
+Task: User requested QR Salon layout revision: QR centered, logo below
+  aligned to the middle, text above the QR code.
+
+Work Log:
+- Triage: SMALL (only qr-salon files, no DB/structure/existing-UX change).
+- Wrote core/tasks/2026-07-17-qr-salon-layout/brief.md.
+- Updated qr-salon-canvas.tsx default position math:
+  * qrDefaultTopPx: 120 → 220 (vertically centered on 800px canvas)
+  * captionDefaultTopPx: below QR → 140 (above QR)
+  * brandingDefaultTopPx: 0.94*CANVAS_H → 620 (below QR)
+- Added brand mark horizontal centering:
+  * useState + useEffect preloads the brand mark image via new Image()
+    to read naturalWidth/naturalHeight
+  * brandingRenderedWidth = brandingHeight × (naturalW / naturalH)
+  * brandingDefaultLeftPx = (CANVAS_W - brandingRenderedWidth) / 2
+  * Fallback while loading: assume 3:1 aspect ratio (height × 3)
+  * If brandingAsset.pos explicitly set, honor it; else use centered default
+- Updated sample-data.ts: removed pos: {x: 2.7, y: 94} so canvas computes
+  centered default. Updated docstring to describe new layout.
+- Updated qr-salon-editor.tsx:
+  * Bumped STORAGE_KEY v2 → v3 to invalidate stale state
+  * Brand mark X/Y form inputs: blank = auto (placeholder="auto"), labels
+    updated to "Position X (%) — blank = auto-center" / "Position Y (%) — blank = auto"
+  * When user clears X or Y, pos set to undefined → canvas reverts to centered default
+  * Updated helper text to describe caption-above / QR-center / logo-below layout
+- TypeScript: npx tsc --noEmit — zero errors in QR Salon files.
+- Wrote implementation.md + CLOSED.md.
+- Updated core/tasks/README.md closed-task table.
+- Committed and pushed to origin/main. Vercel auto-deploying.
+
+Stage Summary:
+- After Vercel deploys (~2 min) and user hard-refreshes
+  /admin/mockups/qr-salon (Ctrl/Cmd+Shift+R), localStorage v3 key starts
+  empty and the new SAMPLE_DATA loads.
+- Default layout: caption "Scan to register" at top (~Y=140), QR code
+  centered (~Y=220), AI Salon logo below (~Y=620), all horizontally
+  centered.
+- Brand mark centering is dynamic — works for any logo aspect ratio.
+- The user can still override via Edit sections drag, Object Properties
+  Panel, or the form's X/Y fields (blank = auto-center).

@@ -81,20 +81,71 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const qrLight = data.qrLightColor ?? "#FFFFFF";
 
     // ─── Default positions (canvas px) ────────────────────────────
-    // The QR is centered horizontally and biased upward so the caption
-    // fits below. Caption sits 32px below the QR. Brand mark is at the
-    // bottom-left per user spec.
+    // Layout per user spec 2026-07-17 (third revision):
+    //   - Caption text ABOVE the QR code (centered horizontally)
+    //   - QR code CENTERED (horizontally + vertically)
+    //   - Brand mark BELOW the QR code, centered horizontally
+    //
+    // Vertical math (canvas 1200×800, QR 360×360):
+    //   composition = caption(~36px) + gap(40) + QR(360) + gap(40) + logo(48)
+    //              = 524px total
+    //   top inset to vertically center the composition = (800 - 524) / 2 ≈ 138
+    //   → caption top ≈ 140
+    //   → QR top ≈ 220  (140 + 36 + 44 gap)
+    //   → logo top ≈ 620 (220 + 360 + 40 gap)
     const qrDefaultLeftPx = (CANVAS_W - qrSize) / 2;
-    const qrDefaultTopPx = 120;
+    const qrDefaultTopPx = 220;
     const captionWidthPct = data.captionWidthPct ?? 80;
     const captionWidthPx = (captionWidthPct / 100) * CANVAS_W;
     const captionDefaultLeftPx = (CANVAS_W - captionWidthPx) / 2;
-    const captionDefaultTopPx = qrDefaultTopPx + qrSize + 32;
+    const captionDefaultTopPx = 140; // above the QR
     const brandingHeight = data.brandingAsset?.height ?? 48;
-    const brandingDefaultLeftPx = 0.027 * CANVAS_W; // X = 2.7%
-    const brandingDefaultTopPx = 0.94 * CANVAS_H; // Y = 94%
+    const brandingDefaultTopPx = 620; // below the QR
     const brandingSrc =
       data.brandingAsset?.imageUrl || DEFAULT_BRANDING_ASSET_URL;
+
+    // ─── Brand mark horizontal centering ───────────────────────────
+    // The brand mark's width is `auto` (driven by the image's natural
+    // aspect ratio). To truly center it horizontally, we preload the
+    // image to learn its natural dimensions, then compute:
+    //   renderedWidth = brandingHeight × (naturalW / naturalH)
+    //   centeredLeftPx = (CANVAS_W - renderedWidth) / 2
+    //
+    // If the user has explicitly set brandingAsset.pos, that overrides
+    // the centered default. If the preload hasn't finished yet, fall
+    // back to a 3:1 aspect ratio estimate (typical horizontal logo).
+    const [brandingNaturalSize, setBrandingNaturalSize] = useState<
+      { w: number; h: number } | null
+    >(null);
+    useEffect(() => {
+      if (!brandingSrc) {
+        setBrandingNaturalSize(null);
+        return;
+      }
+      const img = new Image();
+      img.onload = () =>
+        setBrandingNaturalSize({
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+        });
+      img.onerror = () => setBrandingNaturalSize(null);
+      img.src = brandingSrc;
+    }, [brandingSrc]);
+
+    const brandingRenderedWidth = brandingNaturalSize
+      ? (brandingHeight / brandingNaturalSize.h) * brandingNaturalSize.w
+      : brandingHeight * 3; // fallback: assume 3:1 horizontal logo
+    const brandingDefaultLeftPx = (CANVAS_W - brandingRenderedWidth) / 2;
+
+    // If the user explicitly set brandingAsset.pos in the data, honor it
+    // (convert % to px). Otherwise use the computed centered default.
+    const brandingPosExplicit = data.brandingAsset?.pos;
+    const brandingLeftPx = brandingPosExplicit
+      ? (brandingPosExplicit.x / 100) * CANVAS_W
+      : brandingDefaultLeftPx;
+    const brandingTopPx = brandingPosExplicit
+      ? (brandingPosExplicit.y / 100) * CANVAS_H
+      : brandingDefaultTopPx;
 
     // ─── Caption text style ────────────────────────────────────────
     const captionStyle = data.caption.style ?? {};
@@ -250,8 +301,8 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
             zIndex={zFor("branding")}
             style={{
               position: "absolute",
-              left: brandingDefaultLeftPx,
-              top: brandingDefaultTopPx,
+              left: brandingLeftPx,
+              top: brandingTopPx,
               height: brandingHeight,
               width: "auto",
               cursor: editable && !sectionsEditable ? "pointer" : "default",

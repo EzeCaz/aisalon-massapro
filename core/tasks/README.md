@@ -17,6 +17,7 @@
 | 2026-06-22 | (pre-core) tabs-persistent | (pre-tier) | Added shared AdminTabs component mounted on every /admin/* page; member count badge live (168). Shipped before `core/` existed; retroactively logged. |
 | 2026-07-17 | qr-salon-mockup | SMALL | Fifth mockup template — QR-code-only promotional image with editable QR URL, caption, and AI Salon brand mark. Pure client-side, no DB/migration. First task classified under `core/TASK_CATEGORIES.md` v1.0. |
 | 2026-07-17 | qr-salon-fix | SMALL | Upgraded QR Salon canvas to use shared `SectionBox` system — QR/caption/brand-mark now draggable with 8-handle resize + Object Properties Panel, matching the other mockups. Added Edit-sections (pink) button alongside Edit-images (blue). |
+| 2026-07-17 | qr-salon-layout | SMALL | Reordered QR Salon default layout: caption above, QR centered, brand mark below — all horizontally centered. Brand mark centering computed dynamically from image's natural aspect ratio. |
 
 ---
 

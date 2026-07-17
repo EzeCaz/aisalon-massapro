@@ -4,14 +4,19 @@ import { DEFAULT_BRANDING_ASSET_URL } from "./types";
 /**
  * Sample data for the QR Salon mockup editor.
  *
- * Defaults per user spec 2026-07-15:
- *   - QR code points to the AI Salon events page.
- *   - QR size 360px (about 30% of the 1200px canvas width).
- *   - Caption: "Scan to register" — bold, black, center-aligned.
- *   - Branding asset at the bottom-LEFT corner:
- *       imageUrl: AI Salon logo on Vercel Blob
- *       height:   48px
- *       pos:      X=2.7%, Y=94% (bottom-left with ~6% bottom inset)
+ * Default layout per user spec 2026-07-17 (third revision):
+ *   - Caption text ABOVE the QR code, centered horizontally.
+ *   - QR code CENTERED on the canvas (horizontally + vertically).
+ *   - Brand mark BELOW the QR code, centered horizontally.
+ *
+ * The brand mark's `pos` is intentionally LEFT UNSET so the canvas
+ * computes the centered X dynamically (it preloads the image to get
+ * its natural aspect ratio, then centers based on the rendered width).
+ * If you set `pos` explicitly, the canvas will honor it instead.
+ *
+ * QR points to the AI Salon events page. Caption: "Scan to register" —
+ * bold, black, center-aligned. Brand mark: AI Salon logo on Vercel Blob,
+ * height 48px.
  *
  * Editable in the live JSON editor on /admin/mockups/qr-salon.
  */
@@ -35,6 +40,6 @@ export const SAMPLE_DATA: QrSalonData = {
   brandingAsset: {
     imageUrl: DEFAULT_BRANDING_ASSET_URL,
     height: 48,
-    pos: { x: 2.7, y: 94 },
+    // pos intentionally unset — canvas computes centered default.
   },
 };
