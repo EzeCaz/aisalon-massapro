@@ -250,6 +250,45 @@ def do_upload(creds, files: list[Path], folder_id: str) -> int:
     return 0
 
 
+def do_list(creds, folder_id: str) -> int:
+    """List all files in the Drive folder."""
+    from googleapiclient.discovery import build
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    q = f"trashed=false and '{folder_id}' in parents"
+    results = (
+        service.files()
+        .list(
+            q=q,
+            fields="files(id, name, size, modifiedTime)",
+            orderBy="modifiedTime desc",
+            pageSize=200,
+        )
+        .execute()
+    )
+    files = results.get("files", [])
+    print(f"[upload-to-drive] {len(files)} file(s) in folder {folder_id}:")
+    for f in files:
+        size_mb = int(f.get("size", 0)) / (1024 * 1024)
+        print(f"  {f['name']}")
+        print(f"    id={f['id']}  size={size_mb:.1f}MB  modified={f.get('modifiedTime', '?')}")
+    return 0
+
+
+def do_delete(creds, file_ids: list[str]) -> int:
+    """Delete one or more files from Drive by their IDs."""
+    from googleapiclient.discovery import build
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    for fid in file_ids:
+        try:
+            service.files().delete(fileId=fid).execute()
+            print(f"[upload-to-drive] ✓ deleted  (file id {fid})")
+        except Exception as e:
+            print(f"[upload-to-drive] ✗ failed  (file id {fid}): {e}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     load_env(ENV_FILE)
 
@@ -261,6 +300,29 @@ def main() -> int:
     # Phase 1: --auth-url
     if sys.argv[1] == "--auth-url":
         return cmd_auth_url()
+
+    # --list: list files in the Drive folder
+    if sys.argv[1] == "--list":
+        creds = get_credentials()
+        if not creds:
+            print("[upload-to-drive] no saved token. Run with --auth-url first.", file=sys.stderr)
+            return 2
+        folder_id = os.environ.get("GDRIVE_FOLDER_ID")
+        if not folder_id:
+            print("[upload-to-drive] ERROR: GDRIVE_FOLDER_ID not set in .env", file=sys.stderr)
+            return 2
+        return do_list(creds, folder_id)
+
+    # --delete <file_id> [<file_id> ...]: delete files from Drive
+    if sys.argv[1] == "--delete":
+        if len(sys.argv) < 3:
+            print("[upload-to-drive] usage: upload-to-drive.py --delete <file_id> [<file_id> ...]", file=sys.stderr)
+            return 2
+        creds = get_credentials()
+        if not creds:
+            print("[upload-to-drive] no saved token. Run with --auth-url first.", file=sys.stderr)
+            return 2
+        return do_delete(creds, sys.argv[2:])
 
     # Phase 2: --code <code-or-url> <files...>
     if sys.argv[1] == "--code":
