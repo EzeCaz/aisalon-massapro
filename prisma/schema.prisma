@@ -21,7 +21,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  // TEMPORARY: switched to "sqlite" for local sandbox dev (2026-07-19).
+  // The .env DATABASE_URL points at file:/home/z/my-project/db/custom.db.
+  // To deploy to Vercel production: switch back to "postgresql" and ensure
+  // DATABASE_URL points at the Neon/Vercel Postgres connection string.
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
