@@ -6,6 +6,7 @@ import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ChapterMapPanel } from "@/components/ais/chapter-map-panel";
+import { SeedV7Button } from "@/components/ais/seed-v7-button";
 import Link from "next/link";
 import { Globe2, MapPin, Users, CalendarDays, Plus } from "lucide-react";
 
@@ -153,6 +154,7 @@ export default async function ChaptersPage() {
           </div>
           {isSuperAdmin && (
             <div className="flex items-center gap-2">
+              <SeedV7Button compact />
               <Link
                 href="/admin/countries"
                 className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-2 text-xs hover:bg-[#820A7D] hover:text-white whitespace-nowrap"
@@ -179,22 +181,40 @@ export default async function ChaptersPage() {
 
         {/* World map + chapter tree panel */}
         {chapters.length === 0 ? (
-          <div className="rounded-md border border-black/10 bg-black/[0.02] p-8 text-center">
-            <p className="text-sm text-black/70 mb-3">
-              No countries in your scope yet.
-            </p>
-            {isSuperAdmin ? (
-              <Link
-                href="/admin/countries"
-                className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-2 text-sm hover:bg-[#820A7D]/90"
-              >
-                <Plus className="h-4 w-4" /> Create your first country
-              </Link>
-            ) : (
-              <p className="text-xs text-black/60">
-                Ask a Super Admin to create a country and assign you to it.
-              </p>
-            )}
+          <div className="rounded-md border border-black/10 bg-black/[0.02] p-8 sm:p-10">
+            <div className="max-w-2xl mx-auto text-center space-y-5">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#820A7D]/10">
+                <Globe2 className="h-6 w-6 text-[#820A7D]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-black mb-1">
+                  No countries in your scope yet
+                </h2>
+                <p className="text-sm text-black/70">
+                  The platform starts empty. Seed the default{" "}
+                  <strong>Israel + Tel Aviv</strong> hierarchy with one click
+                  (backfills every existing member, event, RSVP, speaker,
+                  email, and referral to that scope), or manually create a
+                  country from scratch.
+                </p>
+              </div>
+              {isSuperAdmin ? (
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                  <SeedV7Button />
+                  <Link
+                    href="/admin/countries"
+                    className="inline-flex items-center gap-2 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-4 py-2 text-sm hover:bg-[#820A7D] hover:text-white"
+                  >
+                    <Plus className="h-4 w-4" /> Create a country manually
+                  </Link>
+                </div>
+              ) : (
+                <p className="text-xs text-black/60">
+                  Ask a Super Admin to seed the hierarchy or create a country
+                  and assign you to it.
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           <ChapterMapPanel chapters={chapters} isSuperAdmin={isSuperAdmin} />
