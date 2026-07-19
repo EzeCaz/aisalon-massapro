@@ -12,6 +12,9 @@
  * And a row of quick-pick pills for chapters in the selected country
  * (with their member/event counts if provided).
  *
+ * Optionally renders a third "City" dropdown when `cities` is provided
+ * (used by the Events page where each event has its own venue city).
+ *
  * Usage:
  *   <CountryChapterScopeFilter
  *     countries={countries}
@@ -20,8 +23,17 @@
  *     onChange={(v) => setFilter(v)}
  *   />
  *
- * The parent owns the state and uses `countryId` / `chapterId` to filter
- * its own data. This component is purely presentational.
+ *   // With city filter (Events page):
+ *   <CountryChapterScopeFilter
+ *     countries={countries}
+ *     chapters={chapters}
+ *     cities={uniqueCities}  // [{ name, countryId, chapterId }]
+ *     value={{ countryId: "", chapterId: "", city: "" }}
+ *     onChange={(v) => setFilter(v)}
+ *   />
+ *
+ * The parent owns the state and uses `countryId` / `chapterId` / `city`
+ * to filter its own data. This component is purely presentational.
  */
 
 import { useMemo } from "react";
@@ -50,14 +62,26 @@ export type ScopeFilterChapter = {
   speakerCount?: number;
 };
 
+export type ScopeFilterCity = {
+  /** City name (e.g. "Tel Aviv-Yafo", "Jerusalem"). */
+  name: string;
+  /** Country ID this city belongs to (used to filter the city dropdown by selected country). */
+  countryId: string;
+  /** Chapter ID this city belongs to (used to filter the city dropdown by selected chapter). */
+  chapterId: string;
+};
+
 export type ScopeFilterValue = {
   countryId: string; // "" = all countries
   chapterId: string; // "" = all chapters in selected country
+  /** City name to filter by. "" = all cities. Optional — only used when `cities` prop is provided. */
+  city?: string;
 };
 
 export function CountryChapterScopeFilter({
   countries,
   chapters,
+  cities,
   value,
   onChange,
   showCounts = true,
@@ -65,6 +89,8 @@ export function CountryChapterScopeFilter({
 }: {
   countries: ScopeFilterCountry[];
   chapters: ScopeFilterChapter[];
+  /** Optional — when provided, renders a third "City" dropdown. */
+  cities?: ScopeFilterCity[];
   value: ScopeFilterValue;
   onChange: (v: ScopeFilterValue) => void;
   /** When true, shows member/event count pills next to each chapter quick-pick. */
@@ -72,7 +98,7 @@ export function CountryChapterScopeFilter({
   /** When true, renders a more compact single-row layout. */
   compact?: boolean;
 }) {
-  const { countryId, chapterId } = value;
+  const { countryId, chapterId, city } = value;
 
   // Chapters filtered by selected country.
   const filteredChapters = useMemo(
@@ -80,29 +106,71 @@ export function CountryChapterScopeFilter({
     [chapters, countryId]
   );
 
+  // Cities filtered by selected country + chapter. When country is selected,
+  // only show cities in that country. When chapter is selected, only show
+  // cities in that chapter. This keeps the city dropdown contextual.
+  const filteredCities = useMemo(() => {
+    if (!cities || cities.length === 0) return [];
+    let result = cities;
+    if (chapterId) {
+      result = result.filter((c) => c.chapterId === chapterId);
+    } else if (countryId) {
+      result = result.filter((c) => c.countryId === countryId);
+    }
+    // De-duplicate by name (a city may appear in multiple chapters of
+    // the same country — e.g. "Tel Aviv-Yafo" could be the venue city
+    // for events in both Tel Aviv and Herzliya chapters).
+    const seen = new Set<string>();
+    return result.filter((c) => {
+      if (seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    });
+  }, [cities, countryId, chapterId]);
+
   const selectedCountry = countries.find((c) => c.id === countryId);
   const selectedChapter = chapters.find((c) => c.id === chapterId);
 
-  const isActive = !!countryId || !!chapterId;
+  const isActive = !!countryId || !!chapterId || !!city;
 
   function setCountry(newCountryId: string) {
     // If chapter is selected and doesn't belong to the new country, clear it.
+    let nextChapterId = chapterId;
     if (chapterId) {
       const ch = chapters.find((c) => c.id === chapterId);
       if (ch && ch.countryId !== newCountryId) {
-        onChange({ countryId: newCountryId, chapterId: "" });
-        return;
+        nextChapterId = "";
       }
     }
-    onChange({ countryId: newCountryId, chapterId });
+    // If city is selected and doesn't belong to the new country, clear it.
+    let nextCity = city;
+    if (city && cities) {
+      const c = cities.find((cc) => cc.name === city);
+      if (c && c.countryId !== newCountryId) {
+        nextCity = "";
+      }
+    }
+    onChange({ countryId: newCountryId, chapterId: nextChapterId, city: nextCity });
   }
 
   function setChapter(newChapterId: string) {
-    onChange({ countryId, chapterId: newChapterId });
+    // If city is selected and doesn't belong to the new chapter, clear it.
+    let nextCity = city;
+    if (city && cities) {
+      const c = cities.find((cc) => cc.name === city);
+      if (c && c.chapterId !== newChapterId) {
+        nextCity = "";
+      }
+    }
+    onChange({ countryId, chapterId: newChapterId, city: nextCity });
+  }
+
+  function setCity(newCity: string) {
+    onChange({ countryId, chapterId, city: newCity });
   }
 
   function clearAll() {
-    onChange({ countryId: "", chapterId: "" });
+    onChange({ countryId: "", chapterId: "", city: "" });
   }
 
   if (compact) {
@@ -140,6 +208,20 @@ export function CountryChapterScopeFilter({
             </option>
           ))}
         </select>
+        {cities && cities.length > 0 && (
+          <select
+            value={city ?? ""}
+            onChange={(e) => setCity(e.target.value)}
+            className="rounded-md border border-black/15 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#820A7D]/40"
+          >
+            <option value="">🏙️ All cities</option>
+            {filteredCities.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
         {isActive && (
           <button
             type="button"
@@ -158,7 +240,7 @@ export function CountryChapterScopeFilter({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-[0.65rem] font-bold uppercase tracking-widest text-[#820A7D]">
           <Globe2 className="h-3 w-3" />
-          Filter by country &amp; chapter
+          Filter by country, chapter &amp; city
         </div>
         {isActive && (
           <button
@@ -171,7 +253,7 @@ export function CountryChapterScopeFilter({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {/* Country selector */}
         <div>
           <label className="block text-[0.65rem] font-bold uppercase tracking-wide text-black/60 mb-1">
@@ -194,7 +276,7 @@ export function CountryChapterScopeFilter({
         {/* Chapter selector */}
         <div>
           <label className="block text-[0.65rem] font-bold uppercase tracking-wide text-black/60 mb-1">
-            Chapter / City
+            Chapter
           </label>
           <select
             value={chapterId}
@@ -214,6 +296,27 @@ export function CountryChapterScopeFilter({
             ))}
           </select>
         </div>
+
+        {/* City selector — only rendered when `cities` prop is provided. */}
+        {cities && cities.length > 0 && (
+          <div>
+            <label className="block text-[0.65rem] font-bold uppercase tracking-wide text-black/60 mb-1">
+              City
+            </label>
+            <select
+              value={city ?? ""}
+              onChange={(e) => setCity(e.target.value)}
+              className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D]/40"
+            >
+              <option value="">🏙️ All cities{selectedChapter ? ` in ${selectedChapter.name}` : selectedCountry ? ` in ${selectedCountry.name}` : ""}</option>
+              {filteredCities.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Quick-pick pills for chapters in the selected country */}
@@ -275,9 +378,18 @@ export function CountryChapterScopeFilter({
                 <>
                   {" → "}
                   <MapPin className="inline h-2.5 w-2.5" /> {selectedChapter.name}
-                  {selectedChapter.city ? ` (${selectedChapter.city})` : ""}
                 </>
               )}
+              {city && (
+                <>
+                  {" → "}
+                  <MapPin className="inline h-2.5 w-2.5" /> {city}
+                </>
+              )}
+            </>
+          ) : city ? (
+            <>
+              <MapPin className="inline h-2.5 w-2.5" /> {city} (any country)
             </>
           ) : (
             "All countries"

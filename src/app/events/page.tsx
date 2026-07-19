@@ -59,8 +59,71 @@ export default async function EventsPage() {
       // thumbnail on the events list. Falls back to null when no main
       // image has been set by the admin yet.
       mainImage: { select: { id: true, fileUrl: true, caption: true } },
+      // V7: include chapterRef so the public list can show chapter + city
+      // badges and support chapter/city filtering on the client.
+      chapterRef: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          city: true,
+          country: { select: { name: true, code: true, flagEmoji: true } },
+        },
+      },
     },
   });
+
+  // V7: load all active chapters for the public filter dropdown. Includes
+  // city + country so the dropdown can show "Tel Aviv — Tel Aviv-Yafo" style
+  // labels. Sorted by country name then chapter name for stable ordering.
+  const chapters = await db.chapter.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      city: true,
+      country: { select: { name: true, code: true, flagEmoji: true } },
+    },
+    orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+  });
+
+  // Serialize the events to plain objects with ISO string dates. Next.js
+  // App Router auto-serializes Date objects when passing from Server to
+  // Client Component, but doing it explicitly makes the type contract
+  // clean (EventCard expects string, not Date) and avoids TS errors.
+  const serializedEvents = events.map((e) => ({
+    id: e.id,
+    slug: e.slug,
+    title: e.title,
+    subtitle: e.subtitle,
+    chapter: e.chapter,
+    venue: e.venue,
+    city: e.city,
+    country: e.country,
+    chapterId: e.chapterId,
+    startsAt: e.startsAt.toISOString(),
+    endsAt: e.endsAt.toISOString(),
+    _count: { images: e._count.images, speakers: e._count.speakers },
+    mainImage: e.mainImage
+      ? { id: e.mainImage.id, fileUrl: e.mainImage.fileUrl, caption: e.mainImage.caption }
+      : null,
+  }));
+
+  // Extract unique cities from the events themselves (venue city, which
+  // may differ from the chapter's city — e.g. a Tel Aviv chapter event
+  // hosted in Herzliya). Paired with chapterId so the city dropdown can
+  // be contextual: when a chapter is selected, only show cities in that
+  // chapter.
+  const cityMap = new Map<string, { name: string; chapterId: string }>();
+  for (const e of events) {
+    if (!e.city || !e.chapterId) continue;
+    const key = `${e.city}|${e.chapterId}`;
+    if (!cityMap.has(key)) {
+      cityMap.set(key, { name: e.city, chapterId: e.chapterId });
+    }
+  }
+  const cities = Array.from(cityMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
   // Fetch GOING RSVP counts per event in a single grouped query.
   // We count only RSVPs with status="GOING" — this matches the
@@ -196,7 +259,12 @@ export default async function EventsPage() {
           />
         )}
 
-        <EventsList events={events} goingCounts={goingCounts} />
+        <EventsList
+          events={serializedEvents}
+          goingCounts={goingCounts}
+          chapters={chapters}
+          cities={cities}
+        />
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">

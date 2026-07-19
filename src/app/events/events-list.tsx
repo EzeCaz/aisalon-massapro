@@ -1,10 +1,11 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Image as ImageIcon, Users, ArrowRight } from "lucide-react";
+import { MapPin, Image as ImageIcon, Users, ArrowRight, Filter, X } from "lucide-react";
 
 type EventCard = {
   id: string;
@@ -15,6 +16,7 @@ type EventCard = {
   venue: string | null;
   city: string | null;
   country: string | null;
+  chapterId: string | null;
   startsAt: string;
   endsAt: string;
   _count: { images: number; speakers: number };
@@ -22,6 +24,16 @@ type EventCard = {
   // banner at the top of the card. null when none has been set.
   mainImage: { id: string; fileUrl: string; caption: string | null } | null;
 };
+
+type ChapterOption = {
+  id: string;
+  name: string;
+  slug: string;
+  city: string | null;
+  country: { name: string; code: string; flagEmoji: string | null };
+};
+
+type CityOption = { name: string; chapterId: string };
 
 function monthCode(d: Date) {
   return format(d, "MMM").toUpperCase();
@@ -64,12 +76,64 @@ function dateInTLV(d: Date, fmt: "weekday" | "shortDate" | "longDate" | "monthDa
 export function EventsList({
   events,
   goingCounts,
+  chapters,
+  cities,
 }: {
   events: EventCard[];
   // Map of eventId → number of RSVPs with status="GOING". Lookup is
   // safe via `?? 0` for events with no RSVPs yet.
   goingCounts?: Map<string, number>;
+  /** Active chapters for the filter dropdown. */
+  chapters?: ChapterOption[];
+  /** Unique venue cities derived from the events list. */
+  cities?: CityOption[];
 }) {
+  // Chapter + city filter state. Both default to "" (all).
+  const [chapterFilter, setChapterFilter] = useState<string>("");
+  const [cityFilter, setCityFilter] = useState<string>("");
+
+  // Cities contextual to the selected chapter (or all cities when no
+  // chapter is selected). De-duplicated by name.
+  const filteredCities = useMemo(() => {
+    if (!cities || cities.length === 0) return [];
+    const list = chapterFilter
+      ? cities.filter((c) => c.chapterId === chapterFilter)
+      : cities;
+    const seen = new Set<string>();
+    return list.filter((c) => {
+      if (seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    });
+  }, [cities, chapterFilter]);
+
+  // Apply both filters to the events list.
+  const filteredEvents = useMemo(() => {
+    return events.filter((e) => {
+      if (chapterFilter && e.chapterId !== chapterFilter) return false;
+      if (cityFilter && (e.city ?? "") !== cityFilter) return false;
+      return true;
+    });
+  }, [events, chapterFilter, cityFilter]);
+
+  const isFilterActive = !!chapterFilter || !!cityFilter;
+  function clearFilters() {
+    setChapterFilter("");
+    setCityFilter("");
+  }
+
+  function onChapterChange(id: string) {
+    // If the selected city doesn't belong to the new chapter, clear it.
+    if (cityFilter && id) {
+      const stillValid = cities?.some((c) => c.name === cityFilter && c.chapterId === id);
+      if (!stillValid) setCityFilter("");
+    }
+    setChapterFilter(id);
+  }
+
+  // Show the filter bar only when there are chapters/cities to filter by.
+  const showFilter = (chapters && chapters.length > 1) || (cities && cities.length > 0);
+
   if (events.length === 0) {
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
@@ -81,38 +145,135 @@ export function EventsList({
   }
 
   const now = new Date();
-  const upcoming = events.filter((e) => new Date(e.endsAt) >= now);
-  const past = events.filter((e) => new Date(e.endsAt) < now);
+  const upcoming = filteredEvents.filter((e) => new Date(e.endsAt) >= now);
+  const past = filteredEvents.filter((e) => new Date(e.endsAt) < now);
 
   return (
-    <div className="space-y-12">
-      {upcoming.length > 0 && (
-        <Section title="Upcoming" count={upcoming.length}>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {upcoming.map((e) => (
-              <EventCardItem
-                key={e.id}
-                e={e}
-                isPast={false}
-                goingCount={goingCounts?.get(e.id) ?? 0}
-              />
-            ))}
+    <div className="space-y-8">
+      {/* Chapter + city filter — only shown when there are multiple chapters
+          or any cities to filter by. Hidden for single-chapter platforms with
+          no city data (keeps the UI clean for the common case). */}
+      {showFilter && (
+        <div className="rounded-lg border border-black/10 bg-white p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5 text-[0.65rem] font-bold uppercase tracking-widest text-[#FF005A]">
+              <Filter className="h-3 w-3" />
+              Filter by chapter &amp; city
+            </div>
+            {isFilterActive && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-[0.65rem] font-bold uppercase tracking-wider text-[#FF005A] hover:text-[#FF005A]/80 flex items-center gap-0.5"
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
           </div>
-        </Section>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Chapter dropdown */}
+            {chapters && chapters.length > 0 && (
+              <div>
+                <label className="block text-[0.65rem] font-bold uppercase tracking-wide text-black/60 mb-1">
+                  Chapter
+                </label>
+                <select
+                  value={chapterFilter}
+                  onChange={(e) => onChapterChange(e.target.value)}
+                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                >
+                  <option value="">📍 All chapters</option>
+                  {chapters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.country.flagEmoji ?? ""} {c.name}
+                      {c.city ? ` — ${c.city}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* City dropdown */}
+            {cities && cities.length > 0 && (
+              <div>
+                <label className="block text-[0.65rem] font-bold uppercase tracking-wide text-black/60 mb-1">
+                  City
+                </label>
+                <select
+                  value={cityFilter}
+                  onChange={(e) => setCityFilter(e.target.value)}
+                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                >
+                  <option value="">🏙️ All cities</option>
+                  {filteredCities.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          {/* Active filter summary + result count */}
+          {isFilterActive && (
+            <div className="mt-2 text-[0.7rem] text-black/60">
+              Showing <strong>{filteredEvents.length}</strong> of {events.length} events
+              {chapterFilter && chapters && (
+                <>
+                  {" "}· chapter: <strong>{chapters.find((c) => c.id === chapterFilter)?.name ?? "?"}</strong>
+                </>
+              )}
+              {cityFilter && (
+                <>
+                  {" "}· city: <strong>{cityFilter}</strong>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
-      {past.length > 0 && (
-        <Section title="Past events" count={past.length}>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {past.map((e) => (
-              <EventCardItem
-                key={e.id}
-                e={e}
-                isPast
-                goingCount={goingCounts?.get(e.id) ?? 0}
-              />
-            ))}
-          </div>
-        </Section>
+
+      {filteredEvents.length === 0 ? (
+        <Card className="p-12 text-center bg-white border border-black/10">
+          <p className="text-black/80 mb-4">No events match your filter.</p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] hover:bg-[#D8004D] text-white px-4 py-2 text-sm font-semibold transition-colors"
+          >
+            Clear filter
+          </button>
+        </Card>
+      ) : (
+        <div className="space-y-12">
+          {upcoming.length > 0 && (
+            <Section title="Upcoming" count={upcoming.length}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {upcoming.map((e) => (
+                  <EventCardItem
+                    key={e.id}
+                    e={e}
+                    isPast={false}
+                    goingCount={goingCounts?.get(e.id) ?? 0}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
+          {past.length > 0 && (
+            <Section title="Past events" count={past.length}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {past.map((e) => (
+                  <EventCardItem
+                    key={e.id}
+                    e={e}
+                    isPast
+                    goingCount={goingCounts?.get(e.id) ?? 0}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
+        </div>
       )}
     </div>
   );
