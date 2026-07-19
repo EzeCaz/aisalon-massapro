@@ -36,14 +36,29 @@
  * `events.view` that everyone signed-in gets.
  */
 
-/** The five canonical role strings. SPEAKER is intentionally rank 0
- * (outside the inheritance chain) — it does NOT inherit MEMBER. */
+/** The canonical role strings.
+ *
+ * V7 model (current):
+ *   - SUPER_ADMIN         — Global scope (all countries, all chapters)
+ *   - ADMIN               — Country-scoped (one country + all its chapters)
+ *   - CHAPTER_ORGANIZER   — Chapter-scoped (one chapter only)
+ *   - MEMBER              — Default community member
+ *
+ * V6 legacy roles still present in the DB (backwards-compat):
+ *   - CO_HOST             — Migrated to CHAPTER_ORGANIZER by v7-seed script.
+ *                           Until migration runs, treated as CHAPTER_ORGANIZER.
+ *   - SPEAKER             — Migrated to MEMBER (speaker is now per-event via
+ *                           Speaker.userId, not a User role). Until migration
+ *                           runs, treated as MEMBER for permission checks
+ *                           EXCEPT for the explicit `eventprep.view` perm.
+ */
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
   ADMIN: "ADMIN",
-  CO_HOST: "CO_HOST",
+  CHAPTER_ORGANIZER: "CHAPTER_ORGANIZER",
+  CO_HOST: "CO_HOST", // legacy — same rank as CHAPTER_ORGANIZER
   MEMBER: "MEMBER",
-  SPEAKER: "SPEAKER",
+  SPEAKER: "SPEAKER", // legacy — rank 0, outside inheritance
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
@@ -103,6 +118,7 @@ export function normalizeRole(role: string | null | undefined): Role {
   const upper = role.toUpperCase();
   if (upper === "SUPER_ADMIN") return ROLES.SUPER_ADMIN;
   if (upper === "ADMIN") return ROLES.ADMIN;
+  if (upper === "CHAPTER_ORGANIZER") return ROLES.CHAPTER_ORGANIZER;
   if (upper === "CO_HOST") return ROLES.CO_HOST;
   if (upper === "MEMBER") return ROLES.MEMBER;
   if (upper === "SPEAKER") return ROLES.SPEAKER;
@@ -112,15 +128,17 @@ export function normalizeRole(role: string | null | undefined): Role {
 
 /**
  * Privilege rank — higher = more powerful. Used for inheritance.
- *   SUPER_ADMIN = 4
- *   ADMIN       = 3
- *   CO_HOST     = 2
- *   MEMBER      = 1
- *   SPEAKER     = 0  (outside inheritance — gets only explicit perms)
+ *   SUPER_ADMIN         = 4
+ *   ADMIN               = 3
+ *   CHAPTER_ORGANIZER   = 2  (V7 — replaces CO_HOST)
+ *   CO_HOST             = 2  (V6 legacy — same rank as CHAPTER_ORGANIZER)
+ *   MEMBER              = 1
+ *   SPEAKER             = 0  (outside inheritance — gets only explicit perms)
  */
 const RANK: Record<Role, number> = {
   SUPER_ADMIN: 4,
   ADMIN: 3,
+  CHAPTER_ORGANIZER: 2,
   CO_HOST: 2,
   MEMBER: 1,
   SPEAKER: 0,
@@ -245,6 +263,8 @@ export function can(
   if (r === ROLES.SPEAKER) {
     return required === ROLES.SPEAKER;
   }
+  // V7: CHAPTER_ORGANIZER and legacy CO_HOST have the same rank (2), so
+  // both inherit anything that requires CHAPTER_ORGANIZER, CO_HOST, or MEMBER.
   return RANK[r] >= RANK[required];
 }
 
@@ -288,14 +308,29 @@ export async function getCoHostedEventIds(
 ): Promise<string[] | null> {
   // Admins + Super Admins see all events — return null to signal "no filter"
   if (can(role, "events.edit")) return null;
-  // CO_HOST users see only their co-hosted events
-  if (normalizeRole(role) === ROLES.CO_HOST) {
+  const r = normalizeRole(role);
+  // V7: CHAPTER_ORGANIZER sees all events in their chapter
+  if (r === ROLES.CHAPTER_ORGANIZER) {
+    const { db } = await import("@/lib/db");
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { chapterId: true },
+    });
+    if (!user?.chapterId) return [];
+    const events = await db.event.findMany({
+      where: { chapterId: user.chapterId },
+      select: { id: true },
+    });
+    return events.map((e) => e.id);
+  }
+  // V6 legacy: CO_HOST users see only their co-hosted events
+  if (r === ROLES.CO_HOST) {
     const { db } = await import("@/lib/db");
     const rows = await db.eventCoHost.findMany({
       where: { userId },
       select: { eventId: true },
     });
-    return rows.map((r) => r.eventId);
+    return rows.map((row) => row.eventId);
   }
   // Everyone else (MEMBER, SPEAKER, unknown): no events
   return [];
@@ -351,8 +386,10 @@ export function roleLabel(role: string | null | undefined): string {
       return "Super Admin";
     case ROLES.ADMIN:
       return "Admin";
+    case ROLES.CHAPTER_ORGANIZER:
+      return "Chapter Organizer";
     case ROLES.CO_HOST:
-      return "Co-host";
+      return "Co-host (legacy)";
     case ROLES.SPEAKER:
       return "Speaker";
     case ROLES.MEMBER:
@@ -370,6 +407,8 @@ export function roleBadgeClass(role: string | null | undefined): string {
       return "bg-[#820A7D] text-white";
     case ROLES.ADMIN:
       return "bg-[#FF005A] text-white";
+    case ROLES.CHAPTER_ORGANIZER:
+      return "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40";
     case ROLES.CO_HOST:
       return "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40";
     case ROLES.SPEAKER:
@@ -386,8 +425,8 @@ export function roleBadgeClass(role: string | null | undefined): string {
  */
 export const ASSIGNABLE_ROLES: Role[] = [
   ROLES.ADMIN,
+  ROLES.CHAPTER_ORGANIZER,
   ROLES.CO_HOST,
-  ROLES.SPEAKER,
   ROLES.MEMBER,
 ];
 
@@ -396,22 +435,201 @@ export const ASSIGNABLE_ROLES: Role[] = [
  * Admins cannot grant Admin to others (only Super Admin can).
  */
 export const ADMIN_ASSIGNABLE_ROLES: Role[] = [
+  ROLES.CHAPTER_ORGANIZER,
   ROLES.CO_HOST,
-  ROLES.SPEAKER,
   ROLES.MEMBER,
 ];
 
 /**
  * Returns true if the user role should see the "Admin" link in the
- * site header. This includes ADMIN+ and CO_HOST (event-scoped admin
- * pages). SPEAKER is excluded — they access Event Prep via the event
- * page itself (the 🎯 Event prep tab on /events/[slug]), not via /admin.
+ * site header. This includes ADMIN+ and CHAPTER_ORGANIZER/CO_HOST
+ * (event-scoped admin pages). SPEAKER is excluded — they access Event
+ * Prep via the event page itself (the 🎯 Event prep tab on /events/[slug]),
+ * not via /admin.
  */
 export function canSeeAdminNav(role: string | null | undefined): boolean {
   const r = normalizeRole(role);
   return (
     r === ROLES.SUPER_ADMIN ||
     r === ROLES.ADMIN ||
+    r === ROLES.CHAPTER_ORGANIZER ||
     r === ROLES.CO_HOST
   );
+}
+
+// ============================================================================
+// V7 — Hierarchy scope helpers (Global → Country → Chapter)
+// ============================================================================
+
+export type UserScope =
+  | { kind: "global" }
+  | { kind: "country"; countryId: string }
+  | { kind: "chapter"; countryId: string; chapterId: string }
+  | { kind: "none" };
+
+/**
+ * Returns the user's effective scope based on their role + countryId/chapterId.
+ * Used to scope db queries in admin pages.
+ *
+ *   - SUPER_ADMIN → { kind: "global" }  (no filter — sees everything)
+ *   - ADMIN       → { kind: "country", countryId }  (their country only)
+ *   - CHAPTER_ORGANIZER / CO_HOST → { kind: "chapter", countryId, chapterId }
+ *   - MEMBER / SPEAKER → { kind: "none" }  (no admin access)
+ */
+export async function getUserScope(userId: string): Promise<UserScope> {
+  const { db } = await import("@/lib/db");
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { role: true, countryId: true, chapterId: true },
+  });
+  if (!user) return { kind: "none" };
+  const r = normalizeRole(user.role);
+  if (r === ROLES.SUPER_ADMIN) return { kind: "global" };
+  if (r === ROLES.ADMIN) {
+    if (!user.countryId) return { kind: "global" }; // unscoped admin = global (defensive)
+    return { kind: "country", countryId: user.countryId };
+  }
+  if (r === ROLES.CHAPTER_ORGANIZER || r === ROLES.CO_HOST) {
+    // Chapter scope requires both countryId + chapterId. If missing,
+    // fall back to country scope (or global if both missing) so the user
+    // isn't locked out of everything while their scope is being set up.
+    if (user.chapterId && user.countryId) {
+      return { kind: "chapter", countryId: user.countryId, chapterId: user.chapterId };
+    }
+    if (user.countryId) return { kind: "country", countryId: user.countryId };
+    return { kind: "global" };
+  }
+  return { kind: "none" };
+}
+
+/**
+ * Build a Prisma `where` fragment that scopes a User query to the user's
+ * country/chapter. Pass the result into `db.user.findMany({ where: { ...await scopeUserWhere(scope) } })`.
+ *
+ * Returns an empty object for global scope (no filter).
+ * Returns a never-match clause for "none" scope.
+ */
+export function scopeUserWhere(scope: UserScope): Record<string, unknown> {
+  switch (scope.kind) {
+    case "global":
+      return {};
+    case "country":
+      return { countryId: scope.countryId };
+    case "chapter":
+      return {
+        OR: [{ chapterId: scope.chapterId }, { countryId: scope.countryId, chapterId: null }],
+      };
+    case "none":
+      return { id: "___NEVER___" };
+  }
+}
+
+/**
+ * Build a Prisma `where` fragment that scopes an Event query.
+ */
+export function scopeEventWhere(scope: UserScope): Record<string, unknown> {
+  switch (scope.kind) {
+    case "global":
+      return {};
+    case "country":
+      return { chapterRef: { countryId: scope.countryId } };
+    case "chapter":
+      // A chapter organizer sees events in their chapter + cross-chapter
+      // events in their country.
+      return {
+        OR: [
+          { chapterId: scope.chapterId },
+          { isCrossChapter: true, chapterRef: { countryId: scope.countryId } },
+        ],
+      };
+    case "none":
+      return { id: "___NEVER___" };
+  }
+}
+
+/**
+ * Build a Prisma `where` fragment that scopes a Speaker/EventRsvp/EmailQueue
+ * row by chapterId (these models store a denormalized chapterId).
+ */
+export function scopeChapterWhere(scope: UserScope): Record<string, unknown> {
+  switch (scope.kind) {
+    case "global":
+      return {};
+    case "country":
+      // Country scope: include rows in any chapter of this country.
+      // Since we don't store countryId on these rows, we use chapter.countryId.
+      return { chapter: { countryId: scope.countryId } };
+    case "chapter":
+      return { chapterId: scope.chapterId };
+    case "none":
+      return { id: "___NEVER___" };
+  }
+}
+
+/**
+ * Check whether a user can act on a given chapter (e.g. create an event in it,
+ * edit its settings). Returns true if their scope covers it.
+ */
+export function canActOnChapter(scope: UserScope, chapterId: string): boolean {
+  switch (scope.kind) {
+    case "global":
+      return true;
+    case "country":
+      // Country scope: needs to verify the chapter belongs to their country.
+      // Caller should additionally verify chapter.countryId === scope.countryId
+      // for a strict check; this returns true as a role-level signal.
+      return true;
+    case "chapter":
+      return scope.chapterId === chapterId;
+    case "none":
+      return false;
+  }
+}
+
+/**
+ * Check whether a user can act on a given country.
+ */
+export function canActOnCountry(scope: UserScope, countryId: string): boolean {
+  switch (scope.kind) {
+    case "global":
+      return true;
+    case "country":
+      return scope.countryId === countryId;
+    case "chapter":
+      return scope.countryId === countryId;
+    case "none":
+      return false;
+  }
+}
+
+/**
+ * Returns chapter IDs the user can manage. Null = no filter (global).
+ */
+export async function getManagedChapterIds(
+  userId: string,
+  role: string | null | undefined
+): Promise<string[] | null> {
+  const r = normalizeRole(role);
+  if (r === ROLES.SUPER_ADMIN) return null;
+  const { db } = await import("@/lib/db");
+  if (r === ROLES.ADMIN) {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { countryId: true },
+    });
+    if (!user?.countryId) return null;
+    const chapters = await db.chapter.findMany({
+      where: { countryId: user.countryId },
+      select: { id: true },
+    });
+    return chapters.map((c) => c.id);
+  }
+  if (r === ROLES.CHAPTER_ORGANIZER || r === ROLES.CO_HOST) {
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { chapterId: true },
+    });
+    return user?.chapterId ? [user.chapterId] : [];
+  }
+  return [];
 }

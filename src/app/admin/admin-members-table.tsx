@@ -113,6 +113,11 @@ type Member = {
   _count: { images: number };
   speakers: LinkedSpeaker[];
   secondaryEmails: SecondaryEmail[];
+  // V7 hierarchy fields (optional for backwards compat)
+  country?: { id: string; name: string; code: string; flagEmoji: string | null } | null;
+  chapter?: { id: string; name: string; slug: string; city: string | null } | null;
+  countryId?: string | null;
+  chapterId?: string | null;
 };
 
 type EventRow = {
@@ -848,6 +853,7 @@ function CardsView({
               <th className="text-left px-4 py-3 font-bold">Member</th>
               <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Applied for</th>
               <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Linked speaker</th>
+              <th className="text-left px-4 py-3 font-bold hidden xl:table-cell">Country · Chapter</th>
               <th className="text-left px-4 py-3 font-bold">Tags</th>
               <th className="text-right px-4 py-3 font-bold">Actions</th>
             </tr>
@@ -1002,6 +1008,22 @@ function CardsView({
                         </div>
                       )}
                     </td>
+                    <td className="px-4 py-3 hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
+                      {m.country || m.chapter ? (
+                        <div className="flex flex-col gap-0.5 text-[0.7rem]">
+                          <span className="inline-flex items-center gap-1 text-black/80">
+                            {m.country?.flagEmoji && <span className="text-sm">{m.country.flagEmoji}</span>}
+                            <span className="font-semibold">{m.country?.name ?? "—"}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-black/60 pl-1">
+                            <span className="text-[#FF005A]">›</span>
+                            {m.chapter?.name ?? <span className="italic text-black/30">no chapter</span>}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-black/30 italic">Unassigned</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1 max-w-[280px]">
                         {m.tags.length === 0 ? (
@@ -1081,7 +1103,7 @@ function CardsView({
                   {isOpen && (
                     <tr className="bg-black/[0.02]">
                       <td></td>
-                      <td colSpan={6} className="px-4 py-4">
+                      <td colSpan={7} className="px-4 py-4">
                         <MemberDetail member={m} onOpenEmailDialog={onOpenEmailDialog} />
                       </td>
                     </tr>
@@ -1091,7 +1113,7 @@ function CardsView({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-black/80 text-sm">
+                <td colSpan={8} className="px-4 py-8 text-center text-black/80 text-sm">
                   No members match your filters.
                 </td>
               </tr>

@@ -12,6 +12,7 @@ import {
   BookOpen,
   LayoutTemplate,
   ClipboardCheck,
+  Globe2,
 } from "lucide-react";
 import { ROLES } from "@/lib/permissions";
 
@@ -56,9 +57,11 @@ export const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/registrants", label: "Registrants", icon: ClipboardList, match: "/admin/registrants" },
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
   { href: "/admin/events/new", label: "New event", icon: CalendarPlus, match: "/admin/events/new" },
+  { href: "/admin/chapters", label: "Chapters", icon: Globe2, match: "/admin/chapters" },
   { href: "/admin/check-in", label: "Door Check-in", icon: QrCode, match: "/admin/check-in" },
   { href: "/admin/dashboard", label: "Dashboard", icon: BarChart3, match: "/admin/dashboard" },
   { href: "/admin/dashboard/event-dashboard", label: "Event dashboard", icon: CalendarRange, match: "/admin/dashboard/event-dashboard" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, match: "/admin/reports" },
   { href: "/admin/email", label: "Email", icon: Mail, match: "/admin/email" },
   { href: "/admin/images", label: "Images", icon: Images, match: "/admin/images" },
   { href: "/admin/knowledge-base", label: "Knowledge Base", icon: BookOpen, match: "/admin/knowledge-base" },
@@ -90,7 +93,7 @@ export function filterTabsByRole(
   }
 
   // CO_HOST sees the event-scoped tabs + Event Prep.
-  if (r === ROLES.CO_HOST) {
+  if (r === ROLES.CO_HOST || r === ROLES.CHAPTER_ORGANIZER) {
     const allowed = new Set<string>([
       "/admin/speakers",
       "/admin/registrants",

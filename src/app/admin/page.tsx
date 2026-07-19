@@ -2,15 +2,37 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES, roleLabel } from "@/lib/permissions";
+import {
+  can,
+  isSuperAdminEmail,
+  ROLES,
+  roleLabel,
+  getUserScope,
+  scopeUserWhere,
+  scopeEventWhere,
+  type UserScope,
+} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
 import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
-import { BarChart3, ArrowRight, Mail, Archive } from "lucide-react";
+import { BarChart3, ArrowRight, Mail, Archive, Globe2 } from "lucide-react";
 
-export const metadata = { title: "Admin — AI Salon Tel Aviv" };
+export const metadata = { title: "Admin — AI Salon" };
+
+function scopeBadge(scope: UserScope): { label: string; color: string } {
+  switch (scope.kind) {
+    case "global":
+      return { label: "Global scope", color: "bg-[#820A7D] text-white" };
+    case "country":
+      return { label: "Country scope", color: "bg-[#FF005A] text-white" };
+    case "chapter":
+      return { label: "Chapter scope", color: "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40" };
+    case "none":
+      return { label: "No scope", color: "bg-black/10 text-black/60" };
+  }
+}
 
 export default async function AdminPage() {
   const session = await getServerSession(authOptions);
@@ -18,7 +40,7 @@ export default async function AdminPage() {
 
   let me = await db.user.findUnique({
     where: { email: session.user.email },
-    include: { tags: true },
+    include: { tags: true, country: true, chapter: true },
   });
   if (!me) redirect("/login");
 
@@ -35,14 +57,21 @@ export default async function AdminPage() {
   }
 
   // New permission gate: any role with members.view (SUPER_ADMIN + ADMIN)
-  // can access this page. CO_HOST + MEMBER are redirected to /events.
+  // can access this page. CHAPTER_ORGANIZER + MEMBER are redirected to /events.
   if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
 
+  // V7: scope the queries based on the user's country/chapter
+  const scope = await getUserScope(me.id);
+  const scopeUserFilter = scopeUserWhere(scope);
+  const scopeEventFilter = scopeEventWhere(scope);
+
   const members = await db.user.findMany({
-    where: { archivedAt: null },
+    where: { archivedAt: null, ...scopeUserFilter },
     orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
     include: {
       tags: true,
+      country: { select: { id: true, name: true, code: true, flagEmoji: true } },
+      chapter: { select: { id: true, name: true, slug: true, city: true } },
       _count: { select: { images: true } },
       speakers: {
         select: {
@@ -56,15 +85,35 @@ export default async function AdminPage() {
     },
   });
 
-  const archivedCount = await db.user.count({ where: { archivedAt: { not: null } } });
-
-  const events = await db.event.findMany({
-    orderBy: { startsAt: "desc" },
-    include: { _count: { select: { images: true, speakers: true } } },
+  const archivedCount = await db.user.count({
+    where: { archivedAt: { not: null }, ...scopeUserFilter },
   });
 
-  // All speakers across all events — for the "Link user to speaker" picker
+  const events = await db.event.findMany({
+    where: scopeEventFilter,
+    orderBy: { startsAt: "desc" },
+    include: {
+      chapterRef: { select: { id: true, name: true, slug: true, country: { select: { name: true, code: true, flagEmoji: true } } } },
+      _count: { select: { images: true, speakers: true } },
+    },
+  });
+
+  // All speakers across all events in scope — for the "Link user to speaker" picker
+  // V7: scope speakers by chapter — either the chapterId on Speaker rows
+  // (denormalized from Event.chapterId), or fall back to filtering by
+  // the events in scope.
+  const speakerScopeChapterIds =
+    scope.kind === "global"
+      ? null
+      : scope.kind === "country"
+      ? (await db.chapter.findMany({ where: { countryId: scope.countryId }, select: { id: true } })).map((c) => c.id)
+      : scope.kind === "chapter"
+      ? [scope.chapterId]
+      : [];
   const allSpeakers = await db.speaker.findMany({
+    where: speakerScopeChapterIds === null
+      ? {}
+      : { chapterId: { in: speakerScopeChapterIds } },
     orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
     include: {
       event: { select: { id: true, title: true, slug: true, startsAt: true } },
@@ -78,6 +127,11 @@ export default async function AdminPage() {
   const eventsJson = JSON.parse(JSON.stringify(events));
   const allSpeakersJson = JSON.parse(JSON.stringify(allSpeakers));
 
+  // Scope badge for the header
+  const badge = scopeBadge(scope);
+  const myChapterName = me.chapter?.name;
+  const myCountryName = me.country?.name;
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
@@ -87,7 +141,7 @@ export default async function AdminPage() {
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-              Admin Panel
+              Admin Panel · V7 Hierarchy
             </p>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
               Manage community & events
@@ -97,10 +151,35 @@ export default async function AdminPage() {
               <span className="inline-flex items-center gap-1 font-semibold text-[#FF005A]">
                 {roleLabel(me.role)}
               </span>{" "}
-              role. Super Admins can delete members and change roles; Admins can manage everything else.
+              role.
+              {" "}Your active scope:{" "}
+              <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${badge.color}`}>
+                <Globe2 className="h-3 w-3" />
+                {badge.label}
+                {scope.kind === "country" && myCountryName && ` · ${myCountryName}`}
+                {scope.kind === "chapter" && myChapterName && ` · ${myChapterName}`}
+              </span>
+              .{" "}
+              {scope.kind === "global" && "Super Admins can delete members and change roles."}
+              {scope.kind === "country" && "You see all chapters in your country."}
+              {scope.kind === "chapter" && "You see only your chapter."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/chapters"
+              className="inline-flex items-center gap-2 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-2.5 text-sm hover:bg-[#820A7D] hover:text-white ais-lift whitespace-nowrap"
+            >
+              <Globe2 className="h-4 w-4" />
+              Chapters
+            </Link>
+            <Link
+              href="/admin/reports"
+              className="inline-flex items-center gap-2 rounded-md border border-[#007E72] text-[#007E72] font-semibold px-3 py-2.5 text-sm hover:bg-[#007E72] hover:text-white ais-lift whitespace-nowrap"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Reports
+            </Link>
             <Link
               href="/admin/email"
               className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-2.5 text-sm hover:bg-[#820A7D]/90 ais-lift whitespace-nowrap"

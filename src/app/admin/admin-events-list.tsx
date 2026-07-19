@@ -12,6 +12,14 @@ type EventRow = {
   chapter: string;
   venue: string | null;
   country: string | null;
+  city: string | null;
+  isCrossChapter?: boolean;
+  chapterRef?: {
+    id: string;
+    name: string;
+    slug: string;
+    country: { name: string; code: string; flagEmoji: string | null };
+  } | null;
   startsAt: string;
   endsAt: string;
   _count: { images: number; speakers: number };
@@ -70,8 +78,12 @@ export function AdminEventsList({ events }: { events: EventRow[] }) {
                   </span>
                 </div>
               </div>
-              <Badge variant="outline" className="hidden sm:inline-flex text-[0.6rem] uppercase tracking-wider">
-                {e.chapter} · {e.country}
+              <Badge variant="outline" className="hidden sm:inline-flex text-[0.6rem] uppercase tracking-wider items-center gap-1">
+                {e.chapterRef?.country?.flagEmoji && <span>{e.chapterRef.country.flagEmoji}</span>}
+                {e.chapterRef ? e.chapterRef.name : e.chapter}
+                {e.isCrossChapter && (
+                  <span className="ml-1 rounded bg-[#FF005A]/10 px-1 py-0.5 text-[0.55rem] font-bold text-[#FF005A]">CROSS</span>
+                )}
               </Badge>
               <ArrowRight className="h-4 w-4 text-black/30 group-hover:text-black/80 transition-colors flex-shrink-0" />
             </Card>

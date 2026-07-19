@@ -2,27 +2,39 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLES } from "@/lib/permissions";
+import {
+  ROLES,
+  can,
+  isSuperAdminEmail,
+  getUserScope,
+  type UserScope,
+} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminAnalyticsClient } from "./analytics-client";
 import Link from "next/link";
-import { BarChart3, ArrowLeft } from "lucide-react";
+import { BarChart3, ArrowLeft, Globe2 } from "lucide-react";
 
-export const metadata = { title: "Analytics — Admin — AI Salon Tel Aviv" };
+export const metadata = { title: "Analytics — Admin — AI Salon" };
+
+function scopeBadge(scope: UserScope): { label: string; color: string } {
+  switch (scope.kind) {
+    case "global":
+      return { label: "Global scope", color: "bg-[#820A7D] text-white" };
+    case "country":
+      return { label: "Country scope", color: "bg-[#FF005A] text-white" };
+    case "chapter":
+      return { label: "Chapter scope", color: "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40" };
+    case "none":
+      return { label: "No scope", color: "bg-black/10 text-black/60" };
+  }
+}
 
 /**
  * /admin/analytics — UTM referral analytics dashboard.
  *
- * Shows:
- *   - Summary cards (total visits / new visitors / signups / RSVPs / active referrers)
- *   - 30-day visits + signups trend chart
- *   - Top referrers table
- *   - Recent visits feed + recent signups feed
- *   - Top landing pages
- *
- * Auth: ADMIN or SUPER_ADMIN only. CO_HOST gets redirected to /admin
- * (they only have event-scoped access, not site-wide analytics).
+ * V7: scoped by user's country/chapter. Super Admins see global; Admins see
+ * their country; Chapter Organizers see their chapter.
  */
 export default async function AdminAnalyticsPage() {
   const session = await getServerSession(authOptions);
@@ -30,18 +42,25 @@ export default async function AdminAnalyticsPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, countryId: true, chapterId: true },
   });
   if (!me) redirect("/login?callbackUrl=/admin/analytics");
 
-  if (me.role !== ROLES.ADMIN && me.role !== ROLES.SUPER_ADMIN) {
-    redirect("/admin");
+  let myRole = me.role;
+  if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
+    await db.user.update({ where: { id: me.id }, data: { role: ROLES.SUPER_ADMIN } });
+    myRole = ROLES.SUPER_ADMIN;
   }
+
+  if (!can(myRole, "members.view")) redirect("/admin");
+
+  const scope = await getUserScope(me.id);
+  const badge = scopeBadge(scope);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs role={me.role} />
+      <AdminTabs />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-8">
@@ -53,7 +72,7 @@ export default async function AdminAnalyticsPage() {
             Back to admin
           </Link>
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            Admin Panel
+            Admin Panel · V7 Hierarchy
           </p>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black flex items-center gap-3">
             <BarChart3 className="h-8 w-8 text-[#FF005A]" />
@@ -63,7 +82,11 @@ export default async function AdminAnalyticsPage() {
             Track how members are driving traffic and signups via their unique share links.
             Each member has a unique <code className="text-xs font-mono bg-black/5 px-1 py-0.5 rounded">utm_uid</code>{" "}
             (12-char hex) — every visit, signup, and event RSVP attributed to a share link
-            appears here in real time.
+            appears here in real time.{" "}
+            <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${badge.color}`}>
+              <Globe2 className="h-3 w-3" />
+              {badge.label}
+            </span>
           </p>
         </div>
 

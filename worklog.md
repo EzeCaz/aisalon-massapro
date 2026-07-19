@@ -3208,3 +3208,192 @@ Stage Summary:
 - Brand mark centering is dynamic — works for any logo aspect ratio.
 - The user can still override via Edit sections drag, Object Properties
   Panel, or the form's X/Y fields (blank = auto-center).
+
+---
+Task ID: 2026-07-19-v7-hierarchy-implementation
+Agent: Super Z (main)
+Task: User reported "didn't see any real change" — V7 hierarchy plan
+  was drafted (core/v7/plan.md, draft migration SQL, seed script) but
+  never actually applied. User asked to: make sure ALL reports,
+  referrals, events, members, speakers, registrants, emails have the
+  Global → Country → Chapter hierarchy; copy the real data (all
+  currently Israel/Tel-Aviv) and add the hierarchy layer to each.
+
+Work Log:
+- Investigated prior state:
+  * prisma/schema.prisma had only Event.chapter (free-form String) +
+    Event.country (String?) — no Country/Chapter models
+  * V7-add-hierarchy migration existed as DRAFT SQL (180 lines) — never
+    applied to local sandbox or production
+  * core/v7/plan.md (526 lines) had full design + 6 confirmed design
+    decisions but zero code changes shipped
+  * scripts/v7-seed-israel-tel-aviv.ts existed but had never been run
+  * Local sandbox DB had only 1 user (eze@massapro.com), 0 events
+
+- Updated prisma/schema.prisma with V7 hierarchy:
+  * Added 4 new models: Country, Chapter, ChapterSetting,
+    ChapterEmailTemplateOverride
+  * Added countryId + chapterId to User (nullable, backwards-compat)
+  * Added chapterId (FK as chapterRef) + isCrossChapter to Event
+  * Added chapterId to Speaker, EventRsvp, EmailQueue, EmailRecipient,
+    EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow,
+    EmailAudience, ReferralVisit, ReferralAttribution
+  * Each new FK is nullable so existing V6 rows survive the migration
+
+- Applied schema to local SQLite sandbox via `prisma db push` (additive
+  only — no destructive changes). Generated Prisma client.
+
+- Ran scripts/v7-seed-israel-tel-aviv.ts:
+  * Created Country: Israel (code=IL, flagEmoji=🇮🇱)
+  * Created Chapter: Tel Aviv (slug=tel-aviv, timezone=Asia/Jerusalem)
+  * Backfilled User.countryId = Israel for the existing 1 user
+  * 0 events to backfill (sandbox is empty for events)
+
+- Updated src/lib/permissions.ts (V7 role model + scope helpers):
+  * Added ROLES.CHAPTER_ORGANIZER ("CHAPTER_ORGANIZER") as the V7
+    replacement for CO_HOST (same rank 2 — both inherit equally)
+  * Added UserScope type: { kind: "global" | "country" | "chapter" | "none" }
+  * Added getUserScope(userId) → resolves scope from role + countryId/chapterId
+  * Added scopeUserWhere(scope), scopeEventWhere(scope), scopeChapterWhere(scope)
+    — Prisma where-fragment builders for each query type
+  * Added canActOnChapter(scope, chapterId), canActOnCountry(scope, countryId)
+  * Added getManagedChapterIds(userId, role) → null = global, [] = none,
+    [ids] = scoped list
+  * Updated getCoHostedEventIds() to handle CHAPTER_ORGANIZER (chapter scope)
+    in addition to legacy CO_HOST (per-event scope via EventCoHost)
+  * Updated roleLabel, roleBadgeClass, ASSIGNABLE_ROLES,
+    ADMIN_ASSIGNABLE_ROLES, canSeeAdminNav to include CHAPTER_ORGANIZER
+  * Backwards-compat: CO_HOST and SPEAKER roles still work; CO_HOST
+    inherits the same permissions as CHAPTER_ORGANIZER
+
+- Updated src/lib/auth-guards.ts:
+  * getCurrentUser() now returns { user, error, scope } — scope is the
+    user's UserScope (global/country/chapter/none)
+  * Selects countryId + chapterId from the user row
+  * Auto-syncs SUPER_ADMIN role on every request
+  * Made isError() generic so it works with any return type
+
+- Created new /admin/chapters page (Super Admin + Admin):
+  * Lists all countries + their chapters in a tree view
+  * Per-chapter stats: members, events, RSVPs, speakers counts
+  * "Add chapter" button → /admin/chapters/new
+  * "Edit" link → /admin/chapters/[id]
+  * Shows the V7 scoping rules in an info box at the bottom
+
+- Created /admin/chapters/new + /admin/chapters/[id] (chapter-editor.tsx):
+  * Form: name, slug (auto-generated), country picker, city, timezone,
+    WhatsApp URL, LinkedIn URL, active toggle
+  * Calls POST /api/admin/chapters or PATCH /api/admin/chapters/[id]
+
+- Created /api/admin/chapters/route.ts (POST + GET):
+  * POST: validates name/slug/countryId; scope check (Admin can only
+    create chapters in their own country); creates the chapter
+  * GET: returns chapters in the user's scope
+
+- Created /api/admin/chapters/[id]/route.ts (PATCH + DELETE):
+  * PATCH: updates chapter fields; only Super Admin can change countryId
+  * DELETE: Super Admin only; refuses if chapter has attached data
+
+- Created new /admin/reports page (cross-chapter analytics):
+  * Top-level stats: members, events, RSVPs, speakers, emails sent,
+    referral visits (all scoped)
+  * Country breakdown table (rows = countries)
+  * Chapter breakdown table (rows = chapters, columns = members/events/
+    RSVPs/speakers/emails/referrals)
+  * Scope badge in the header (Global/Country/Chapter)
+
+- Updated src/components/ais/admin-tabs-def.ts:
+  * Added Globe2 icon import
+  * Added /admin/chapters tab (visible to SUPER_ADMIN + ADMIN)
+  * Added /admin/reports tab
+  * Updated filterTabsByRole to handle CHAPTER_ORGANIZER (same as CO_HOST)
+
+- Updated src/app/admin/page.tsx (members dashboard):
+  * Imports getUserScope, scopeUserWhere, scopeEventWhere
+  * Scoped members query: scopeUserWhere(scope) + archivedAt: null
+  * Scoped events query: scopeEventWhere(scope)
+  * Scoped speakers query: filters by chapterId via speakerScopeChapterIds
+  * Scoped archivedCount query
+  * Added V7 scope badge in the header (Global/Country/Chapter color-coded)
+  * Added "Chapters" + "Reports" quick-action buttons
+
+- Updated src/app/admin/admin-members-table.tsx:
+  * Added country/chapter/countryId/chapterId to the Member type
+  * Added "Country · Chapter" column header (xl: breakpoint)
+  * Added the column cell — shows flag emoji + country name, then chapter
+    name (or "no chapter" if null) with a pink › separator
+  * Updated colSpan from 7 → 8 for empty-state + expanded-detail rows
+
+- Updated src/app/admin/admin-events-list.tsx:
+  * Added chapterRef, isCrossChapter, city to EventRow type
+  * Updated the chapter badge to show the flag emoji + chapter name from
+    chapterRef (falling back to the legacy String `chapter` field)
+  * Added a "CROSS" badge when isCrossChapter is true
+
+- Updated src/app/admin/events/page.tsx:
+  * Scoped events query: scopeEventWhere(scope)
+  * Includes chapterRef + country on each event
+  * Serialized chapterRef + isCrossChapter to client
+  * Added scope badge in the header
+
+- Updated src/app/admin/registrants/page.tsx:
+  * Scoped RSVPs query: scopeChapterWhere(scope) + per-event scoping
+    for CHAPTER_ORGANIZER/CO_HOST
+  * Scoped events query: scopeEventWhere(scope) or per-event filter
+  * Includes event.chapterRef (with country) on each RSVP
+  * Added scope badge in the header
+
+- Updated src/app/admin/speakers/page.tsx:
+  * Scoped speakers query: scopeChapterWhere(scope) + per-event scoping
+  * Scoped events query: scopeEventWhere(scope) or per-event filter
+  * Scoped users query (for the "link user to speaker" picker):
+    scopeUserWhere(scope)
+  * Includes event.chapterRef (with country) on each speaker
+  * Added scope badge in the header
+
+- Updated src/app/admin/email/page.tsx:
+  * Scoped campaigns, templates, flows, audiences, stageTemplates — all
+    use the same emailModelWhere: global scope = all rows; country scope
+    = chapterId IS NULL OR chapter.countryId = scope.countryId; chapter
+    scope = chapterId IS NULL OR chapterId = scope.chapterId
+  * Scoped membersCount via scopeUserWhere(scope)
+  * Includes chapter (with country) on each campaign/template/flow
+  * Added scope badge + explanation banner above the email tabs
+
+- Updated src/app/admin/analytics/page.tsx + /api/admin/analytics/route.ts:
+  * Page: removed the wrong `<AdminTabs role={me.role} />` prop usage;
+    added V7 scope badge; lets CHAPTER_ORGANIZER + CO_HOST access too
+  * API: scoped ALL queries (visits, signups, RSVPs, top referrers,
+    recent visits, recent signups, visits-by-day chart, top landing
+    pages, attributed RSVPs) by scopeChapterWhere(scope)
+  * Includes countryId + chapterId on the user lookup so getUserScope works
+
+- TypeScript: zero errors in any of the V7 files. `next build` succeeds.
+  (Pre-existing errors in non-member-dashboard.tsx + skills/* are
+  unrelated and were not touched.)
+
+Stage Summary:
+- V7 hierarchy is now LIVE in the local sandbox DB: Israel + Tel Aviv
+  exist as real rows in the Country + Chapter tables, and the existing
+  SUPER_ADMIN user is scoped to Israel.
+- All admin pages now apply the user's scope filter automatically:
+  * Super Admin (eze@massapro.com) sees everything (global scope)
+  * Admin sees only their country + all chapters in it
+  * Chapter Organizer sees only their chapter
+- New /admin/chapters page: full CRUD UI for countries + chapters
+- New /admin/reports page: cross-chapter comparison tables
+- The admin header now shows a colored scope badge (purple=global,
+  pink=country, cyan=chapter) on every admin page so the user always
+  knows what scope they're operating in.
+- The members table has a new "Country · Chapter" column showing the
+  flag emoji + country name + chapter name for every member.
+- The events list badge now shows the flag emoji + chapter name from
+  the real Chapter FK (not the legacy free-form String).
+- The analytics API (referrals + reports) now scopes every query by
+  chapter/country.
+- To deploy to production:
+  1. Commit + push to origin/main (Vercel auto-deploys)
+  2. Apply the schema to production Neon DB via `prisma db push` or
+     `prisma migrate deploy`
+  3. Run `npx tsx scripts/v7-seed-israel-tel-aviv.ts` against production
+     — this creates Israel + Tel Aviv and backfills all existing rows

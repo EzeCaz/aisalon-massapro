@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLES } from "@/lib/permissions";
+import {
+  ROLES,
+  getUserScope,
+  scopeChapterWhere,
+  type UserScope,
+} from "@/lib/permissions";
 
 /**
  * GET /api/admin/analytics
@@ -62,11 +67,17 @@ export async function GET() {
   }
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, role: true },
+    select: { id: true, role: true, countryId: true, chapterId: true },
   });
-  if (!me || (me.role !== ROLES.ADMIN && me.role !== ROLES.SUPER_ADMIN)) {
+  if (!me || (me.role !== ROLES.ADMIN && me.role !== ROLES.SUPER_ADMIN && me.role !== ROLES.CHAPTER_ORGANIZER && me.role !== ROLES.CO_HOST)) {
     return NextResponse.json({ error: "Forbidden — Admin access required" }, { status: 403 });
   }
+
+  // V7: scope by user's chapter/country
+  const scope: UserScope = await getUserScope(me.id);
+  const visitWhere = scopeChapterWhere(scope);
+  const signupWhere = scopeChapterWhere(scope);
+  const rsvpWhere = scopeChapterWhere(scope);
 
   // ---------- Summary counts ----------
   const [
@@ -76,13 +87,14 @@ export async function GET() {
     totalRsvps,
     activeReferrers,
   ] = await Promise.all([
-    db.referralVisit.count(),
-    db.referralVisit.count({ where: { isNewVisitor: true } }),
-    db.referralAttribution.count(),
-    db.eventRsvp.count({ where: { NOT: { referredByUserId: null } } }),
+    db.referralVisit.count({ where: visitWhere }),
+    db.referralVisit.count({ where: { ...visitWhere, isNewVisitor: true } }),
+    db.referralAttribution.count({ where: signupWhere }),
+    db.eventRsvp.count({ where: { ...rsvpWhere, NOT: { referredByUserId: null } } }),
     db.referralVisit.groupBy({
       by: ["referrerUserId"],
       _count: { _all: true },
+      where: visitWhere,
     }).then((rows) => rows.length),
   ]);
 
@@ -92,6 +104,7 @@ export async function GET() {
     by: ["referrerUserId", "utmUid"],
     _count: { _all: true },
     _max: { createdAt: true },
+    where: visitWhere,
     orderBy: { _count: { id: "desc" } },
     take: 20,
   });
@@ -106,14 +119,16 @@ export async function GET() {
     db.referralAttribution.groupBy({
       by: ["referrerUserId"],
       _count: { _all: true },
+      where: signupWhere,
     }),
     db.eventRsvp.groupBy({
       by: ["referredByUserId"],
       _count: { _all: true },
+      where: rsvpWhere,
     }),
     db.referralVisit.groupBy({
       by: ["referrerUserId"],
-      where: { isNewVisitor: true },
+      where: { ...visitWhere, isNewVisitor: true },
       _count: { _all: true },
     }),
   ]);
@@ -145,6 +160,7 @@ export async function GET() {
   // per the user spec point E ("Always add the utms on the columns and as
   // a filter").
   const recentVisits = await db.referralVisit.findMany({
+    where: visitWhere,
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
@@ -171,6 +187,7 @@ export async function GET() {
 
   // ---------- Recent signups (last 50, with full UTM columns) ----------
   const recentSignups = await db.referralAttribution.findMany({
+    where: signupWhere,
     orderBy: { convertedAt: "desc" },
     take: 50,
     include: {
@@ -196,12 +213,12 @@ export async function GET() {
   // ---------- Visits by day (last 30 days) ----------
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const recentVisitsForChart = await db.referralVisit.findMany({
-    where: { createdAt: { gte: thirtyDaysAgo } },
+    where: { ...visitWhere, createdAt: { gte: thirtyDaysAgo } },
     select: { createdAt: true },
     orderBy: { createdAt: "asc" },
   });
   const recentSignupsForChart = await db.referralAttribution.findMany({
-    where: { convertedAt: { gte: thirtyDaysAgo } },
+    where: { ...signupWhere, convertedAt: { gte: thirtyDaysAgo } },
     select: { convertedAt: true },
     orderBy: { convertedAt: "asc" },
   });
@@ -232,6 +249,7 @@ export async function GET() {
   const topLandingPagesRows = await db.referralVisit.groupBy({
     by: ["landingPath"],
     _count: { _all: true },
+    where: visitWhere,
     orderBy: { _count: { id: "desc" } },
     take: 10,
   });
@@ -249,7 +267,7 @@ export async function GET() {
   // "Attended" here = door-staff scanned their code AND a co-host had pre-
   // approved them (the strictest signal of a real, intentional attendee).
   const attributedRsvps = await db.eventRsvp.findMany({
-    where: { referredByUserId: { not: null } },
+    where: { ...rsvpWhere, referredByUserId: { not: null } },
     select: {
       id: true,
       eventId: true,

@@ -5,22 +5,34 @@
  * @/lib/permissions — that handles SUPER_ADMIN inheritance and the
  * minimum-role-for-permission lookup.
  *
+ * V7: `getCurrentUser()` also returns the user's effective `scope`
+ * (global / country / chapter / none). Pass `scope` into your query
+ * filters via `scopeUserWhere(scope)` / `scopeEventWhere(scope)` /
+ * `scopeChapterWhere(scope)`.
+ *
  * This file adds helpers for the common "load the current user,
  * check their role, return 401/403 if not allowed" pattern, plus
- * per-event scope checks for CO_HOST users.
+ * per-event scope checks for CHAPTER_ORGANIZER / CO_HOST users.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isEventCoHost, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import {
+  can,
+  getUserScope,
+  isEventCoHost,
+  isSuperAdminEmail,
+  ROLES,
+  type UserScope,
+} from "@/lib/permissions";
 
 /**
  * Load the current authenticated user from the session. Returns:
- *   - { user: <User>, error: null }  on success
- *   - { user: null,  error: <401 NextResponse> }  if not signed in
- *   - { user: null,  error: <403 NextResponse> }  if signed in but no DB row
+ *   - { user: <User>, error: null, scope: <UserScope> }  on success
+ *   - { user: null,  error: <401 NextResponse>, scope: null }  if not signed in
+ *   - { user: null,  error: <403 NextResponse>, scope: null }  if signed in but no DB row
  *
  * SIDE EFFECT: If the user's email is in the SUPER_ADMIN_EMAILS allowlist
  * but their DB role isn't SUPER_ADMIN yet (e.g. they were just added to
@@ -28,6 +40,9 @@ import { can, isEventCoHost, isSuperAdminEmail, ROLES } from "@/lib/permissions"
  * their JWT), this function auto-syncs the DB role to SUPER_ADMIN. This
  * guarantees that the hard-coded email allowlist is ALWAYS authoritative,
  * regardless of DB state.
+ *
+ * V7: also returns the user's effective `scope` (global / country / chapter / none).
+ * Use `scope` to filter db queries in admin pages.
  */
 export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
@@ -35,16 +50,25 @@ export async function getCurrentUser() {
     return {
       user: null,
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      scope: null as UserScope | null,
     };
   }
   const user = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, name: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      countryId: true,
+      chapterId: true,
+    },
   });
   if (!user) {
     return {
       user: null,
       error: NextResponse.json({ error: "User not found" }, { status: 403 }),
+      scope: null as UserScope | null,
     };
   }
   // Auto-sync: if email is in super admin allowlist but DB role isn't,
@@ -54,9 +78,11 @@ export async function getCurrentUser() {
       where: { id: user.id },
       data: { role: ROLES.SUPER_ADMIN },
     });
-    return { user: { ...user, role: ROLES.SUPER_ADMIN }, error: null };
+    const syncedUser = { ...user, role: ROLES.SUPER_ADMIN };
+    return { user: syncedUser, error: null, scope: { kind: "global" } as UserScope };
   }
-  return { user, error: null };
+  const scope = await getUserScope(user.id);
+  return { user, error: null, scope };
 }
 
 /**
@@ -132,8 +158,6 @@ export async function requireEventSpeakersEdit(eventId: string) {
  * Type guard: is the return value from requirePermission* a NextResponse
  * (i.e. an error response) or the actual user?
  */
-export function isError(
-  v: Awaited<ReturnType<typeof requirePermission>>
-): v is NextResponse {
+export function isError<T>(v: T | NextResponse): v is NextResponse {
   return v instanceof NextResponse;
 }
