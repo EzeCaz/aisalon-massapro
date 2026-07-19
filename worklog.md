@@ -3949,3 +3949,28 @@ What the user should do next:
    don't have a uniform bulk-selection pattern. Recommend doing them as a
    follow-up: each page would need its own filter wiring (or extract a
    shared <AdminScopeFilterWrapper> that wraps any admin page).
+
+---
+Task ID: 2026-07-20-v7-seed-prod-endpoint
+Agent: Super Z (main)
+Task: User reported "/admin/chapters still shows 'Run npx tsx scripts/v7-seed-israel-tel-aviv.ts to seed Israel + Tel Aviv.' on production — nothing is deployed."
+
+Work Log:
+- Diagnosed: `git log origin/main..HEAD` showed 0 commits, but `git status` had 27 modified files (all the V7 work from the previous session — chapter-editor, bulk-assign-scope APIs, world map, countries CRUD, scope filter). The previous session's V7 work was NEVER committed/pushed.
+- Diagnosed: scripts/v7-seed-israel-tel-aviv.ts was missing from disk entirely. The previous session created it but it was lost on `git reset --hard origin/main` because the scripts/ directory is gitignored. So the seed script only ever existed transiently.
+- Diagnosed: Even if the V7 code had been pushed, production had no way to run the seed because (a) the script is gitignored and (b) Vercel serverless has no shell access for one-off script runs.
+- Solution: Production-safe seed endpoint.
+  * Recreated scripts/v7-seed-israel-tel-aviv.ts (idempotent, V7-FK compatible) for local dev. Gitignored — not committed.
+  * Created src/app/api/admin/v7-seed/route.ts — POST endpoint, Super Admin only. Upserts Country "Israel" + Chapter "Tel Aviv", backfills every NULL countryId/chapterId row across User (except SUPER_ADMIN), Event (except cross-chapter), EventRsvp, Speaker, EmailQueue, EmailRecipient, EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow, EmailAudience, ReferralVisit, ReferralAttribution. Returns JSON verification report (counts per country/chapter + remaining-NULL sanity check). Idempotent.
+  * Created src/components/ais/seed-v7-button.tsx — client component, calls the endpoint with confirm() dialog, shows loading/success/error states, refreshes the page on success. Has a `compact` variant for tight layouts.
+  * Updated src/app/admin/chapters/page.tsx empty state: now shows two clear CTAs side-by-side — "Seed Israel + Tel Aviv now" (one-click via API) + "Create a country manually" (link to /admin/countries). Removed the obsolete "Run npx tsx scripts/..." message.
+  * Also added a compact "Seed Israel + Tel Aviv" button to the page header (visible to Super Admins even when chapters already exist), so the backfill can be re-triggered after a fresh DB restore or for ad-hoc cleanup.
+- Verified: bunx tsc --noEmit shows ZERO errors in the new files (errors in non-member-dashboard.tsx + skills/* are all pre-existing). bunx prisma generate clean.
+- Committed as e227dce, pushed to origin/main. Vercel will auto-deploy.
+
+Stage Summary:
+- Root cause of user's report: V7 work was uncommitted locally + the seed script never existed in any deployable form. Two-pronged fix:
+  1. Code side: production-safe /api/admin/v7-seed endpoint + UI button — no shell access required.
+  2. Process side: all 27 modified V7 files now pushed to origin/main, so Vercel will rebuild with the new chapter-editor, world map, bulk-assign-scope, countries CRUD, etc.
+- After Vercel deploy finishes (~2-4 min), user signs in as Super Admin (eze@massapro.com), visits /admin/chapters, clicks "Seed Israel + Tel Aviv now", confirms. Page reloads with the world map showing the Tel Aviv pin + chapter tree with real counts.
+- The endpoint is idempotent — safe to click multiple times. Re-clicks produce 0 backfills.
