@@ -487,40 +487,14 @@ Aggregated cross-chapter view for Super Admins and Admins:
      `User.chapterId` if null. Implemented in
      `src/app/api/events/[slug]/rsvp/route.ts` after successful RSVP insert.
 
-6. **Speaker-message relay routing** → **PENDING — needs clarification** (see below).
-
----
-
-## 8a. Q6 Explanation — Speaker-message relay routing
-
-**The V6 behavior** (current code):
-- A member visits a speaker's profile on an event page and clicks "Message speaker".
-- The member writes a message; it's saved to the `SpeakerMessage` table.
-- **A copy of the message is also emailed to `ADMIN_EMAIL` (eze@massapro.com)** as a "relay" — so the admin can monitor all member-to-speaker conversations from their inbox.
-- Code locations:
-  - `src/app/api/speakers/[id]/messages/route.ts:132` — `const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";`
-  - `src/app/api/messages/[userId]/route.ts:182` — same pattern for member-to-member DMs.
-
-**Why Q6 matters in V7:**
-With the new hierarchy, "the admin" is no longer a single person. An event in the Tel Aviv chapter is now conceptually owned by the Tel Aviv Chapter Organizer and the Israel Country Admin — not necessarily the global Super Admin. The question is: **who should receive these relay emails in V7?**
-
-**Concrete options — pick one:**
-
-| Option | Who receives the relay email | Pros | Cons |
-|---|---|---|---|
-| **A. Keep status quo** | `ADMIN_EMAIL` env var (still eze@massapro.com globally) | Simplest — zero code changes to relay logic | Super Admin becomes a bottleneck for every chapter; Chapter Organizers can't see member-speaker conversations in their chapter |
-| **B. Chapter Organizers of the event's chapter** | All users with `role=CHAPTER_ORGANIZER` where `chapterId = event.chapterId` | Local visibility — Chapter Organizers can monitor their chapter's conversations | If a chapter has no organizer yet, message is silently not relayed (need fallback) |
-| **C. Country Admin of the event's country** | All users with `role=ADMIN` where `countryId = event.chapter.countryId` | Country Admin gets full picture of their country | Country Admin may be spammed if many events run concurrently |
-| **D. Both Chapter Organizers AND Country Admin** | Union of B + C | Maximum visibility for the local team | More email volume; potential duplicate notifications |
-| **E. Stop relaying entirely** | Nobody — messages stay in-app only (admin can read them via the Speaker Messages admin page) | Simplest data flow; matches the in-app DM pattern | Admin loses passive visibility — must actively check the admin panel |
-
-**Recommendation: Option B with fallback to A.**
-- Try to relay to all Chapter Organizers of the event's chapter.
-- If the chapter has zero organizers, fall back to `ADMIN_EMAIL` (Option A behavior).
-- Country Admins can see all messages via the admin panel (filter by chapter), so they don't need an email.
-- Super Admin can also see everything via the admin panel.
-
-**My default if you don't pick:** Option A (keep status quo) — zero risk of accidentally emailing the wrong person, and Super Admin keeps full visibility.
+6. **Speaker-message relay routing** → **Option B with fallback to A.**
+   - When a member sends a message to a speaker, the relay email goes to:
+     1. **All Chapter Organizers** of the event's chapter (i.e. all users with `role="CHAPTER_ORGANIZER"` where `chapterId = event.chapterId`).
+     2. **Fallback**: if the chapter has zero Chapter Organizers, the relay goes to `ADMIN_EMAIL` (status quo — Option A behavior) so no message is silently lost.
+   - Country Admins do NOT receive the relay email (they can read all messages via the admin panel, filtered by chapter).
+   - Super Admin can also see all messages via the admin panel.
+   - Same logic applies to member-to-member DM relays (`src/app/api/messages/[userId]/route.ts:182`).
+   - Implementation: extract a helper `getRelayRecipientsForEvent(eventId)` in `src/lib/relay-recipients.ts` that returns the email addresses to CC. Used by both speaker-message and DM relay code paths.
 
 ---
 
@@ -534,4 +508,19 @@ If V7 breaks production:
 4. **Re-enable V6 auth**: V6 `resolveInitialRole` still works; `SUPER_ADMIN_EMAILS` allowlist unchanged.
 
 **The V7 migration is the safest possible kind — purely additive.**
+
+---
+
+## 10. All Confirmed Design Decisions (final summary)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Email domain per chapter? | Keep `@aisalon.massapro.com` globally. `Country.defaultEmailDomain` stays nullable. |
+| 2 | Chapter slug in URL? | `/{chapter-slug}/events/{event-slug}` (e.g. `/tel-aviv/events/ai-salon-37`). 301 redirect from old `/events/{slug}`. Admin URLs stay flat. |
+| 3 | Cross-chapter events allowed? | Only when Super Admin sets `Event.isCrossChapter = true`. Defaults to false. |
+| 4 | Admin can promote Member → Chapter Organizer within their country? | Yes. Admin cannot touch Admin or Super Admin. |
+| 5 | Members pick their chapter? | No. Auto-set on first RSVP. Stays null if never RSVP'd. |
+| 6 | Speaker-message relay routing? | **Option B with fallback to A**: relay to Chapter Organizers of the event's chapter; fall back to `ADMIN_EMAIL` if chapter has no organizers. |
+
+All 6 design questions resolved. Ready to begin V7 implementation (Section 7 of this plan).
 
