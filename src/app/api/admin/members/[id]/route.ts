@@ -74,7 +74,7 @@ export async function PATCH(
   const { id } = await params;
   const existing = await db.user.findUnique({
     where: { id },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, countryId: true, chapterId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -94,6 +94,13 @@ export async function PATCH(
     appliedFor?: string | null;
     invitedToSpeak?: string | null;
     role?: string | null;
+    // V7 hierarchy allocation (Super Admin only):
+    //   - countryId: which country this admin/organizer manages (or null to clear)
+    //   - chapterId: which chapter they manage (or null to clear)
+    // When role=ADMIN → countryId should be set (chapterId optional / null = country-wide)
+    // When role=CHAPTER_ORGANIZER → both countryId AND chapterId should be set
+    countryId?: string | null;
+    chapterId?: string | null;
   };
 
   // ---- Role change authorization ----
@@ -190,6 +197,93 @@ export async function PATCH(
     data.role = normalizeRole(body.role);
   }
 
+  // ---- V7 hierarchy allocation (Super Admin only) ----
+  // Super Admin can allocate admins/organizers to a specific country + chapter.
+  // When the body contains countryId or chapterId (even as null), we treat
+  // that as an explicit assignment request and update accordingly.
+  //
+  // Authorization:
+  //   - Only Super Admin can change countryId/chapterId on a user.
+  //   - Super Admin targets are immutable (already blocked above for role;
+  //     we apply the same rule for scope).
+  //
+  // Validation:
+  //   - If countryId is provided (non-null), it must reference an existing Country.
+  //   - If chapterId is provided (non-null), it must reference an existing Chapter,
+  //     AND that chapter's countryId must match the user's effective countryId
+  //     (either the one being set in this same payload, or the existing one).
+  //   - If chapterId is set but countryId is null/cleared, we auto-derive
+  //     countryId from chapter.countryId (so the user's scope stays consistent).
+  if (
+    (body.countryId !== undefined || body.chapterId !== undefined) &&
+    !isSuperAdminEmail(existing.email)
+  ) {
+    if (!isSuperAdmin({ email: me.email, role: me.role })) {
+      return NextResponse.json(
+        { error: "Only a Super Admin can allocate users to a country or chapter." },
+        { status: 403 }
+      );
+    }
+
+    // Resolve the effective countryId: either the one in the payload, or the existing one.
+    const effectiveCountryId =
+      body.countryId !== undefined && body.countryId !== null && body.countryId !== ""
+        ? body.countryId
+        : body.countryId === null
+          ? null
+          : existing.countryId;
+
+    // Validate countryId if it's being set to a non-null value
+    if (effectiveCountryId) {
+      const country = await db.country.findUnique({ where: { id: effectiveCountryId } });
+      if (!country) {
+        return NextResponse.json(
+          { error: `Country not found: ${effectiveCountryId}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Apply countryId update (if it was in the payload at all — including null)
+    if (body.countryId !== undefined) {
+      data.countryId = body.countryId === "" ? null : body.countryId;
+    }
+
+    // Validate + apply chapterId
+    if (body.chapterId !== undefined) {
+      const chapterVal = body.chapterId === "" || body.chapterId === null ? null : body.chapterId;
+      if (chapterVal) {
+        const chapter = await db.chapter.findUnique({
+          where: { id: chapterVal },
+          select: { id: true, countryId: true },
+        });
+        if (!chapter) {
+          return NextResponse.json(
+            { error: `Chapter not found: ${chapterVal}` },
+            { status: 400 }
+          );
+        }
+        // If chapter is provided, ensure countryId is consistent:
+        //   - If countryId was also provided in the payload, they must match.
+        //   - If countryId was NOT provided, auto-derive it from chapter.countryId.
+        if (body.countryId !== undefined && body.countryId !== null && body.countryId !== "") {
+          if (chapter.countryId !== body.countryId) {
+            return NextResponse.json(
+              {
+                error: `Chapter "${chapterVal}" belongs to a different country (${chapter.countryId}) than the one specified (${body.countryId}).`,
+              },
+              { status: 400 }
+            );
+          }
+        } else {
+          // Auto-derive countryId from chapter.countryId
+          data.countryId = chapter.countryId;
+        }
+      }
+      data.chapterId = chapterVal;
+    }
+  }
+
   const updated = await db.user.update({
     where: { id },
     data,
@@ -215,6 +309,8 @@ export async function PATCH(
       appliedFor: updated.appliedFor,
       invitedToSpeak: updated.invitedToSpeak,
       role: updated.role,
+      countryId: updated.countryId,
+      chapterId: updated.chapterId,
       tags: updated.tags,
     },
   });

@@ -65,6 +65,8 @@ import {
   Mail as MailIcon,
   Copy,
   Check,
+  Globe2,
+  MapPin,
 } from "lucide-react";
 import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
 
@@ -1711,6 +1713,20 @@ function EditMemberDialog({
   const [memberRole, setMemberRole] = useState<string>(ROLES.MEMBER);
   const [saving, setSaving] = useState(false);
 
+  // ---- V7 hierarchy assignment state (Super Admin only) ----
+  // Selected countryId + chapterId for THIS member. Persisted via the same
+  // PATCH /api/admin/members/[id] endpoint (super-admin-only fields).
+  // Initialized from member.countryId / member.chapterId on open.
+  const [memberCountryId, setMemberCountryId] = useState<string>("");
+  const [memberChapterId, setMemberChapterId] = useState<string>("");
+  // List of all countries + chapters available for assignment (loaded once).
+  const [assignCountries, setAssignCountries] = useState<
+    { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[]
+  >([]);
+  const [assignChapters, setAssignChapters] = useState<
+    { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[]
+  >([]);
+
   // Existing company names — fetched once on mount. Used to populate
   // the datalist so the admin can pick an existing company OR type a
   // brand-new one (the datalist is a suggestion list, not a closed
@@ -1746,6 +1762,9 @@ function EditMemberDialog({
       setInvitedToSpeak(member.invitedToSpeak || "");
       setMemberRole(member.role || ROLES.MEMBER);
       setPhotoUrl(member.photoUrl ?? null);
+      // V7: sync country/chapter assignment state
+      setMemberCountryId(member.countryId ?? "");
+      setMemberChapterId(member.chapterId ?? "");
       // Reset credential fields whenever the member changes — the email
       // field shows the current primary email as a starting point, and
       // the password field is always blank (we never re-display an
@@ -1776,6 +1795,30 @@ function EditMemberDialog({
       cancelled = true;
     };
   }, []);
+
+  // Fetch countries + chapters available for assignment (Super Admin only).
+  // Loads once on mount — used to populate the country/chapter selectors
+  // in the EditMemberDialog.
+  useEffect(() => {
+    if (!isSuperAdminEmail(currentUserEmail)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/chapters/for-assign");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setAssignCountries(data.countries ?? []);
+          setAssignChapters(data.chapters ?? []);
+        }
+      } catch {
+        // silent — selectors just won't have options
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserEmail]);
 
   if (!member) return null;
 
@@ -1819,6 +1862,11 @@ function EditMemberDialog({
       };
       if (isSuperAdminMe && !isSuperAdminTarget) {
         payload.role = memberRole;
+        // V7: Super Admin can allocate this user to a country + chapter.
+        // Send both fields (even if empty string = "clear assignment").
+        // The server validates existence + country/chapter consistency.
+        payload.countryId = memberCountryId || null;
+        payload.chapterId = memberChapterId || null;
       }
       const res = await fetch(`/api/admin/members/${member.id}`, {
         method: "PATCH",
@@ -2296,6 +2344,125 @@ function EditMemberDialog({
                 </p>
               )}
           </div>
+
+          {/* ---- V7 hierarchy assignment (Super Admin only) ----
+              Lets the Super Admin allocate this user to a specific Country
+              and Chapter. The user's scope (what they can see in the admin
+              panel) is derived from their role + these two fields:
+
+                role=ADMIN              → country scope (countryId required)
+                role=CHAPTER_ORGANIZER  → chapter scope (countryId + chapterId required)
+                role=CO_HOST (legacy)   → same as CHAPTER_ORGANIZER
+                role=MEMBER             → no admin scope (countryId/chapterId still
+                                         set so RSVPs/emails are tagged correctly)
+
+              Hidden for non-Super-Admins. Hidden for Super Admin targets
+              (their scope is global — countryId/chapterId are irrelevant). */}
+          {isSuperAdminEmail(currentUserEmail) &&
+            !isSuperAdminEmail(member.email) && (
+              <div className="rounded-md border border-[#820A7D]/30 bg-[#820A7D]/5 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[0.65rem] font-bold uppercase tracking-widest text-[#820A7D] flex items-center gap-1.5">
+                    <Globe2 className="h-3 w-3" />
+                    Hierarchy assignment (V7)
+                  </div>
+                  <span className="text-[0.55rem] font-bold uppercase bg-[#820A7D] text-white px-1.5 py-0.5 rounded">
+                    Super Admin
+                  </span>
+                </div>
+
+                {/* Country selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-black/80 mb-1 flex items-center gap-1">
+                    <Globe2 className="h-3 w-3" />
+                    Country
+                  </label>
+                  <select
+                    value={memberCountryId}
+                    onChange={(e) => {
+                      const newCountryId = e.target.value;
+                      setMemberCountryId(newCountryId);
+                      // If the currently-selected chapter doesn't belong to
+                      // the newly-selected country, clear the chapter selection
+                      // (the user will pick a new chapter from the new country's list).
+                      if (memberChapterId) {
+                        const chapter = assignChapters.find((c) => c.id === memberChapterId);
+                        if (chapter && chapter.countryId !== newCountryId) {
+                          setMemberChapterId("");
+                        }
+                      }
+                    }}
+                    className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D]/40"
+                  >
+                    <option value="">— No country (global / unscoped) —</option>
+                    {assignCountries.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.flagEmoji ?? ""} {c.name} ({c.code})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[0.6rem] text-black/50 leading-relaxed">
+                    Required for <code className="bg-black/5 px-1 rounded">ADMIN</code> and{" "}
+                    <code className="bg-black/5 px-1 rounded">CHAPTER_ORGANIZER</code> roles.
+                  </p>
+                </div>
+
+                {/* Chapter selector — filtered by selected country */}
+                <div>
+                  <label className="block text-xs font-semibold text-black/80 mb-1 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    Chapter / City
+                  </label>
+                  <select
+                    value={memberChapterId}
+                    onChange={(e) => setMemberChapterId(e.target.value)}
+                    disabled={!memberCountryId}
+                    className={`w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D]/40 ${
+                      !memberCountryId ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    <option value="">
+                      {memberCountryId ? "— No chapter (country-wide) —" : "— Select a country first —"}
+                    </option>
+                    {assignChapters
+                      .filter((ch) => ch.countryId === memberCountryId)
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          {ch.name}
+                          {ch.city ? ` — ${ch.city}` : ""}
+                          {!ch.isActive ? " (inactive)" : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-[0.6rem] text-black/50 leading-relaxed">
+                    Required for <code className="bg-black/5 px-1 rounded">CHAPTER_ORGANIZER</code> role.
+                    Leave empty for country-wide ADMIN scope.
+                  </p>
+                </div>
+
+                {/* Live scope preview */}
+                <div className="rounded bg-white/60 border border-black/10 px-2.5 py-1.5">
+                  <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/60 mb-0.5">
+                    Effective scope
+                  </div>
+                  <div className="text-xs font-medium text-[#820A7D]">
+                    {memberRole === ROLES.SUPER_ADMIN
+                      ? "Global (Super Admin)"
+                      : memberRole === ROLES.ADMIN
+                        ? memberCountryId
+                          ? `Country scope — ${assignCountries.find((c) => c.id === memberCountryId)?.name ?? "Unknown country"}`
+                          : "⚠ Admin role with no country — will default to global (defensive)"
+                        : memberRole === ROLES.CHAPTER_ORGANIZER || memberRole === ROLES.CO_HOST
+                          ? memberChapterId
+                            ? `Chapter scope — ${assignChapters.find((c) => c.id === memberChapterId)?.name ?? "Unknown chapter"}`
+                            : "⚠ Chapter Organizer role with no chapter — will fall back to country scope"
+                          : memberCountryId
+                            ? `Member — tagged to ${assignCountries.find((c) => c.id === memberCountryId)?.name ?? "Unknown country"}${memberChapterId ? ` / ${assignChapters.find((c) => c.id === memberChapterId)?.name ?? ""}` : ""}`
+                            : "Member — no country/chapter tag"}
+                  </div>
+                </div>
+              </div>
+            )}
 
           {/* ---- Super-Admin-only: Credentials section ----
               Lets the Super Admin change a member's primary email AND/OR
