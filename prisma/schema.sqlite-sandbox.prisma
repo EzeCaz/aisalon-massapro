@@ -21,85 +21,232 @@ generator client {
 }
 
 datasource db {
+  // LOCAL SANDBOX ONLY — SQLite provider for offline dev.
+  // Do NOT deploy with this file — production builds use schema.prisma (postgresql).
+  
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+// ---------------------------- V7 Hierarchy: Country + Chapter ----------------------------
+// Global → Country → Chapter(City) — multi-tenant geographic scoping.
+// All V6 records are backfilled to Country=Israel + Chapter=Tel Aviv.
+// See core/v7/plan.md for the full design.
+
+model Country {
+  id                 String    @id @default(cuid())
+  name               String    @unique // "Israel"
+  code               String    @unique // "IL" (ISO 3166-1 alpha-2)
+  slug               String    @unique // "israel"
+  flagEmoji          String? // "🇮🇱"
+  defaultEmailDomain String? // "aisalon.co.il" (nullable at launch — falls back to global)
+  defaultFromName    String?
+  defaultReplyTo     String?
+  isActive           Boolean   @default(true)
+  chapters           Chapter[]
+  users              User[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Chapter {
+  id                   String                         @id @default(cuid())
+  name                 String // "Tel Aviv"
+  slug                 String                         @unique // "tel-aviv"
+  countryId            String
+  country              Country                        @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  city                 String? // "Tel Aviv-Yafo"
+  timezone             String                         @default("Asia/Jerusalem")
+  whatsappGroupUrl     String? // per-chapter override
+  linkedinUrl          String? // per-chapter override
+  isActive             Boolean                        @default(true)
+  users                User[]
+  events               Event[]
+  speakers             Speaker[]
+  rsvps                EventRsvp[]
+  emailQueueItems      EmailQueue[]
+  emailRecipients      EmailRecipient[]
+  emailCampaigns       EmailCampaign[]
+  emailTemplates       EmailTemplate[]
+  stageTemplates       EmailStageTemplate[]
+  emailFlows           EmailFlow[]
+  emailAudiences       EmailAudience[]
+  referralVisits       ReferralVisit[]
+  referralAttributions ReferralAttribution[]
+  settings             ChapterSetting[]
+  templateOverrides    ChapterEmailTemplateOverride[]
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+
+  @@unique([countryId, slug])
+  @@index([countryId])
+}
+
+/// Per-chapter branding overrides (mirrors the V6 SiteSetting key/value
+/// pattern). A null chapterId means "country-level fallback" (rare).
+/// Lookups follow: ChapterSetting → SiteSetting (global).
+model ChapterSetting {
+  id        String   @id @default(cuid())
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  key       String // "logoUrl" | "loginHero" | "emailDomain" | ...
+  value     String
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([chapterId, key])
+  @@index([chapterId])
+}
+
+/// Per-chapter override of a global EmailStageTemplate (logo, subject,
+/// htmlBody). Resolver: ChapterEmailTemplateOverride (if active) →
+/// EmailStageTemplate (global default).
+model ChapterEmailTemplateOverride {
+  id              String             @id @default(cuid())
+  chapterId       String
+  chapter         Chapter            @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  stageTemplateId String
+  stageTemplate   EmailStageTemplate @relation(fields: [stageTemplateId], references: [id], onDelete: Cascade)
+  logoUrl         String? // override
+  subject         String? // override
+  htmlBody        String? // override
+  isActive        Boolean            @default(true)
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([chapterId, stageTemplateId])
+  @@index([chapterId])
 }
 
 // ---------------------------- Users & Members ----------------------------
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  image         String?
+  id                 String                @id @default(cuid())
+  email              String                @unique
+  name               String?
+  image              String?
   // ---------------- Profile fields (user-editable) ----------------
-  bio           String?  // free-form short bio
-  linkedinUrl   String?  // https://www.linkedin.com/in/...
-  company       String?  // e.g. "MassaPro"
-  companyUrl    String?  // https://...
-  portfolioUrl  String?  // personal site / portfolio
-  photoUrl      String?  // user-uploaded photo (overrides Google `image` when set)
+  bio                String? // free-form short bio
+  linkedinUrl        String? // https://www.linkedin.com/in/...
+  company            String? // e.g. "MassaPro"
+  companyUrl         String? // https://...
+  portfolioUrl       String? // personal site / portfolio
+  photoUrl           String? // user-uploaded photo (overrides Google `image` when set)
+  title              String? // job title / role, e.g. "CEO", "Engineer", "Designer"
   // ----------------------------------------------------------------
   // Email/password login: bcrypt-hashed password. Null when the user
   // signed in via Google only. Set on first email sign-up, and on
   // subsequent password resets.
-  passwordHash  String?
+  passwordHash       String?
   // ----------------------------------------------------------------
   // Imported-from-spreadsheet fields (admin-only). Captured from the
   // AI Salon TLV intake form so the admin can see who applied, what
   // they're interested in, what they applied for, and whether they
   // were invited to speak. Visible only in the admin panel.
-  mobile            String?  // phone number from the intake form
-  interestedIn      String?  // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
-  profileCategories String?  // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
-  appliedFor        String?  // e.g. "Fast pitch", "Presentation/Lecure"
-  invitedToSpeak    String?  // admin-set indicator (e.g. "Yes" / event slug)
-  importSource      String?  // e.g. "excel:AI Salon TLV.xlsx"
-  importedAt        DateTime?
+  mobile             String? // phone number from the intake form
+  interestedIn       String? // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
+  profileCategories  String? // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
+  appliedFor         String? // e.g. "Fast pitch", "Presentation/Lecure"
+  invitedToSpeak     String? // admin-set indicator (e.g. "Yes" / event slug)
+  importSource       String? // e.g. "excel:AI Salon TLV.xlsx"
+  importedAt         DateTime?
   // ----------------------------------------------------------------
   // Onboarding: set to NOW() the first time a self-registered user
   // fills out the /onboarding form. Null = the user hasn't completed
   // the intake form yet. Pre-imported users (importSource set) skip
   // onboarding — they already have intake data from the spreadsheet.
-  onboardedAt       DateTime?
+  onboardedAt        DateTime?
+  // ----------------------------------------------------------------
+  // UTM tracking — a unique 12-char hex string generated server-side
+  // on user creation. Used as the `utm_uid` query param on every
+  // share link the user generates from /profile or /events so the
+  // platform can attribute visits + signups + RSVPs back to the
+  // referring member. Stable for the lifetime of the user (never
+  // regenerated). Unique at the DB level. Backfilled for all
+  // pre-existing users by scripts/backfill-utm-uid.ts.
+  utmUid             String?               @unique
   // ----------------------------------------------------------------
   // Soft-delete (archive) — set when a Super Admin archives a member.
   // Archived members are excluded from the main members list and from
   // most queries, but their row is preserved for audit. Only Super
   // Admins can view the archive list at /admin/members/archive and
   // restore archived members. Null = active (not archived).
-  archivedAt        DateTime?
-  archivedBy        String?
-  archiver          User?    @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
-  archivedUsers     User[]    @relation("UserArchiver")
+  archivedAt         DateTime?
+  archivedBy         String?
+  archiver           User?                 @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
+  archivedUsers      User[]                @relation("UserArchiver")
   // ----------------------------------------------------------------
-  role          String   @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CO_HOST" | "MEMBER"
-  tags          MemberTag[] // tags assigned to this member (admin-managed)
-  images        EventImage[]
-  presentations PresentationFile[]
-  speakerMessages SpeakerMessage[] // messages this user sent to speakers
+  // V7 hierarchy scoping fields. Nullable for backwards compatibility
+  // with V6 rows (backfilled to Israel/Tel-Aviv on migration).
+  //   - SUPER_ADMIN: both null (global scope)
+  //   - ADMIN: countryId set (country scope)
+  //   - CHAPTER_ORGANIZER: both set (chapter scope)
+  //   - MEMBER: countryId set if backfilled; chapterId null until first RSVP
+  countryId          String?
+  country            Country?              @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  chapterId          String?
+  chapter            Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // ----------------------------------------------------------------
+  role               String                @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
+  tags               MemberTag[] // tags assigned to this member (admin-managed)
+  images             EventImage[]
+  presentations      PresentationFile[]
+  speakerMessages    SpeakerMessage[] // messages this user sent to speakers
   // User-to-user direct messages (community chat)
-  sentMessages     ConversationMessage[] @relation("SentMessages")
-  receivedMessages ConversationMessage[] @relation("ReceivedMessages")
+  sentMessages       ConversationMessage[] @relation("SentMessages")
+  receivedMessages   ConversationMessage[] @relation("ReceivedMessages")
   // Speakers linked to this user (for in-app chat with members)
-  speakers         Speaker[]
+  speakers           Speaker[]
   // ----------------------------------------------------------------
   // Secondary emails — admin can attach multiple emails to a single
   // user so that signing in with any of them resolves to the same
   // account. User.email itself is still the unique primary email
   // (and the value displayed in the admin table).
-  secondaryEmails  UserEmail[]
+  secondaryEmails    UserEmail[]
   // ----------------------------------------------------------------
   // Email campaigns & templates — back-relations
-  emailCampaigns    EmailCampaign[]  @relation("EmailCampaignCreator")
-  emailTemplates    EmailTemplate[]  @relation("EmailTemplateCreator")
-  emailRecipients   EmailRecipient[] @relation("EmailRecipientUser")
-  eventRsvps        EventRsvp[]      @relation("EventRsvpUser")
-  eventCoHosts      EventCoHost[]    @relation("EventCoHostUser")
-  coHostAddedBy     EventCoHost[]    @relation("EventCoHostAdder")
+  emailCampaigns     EmailCampaign[]       @relation("EmailCampaignCreator")
+  emailTemplates     EmailTemplate[]       @relation("EmailTemplateCreator")
+  emailRecipients    EmailRecipient[]      @relation("EmailRecipientUser")
+  eventRsvps         EventRsvp[]           @relation("EventRsvpUser")
+  eventCoHosts       EventCoHost[]         @relation("EventCoHostUser")
+  coHostAddedBy      EventCoHost[]         @relation("EventCoHostAdder")
   // ----------------------------------------------------------------
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // Event prep — suggestions this user has submitted (audit trail).
+  prepSuggestions    EventPrepSuggestion[] @relation("EventPrepSuggester")
+  // ----------------------------------------------------------------
+  // UTM referrals — visits attributed to this user's share link, and
+  // signups/RSVPs that resulted from those visits. Used by the
+  // /admin/analytics dashboard to show referral stats per member.
+  referralVisits     ReferralVisit[]       @relation("ReferralVisitsReferrer")
+  referredSignups    ReferralAttribution[] @relation("ReferredSignupReferrer")
+  // The signup attribution row where THIS user was the new signup
+  // (i.e. they signed up via someone else's share link). At most one
+  // row per user (enforced by ReferralAttribution.referredUserId @unique).
+  signupAttributedTo ReferralAttribution?  @relation("ReferredSignupReferredUser")
+  referredRsvps      EventRsvp[]           @relation("ReferredRsvpReferrer")
+  approvedRsvps      EventRsvp[]           @relation("EventRsvpApprover")
+  // ----------------------------------------------------------------
+  // Email orchestrator + flows — back-relations
+  emailQueueItems    EmailQueue[]          @relation("EmailQueueUser")
+  // ----------------------------------------------------------------
+  // Flourishing Quiz — sessions this user is hosting + participation records
+  hostedQuizSessions QuizSession[]         @relation("QuizHost")
+  quizParticipations QuizParticipant[]
+  // ----------------------------------------------------------------
+  // Community chat — group rooms this user created + rooms they're a
+  // member of + messages they've sent. DMs reuse ConversationMessage
+  // (already wired above) — group chat lives in the ChatRoom family.
+  chatRoomsCreated   ChatRoom[]            @relation("ChatRoomCreator")
+  chatMemberships    ChatRoomMember[]
+  chatMessages       ChatMessage[]
+  // ----------------------------------------------------------------
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([countryId])
+  @@index([chapterId])
+  @@index([role, countryId])
+  @@index([role, chapterId])
 }
 
 /// A secondary email attached to a User. The User.email column is
@@ -115,7 +262,7 @@ model UserEmail {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   email     String   @unique
-  label     String?  // optional note: "Work", "Personal", etc.
+  label     String? // optional note: "Work", "Personal", etc.
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -124,14 +271,14 @@ model UserEmail {
 /// A direct message between two platform users (community chat).
 /// Used to power the inbox / chat feature in the top-right of the header.
 model ConversationMessage {
-  id           String   @id @default(cuid())
-  senderId     String
-  sender       User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  recipientId  String
-  recipient    User     @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
-  body         String
-  readAt       DateTime? // null = unread by recipient
-  createdAt    DateTime @default(now())
+  id          String    @id @default(cuid())
+  senderId    String
+  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  body        String
+  readAt      DateTime? // null = unread by recipient
+  createdAt   DateTime  @default(now())
 
   @@index([senderId, createdAt])
   @@index([recipientId, readAt])
@@ -142,7 +289,7 @@ model ConversationMessage {
 model MemberTag {
   id        String   @id @default(cuid())
   label     String   @unique // e.g. "Speaker", "Builder", "Investor"
-  color     String?  // optional AIS palette color hex
+  color     String? // optional AIS palette color hex
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -151,75 +298,106 @@ model MemberTag {
 // ---------------------------- Events ----------------------------
 
 model Event {
-  id            String   @id @default(cuid())
-  slug          String   @unique
-  title         String
-  subtitle      String?
-  chapter       String   @default("Tel Aviv") // e.g. "Tel Aviv"
-  venue         String?
-  address       String?
-  city          String?
-  country       String?  // e.g. "ISR"
-  mapUrl        String?
-  startsAt      DateTime
-  endsAt        DateTime
-  description   String?  // long-form description / "About Event"
-  takeaways     String?  // "What you'll take home"
-  intendedFor   String?  // "This event is built for: ..."
-  rsvpUrl       String?  // external RSVP form
-  coverImage    String?  // legacy: external URL for the event's cover image
+  id             String      @id @default(cuid())
+  slug           String      @unique
+  title          String
+  subtitle       String?
+  chapter        String      @default("Tel Aviv") // legacy free-form label (denormalized cache of Chapter.name)
+  venue          String?
+  address        String?
+  city           String?
+  country        String? // legacy free-form ISO code ("IL") — denormalized from Chapter.country.code
+  mapUrl         String?
+  wazeUrl        String? // optional Waze deep-link / search URL for the event venue
+  startsAt       DateTime
+  endsAt         DateTime
+  description    String? // long-form description / "About Event"
+  takeaways      String? // "What you'll take home"
+  intendedFor    String? // "This event is built for: ..."
+  rsvpUrl        String? // external RSVP form
+  coverImage     String? // legacy: external URL for the event's cover image
+  // ---- V7: real chapter FK (replaces the free-form String `chapter`) ----
+  chapterId      String?
+  chapterRef     Chapter?    @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // Cross-chapter event (Super Admin only). When true, the event
+  // appears in the listings of ALL chapters in its country. The event
+  // is still owned by `chapterId` for admin scope checks.
+  isCrossChapter Boolean     @default(false)
   // The "main" image for this event — a pointer to one of the
   // EventImage rows uploaded via the gallery. Used as the hero image
   // on the event page and the thumbnail on /events. When null, the
   // gallery's first image (by slideOrder) is used as a fallback.
-  mainImageId   String?
-  mainImage     EventImage? @relation("EventMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  mainImageId    String?
+  mainImage      EventImage? @relation("EventMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  speakers      Speaker[]
-  agenda        EventAgendaItem[]
-  images        EventImage[]
-  presentations PresentationFile[]
-  rsvps         EventRsvp[]
-  coHosts       EventCoHost[]
+  speakers        Speaker[]
+  agenda          EventAgendaItem[]
+  images          EventImage[]
+  presentations   PresentationFile[]
+  rsvps           EventRsvp[]
+  coHosts         EventCoHost[]
+  /// Saved mockup defaults (one per type). Set via the "Save as default
+  /// for event" button in each mockup editor.
+  mockupDefaults  EventMockupDefault[]
+  /// Event prep questions (generic + per-speaker) for the "Event prep" tab.
+  prepQuestions   EventPrepQuestion[]
+  /// Suggested edits to those questions (from admins/co-hosts).
+  prepSuggestions EventPrepSuggestion[]
+  /// Email orchestrator queue items for this event (5-stage + flow steps).
+  emailQueueItems EmailQueue[]
+  /// Flourishing Quiz sessions tied to this event (optional link for
+  /// post-event follow-up outreach to top performers).
+  quizSessions    QuizSession[]
+  /// Group chat room for this event (one-to-one). Looked up via
+  /// ChatRoom.eventId — the FK lives on ChatRoom.
+  chatRoom        ChatRoom?
+
+  @@index([chapterId])
+  @@index([isCrossChapter])
 }
 
 /// Speaker at an event — has name, role, company, topic, photo.
 model Speaker {
-  id             String   @id @default(cuid())
-  eventId        String
-  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name           String
-  role           String?   // e.g. "AI Product Lead, Amdocs"
-  company        String?
-  bio            String?
-  topic          String?   // talk title
-  photoUrl       String?
+  id            String              @id @default(cuid())
+  eventId       String
+  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name          String
+  role          String? // e.g. "AI Product Lead, Amdocs"
+  company       String?
+  bio           String?
+  topic         String? // talk title
+  photoUrl      String?
   // Optional contact email — used to AUTO-LINK a Speaker to a platform User
   // (by matching email). When linked, members can chat with the speaker
   // via the in-app ConversationMessage system (two-way). When not linked,
   // the old SpeakerMessage flow (one-way email relay via admin) is used.
-  contactEmail   String?
+  contactEmail  String?
   // Optional explicit link to a User account. Either set by the admin
   // (rare) or auto-populated from contactEmail on speaker creation.
-  userId         String?
-  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  order          Int      @default(0)
-  images         EventImage[] // images linked to this speaker
-  presentations  PresentationFile[] // presentations linked to this speaker
+  userId        String?
+  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order         Int                 @default(0)
+  images        EventImage[] // images linked to this speaker
+  presentations PresentationFile[] // presentations linked to this speaker
   // Lead-speaker relation: agenda items where this speaker is the primary
   // speaker (for non-PANEL items, or for the PANEL moderator).
-  agendaItems    EventAgendaItem[] @relation("AgendaLeadSpeaker")
+  agendaItems   EventAgendaItem[]   @relation("AgendaLeadSpeaker")
   // Panelist relation: PANEL agenda items where this speaker appears as a
   // panelist (not the moderator).
-  panelItems     EventAgendaItem[] @relation("AgendaPanelist")
-  messages       SpeakerMessage[] // messages left by community members for this speaker
+  panelItems    EventAgendaItem[]   @relation("AgendaPanelist")
+  messages      SpeakerMessage[] // messages left by community members for this speaker
+  prepQuestions EventPrepQuestion[] // personalized prep questions for this speaker
+  // ---- V7: chapter scoping (denormalized from Event.chapterId at write time) ----
+  chapterId     String?
+  chapter       Chapter?            @relation(fields: [chapterId], references: [id], onDelete: SetNull)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([chapterId])
 }
 
 /// A message left by a community member for a speaker.
@@ -227,15 +405,15 @@ model Speaker {
 /// (e.g. via email or LinkedIn). The platform itself does not (yet)
 /// support bidirectional chat — this is the "first contact" hop.
 model SpeakerMessage {
-  id          String   @id @default(cuid())
-  speakerId   String
-  speaker     Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
-  fromUserId  String?
-  fromUser    User?    @relation(fields: [fromUserId], references: [id], onDelete: SetNull)
-  fromName    String   // snapshot in case the user is later deleted
-  fromEmail   String   // snapshot — this is how the speaker replies
-  body        String
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  speakerId  String
+  speaker    Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  fromUserId String?
+  fromUser   User?    @relation(fields: [fromUserId], references: [id], onDelete: SetNull)
+  fromName   String // snapshot in case the user is later deleted
+  fromEmail  String // snapshot — this is how the speaker replies
+  body       String
+  createdAt  DateTime @default(now())
 
   @@index([speakerId, createdAt])
   @@index([fromUserId])
@@ -243,23 +421,82 @@ model SpeakerMessage {
 
 /// One row in the event agenda — can be a talk, a break, fast pitch, etc.
 model EventAgendaItem {
-  id             String   @id @default(cuid())
-  eventId        String
-  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  startsAt       DateTime
-  endsAt         DateTime?
-  title          String   // e.g. "Welcome by Ezequiel Sznaider"
-  description    String?  // optional longer description (used by fast pitch sessions and other items)
-  type           String   @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME" | "PANEL"
+  id            String             @id @default(cuid())
+  eventId       String
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  startsAt      DateTime
+  endsAt        DateTime?
+  title         String // e.g. "Welcome by Ezequiel Sznaider"
+  description   String? // optional longer description (used by fast pitch sessions and other items)
+  type          String             @default("TALK") // "TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME" | "PANEL"
   // For non-PANEL items: the lead speaker. For PANEL items: the moderator
   // (optional — one of the panelists can take that role if no moderator).
-  speakerId      String?
-  speaker        Speaker? @relation("AgendaLeadSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
+  speakerId     String?
+  speaker       Speaker?           @relation("AgendaLeadSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
   // Panelists for PANEL-type items (m:n). Empty for non-PANEL items.
   // Stored via the implicit _EventAgendaItemToSpeaker join table.
-  panelists      Speaker[] @relation("AgendaPanelist")
-  presentations  PresentationFile[] // files uploaded for this specific agenda item
-  createdAt      DateTime @default(now())
+  panelists     Speaker[]          @relation("AgendaPanelist")
+  presentations PresentationFile[] // files uploaded for this specific agenda item
+  // Photos tagged with this agenda item (m:n). Complements the
+  // EventImage.speakers relation — a photo can be tagged with BOTH the
+  // speaker(s) AND the specific session(s) it belongs to. Stored via
+  // the implicit _AgendaItemTaggedImages join table.
+  // Used by the Photos tab "Link to session" picker so members can
+  // organize the community gallery by agenda item, not just by speaker.
+  taggedImages  EventImage[]       @relation("AgendaItemTaggedImages")
+  // Optional per-session link (e.g. recording, livestream, signup form,
+  // sponsor call-booking link). Rendered as the "Session URL" thumbnail
+  // on the public agenda tab. When null, the public tab falls back to
+  // extracting the first http(s) URL from `description` (legacy behavior
+  // preserved so existing sessions that embed a URL in their description
+  // keep working without migration).
+  sessionUrl    String?
+  // Optional pointer to ONE EventImage row to use as the "main picture"
+  // for this agenda item on the public agenda tab. Used as a fallback
+  // when the session's speaker (or panelists) have no linked images.
+  // Admins set this in the EditAgendaItemDialog (per-item main image picker).
+  // Null = no per-item main image; the agenda tab falls back to speaker
+  // images, or hides the slideshow column entirely when none exist.
+  mainImageId   String?
+  mainImage     EventImage?        @relation("AgendaItemMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+}
+
+// ---------------------------- Event Mockup Defaults ----------------------------
+
+/// One saved mockup default for an event. Each event can have at most one
+/// default per mockup type (speaker-intro, meet-the-speaker,
+/// agenda-profile, event-profile). When the admin clicks "Save as default
+/// for event" in a mockup editor, the canvas JSON is serialized into
+/// `dataJson`, and a PNG snapshot is uploaded to Vercel Blob (URL stored
+/// in `imageUrl`). The PNG is also added to /admin/images brand-assets
+/// with `caption` = `${eventName} — ${mockupType}`.
+///
+/// For the `event-profile` mockup type, saving also sets the event's
+/// mainImageId to point at the newly-created EventImage row (so the
+/// event's main image at /events/[slug] updates immediately).
+model EventMockupDefault {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Mockup type: "speaker-intro" | "meet-the-speaker" | "agenda-profile" | "event-profile"
+  type         String
+  /// Full JSON serialization of the mockup data (SpeakerIntroData, etc.)
+  dataJson     String
+  /// URL of the PNG snapshot in Vercel Blob (brand-assets/ prefix)
+  imageUrl     String
+  /// Caption shown in /admin/images — typically "${eventName} — ${type}"
+  caption      String?
+  /// Optional pointer to the EventImage row created from the snapshot
+  /// (so we can update the event's mainImage). Null when no EventImage
+  /// row was created (e.g. for non-event-profile mockup types, or when
+  /// the snapshot upload failed but we still saved the JSON).
+  eventImageId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([eventId, type])
+  @@index([eventId])
 }
 
 // ---------------------------- Event Images ----------------------------
@@ -268,27 +505,39 @@ model EventAgendaItem {
 /// Can be linked to one or more speakers (so members can tag
 /// "this photo is from Ohad's talk", "this photo is from Boris's talk", etc.)
 model EventImage {
-  id          String   @id @default(cuid())
-  eventId     String
-  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  uploaderId  String
-  uploader    User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
-  fileName    String
-  fileUrl     String   // served from /uploads/events/<eventId>/<filename>
-  fileSize    Int      @default(0)
-  width       Int?
-  height      Int?
-  mimeType    String   @default("image/jpeg")
-  caption     String?
+  id                String            @id @default(cuid())
+  eventId           String
+  event             Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId        String
+  uploader          User              @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName          String
+  fileUrl           String // served from /uploads/events/<eventId>/<filename>
+  fileSize          Int               @default(0)
+  width             Int?
+  height            Int?
+  mimeType          String            @default("image/jpeg")
+  caption           String?
   // Slideshow ordering — admin/member can reorder. Lower = earlier.
-  slideOrder  Int      @default(0)
+  slideOrder        Int               @default(0)
   // Linked speakers — many-to-many (an image can be from multiple talks/speakers)
-  speakers    Speaker[]
+  speakers          Speaker[]
+  // Linked agenda items (sessions) — many-to-many. Members can tag a
+  // photo with the specific session(s) it belongs to, in addition to
+  // (or instead of) tagging the speaker. Useful for panels, breaks,
+  // fast-pitch sessions, networking slots — anything where "this photo
+  // was taken during session X" is more meaningful than "this photo
+  // contains speaker Y". Set via the Photos tab "Link to session"
+  // picker (single) or "Link to session" bulk action (multi).
+  agendaItems       EventAgendaItem[] @relation("AgendaItemTaggedImages")
   // Back-relation: events that have this image as their mainImage.
   // (One image can be the main of at most one event — the FK lives on Event.)
-  mainOfEvents Event[] @relation("EventMainImage")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  mainOfEvents      Event[]           @relation("EventMainImage")
+  // Back-relation: agenda items that have this image as their per-item
+  // mainImage. An image can be the main of multiple agenda items (rare
+  // but allowed — e.g. one image reused across two related sessions).
+  mainOfAgendaItems EventAgendaItem[] @relation("AgendaItemMainImage")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([eventId, slideOrder])
   @@index([uploaderId])
@@ -305,25 +554,25 @@ model EventImage {
 /// — same reason as EventImage: Vercel's serverless filesystem is
 /// read-only at runtime.
 model PresentationFile {
-  id            String   @id @default(cuid())
-  eventId       String
-  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  uploaderId    String
-  uploader      User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
-  fileName      String   // original filename, e.g. "AI-CMO-Blueprint.pdf"
-  fileUrl       String   // Vercel Blob URL
-  fileSize      Int      @default(0)
-  mimeType      String   @default("application/pdf")
-  title         String?  // optional display title (defaults to fileName)
-  description   String?  // optional short description
+  id           String           @id @default(cuid())
+  eventId      String
+  event        Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  uploaderId   String
+  uploader     User             @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  fileName     String // original filename, e.g. "AI-CMO-Blueprint.pdf"
+  fileUrl      String // Vercel Blob URL
+  fileSize     Int              @default(0)
+  mimeType     String           @default("application/pdf")
+  title        String? // optional display title (defaults to fileName)
+  description  String? // optional short description
   // Optional link to a specific agenda item — null means "general event
   // file" (e.g. event wrap-up deck, sponsor deck, etc.)
-  agendaItemId  String?
-  agendaItem    EventAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: SetNull)
+  agendaItemId String?
+  agendaItem   EventAgendaItem? @relation(fields: [agendaItemId], references: [id], onDelete: SetNull)
   // Linked speakers (presenters) — many-to-many (a deck can be co-presented)
-  speakers      Speaker[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  speakers     Speaker[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   @@index([eventId])
   @@index([uploaderId])
@@ -338,23 +587,27 @@ model PresentationFile {
 /// composer's template picker, which loads their subject + bodyHtml into the
 /// composer as a starting point.
 model EmailTemplate {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   name          String
   slug          String?
-  category      String   @default("general")
+  category      String          @default("general")
   subject       String
   bodyHtml      String
   bodyText      String?
   signatureHtml String?
   thumbnailUrl  String?
   createdBy     String
-  creator       User     @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  creator       User            @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   campaigns     EmailCampaign[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // ---- V7: chapter scoping (nullable = global template available to all chapters) ----
+  chapterId     String?
+  chapter       Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([createdBy])
   @@index([category])
+  @@index([chapterId])
 }
 
 /// An email campaign — a single send-out to a list of recipients.
@@ -362,18 +615,18 @@ model EmailTemplate {
 /// The subject/body are snapshotted at send time so that later edits to
 /// the source template don't change what was actually sent.
 model EmailCampaign {
-  id                    String   @id @default(cuid())
+  id                    String           @id @default(cuid())
   name                  String
   templateId            String?
-  template              EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template              EmailTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
   subjectSnapshot       String
   bodyHtmlSnapshot      String
   bodyTextSnapshot      String?
   signatureHtmlSnapshot String?
-  listSource            String   // "ALL_MEMBERS" | "TAG:Speaker" | "EVENT:abc123" | "MANUAL:list@x.com,..." etc.
-  listConfigJson        String   // JSON payload describing the recipient list filter
-  recipientCount        Int      @default(0)
-  status                String   @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED
+  listSource            String // "ALL_MEMBERS" | "TAG:Speaker" | "EVENT:abc123" | "MANUAL:list@x.com,..." etc.
+  listConfigJson        String // JSON payload describing the recipient list filter
+  recipientCount        Int              @default(0)
+  status                String           @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED
   scheduledAt           DateTime?
   startedAt             DateTime?
   completedAt           DateTime?
@@ -381,16 +634,20 @@ model EmailCampaign {
   fromEmail             String?
   replyTo               String?
   createdBy             String
-  creator               User     @relation("EmailCampaignCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  creator               User             @relation("EmailCampaignCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   recipients            EmailRecipient[]
   events                EmailEvent[]
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  // ---- V7: chapter scoping (nullable = global campaign across all chapters) ----
+  chapterId             String?
+  chapter               Chapter?         @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   @@index([status])
   @@index([scheduledAt])
   @@index([createdBy])
   @@index([templateId])
+  @@index([chapterId])
 }
 
 /// One recipient of one campaign. Tracks per-recipient delivery state
@@ -398,30 +655,33 @@ model EmailCampaign {
 /// trackToken used to identify this recipient in open/click tracking
 /// pixels and links.
 model EmailRecipient {
-  id            String   @id @default(cuid())
-  campaignId    String
-  campaign      EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  userId        String?
-  user          User?    @relation("EmailRecipientUser", fields: [userId], references: [id], onDelete: SetNull)
-  email         String
-  name          String?
-  trackToken    String   @unique
-  messageId     String?  // SMTP Message-ID, for matching bounces/replies
-  status        String   @default("QUEUED") // QUEUED | SENT | FAILED | BOUNCED | COMPLAINED
-  errorReason   String?
-  retryCount    Int      @default(0) // incremented by /api/cron/email on each retry attempt
-  sentAt        DateTime?
-  firstOpenedAt DateTime?
-  lastOpenedAt  DateTime?
-  openCount     Int      @default(0)
+  id             String        @id @default(cuid())
+  campaignId     String
+  campaign       EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation("EmailRecipientUser", fields: [userId], references: [id], onDelete: SetNull)
+  email          String
+  name           String?
+  trackToken     String        @unique
+  messageId      String? // SMTP Message-ID, for matching bounces/replies
+  status         String        @default("QUEUED") // QUEUED | SENT | FAILED | BOUNCED | COMPLAINED
+  errorReason    String?
+  retryCount     Int           @default(0) // incremented by /api/cron/email on each retry attempt
+  sentAt         DateTime?
+  firstOpenedAt  DateTime?
+  lastOpenedAt   DateTime?
+  openCount      Int           @default(0)
   firstClickedAt DateTime?
-  lastClickedAt DateTime?
-  clickCount    Int      @default(0)
-  repliedAt     DateTime?
-  replySnippet  String?
-  events        EmailEvent[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  lastClickedAt  DateTime?
+  clickCount     Int           @default(0)
+  repliedAt      DateTime?
+  replySnippet   String?
+  events         EmailEvent[]
+  // ---- V7: chapter scoping (denormalized from Campaign.chapterId at send time) ----
+  chapterId      String?
+  chapter        Chapter?      @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([campaignId, email])
   @@index([campaignId])
@@ -430,15 +690,16 @@ model EmailRecipient {
   @@index([trackToken])
   @@index([messageId])
   @@index([status])
+  @@index([chapterId])
 }
 
 /// One tracking event for one campaign/recipient. Types include
 /// SENT, DELIVERED, OPENED, CLICKED, REPLIED, BOUNCED, COMPLAINED.
 /// `details` is free-form JSON (e.g. the URL that was clicked).
 model EmailEvent {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   campaignId  String
-  campaign    EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign    EmailCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   recipientId String?
   recipient   EmailRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
   email       String
@@ -446,7 +707,7 @@ model EmailEvent {
   details     String?
   userAgent   String?
   ipAddress   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime        @default(now())
 
   @@index([campaignId, type, createdAt])
   @@index([recipientId, type])
@@ -465,38 +726,75 @@ model EmailEvent {
 /// at the door to enter the venue. The code is idempotent — clicking
 /// "Check in" again returns the same code.
 model EventRsvp {
-  id           String    @id @default(cuid())
-  eventId      String
-  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId       String?
-  user         User?     @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
-  email        String
-  name         String?
-  status       String    @default("GOING") // GOING | MAYBE | NOT_GOING
-  source       String    @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
+  id                 String       @id @default(cuid())
+  eventId            String
+  event              Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId             String?
+  user               User?        @relation("EventRsvpUser", fields: [userId], references: [id], onDelete: SetNull)
+  email              String
+  name               String?
+  status             String       @default("GOING") // GOING | MAYBE | NOT_GOING
+  source             String       @default("MANUAL") // MANUAL | EVENT_PAGE | IMPORT
   // --------------- Event-day check-in (entry ticket) ---------------
   // 8-char Crockford base32 code (excludes O/0/I/1/L to avoid confusion).
   // Generated server-side via crypto.randomBytes when the user clicks
   // "Check in" on the public event page. Stored formatted as "XXXX-XXXX".
   // Unique across ALL events so door staff can scan without event context.
-  checkInCode  String?   @unique
-  checkedInAt  DateTime?
+  checkInCode        String?      @unique
+  checkedInAt        DateTime?
   // ----------------------------------------------------------------
   // Door check-in (single-use enforcement). Set the FIRST time door
   // staff look up this code at /admin/check-in. Once set, subsequent
   // lookups return a "code already used" warning so the same code
   // cannot be used to re-enter the venue. Null = code has been
   // generated but not yet verified at the door.
-  doorCheckedAt    DateTime?
-  doorCheckedBy    String?
+  doorCheckedAt      DateTime?
+  doorCheckedBy      String?
   // ----------------------------------------------------------------
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  // Co-host pre-approval for entry. A co-host (or admin) marks an RSVP
+  // as "approved to check in" before the event. Door-staff lookup then
+  // shows who approved + when. Codes without approval are rejected at
+  // the door (the panel says "Not approved — ask the co-host to approve
+  // this RSVP first"). Null = not yet approved.
+  approvedByCoHostId String?
+  approvedByCoHost   User?        @relation("EventRsvpApprover", fields: [approvedByCoHostId], references: [id], onDelete: SetNull)
+  approvedAt         DateTime?
+  // ----------------------------------------------------------------
+  // UTM referral — set when a visitor lands on the event page with
+  // ?utm_uid=<hex> and RSVPs. The userId of the referring member
+  // (looked up from utm_uid). Lets the analytics dashboard show
+  // "RSVPs by referrer" without joining through ReferralAttribution.
+  // Null = the RSVP was not attributed to any referrer (direct visit
+  // or no utm_uid cookie present at RSVP time).
+  referredByUserId   String?
+  referredBy         User?        @relation("ReferredRsvpReferrer", fields: [referredByUserId], references: [id], onDelete: SetNull)
+  // ----------------------------------------------------------------
+  // Post-event attendance tracking (admin-set). Independent from door
+  // check-in — someone can check in at the door and still leave early
+  // (no-show for content), or attend without a door check-in (admin
+  // override). Both fields null = event not yet post-processed.
+  attendedAt         DateTime?
+  noShow             Boolean      @default(false)
+  attendedMarkedBy   String? // admin userId who set the attendance
+  // ----------------------------------------------------------------
+  // Email orchestrator + flows — back-relations
+  emailQueueItems    EmailQueue[]
+  // ----------------------------------------------------------------
+  // V7: chapter scoping (denormalized from Event.chapterId at RSVP creation).
+  // Lets the admin /admin/registrants page filter by chapter without
+  // joining through Event.
+  chapterId          String?
+  chapter            Chapter?     @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // ----------------------------------------------------------------
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@unique([eventId, email])
   @@index([eventId])
   @@index([userId])
   @@index([email])
+  @@index([referredByUserId])
+  @@index([chapterId])
 }
 
 /// Co-host of an event (admin-designated collaborators, in addition to the
@@ -535,4 +833,729 @@ model SiteSetting {
   value     String
   updatedAt DateTime @updatedAt
   updatedBy String?
+}
+
+// ---------------------------- Event Prep ----------------------------
+
+/// A question prepared for an event's "Event prep" tab. Each event has:
+///   - GENERIC questions (scope="GENERIC", speakerId=null) — apply to all
+///     speakers on that event. Rendered on the right column of the tab.
+///   - SPEAKER questions (scope="SPEAKER", speakerId=<id>) — personalized
+///     for one speaker based on their expertise. Rendered in that speaker's
+///     box on the left column.
+///
+/// Questions are seeded by Super Admin via the "Generate questions" button
+/// or written directly. Super Admin can edit any field. Admins and
+/// Co-hosts of the event can SUGGEST changes (see EventPrepSuggestion).
+model EventPrepQuestion {
+  id          String                @id @default(cuid())
+  eventId     String
+  event       Event                 @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// The Speaker this question is for. null when scope="GENERIC".
+  speakerId   String?
+  speaker     Speaker?              @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  /// "GENERIC" = applies to all speakers (rendered on the right column).
+  /// "SPEAKER"  = personalized for the linked speaker (left column box).
+  scope       String                @default("SPEAKER") // "GENERIC" | "SPEAKER"
+  /// The question text. Edited by Super Admin; suggested-edits by
+  /// admins/co-hosts create EventPrepSuggestion rows instead of mutating
+  /// this field directly.
+  text        String
+  /// Optional short tag (e.g. "behavioral economics", "edge AI") to help
+  /// admins scan the list. Free-form.
+  tag         String?
+  /// Order within the (event, scope, speaker) group. Default 0.
+  order       Int                   @default(0)
+  suggestions EventPrepSuggestion[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([eventId, scope])
+  @@index([speakerId])
+}
+
+/// A suggested edit to a question, submitted by an Admin or Co-host.
+/// Super Admin can accept (apply the suggested text to the question +
+/// mark status="ACCEPTED") or reject (status="REJECTED"). The suggestion
+/// is preserved (never deleted) so the audit trail of who suggested what
+/// stays intact.
+///
+/// A user can also suggest a NEW question (questionId=null,
+/// scope+speakerId+text set) — Super Admin can promote it to a real
+/// EventPrepQuestion by accepting.
+model EventPrepSuggestion {
+  id                String             @id @default(cuid())
+  eventId           String
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// The question this suggestion is about. null = suggestion for a NEW
+  /// question (not yet attached to any existing one).
+  questionId        String?
+  question          EventPrepQuestion? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /// When questionId is null (new-question suggestion), these fields
+  /// tell the Super Admin where the new question should go:
+  ///   - scope = "GENERIC" | "SPEAKER"
+  ///   - speakerId = which speaker (null when scope="GENERIC")
+  proposedScope     String?
+  proposedSpeakerId String?
+  /// The proposed new text for the question (when questionId is set),
+  /// OR the proposed text for a new question (when questionId is null).
+  proposedText      String
+  /// Optional proposed tag (only meaningful for new-question suggestions).
+  proposedTag       String?
+  /// Who suggested the change. Snapshot of name + email in case the
+  /// user is later deleted.
+  suggestedBy       String
+  suggestedByUserId String?
+  suggestedByUser   User?              @relation("EventPrepSuggester", fields: [suggestedByUserId], references: [id], onDelete: SetNull)
+  /// "PENDING" (default) | "ACCEPTED" | "REJECTED".
+  /// Only Super Admin can change this. Once ACCEPTED, the suggested
+  /// text is applied to the question (or a new question is created).
+  status            String             @default("PENDING")
+  /// Optional note from the Super Admin when accepting/rejecting.
+  reviewerNote      String?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime           @default(now())
+
+  @@index([eventId, status])
+  @@index([questionId])
+  @@index([suggestedByUserId])
+}
+
+// ===========================================================================
+// UTM REFERRAL TRACKING
+// ===========================================================================
+
+/// A single inbound visit attributed to a member's share link.
+///
+/// Created by middleware when a visitor lands with ?utm_uid=<hex> in the URL
+/// (the cookie `ais_utm_uid` is also set so subsequent visits within 30 days
+/// attribute to the same referrer even without the query param).
+///
+/// One row PER VISIT (i.e. per landing with utm_uid present). The
+/// dashboard aggregates by referrerUserId + day.
+model ReferralVisit {
+  id             String   @id @default(cuid())
+  /// The userId of the member whose share link was clicked.
+  referrerUserId String
+  referrer       User     @relation("ReferralVisitsReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  /// The hex utm_uid from the URL (matches User.utmUid). Denormalized so
+  /// the dashboard can group by utm_uid without joining back to User.
+  utmUid         String
+  /// Raw UTM params captured from the URL (utm_source, utm_medium,
+  /// utm_campaign, utm_content, utm_term). Null when not provided.
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmContent     String?
+  utmTerm        String?
+  /// The path the visitor landed on (e.g. "/e/ai-salon-human").
+  landingPath    String
+  /// Anonymous visitor fingerprint — IP hash + user-agent hash. Used to
+  /// dedupe repeat visits within the same session (we don't want to count
+  /// the same visitor clicking their own link 50 times as 50 visits).
+  visitorHash    String?
+  /// True if the visitor was previously unseen (new visitor). False if
+  /// we've seen this visitorHash before for this referrerUserId.
+  isNewVisitor   Boolean  @default(true)
+  // ---- V7: chapter scoping (denormalized from referrer's chapter at visit time) ----
+  chapterId      String?
+  chapter        Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+
+  @@index([referrerUserId])
+  @@index([utmUid])
+  @@index([createdAt])
+  @@index([visitorHash])
+  @@index([chapterId])
+}
+
+/// A successful conversion: a visitor who arrived via a member's share
+/// link and then signed up (created an account) on the platform.
+///
+/// One row PER REFERRED SIGNUP. The `referredUserId` is the new user
+/// who signed up; `referrerUserId` is the member whose link they clicked.
+/// `ReferralVisit.id` is the visit that introduced them (the latest
+/// visit from that referrer within the 30-day attribution window).
+model ReferralAttribution {
+  id              String   @id @default(cuid())
+  /// The new user who signed up.
+  referredUserId  String   @unique
+  referredUser    User     @relation("ReferredSignupReferredUser", fields: [referredUserId], references: [id], onDelete: Cascade)
+  /// The member whose share link drove the signup.
+  referrerUserId  String
+  referrer        User     @relation("ReferredSignupReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  /// The hex utm_uid that was on the share link.
+  utmUid          String
+  /// The visit that introduced the user (one of ReferralVisit rows
+  /// attributed to this referrer). Null when the visitor came back via
+  /// the cookie without an explicit utm_uid on the final signup URL.
+  referralVisitId String?
+  /// When the signup completed (denormalized from User.createdAt for
+  /// faster dashboard queries without a join).
+  convertedAt     DateTime @default(now())
+  // ---- V7: chapter scoping (denormalized from referrer's chapter) ----
+  chapterId       String?
+  chapter         Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+
+  @@index([referrerUserId])
+  @@index([utmUid])
+  @@index([convertedAt])
+  @@index([chapterId])
+}
+
+// ===========================================================================
+// EMAIL ORCHESTRATOR + FLOW BUILDER (V5.20 — layered on top of V5.19)
+// ===========================================================================
+// These models power the Orchestrator + Flows tabs under /admin/email.
+// They are ADDITIVE — they do not modify any existing model's behavior.
+// The legacy EmailCampaign system (above) continues to work unchanged.
+// ===========================================================================
+
+/// One row per (RSVP × stage) in the 5-stage orchestrator, OR per
+/// (flow run × step) in the flow builder. Status tracks the email
+/// lifecycle from PENDING → SENT → OPENED/CLICKED.
+model EmailQueue {
+  id                String         @id @default(cuid())
+  // --- who / what ---
+  // rsvpId is OPTIONAL. The legacy stage-based orchestrator always sets it
+  // (queue rows are bootstrapped from real RSVPs). The flow-based system
+  // sets it only when an RSVP already exists for (eventId, email); for
+  // audience sends to emails with no RSVP, rsvpId stays null and we use
+  // the denormalized email/eventId/userId columns directly. This prevents
+  // "Send to Audience" from creating synthetic RSVP rows that pollute the
+  // event's registrant count.
+  rsvpId            String?
+  rsvp              EventRsvp?     @relation(fields: [rsvpId], references: [id], onDelete: Cascade)
+  eventId           String
+  event             Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId            String?
+  user              User?          @relation("EmailQueueUser", fields: [userId], references: [id], onDelete: SetNull)
+  email             String
+  // --- stage info ---
+  stage             Int // 1=awareness, 2=reminder, 3=final-prep, 4=day-of, 5=recap
+  // --- flow info ---
+  // When set, this queue row belongs to a specific flow step.
+  // When null, it's a legacy stage-based orchestrator row.
+  flowStepId        String?
+  flowStep          EmailFlowStep? @relation(fields: [flowStepId], references: [id], onDelete: SetNull)
+  // --- status ---
+  status            String         @default("PENDING") // PENDING | QUEUED | SENT | OPENED | CLICKED | SKIPPED | FAILED
+  // --- timing ---
+  scheduledFor      DateTime // when this stage should fire (relative to event.startsAt)
+  sentAt            DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  // --- content snapshot ---
+  subject           String?
+  htmlBody          String? // the rendered HTML actually sent (for audit / replay)
+  /// Which A/B subject variant was sent: "A" or "B". Null for non-A/B sends.
+  subjectVariant    String?
+  /// Which audience this recipient belonged to (denormalized for reporting).
+  audienceId        String?
+  /// True when this row is an alt-subject re-send of an earlier row (same
+  /// body, different subject). The original row's `subject` is preserved
+  /// on this row's `subject` snapshot — but `altOfEmailQueueId` points
+  /// back to the original. Used by the alt-subject re-send feature.
+  isAltResend       Boolean        @default(false)
+  altOfEmailQueueId String?
+  /// True when this row used the no-check-in-code body variant
+  /// (`EmailStageTemplate.noCodeHtmlBody`). Reporting flag.
+  usedNoCodeVariant Boolean        @default(false)
+  // --- failure ---
+  errorMessage      String?
+  attemptCount      Int            @default(0)
+  // --- links ---
+  trackingLogs      TrackingLog[]
+  // ---- V7: chapter scoping (denormalized from Event.chapterId at queue creation) ----
+  chapterId         String?
+  chapter           Chapter?       @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // --- meta ---
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([rsvpId, stage])
+  @@index([eventId, stage])
+  @@index([status, scheduledFor])
+  @@index([email])
+  @@index([flowStepId])
+  @@index([subjectVariant])
+  @@index([audienceId])
+  @@index([isAltResend])
+  @@index([chapterId])
+}
+
+/// Admin-editable email templates. Originally tied 1:1 to the 5
+/// orchestrator stages (Awareness, Reminder, Final Prep, Day-Of, Recap),
+/// now also supports admin-created custom templates (stage = null) that
+/// can be picked in the flow step editor alongside the stage defaults.
+///
+/// Each template has a subject + HTML body with {{eventTitle}},
+/// {{firstName}}, etc. tokens. The stopIfNotOpenedHours rule lets the
+/// orchestrator halt the chain if a stage isn't opened in time.
+model EmailStageTemplate {
+  id                   String  @id @default(cuid())
+  /// 1..5 for the seeded stage defaults; null for admin-created custom templates.
+  stage                Int?    @unique
+  /// Display name — unique across all templates. For seeded defaults this is
+  /// "Awareness" | "Reminder" | "Final Prep" | "Day-Of" | "Recap". Custom
+  /// templates get a user-chosen name (e.g. "TLV promo — early bird").
+  name                 String  @unique
+  subject              String
+  htmlBody             String // HTML template with {{eventTitle}}, {{firstName}}, etc.
+  stopIfNotOpenedHours Int?
+  isActive             Boolean @default(true)
+  /// Marks the 5 seeded defaults — they cannot be deleted (only edited or
+  /// deactivated). Set to false on duplicated / custom-created templates.
+  isDefault            Boolean @default(false)
+
+  // ─── Feature: Alternative subject line re-send ───────────────────────────
+  // If set: when this template's primary send isn't OPENED within
+  // `altNotOpenedHours` hours, the worker creates a new EmailQueue row
+  // (isAltResend=true) with the SAME body but `altSubject`. The recipient
+  // sees a fresh subject line in their inbox — same content, new hook.
+  altSubject        String?
+  altNotOpenedHours Int?
+
+  // ─── Feature: No-check-in-code variant body ──────────────────────────────
+  // If set AND the RSVP has no checkInCode (checkInCode IS NULL), the worker
+  // sends this body instead of `htmlBody`. Used for stages 3 (Final Prep) and
+  // 4 (Day-Of) where the code is normally displayed. The variant should
+  // prompt the user to open the event page and generate their personal,
+  // non-transferrable code.
+  noCodeHtmlBody String?
+  noCodeSubject  String?
+
+  // ─── Feature: Brand logo override per template ───────────────────────────
+  // If set: this URL is used as the top-right logo. If null, falls back to
+  // the EMAIL_BRAND_LOGO_URL env var, then to the hardcoded default
+  // (the small AI Salon mark hosted on Vercel Blob).
+  logoUrl String?
+
+  updatedAt        DateTime                       @updatedAt
+  updatedBy        String?
+  // ---- V7: chapter scoping (nullable = global template available to all chapters) ----
+  chapterId        String?
+  chapter          Chapter?                       @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // --- back-relations ---
+  flowSteps        EmailFlowStep[] // flow steps that use this template
+  chapterOverrides ChapterEmailTemplateOverride[]
+
+  @@index([stage])
+  @@index([isActive])
+  @@index([chapterId])
+}
+
+/// Per-event audit log for email opens + clicks. Also stores the
+/// Meta CAPI payload (constructed always; sent to Graph API only
+/// when META_ACCESS_TOKEN + META_PIXEL_ID env vars are set).
+model TrackingLog {
+  id          String     @id @default(cuid())
+  queueId     String
+  queue       EmailQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  type        String // "OPEN" | "CLICK"
+  targetUrl   String? // only for CLICK
+  userAgent   String?
+  ip          String?
+  // --- Meta CAPI ---
+  metaPayload Json?
+  metaSentAt  DateTime? // null = not actually sent to Meta
+  createdAt   DateTime   @default(now())
+
+  @@index([queueId, createdAt])
+  @@index([type])
+}
+
+/// A rule-based email flow. Each flow is a collection of up to 8
+/// independent triggered email steps. Each step has its own audience,
+/// trigger (entry event), and email template + A/B subject variants.
+/// Steps are NOT chained — each fires independently when its trigger
+/// event occurs for a recipient in its audience.
+model EmailFlow {
+  id          String          @id @default(cuid())
+  name        String // "TLV default — registered→attended"
+  description String?
+  // --- state ---
+  status      String          @default("DRAFT") // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
+  // --- relations ---
+  steps       EmailFlowStep[]
+  // ---- V7: chapter scoping (nullable = global flow available to all chapters) ----
+  chapterId   String?
+  chapter     Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  // --- meta ---
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   String?
+
+  @@index([status])
+  @@index([chapterId])
+}
+
+/// A single step in an email flow. Position 1..8 (max 8 per flow).
+/// Each step is a self-contained triggered email send:
+///   - audience: who receives this email (reusable EmailAudience)
+///   - trigger: when to fire (entry event like RSVP_GOING)
+///   - email: template + subject A (+ optional subject B for A/B test)
+///   - delay: optional wait after trigger before sending
+model EmailFlowStep {
+  id              String              @id @default(cuid())
+  flowId          String
+  flow            EmailFlow           @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  position        Int // 1..8 (max 8 per flow)
+  // --- A. audience — who receives this step's email ---
+  audienceId      String?
+  audience        EmailAudience?      @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+  // --- B. trigger — entry event that fires this step ---
+  triggerKind     String? // "RSVP_GOING" | "DOOR_CHECKED_IN" | "MARKED_ATTENDED" | "MARKED_NO_SHOW" | "MANUAL"
+  triggerEventId  String? // null = all events (only meaningful for RSVP-based triggers)
+  // --- C. email content ---
+  templateId      String? // null = wait-only step (no email sent)
+  template        EmailStageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  subjectVariantA String? // Subject A (if null, uses template.subject)
+  subjectVariantB String? // Subject B (if set, 50/50 A/B test; if null, only A is used)
+  // --- delay after trigger event before sending ---
+  delayValue      Int                 @default(0)
+  delayUnit       String              @default("MINUTES") // "MINUTES" | "HOURS" | "DAYS"
+  // --- meta ---
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  // --- back-relations ---
+  queueItems      EmailQueue[]
+
+  @@unique([flowId, position])
+  @@index([flowId, position])
+  @@index([triggerKind])
+  @@index([audienceId])
+}
+
+/// A reusable named audience — either a STATIC list of email addresses
+/// or a DYNAMIC filter spec that resolves to a list of emails at query
+/// time. The built-in "Test" audience is STATIC with the admin's test
+/// emails. Admins can create custom audiences of either kind.
+///
+/// STATIC audiences store `emailsJson` (JSON array of email strings).
+/// DYNAMIC audiences store `filtersJson` (filter spec resolved by
+/// `src/lib/email-orchestrator/audience-filter.ts`) — the resolved
+/// email list is recomputed on demand (so new RSVPs / users that match
+/// the filter are picked up automatically).
+model EmailAudience {
+  id          String          @id @default(cuid())
+  name        String          @unique // "Test" | "TLV members" | etc.
+  slug        String?         @unique
+  description String?
+  /// "STATIC" = explicit list of emails; "DYNAMIC" = filter spec.
+  kind        String          @default("STATIC") // "STATIC" | "DYNAMIC"
+  /// JSON array of email strings (STATIC only): ["eze@massapro.com", ...]
+  emailsJson  String          @default("[]")
+  /// Filter spec (DYNAMIC only). Shape:
+  ///   {
+  ///     source: "users" | "rsvps" | "users_and_rsvps",
+  ///     combinator: "AND" | "OR",           // how rule groups combine
+  ///     groups: [
+  ///       { combinator: "AND" | "OR", rules: [{ field, op, value }] }
+  ///     ]
+  ///   }
+  /// Stored as JSON string. Null for STATIC audiences. See
+  /// `audience-filter.ts` for the evaluator + available fields/ops.
+  filtersJson String?
+  /// Marks the built-in test audience (created automatically on first load).
+  isTest      Boolean         @default(false)
+  // ---- V7: chapter scoping (nullable = global audience available to all chapters) ----
+  chapterId   String?
+  chapter     Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  // --- back-relations ---
+  flowSteps   EmailFlowStep[]
+
+  @@index([isTest])
+  @@index([kind])
+  @@index([chapterId])
+}
+
+// ============================================================================
+// FLOURISHING QUIZ ENGINE
+// Real-time, Kahoot-style interactive quiz module for AI Salon events.
+// First quiz: "AI and Human Flourishing" — content pulled dynamically
+// from /resources/ai-human-flourishing.
+// ============================================================================
+
+/// A single quiz session — one run of a quiz at an event.
+/// Created by an admin/co-host from the Control Room at /admin/quiz.
+/// Members join at /quiz/[sessionId].
+model QuizSession {
+  id                       String            @id @default(cuid())
+  /// Human-friendly title, e.g. "AI & Human Flourishing — July 2026".
+  title                    String
+  /// Optional event link — when set, the session is tied to a specific
+  /// Event row so the leaderboard can flow into event follow-up outreach.
+  eventId                  String?
+  event                    Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  /// The user (admin/co-host) who created + is hosting this session.
+  hostId                   String?
+  host                     User?             @relation("QuizHost", fields: [hostId], references: [id], onDelete: SetNull)
+  /// Source of the quiz content. "resource:ai-human-flourishing" pulls
+  /// dynamically from the salon-data module; "manual" uses admin-authored
+  /// questions; future sources can be added.
+  contentSource            String            @default("resource:ai-human-flourishing")
+  /// Live state machine:
+  ///   "DRAFT"     — created, not started. Admin can edit questions.
+  ///   "LOBBY"     — admin opened the lobby; members can join.
+  ///   "LIVE"      — a question is currently active (timer running).
+  ///   "PAUSED"    — admin hit the kill switch; timer frozen, state preserved.
+  ///   "BETWEEN"   — between questions (showing leaderboard or deep-dive).
+  ///   "FINISHED"  — session ended; final leaderboard locked.
+  ///   "ABORTED"   — admin cancelled the session early.
+  status                   String            @default("DRAFT")
+  /// When the current question was started (server time). Used to compute
+  /// response latency for scoring. Null when no question is active.
+  currentQuestionStartedAt DateTime?
+  /// The index (0-based) of the current question in the questions array.
+  /// Null when between questions or before the first question.
+  currentQuestionIndex     Int?
+  /// Per-question time limit in seconds (default 30s, Kahoot-style).
+  questionTimeLimitSec     Int               @default(30)
+  /// Total questions planned for this session (may be less than the
+  /// number in the source if admin toggled some off).
+  totalQuestions           Int               @default(0)
+  /// Optional JSON blob with host-side settings (e.g. enableFastestBonus,
+  /// showLeaderboardBetweenQuestions, deepDiveSnippetIds). Free-form so
+  /// we can add settings without migrating.
+  settingsJson             String?
+  /// When the session was started (status → LOBBY). Null before that.
+  startedAt                DateTime?
+  /// When the session was finished (status → FINISHED). Null until then.
+  finishedAt               DateTime?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  // --- relations ---
+  questions                QuizQuestion[]
+  responses                QuizResponse[]
+  participants             QuizParticipant[]
+
+  @@index([eventId])
+  @@index([hostId])
+  @@index([status])
+}
+
+/// A question in a quiz session. Stored at session-creation time so the
+/// quiz is reproducible even if the source content changes later.
+/// Each question has 4 options (Kahoot-style) with one marked correct.
+model QuizQuestion {
+  id           String         @id @default(cuid())
+  sessionId    String
+  session      QuizSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// 0-based order in the session.
+  order        Int
+  /// The full text of the question.
+  text         String
+  /// The 4 answer options, stored as JSON array of strings.
+  /// e.g. ["Curiosity", "Intentionality", "Clarity", "Care"]
+  optionsJson  String
+  /// 0-based index of the correct option in optionsJson.
+  correctIndex Int
+  /// Optional "deep dive" explanation shown after the correct answer
+  /// is revealed. Pulled from the resource page's quotes/stories/tools.
+  deepDive     String?
+  /// The conversation area this question came from (e.g. "identity-purpose").
+  /// Null for admin-authored questions.
+  sourceAreaId String?
+  /// Whether the admin has toggled this question OFF for the current
+  /// session. Off questions are skipped during play.
+  enabled      Boolean        @default(true)
+  /// How long (seconds) this specific question runs. Falls back to
+  /// QuizSession.questionTimeLimitSec when null.
+  timeLimitSec Int?
+  // --- relations ---
+  responses    QuizResponse[]
+
+  @@index([sessionId])
+  @@index([order])
+}
+
+/// A single participant's answer to a single question.
+/// One row per (participant, question) pair — enforced by the unique
+/// constraint. Used to compute scores + final leaderboard.
+model QuizResponse {
+  id            String          @id @default(cuid())
+  sessionId     String
+  session       QuizSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      QuizQuestion    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   QuizParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  /// 0-based index of the option the participant selected.
+  /// Null if they didn't answer in time (counts as wrong).
+  selectedIndex Int?
+  /// Whether the answer was correct.
+  isCorrect     Boolean         @default(false)
+  /// Response latency in milliseconds (from question start to answer submit).
+  /// Null if no answer.
+  responseMs    Int?
+  /// Points awarded for this response. Kahoot-style: 0 if wrong; if correct,
+  ///   base 500 + up to 500 bonus for speed (faster = more).
+  points        Int             @default(0)
+  /// Server timestamp when the response was recorded.
+  answeredAt    DateTime        @default(now())
+
+  @@unique([questionId, participantId])
+  @@index([sessionId])
+  @@index([questionId])
+  @@index([participantId])
+}
+
+/// A participant in a quiz session. One row per (user, session).
+/// Tracks live connection state + cumulative score.
+model QuizParticipant {
+  id            String         @id @default(cuid())
+  sessionId     String
+  session       QuizSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Display name (copied from User.name at join time so the leaderboard
+  /// doesn't break if the user later changes their name).
+  displayName   String
+  /// Avatar URL (copied from User.photoUrl or User.image at join time).
+  avatarUrl     String?
+  /// Cumulative score across all answered questions in this session.
+  /// Updated on every response.
+  totalScore    Int            @default(0)
+  /// Number of questions answered correctly.
+  correctCount  Int            @default(0)
+  /// Number of questions answered (right or wrong).
+  answeredCount Int            @default(0)
+  /// Average response latency in ms (rolling). Null until first answer.
+  avgResponseMs Int?
+  /// Whether the participant is currently connected via WebSocket.
+  /// Updated by the quiz-service on connect/disconnect events.
+  isOnline      Boolean        @default(false)
+  /// Last time we saw activity from this participant (heartbeat or
+  /// answer). Used for stale-participant cleanup.
+  lastSeenAt    DateTime       @default(now())
+  joinedAt      DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  // --- relations ---
+  responses     QuizResponse[]
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([isOnline])
+}
+
+// ===========================================================================
+// Community chat — group rooms (event-scoped or standalone) + 1:1 DMs.
+// ===========================================================================
+//
+// DMs already work via ConversationMessage (senderId + recipientId).
+// This family adds GROUP rooms. The web UI exposes both as a unified
+// inbox; the WebSocket relay (mini-services/chat-service) drives real-
+// time delivery for both.
+//
+// Lifecycle of an event room:
+//   1. A member opens the "Chat" tab on /events/[slug].
+//   2. /api/chat/events/[eventId]/room get-or-creates a ChatRoom with
+//      type=EVENT + eventId set + title = event.title.
+//   3. The endpoint also bulk-inserts ChatRoomMember rows for every
+//      user with an EventRsvp{status=GOING} + every EventCoHost +
+//      every Speaker whose userId is set. Future RSVPs auto-add via
+//      the join API.
+//   4. The WS service relays chat:message events to room:<roomId>.
+//
+// Lifecycle of a DM:
+//   1. Member clicks "Message" on someone's profile / event RSVP row.
+//   2. POST /api/messages/[userId] inserts a ConversationMessage.
+//   3. The chat-service broadcasts chat:dm-received to that user's
+//      personal room (room:user:<userId>) so the InboxButton updates
+//      live (instead of polling).
+
+model ChatRoom {
+  id          String           @id @default(cuid())
+  /// "EVENT"  — one room per event, members auto-managed by RSVP.
+  /// "GROUP"  — admin-created custom room (future — not in V1 UI).
+  /// Reserved for future types: "SESSION" (breakout), "ANNOUNCE".
+  type        String           @default("EVENT")
+  /// Set when type=EVENT. Null for standalone rooms. One-to-one.
+  eventId     String?          @unique
+  event       Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  /// Human-friendly title shown in the room list. For event rooms we
+  /// copy event.title at creation time; if the event is later renamed
+  /// we DON'T sync (the room keeps its original name).
+  title       String
+  /// Optional description shown under the title (e.g. "Post-event
+  /// discussion thread"). Null for event rooms in V1.
+  description String?
+  /// The user who created the room (or the first member who opened
+  /// the event chat tab). Used for audit + soft-delete permissions.
+  createdById String?
+  createdBy   User?            @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Soft delete — keeps the row for audit but hides it from the UI.
+  archivedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  // --- relations ---
+  members     ChatRoomMember[]
+  messages    ChatMessage[]
+
+  @@index([type])
+  @@index([createdById])
+}
+
+model ChatRoomMember {
+  id         String    @id @default(cuid())
+  roomId     String
+  room       ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "MEMBER" by default; "HOST" for the event host + co-hosts so the
+  /// UI can badge them in the member list. Hosts can pin messages /
+  /// mute members (future — not enforced in V1).
+  role       String    @default("MEMBER")
+  /// Per-user read cursor. Updated whenever the user opens the room
+  /// or receives a chat:read event. Null = never opened.
+  lastReadAt DateTime?
+  /// Set when the user explicitly leaves the room. They stop receiving
+  /// notifications but their message history is preserved. Re-joining
+  /// un-hides the room.
+  leftAt     DateTime?
+  joinedAt   DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id        String        @id @default(cuid())
+  roomId    String
+  room      ChatRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  /// Null for system messages (e.g. "X joined the room"). Always set
+  /// for user-authored messages.
+  senderId  String?
+  sender    User?         @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  /// Message body. 4000-char limit (matches ConversationMessage). For
+  /// system messages this holds the templated text.
+  body      String
+  /// Soft-edit: original body is replaced; editedAt records when.
+  /// The UI shows "(edited)" next to the timestamp. We don't keep
+  /// revision history in V1.
+  editedAt  DateTime?
+  /// Soft-delete: body is replaced with "[message deleted]" + the
+  /// row stays for audit. Sender + admins can delete.
+  deletedAt DateTime?
+  /// Optional reply-to. Null for top-level messages. We don't enforce
+  /// that the referenced message is in the same room at the DB level
+  /// (the API validates), but we do index it for fast lookups.
+  replyToId String?
+  replyTo   ChatMessage?  @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("ChatReply")
+  createdAt DateTime      @default(now())
+
+  @@index([roomId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([replyToId])
 }

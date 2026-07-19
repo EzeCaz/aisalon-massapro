@@ -1,9 +1,6 @@
 -- ============================================================================
 -- V7 — Global → Country → Chapter hierarchy
 -- ============================================================================
--- DRAFT ONLY — DO NOT RUN YET.
--- Reviewed by eze@massapro.com before applying.
---
 -- This migration is ADDITIVE: it creates new tables and adds new nullable
 -- columns. It does NOT drop or modify any existing V6 column. This means
 -- V6 code will continue to work against the migrated DB (rollback safe).
@@ -162,6 +159,101 @@ ALTER TABLE "ChapterEmailTemplateOverride"
   FOREIGN KEY ("stageTemplateId") REFERENCES "EmailStageTemplate"("id")
   ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- ----------------------------------------------------------------------------
+-- 8. Add chapterId to remaining entities (denormalized V7 scope column)
+-- ----------------------------------------------------------------------------
+-- Each table gets a nullable chapterId column + FK to Chapter + index.
+-- Nullable so existing V6 rows survive the migration (backfilled by
+-- scripts/v7-seed-israel-tel-aviv.ts afterwards).
+
+-- Speaker
+ALTER TABLE "Speaker" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "Speaker_chapterId_idx" ON "Speaker"("chapterId");
+ALTER TABLE "Speaker"
+  ADD CONSTRAINT "Speaker_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EventRsvp
+ALTER TABLE "EventRsvp" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EventRsvp_chapterId_idx" ON "EventRsvp"("chapterId");
+ALTER TABLE "EventRsvp"
+  ADD CONSTRAINT "EventRsvp_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailQueue
+ALTER TABLE "EmailQueue" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailQueue_chapterId_idx" ON "EmailQueue"("chapterId");
+ALTER TABLE "EmailQueue"
+  ADD CONSTRAINT "EmailQueue_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailRecipient
+ALTER TABLE "EmailRecipient" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailRecipient_chapterId_idx" ON "EmailRecipient"("chapterId");
+ALTER TABLE "EmailRecipient"
+  ADD CONSTRAINT "EmailRecipient_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailCampaign
+ALTER TABLE "EmailCampaign" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailCampaign_chapterId_idx" ON "EmailCampaign"("chapterId");
+ALTER TABLE "EmailCampaign"
+  ADD CONSTRAINT "EmailCampaign_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailTemplate
+ALTER TABLE "EmailTemplate" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailTemplate_chapterId_idx" ON "EmailTemplate"("chapterId");
+ALTER TABLE "EmailTemplate"
+  ADD CONSTRAINT "EmailTemplate_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailStageTemplate
+ALTER TABLE "EmailStageTemplate" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailStageTemplate_chapterId_idx" ON "EmailStageTemplate"("chapterId");
+ALTER TABLE "EmailStageTemplate"
+  ADD CONSTRAINT "EmailStageTemplate_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailFlow
+ALTER TABLE "EmailFlow" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailFlow_chapterId_idx" ON "EmailFlow"("chapterId");
+ALTER TABLE "EmailFlow"
+  ADD CONSTRAINT "EmailFlow_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- EmailAudience
+ALTER TABLE "EmailAudience" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "EmailAudience_chapterId_idx" ON "EmailAudience"("chapterId");
+ALTER TABLE "EmailAudience"
+  ADD CONSTRAINT "EmailAudience_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ReferralVisit
+ALTER TABLE "ReferralVisit" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "ReferralVisit_chapterId_idx" ON "ReferralVisit"("chapterId");
+ALTER TABLE "ReferralVisit"
+  ADD CONSTRAINT "ReferralVisit_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ReferralAttribution
+ALTER TABLE "ReferralAttribution" ADD COLUMN "chapterId" TEXT;
+CREATE INDEX "ReferralAttribution_chapterId_idx" ON "ReferralAttribution"("chapterId");
+ALTER TABLE "ReferralAttribution"
+  ADD CONSTRAINT "ReferralAttribution_chapterId_fkey"
+  FOREIGN KEY ("chapterId") REFERENCES "Chapter"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
 -- ============================================================================
 -- END OF MIGRATION
 -- ============================================================================
@@ -171,10 +263,11 @@ ALTER TABLE "ChapterEmailTemplateOverride"
 -- That script will:
 --   1. Create Country: Israel (code=IL)
 --   2. Create Chapter: Tel Aviv (countryId=IL, timezone=Asia/Jerusalem)
---   3. Backfill User.countryId = IL for all users
---   4. Backfill User.chapterId = TLV for all users
---   5. Backfill Event.chapterId = TLV for all events
---   6. Migrate role="CO_HOST" → role="CHAPTER_ORGANIZER"
---   7. Migrate role="SPEAKER" → role="MEMBER"
---   8. Print summary counts for verification
+--   3. Backfill ALL existing rows (User, Event, Speaker, EventRsvp,
+--      EmailQueue, EmailRecipient, EmailCampaign, EmailTemplate,
+--      EmailStageTemplate, EmailFlow, EmailAudience, ReferralVisit,
+--      ReferralAttribution) with countryId=Israel and chapterId=Tel Aviv
+--   4. Migrate role="CO_HOST" → role="CHAPTER_ORGANIZER"
+--   5. Migrate role="SPEAKER" → role="MEMBER"
+--   6. Print summary counts for verification
 -- ============================================================================
