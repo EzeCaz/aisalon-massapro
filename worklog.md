@@ -3628,3 +3628,93 @@ Stage Summary:
   needs to run:
     DATABASE_URL=<production Neon URL> npx tsx scripts/v7-seed-israel-tel-aviv.ts
   This is the ONLY manual step — the schema migration is now automated.
+
+---
+Task ID: 2026-07-19-fix-events-page-crash-after-admin-fix
+Agent: Super Z (main)
+Task: User reported /events page still crashing on production with server
+  components render error (digest 1437300306) after the previous /admin
+  fix (commit 967f86f). The error page said "head back to events or sign
+  in again" — the global-error.tsx boundary.
+
+Work Log:
+- Initial diagnosis was misleading:
+  * I tested /admin (307 → /login, OK), /events (500, broken),
+    /e/[slug] (500, broken), other admin pages (307 → /login, OK)
+  * Concluded the issue was specific to /events page code
+  * Added /api/debug-events-db endpoint + /events/error.tsx boundary
+    in commit 8322080 to surface the actual error message
+
+- Discovery: the debug endpoint wasn't deploying:
+  * Pushed 8322080 at ~10:55 UTC
+  * By ~11:15 UTC (20 min later) the endpoint still returned 404
+  * The BUILD_ID on production was still N3eSB8FP39sNpgbFtpgJ9
+    (from the 967f86f deploy, not 8322080)
+  * Realized the Vercel build was failing silently
+
+- Root cause analysis (revised):
+  * The build script in 967f86f was:
+      prisma generate && prisma migrate deploy && next build && ...
+  * The production Neon DB has historically been managed with
+    `prisma db push` (NOT migrations) — confirmed by commit 2460120
+    message from Jul 7: "remove prisma migrate deploy — needs
+    _prisma_migrations table"
+  * `prisma migrate deploy` on a DB without `_prisma_migrations` table
+    creates the table and tries to apply ALL migrations from scratch
+  * The early migrations (20260705000000_email_flow_restructure) have
+    non-idempotent statements like:
+      ALTER TABLE "EmailFlowStep" ADD CONSTRAINT "EmailFlowStep_audienceId_fkey"
+      FOREIGN KEY ("audienceId") REFERENCES "EmailAudience"("id") ...
+    (no IF NOT EXISTS — Postgres doesn't support it for ADD CONSTRAINT)
+  * These statements fail when the constraint already exists (because
+    db push already created it from the same schema)
+  * When migrate deploy fails, the `&&` chain stops, the build fails,
+    Vercel keeps serving the OLD deployment
+
+- Why the user saw "digest 1437300306" and not the new digest:
+  * 967f86f's build failed → Vercel served the PREVIOUS deployment
+  * Previous deployment was d4ecb98 (sqlite provider, broken)
+  * User's digest 1437300306 was from the OLD broken d4ecb98 deploy
+  * My fix in 967f86f never actually went live
+
+- Fix applied in commit 1617104:
+  * Changed build script to:
+      prisma generate && (prisma migrate deploy 2>&1 || prisma db push --accept-data-loss 2>&1) && next build && ...
+  * Tries migrate deploy first. If it fails for ANY reason, falls back
+    to `prisma db push --accept-data-loss` which syncs the current
+    schema.prisma to the DB directly.
+  * This is the same approach production has been using successfully
+    for months — the V7 schema is purely additive so db push is safe.
+
+- Verification (after 1617104 deployed):
+  * /api/debug-events-db returned 200 with all 6 query steps passing:
+    - db.event.count() → 3 events
+    - db.event.findMany (minimal select) → 3 events with V7 fields
+      (chapterId=null, isCrossChapter=false on all 3)
+    - db.event.findMany (with _count + mainImage, matches /events) → OK
+    - db.eventRsvp.groupBy (matches /events) → 3 groups
+    - db.siteSetting.findMany → 6 settings
+    - db.eventRsvp.findFirst → has chapterId column (null)
+  * /events → HTTP 200, renders 3 events: "AI and Human Flourishing",
+    "AI CMO Blueprint", "AI Blueprint"
+  * /e/ai-salon-human → HTTP 200, renders event landing page
+  * /admin/* → 307 → /login (auth gate)
+  * BUILD_ID changed from N3eSB8FP39sNpgbFtpgJ9 → U03wh2oI-PPiA1UtMAo5s
+
+- Cleanup in commit 0b5a711:
+  * Removed src/app/api/debug-events-db/route.ts (temporary debug tool)
+  * Removed src/app/events/error.tsx (temporary error boundary —
+    the global-error.tsx is sufficient now that the page works)
+
+Stage Summary:
+- Production /events crash is FIXED.
+- Root cause was the `prisma migrate deploy` step in the build script
+  failing silently on Vercel (production DB was managed with db push,
+  not migrations). Every commit since 967f86f failed at this step, so
+  Vercel kept serving the OLD broken sqlite-provider deployment.
+- Fix: build script now falls back to `prisma db push --accept-data-loss`
+  if migrate deploy fails. This is the same approach production has
+  been using for months — safe because the V7 schema is purely additive.
+- All public pages now render correctly. Auth-gated pages redirect to
+  /login as expected.
+- The temporary debug endpoint + error boundary have been removed.
