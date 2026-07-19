@@ -4094,3 +4094,95 @@ What the user should do next:
 4. The same URL pattern works for every chapter: /admin/c/<slug>.
    Slug is shown/editable in the chapter editor; the admin URL panel
    updates live as the slug changes.
+
+---
+Task ID: 2026-07-20-events-chapter-city-filter
+Agent: Super Z (main)
+Task: User wants to filter events by chapter AND city (in addition to the existing country filter).
+
+Work Log:
+- Extended the shared <CountryChapterScopeFilter> component with an
+  optional `cities` prop + optional `city` field on the value type:
+  * When `cities` is provided, renders a third "City" dropdown alongside
+    Country + Chapter.
+  * The city dropdown is contextual: when a chapter is selected, only
+    shows cities in that chapter; when a country is selected (but no
+    chapter), only shows cities in that country.
+  * Selecting a country/chapter that doesn't contain the currently
+    selected city auto-clears the city (prevents dead-filter state).
+  * Backward-compatible: existing callers (Members, Speakers,
+    Registrants) don't pass `cities` and don't include `city` in their
+    value, so they render exactly as before (verified by zero new TS
+    errors in those pages).
+- Admin events page (/admin/events):
+  * Now loads countries + chapters for ALL admin roles (was Super Admin
+    only). Non-Super-Admin roles get a scoped list:
+      - SUPER_ADMIN       → all countries + all chapters
+      - ADMIN             → their country only + chapters in that country
+      - CHAPTER_ORGANIZER → their chapter only (single-item list)
+  * Extracts unique venue cities from the events themselves (event.city),
+    paired with chapterId + countryId for contextual filtering. Note
+    that event.city may differ from chapter.city (e.g. a Tel Aviv
+    chapter event hosted in Herzliya).
+  * Passes the user's V7 scope to the list component so the filter can
+    pre-lock the country/chapter selectors for non-Super-Admin roles
+    (Admin = country-locked; Chapter Organizer = country+chapter locked).
+  * Shows the filter UI for all admins (was Super Admin only) + shows
+    an italic hint explaining the lock.
+  * Updated the per-event badge to show chapter + city (was chapter +
+    country) since city is now the more useful differentiator.
+- Public events page (/events):
+  * Loads all active chapters (with city + country) + extracts unique
+    venue cities from events.
+  * Passes them to <EventsList> as new `chapters` + `cities` props.
+  * <EventsList> now renders a pink-themed inline filter bar at the top
+    with Chapter + City dropdowns. The filter bar is only shown when
+    there's more than one chapter OR any cities to filter by (keeps
+    the UI clean for single-chapter platforms).
+  * When the filter returns zero events, shows a "No events match your
+    filter" empty state with a Clear-filter button.
+  * Active filter summary shows the result count + selected chapter/city.
+  * Serialized events to ISO strings before passing to the client
+    component (was passing raw Prisma Date objects, which worked at
+    runtime via Next.js auto-serialization but caused a pre-existing
+    TS error that my new `chapterId` field surfaced).
+
+Verification:
+- bunx tsc --noEmit: 0 errors in any modified file (errors in
+  api/admin/events/[id]/registrations/route.ts + api/admin/members/
+  bulk-tags/route.ts are all pre-existing — reference Prisma models
+  that don't exist in the schema).
+- Dev server smoke test (with SQLite sandbox seeded with Israel +
+  Tel Aviv + Jerusalem chapters + test events in Tel Aviv-Yafo,
+  Herzliya, and Jerusalem):
+  * GET /events         → 200, filter UI rendered correctly with
+    "All chapters", "All cities", and city options "Herzliya",
+    "Jerusalem", "Tel Aviv-Yafo".
+  * GET /admin/events   → 307 → /login?callbackUrl=/admin/events
+    (compiles cleanly, 6.2s first compile).
+- Sandbox test data cleaned up.
+
+Stage Summary:
+- Both admin and public events pages now support filtering by chapter
+  AND city (in addition to the existing country filter on admin).
+- The admin filter is now available to ALL admin roles (was Super Admin
+  only), with appropriate scope-locking for Admin / Chapter Organizer.
+- The public /events filter is shown only when there are multiple
+  chapters or any cities to filter by — keeps the UI clean for the
+  common single-chapter case.
+- The city filter uses event.city (the venue city), which is independent
+  of chapter.city — so users can find "all events in Herzliya"
+  regardless of which chapter owns them.
+- Committed + pushed to origin/main. Vercel will auto-deploy.
+
+What the user should do next:
+1. Wait ~2-4 min for Vercel deploy to finish.
+2. Visit https://aisalon.massapro.com/events — should see the new
+   "Filter by chapter & city" panel above the events grid (assuming
+   there's >1 chapter or any city data on the events).
+3. Visit https://aisalon.massapro.com/admin/events (as any admin role) —
+   should see the country + chapter + city filter at the top. Admins
+   scoped to a single country will see their country pre-selected;
+   Chapter Organizers will see their chapter pre-selected.
+4. To populate the city filter, make sure events have their `city`
+   field set (editable in the event editor).

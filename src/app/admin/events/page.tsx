@@ -16,6 +16,10 @@ import { AdminEventsListWithActions } from "./admin-events-list-with-actions";
 import Link from "next/link";
 import { CalendarPlus, Globe2 } from "lucide-react";
 
+type CountryRow = { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean };
+type ChapterRow = { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean };
+type CityRow = { name: string; countryId: string; chapterId: string };
+
 export const metadata = { title: "Events — Admin — AI Salon" };
 
 function scopeBadge(scope: UserScope): { label: string; color: string } {
@@ -67,6 +71,7 @@ export default async function AdminEventsPage() {
           id: true,
           name: true,
           slug: true,
+          countryId: true,
           country: { select: { name: true, code: true, flagEmoji: true } },
         },
       },
@@ -111,13 +116,16 @@ export default async function AdminEventsPage() {
     subtitle: e.subtitle,
     chapter: e.chapter,
     venue: e.venue,
+    city: e.city,
     country: e.country,
+    chapterId: e.chapterId,
     isCrossChapter: e.isCrossChapter,
     chapterRef: e.chapterRef
       ? {
           id: e.chapterRef.id,
           name: e.chapterRef.name,
           slug: e.chapterRef.slug,
+          countryId: e.chapterRef.countryId,
           country: e.chapterRef.country,
         }
       : null,
@@ -141,9 +149,22 @@ export default async function AdminEventsPage() {
     },
   }));
 
-  // V7: load all countries + chapters (Super Admin only — for the scope filter).
-  let allCountries: { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[] = [];
-  let allChapters: { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[] = [];
+  // V7: load countries + chapters for the scope filter. Loaded for ALL
+  // admin roles (not just Super Admin) — scoped to the user's permissions:
+  //   - SUPER_ADMIN       → all countries + all chapters
+  //   - ADMIN             → their country only + chapters in that country
+  //   - CHAPTER_ORGANIZER → their chapter only (single-item list)
+  // The country selector is auto-locked when the user has only one country
+  // (i.e. non-Super-Admin); the chapter selector is auto-locked when the
+  // user has only one chapter (Chapter Organizer). This is enforced by the
+  // AdminEventsListWithActions component via the `scopeLockedTo` prop.
+  //
+  // Also extract unique cities from the events themselves — these are
+  // the actual venue cities (event.city), which may differ from the
+  // chapter's city (e.g. a Tel Aviv chapter event hosted in Herzliya).
+  let allCountries: CountryRow[] = [];
+  let allChapters: ChapterRow[] = [];
+
   if (isSuperAdminEmail(me.email)) {
     [allCountries, allChapters] = await Promise.all([
       db.country.findMany({
@@ -157,7 +178,48 @@ export default async function AdminEventsPage() {
         orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
       }),
     ]);
+  } else if (me.role === ROLES.ADMIN && me.countryId) {
+    // Admin: scoped to their country only.
+    const [country, chapters] = await Promise.all([
+      db.country.findUnique({
+        where: { id: me.countryId },
+        select: { id: true, name: true, code: true, flagEmoji: true, slug: true, isActive: true },
+      }),
+      db.chapter.findMany({
+        where: { countryId: me.countryId, isActive: true },
+        select: { id: true, name: true, slug: true, countryId: true, city: true, isActive: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    allCountries = country ? [country] : [];
+    allChapters = chapters;
+  } else if (me.role === ROLES.CHAPTER_ORGANIZER && me.chapterId) {
+    // Chapter Organizer: scoped to their chapter only.
+    const chapter = await db.chapter.findUnique({
+      where: { id: me.chapterId },
+      select: { id: true, name: true, slug: true, countryId: true, city: true, isActive: true, country: { select: { id: true, name: true, code: true, flagEmoji: true, slug: true, isActive: true } } },
+    });
+    if (chapter) {
+      allChapters = [chapter];
+      allCountries = chapter.country ? [chapter.country] : [];
+    }
   }
+
+  // Extract unique cities from the events in scope. Each city is paired
+  // with its chapterId + countryId so the filter can contextualize the
+  // city dropdown (only show cities in the selected country/chapter).
+  const cityMap = new Map<string, CityRow>();
+  for (const e of events) {
+    if (!e.city) continue;
+    const chapterId = e.chapterId;
+    const countryId = e.chapterRef?.countryId;
+    if (!chapterId || !countryId) continue;
+    const key = `${e.city}|${chapterId}`;
+    if (!cityMap.has(key)) {
+      cityMap.set(key, { name: e.city, countryId, chapterId });
+    }
+  }
+  const allCities = Array.from(cityMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
   const badge = scopeBadge(scope);
 
@@ -198,7 +260,9 @@ export default async function AdminEventsPage() {
           events={serialized}
           allCountries={allCountries}
           allChapters={allChapters}
+          allCities={allCities}
           isSuperAdmin={isSuperAdminEmail(me.email)}
+          scope={scope}
         />
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">

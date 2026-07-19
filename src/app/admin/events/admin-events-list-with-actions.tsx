@@ -19,8 +19,11 @@ import {
   CountryChapterScopeFilter,
   type ScopeFilterCountry,
   type ScopeFilterChapter,
+  type ScopeFilterCity,
+  type ScopeFilterValue,
 } from "@/components/ais/country-chapter-scope-filter";
 import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
+import type { UserScope } from "@/lib/permissions";
 
 type EventRow = {
   id: string;
@@ -29,9 +32,11 @@ type EventRow = {
   subtitle: string | null;
   chapter: string;
   venue: string | null;
+  city: string | null;
   country: string | null;
+  chapterId: string | null;
   isCrossChapter?: boolean;
-  chapterRef?: { id: string; name: string; slug: string; country: { name: string; code: string; flagEmoji?: string | null } } | null;
+  chapterRef?: { id: string; name: string; slug: string; countryId: string; country: { name: string; code: string; flagEmoji?: string | null } } | null;
   startsAt: string;
   endsAt: string;
   mainImage: { id: string; fileUrl: string } | null;
@@ -69,20 +74,36 @@ export function AdminEventsListWithActions({
   events,
   allCountries,
   allChapters,
+  allCities,
   isSuperAdmin,
+  scope,
 }: {
   events: EventRow[];
   allCountries?: ScopeFilterCountry[];
   allChapters?: ScopeFilterChapter[];
+  allCities?: ScopeFilterCity[];
   isSuperAdmin?: boolean;
+  /** The user's V7 scope. Used to lock the filter selectors when the user
+   *  has a single-country or single-chapter scope (Admin / Chapter Organizer). */
+  scope?: UserScope;
 }) {
-  // V7: scope filter (Super Admin only)
-  const [scopeFilter, setScopeFilter] = useState<{ countryId: string; chapterId: string }>({
-    countryId: "",
-    chapterId: "",
-  });
+  // V7: scope filter — available to ALL admin roles now (not just Super Admin).
+  // Initial values are pre-locked to the user's scope:
+  //   - Country scope (Admin)      → countryId pre-set to their country
+  //   - Chapter scope (Chapter Org) → countryId + chapterId pre-set
+  const initialFilter: ScopeFilterValue = useMemo(() => {
+    if (scope?.kind === "country") return { countryId: scope.countryId, chapterId: "", city: "" };
+    if (scope?.kind === "chapter") return { countryId: scope.countryId, chapterId: scope.chapterId, city: "" };
+    return { countryId: "", chapterId: "", city: "" };
+  }, [scope]);
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilterValue>(initialFilter);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkScopeOpen, setBulkScopeOpen] = useState(false);
+
+  // Whether the country/chapter selectors are locked (disabled) because
+  // the user's role only permits one option.
+  const countryLocked = scope?.kind === "country" || scope?.kind === "chapter";
+  const chapterLocked = scope?.kind === "chapter";
 
   const filtered = useMemo(() => {
     return events.filter((e) => {
@@ -91,6 +112,12 @@ export function AdminEventsListWithActions({
       } else if (scopeFilter.countryId) {
         const country = allCountries?.find((c) => c.id === scopeFilter.countryId);
         if (country && e.chapterRef?.country?.code !== country.code) return false;
+      }
+      // City filter — matches against event.city (the venue city).
+      // Empty/null city on an event is treated as "no city" and excluded
+      // when a specific city is selected.
+      if (scopeFilter.city) {
+        if ((e.city ?? "") !== scopeFilter.city) return false;
       }
       return true;
     });
@@ -129,14 +156,29 @@ export function AdminEventsListWithActions({
 
   return (
     <div className="space-y-3">
-      {/* V7 scope filter (Super Admin only) */}
-      {isSuperAdmin && allCountries && allChapters && allCountries.length > 0 && (
+      {/* V7 scope filter — available to ALL admin roles now.
+          Country/chapter selectors are locked when the user's role only
+          permits one option (Admin = country-locked; Chapter Organizer =
+          country+chapter locked). */}
+      {allCountries && allCountries.length > 0 && allChapters && (
         <CountryChapterScopeFilter
           countries={allCountries}
           chapters={allChapters}
+          cities={allCities}
           value={scopeFilter}
           onChange={setScopeFilter}
         />
+      )}
+
+      {/* Lock hint for non-Super-Admin roles */}
+      {(countryLocked || chapterLocked) && (
+        <div className="text-[0.65rem] text-black/50 italic px-1">
+          {chapterLocked
+            ? "Filter is scoped to your chapter (Chapter Organizer role)."
+            : countryLocked
+              ? "Filter is scoped to your country (Admin role)."
+              : ""}
+        </div>
       )}
 
       {/* Bulk-action bar (Super Admin only) */}
@@ -266,9 +308,11 @@ export function AdminEventsListWithActions({
               </div>
             </div>
 
-            {/* Chapter badge */}
-            <Badge variant="outline" className="hidden sm:inline-flex text-[0.6rem] uppercase tracking-wider">
-              {e.chapter} · {e.country}
+            {/* Chapter + city badge */}
+            <Badge variant="outline" className="hidden sm:inline-flex text-[0.6rem] uppercase tracking-wider gap-1">
+              <MapPin className="h-2.5 w-2.5" />
+              {e.chapter}
+              {e.city ? ` · ${e.city}` : ""}
             </Badge>
 
             {/* Actions */}
