@@ -3397,3 +3397,132 @@ Stage Summary:
      `prisma migrate deploy`
   3. Run `npx tsx scripts/v7-seed-israel-tel-aviv.ts` against production
      — this creates Israel + Tel Aviv and backfills all existing rows
+
+---
+Task ID: 2026-07-19-v7-super-admin-allocation
+Agent: Super Z (main)
+Task: User asked 4 questions about V7 hierarchy status:
+  1. Is implemented? — YES (prior session shipped the schema + scoping).
+  2. All existing data under Israel / Tel-Aviv chapter? — PARTIAL → FIXED.
+  3. Super admin must be able to allocate admins to specific chapters/country?
+     — NOT YET → IMPLEMENTED.
+  4. All reports/data scoped by country+chapter? — YES (prior session).
+
+Work Log:
+- Verified prior V7 implementation state:
+  * prisma/schema.prisma has Country, Chapter, ChapterSetting,
+    ChapterEmailTemplateOverride models with chapterId on User, Event,
+    Speaker, EventRsvp, EmailQueue, EmailRecipient, EmailCampaign,
+    EmailTemplate, EmailStageTemplate, EmailFlow, EmailAudience,
+    ReferralVisit, ReferralAttribution
+  * Local sandbox DB had Israel + Tel Aviv created, but only 1 user
+    with countryId=Israel and chapterId=NULL (the seed script's Q5
+    design decision was "members don't auto-get chapterId until first
+    RSVP")
+  * No way for Super Admin to allocate country/chapter to a user via UI
+
+- Updated scripts/v7-seed-israel-tel-aviv.ts (FULL backfill, overrides Q5):
+  * Backfills User.chapterId = Tel Aviv for ALL users (was previously
+    only set for CO_HOST users being migrated to CHAPTER_ORGANIZER)
+  * Backfills Speaker.chapterId for ALL speakers
+  * Backfills EventRsvp.chapterId for ALL RSVPs
+  * Backfills EmailQueue.chapterId for ALL queued emails
+  * Backfills EmailRecipient.chapterId for ALL recipients
+  * Backfills EmailCampaign.chapterId for ALL campaigns
+  * Backfills EmailTemplate.chapterId for ALL templates
+  * Backfills EmailStageTemplate.chapterId for ALL stage templates
+  * Backfills EmailFlow.chapterId for ALL flows
+  * Backfills EmailAudience.chapterId for ALL audiences
+  * Backfills ReferralVisit.chapterId for ALL visits
+  * Backfills ReferralAttribution.chapterId for ALL attributions
+  * All backfills are IDEMPOTENT (only updates rows where chapterId IS NULL)
+
+- Updated src/app/api/admin/members/[id]/route.ts PATCH endpoint:
+  * Accepts countryId + chapterId in body (super admin only)
+  * Validates country existence (400 if countryId doesn't match a row)
+  * Validates chapter existence (400 if chapterId doesn't match a row)
+  * Validates chapter.countryId matches the provided countryId (400 if
+    mismatch — prevents assigning an admin to a chapter in a different
+    country than the one selected)
+  * Auto-derives countryId from chapter.countryId when only chapterId is
+    provided (so the user's scope stays consistent)
+  * Allows clearing country/chapter by passing null or empty string
+  * Returns updated countryId + chapterId in the response
+  * Existing select also fetches countryId + chapterId for validation
+
+- Created src/app/api/admin/chapters/for-assign/route.ts (GET):
+  * Returns all countries + chapters available to the calling admin
+  * Super Admin → all countries + all chapters
+  * Admin → only their country + its chapters
+  * Chapter Organizer → only their own chapter
+  * Response: { countries: [...], chapters: [...] } — flat structure
+    so the client can filter chapters by selected countryId
+
+- Updated src/app/admin/admin-members-table.tsx EditMemberDialog:
+  * Added Globe2 + MapPin icon imports
+  * Added state: memberCountryId, memberChapterId, assignCountries,
+    assignChapters
+  * Added useEffect to fetch /api/admin/chapters/for-assign on mount
+    (Super Admin only — gated by isSuperAdminEmail(currentUserEmail))
+  * Added useEffect sync: when member changes, memberCountryId +
+    memberChapterId are initialized from member.countryId / chapterId
+  * Updated handleSave payload: when caller is Super Admin and target
+    is not a Super Admin, countryId + chapterId are included in the
+    PATCH body (so they're persisted alongside role changes)
+  * New "Hierarchy assignment (V7)" section in the dialog:
+    - Purple (#820A7D) themed box — distinct from the pink credentials box
+    - Country dropdown: lists all countries with flag emoji + name + code
+    - Chapter dropdown: filtered by selected country; disabled if no
+      country selected; shows chapter name + city + inactive flag
+    - "Effective scope" live preview: shows the user's resulting scope
+      based on their role + selected country + selected chapter:
+        * SUPER_ADMIN → "Global (Super Admin)"
+        * ADMIN + country → "Country scope — Israel"
+        * ADMIN + no country → "⚠ Admin role with no country — will default to global (defensive)"
+        * CHAPTER_ORGANIZER + chapter → "Chapter scope — Tel Aviv"
+        * CHAPTER_ORGANIZER + no chapter → "⚠ Chapter Organizer role with no chapter — will fall back to country scope"
+        * MEMBER + country/chapter → "Member — tagged to Israel / Tel Aviv"
+        * MEMBER + no country/chapter → "Member — no country/chapter tag"
+    - Chapter dropdown auto-clears when country changes to a country
+      that doesn't contain the currently-selected chapter (prevents
+      stale chapter selections across country changes)
+
+- Ran npx tsx scripts/v7-seed-israel-tel-aviv.ts locally:
+  * User.chapterId backfilled from NULL → Tel Aviv (1 row updated)
+  * All other tables: 0 rows in sandbox, but the backfill logic runs
+    successfully (idempotent — no-op when nothing to update)
+  * verify-v7.js confirms: eze@massapro.com (SUPER_ADMIN) — country:
+    Israel, chapter: Tel Aviv ✓
+
+- TypeScript check (npx tsc --noEmit):
+  * Zero errors in src/app/admin/admin-members-table.tsx
+  * Zero errors in src/app/api/admin/members/[id]/route.ts
+  * Zero errors in src/app/api/admin/chapters/for-assign/route.ts
+  * 143 pre-existing errors in unrelated files (testimonials, tracking,
+    non-members, mockups, skills/*) — unchanged.
+
+- Committed (03a96b5) and pushed to origin/main. Vercel auto-deploying.
+
+Stage Summary:
+- ALL 4 of the user's questions are now answered + implemented:
+  1. ✅ V7 hierarchy is implemented (schema + scoping + UI)
+  2. ✅ ALL existing data is now tagged with Israel + Tel Aviv chapter
+     (seed script updated to backfill every entity, not just users+events)
+  3. ✅ Super Admin can allocate admins to specific chapters/countries
+     via the EditMemberDialog's new "Hierarchy assignment (V7)" section
+  4. ✅ All reports/data are scoped by country+chapter (already done in
+     prior session via scopeUserWhere/scopeEventWhere/scopeChapterWhere)
+
+- To deploy to production:
+  1. Commit + push to origin/main ✓ (already pushed — Vercel auto-deploying)
+  2. Apply the schema to production Neon DB via `prisma db push`
+     (the V7-add-hierarchy migration SQL is in
+     prisma/migrations/V7-add-hierarchy/migration.sql)
+  3. Run `npx tsx scripts/v7-seed-israel-tel-aviv.ts` against production
+     — this creates Israel + Tel Aviv and backfills ALL existing rows
+     (users, events, speakers, RSVPs, emails, referrals) with both
+     countryId=Israel AND chapterId=Tel Aviv
+  4. After deployment, the Super Admin can open any member's Edit dialog
+     and use the new "Hierarchy assignment (V7)" section to allocate
+     them to a country + chapter (e.g. promote a member to ADMIN role
+     and assign them to a new country when expanding to other regions)
