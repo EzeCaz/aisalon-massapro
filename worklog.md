@@ -3974,3 +3974,38 @@ Stage Summary:
   2. Process side: all 27 modified V7 files now pushed to origin/main, so Vercel will rebuild with the new chapter-editor, world map, bulk-assign-scope, countries CRUD, etc.
 - After Vercel deploy finishes (~2-4 min), user signs in as Super Admin (eze@massapro.com), visits /admin/chapters, clicks "Seed Israel + Tel Aviv now", confirms. Page reloads with the world map showing the Tel Aviv pin + chapter tree with real counts.
 - The endpoint is idempotent — safe to click multiple times. Re-clicks produce 0 backfills.
+
+---
+Task ID: 2026-07-20-per-chapter-registration-urls
+Agent: Super Z (main)
+Task: User wants each chapter to have its own unique registration URL — anyone signing up via that URL gets registered specifically for that chapter.
+
+Work Log:
+- Modified /api/auth/signup to accept optional { chapterSlug } in the body:
+  * Resolves the chapter by slug; returns 404 if not found, 403 if inactive.
+  * New users are created with that chapter's countryId + chapterId at creation time.
+  * Existing users without scope get backfilled to that chapter (existing scope preserved).
+  * Fully backwards compatible — without chapterSlug, behavior is unchanged.
+- Created /c/[chapterSlug] public chapter landing page (no auth required):
+  * src/app/c/[chapterSlug]/page.tsx — server component, fetches chapter + upcoming events, generates SEO metadata.
+  * src/app/c/[chapterSlug]/chapter-landing-client.tsx — client component with hero (chapter identity, flag, member/event counts, WhatsApp/LinkedIn buttons), upcoming events list (5 future events with date/time/venue/RSVP count), and a sign-up form pre-tagged to the chapter. On submit, POSTs to /api/auth/signup with chapterSlug in the body. Shows success state with "Sign in" CTA after signup.
+- Updated chapter-editor.tsx:
+  * Added "Public registration URL" panel below the slug field showing the full URL (https://yourdomain.com/c/[slug]).
+  * Updates live as admin types the slug.
+  * Copy button (clipboard) + Open button (new tab).
+  * Explanatory text: "Anyone who signs up via this URL is automatically tagged to this chapter."
+- Updated /admin/chapters tree view (chapter-map-panel.tsx):
+  * Each chapter row now shows /c/[slug] inline next to the chapter name.
+  * Tiny Open + Copy buttons next to the URL for quick sharing.
+- Verified: bunx tsc --noEmit shows 0 errors in new files. bunx prisma generate clean.
+- Committed as ddeb2ec, pushed to origin/main.
+
+Stage Summary:
+- Each chapter now has a unique, shareable registration URL: /c/[chapterSlug]
+- Example: /c/tel-aviv → Tel Aviv chapter landing page + signup form
+- Anyone signing up via that URL is automatically tagged to that chapter at the DB level (countryId + chapterId set on User creation).
+- Admin sees the URL with copy/open buttons in both:
+  * The chapter editor (large panel with explanation)
+  * The /admin/chapters tree view (inline mini-buttons)
+- Public landing page includes chapter branding (name, city, country, flag), community links (WhatsApp/LinkedIn), upcoming events list, and the sign-up form.
+- Backwards compatible: existing /login flow still works without chapter context.
