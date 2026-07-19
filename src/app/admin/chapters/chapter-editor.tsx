@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
+import { Copy, Check, ExternalLink, Globe2 } from "lucide-react";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -32,6 +33,7 @@ export function ChapterEditor({
   const params = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     slug: initial?.slug ?? "",
@@ -42,6 +44,35 @@ export function ChapterEditor({
     linkedinUrl: initial?.linkedinUrl ?? "",
     isActive: initial?.isActive ?? true,
   });
+
+  // Public registration URL — derived from the slug. This is the URL
+  // admins share with people to register specifically for this chapter.
+  // Anyone signing up via this URL gets tagged to this chapter automatically.
+  const siteUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+  const registrationUrl = form.slug ? `${siteUrl}/c/${form.slug}` : "";
+
+  async function copyRegistrationUrl() {
+    if (!registrationUrl) return;
+    try {
+      await navigator.clipboard.writeText(registrationUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback for older browsers
+      const ta = document.createElement("textarea");
+      ta.value = registrationUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  }
 
   // Auto-generate slug from name in "new" mode
   useEffect(() => {
@@ -91,7 +122,7 @@ export function ChapterEditor({
           />
         </Field>
 
-        <Field label="Slug" required hint="Used in URLs: /tel-aviv/events/...">
+        <Field label="Slug" required hint="Used in URLs: /c/tel-aviv">
           <input
             type="text"
             value={form.slug}
@@ -100,6 +131,53 @@ export function ChapterEditor({
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
+
+        {/* Public registration URL — auto-derived from slug */}
+        {registrationUrl && (
+          <div className="rounded-md border border-[#820A7D]/20 bg-[#820A7D]/[0.04] p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#820A7D] flex items-center gap-1.5 mb-1">
+                  <Globe2 className="h-3 w-3" /> Public registration URL
+                </p>
+                <p className="text-sm font-mono text-black break-all">
+                  {registrationUrl}
+                </p>
+                <p className="text-xs text-black/60 mt-1.5">
+                  Anyone who signs up via this URL is automatically tagged
+                  to <strong>{form.name || "this chapter"}</strong>. Share
+                  it in your chapter&apos;s WhatsApp group, LinkedIn, event
+                  invites, etc.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={copyRegistrationUrl}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white transition"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" /> Copy
+                    </>
+                  )}
+                </button>
+                <a
+                  href={registrationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Field label="Country" required>
           <select

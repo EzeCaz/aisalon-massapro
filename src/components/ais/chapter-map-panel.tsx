@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, MapPin, Globe2 } from "lucide-react";
+import { ArrowRight, MapPin, Globe2, ExternalLink, Copy, Check } from "lucide-react";
 import { ChapterWorldMap, type MapChapter } from "./chapter-world-map";
 
 export type ChapterTreeNode = MapChapter;
@@ -145,8 +145,9 @@ export function ChapterMapPanel({
                           {chapter.name}
                           {chapter.city && <span className="ml-2 text-xs font-normal text-black/50">{chapter.city}</span>}
                         </p>
-                        <p className="text-xs text-black/60">
-                          <code className="bg-black/5 px-1 rounded text-[0.65rem]">/{chapter.slug}</code>
+                        <p className="text-xs text-black/60 flex items-center gap-1.5">
+                          <code className="bg-black/5 px-1 rounded text-[0.65rem]">/c/{chapter.slug}</code>
+                          <ChapterUrlButtons slug={chapter.slug} />
                         </p>
                       </div>
                     </div>
@@ -181,6 +182,54 @@ function CountPill({ label, value }: { label: string; value: number }) {
     <span className="inline-flex items-baseline gap-1">
       <span className="font-bold text-black">{value}</span>
       <span className="text-black/50">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Tiny inline "Open" + "Copy" buttons next to each chapter's public URL
+ * in the tree view. Lets admins quickly grab the share link without
+ * leaving the chapters list.
+ */
+function ChapterUrlButtons({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const url =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/c/${slug}`
+      : `/c/${slug}`;
+
+  async function copy(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <a
+        href={`/c/${slug}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        title="Open public page"
+        className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-black/10 text-black/50 hover:text-black"
+      >
+        <ExternalLink className="h-3 w-3" />
+      </a>
+      <button
+        type="button"
+        onClick={copy}
+        title="Copy URL"
+        className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-black/10 text-black/50 hover:text-black"
+      >
+        {copied ? <Check className="h-3 w-3 text-[#007E72]" /> : <Copy className="h-3 w-3" />}
+      </button>
     </span>
   );
 }

@@ -24,7 +24,7 @@ import { generateUtmUid, attributeSignup, UTM_COOKIE_NAME } from "@/lib/utm";
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { email?: unknown; name?: unknown };
+    let body: { email?: unknown; name?: unknown; chapterSlug?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -33,12 +33,47 @@ export async function POST(req: NextRequest) {
 
     const email = (body.email as string | undefined)?.trim().toLowerCase();
     const name = (body.name as string | undefined)?.trim();
+    const chapterSlug = (body.chapterSlug as string | undefined)?.trim().toLowerCase() || null;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
     }
     if (!name || name.length < 2) {
       return NextResponse.json({ error: "Please tell us your name." }, { status: 400 });
+    }
+
+    // V7: if chapterSlug is provided, resolve the chapter so we can tag
+    // the new user with countryId + chapterId. This is what makes
+    // /c/[chapterSlug] registration URLs work — anyone signing up via
+    // that URL is automatically scoped to that chapter.
+    let chapterScope: { countryId: string; chapterId: string; chapterName: string } | null = null;
+    if (chapterSlug) {
+      const chapter = await db.chapter.findUnique({
+        where: { slug: chapterSlug },
+        select: {
+          id: true,
+          name: true,
+          countryId: true,
+          isActive: true,
+        },
+      });
+      if (!chapter) {
+        return NextResponse.json(
+          { error: `Chapter "${chapterSlug}" not found.` },
+          { status: 404 }
+        );
+      }
+      if (!chapter.isActive) {
+        return NextResponse.json(
+          { error: `Chapter "${chapter.name}" is not currently accepting new members.` },
+          { status: 403 }
+        );
+      }
+      chapterScope = {
+        countryId: chapter.countryId,
+        chapterId: chapter.id,
+        chapterName: chapter.name,
+      };
     }
 
     // Generate a memorable-ish but random 8-char password (alphanumeric)
@@ -57,7 +92,10 @@ export async function POST(req: NextRequest) {
     let displayName = name;
 
     try {
-      const existing = await db.user.findUnique({ where: { email } });
+      const existing = await db.user.findUnique({
+        where: { email },
+        select: { id: true, passwordHash: true, countryId: true, chapterId: true, utmUid: true },
+      });
       userExisted = !!existing;
       userHasPassword = !!existing?.passwordHash;
 
@@ -78,12 +116,25 @@ export async function POST(req: NextRequest) {
       // hash was null).
       // ----------------------------------------------------------------------
       if (existing) {
+        // For existing users signing up via a chapter URL: if they don't
+        // already have a chapter scope, backfill it now. We DON'T overwrite
+        // an existing scope (admin may have manually assigned them).
+        const updateData: { passwordHash: string; name: string; countryId?: string; chapterId?: string } = {
+          passwordHash,
+          name: displayName,
+        };
+        if (chapterScope && !existing.countryId && !existing.chapterId) {
+          updateData.countryId = chapterScope.countryId;
+          updateData.chapterId = chapterScope.chapterId;
+        }
         await db.user.update({
           where: { id: existing.id },
-          data: { passwordHash, name: displayName },
+          data: updateData,
         });
       } else {
         // Brand-new user — allocate utmUid with collision retry, then create.
+        // V7: if chapterScope is set (user arrived via /c/[chapterSlug]),
+        // tag them with that chapter's countryId + chapterId at creation.
         let utmUid: string | undefined;
         for (let i = 0; i < 5; i++) {
           utmUid = generateUtmUid();
@@ -95,6 +146,12 @@ export async function POST(req: NextRequest) {
                 passwordHash,
                 role: "MEMBER",
                 utmUid,
+                ...(chapterScope
+                  ? {
+                      countryId: chapterScope.countryId,
+                      chapterId: chapterScope.chapterId,
+                    }
+                  : {}),
               },
             });
             break;
@@ -112,7 +169,18 @@ export async function POST(req: NextRequest) {
           // All retries failed (essentially impossible). Fall back to creating
           // the user without a utmUid — backfill script will fill it in later.
           await db.user.create({
-            data: { email, name, passwordHash, role: "MEMBER" },
+            data: {
+              email,
+              name,
+              passwordHash,
+              role: "MEMBER",
+              ...(chapterScope
+                ? {
+                    countryId: chapterScope.countryId,
+                    chapterId: chapterScope.chapterId,
+                  }
+                : {}),
+            },
           });
         }
       }
