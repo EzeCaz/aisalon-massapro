@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,12 @@ import {
   Ticket,
   UserCircle,
 } from "lucide-react";
+import {
+  CountryChapterScopeFilter,
+  type ScopeFilterCountry,
+  type ScopeFilterChapter,
+} from "@/components/ais/country-chapter-scope-filter";
+import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
 type EventRow = {
   id: string;
@@ -23,6 +30,8 @@ type EventRow = {
   chapter: string;
   venue: string | null;
   country: string | null;
+  isCrossChapter?: boolean;
+  chapterRef?: { id: string; name: string; slug: string; country: { name: string; code: string; flagEmoji?: string | null } } | null;
   startsAt: string;
   endsAt: string;
   mainImage: { id: string; fileUrl: string } | null;
@@ -58,9 +67,52 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
 
 export function AdminEventsListWithActions({
   events,
+  allCountries,
+  allChapters,
+  isSuperAdmin,
 }: {
   events: EventRow[];
+  allCountries?: ScopeFilterCountry[];
+  allChapters?: ScopeFilterChapter[];
+  isSuperAdmin?: boolean;
 }) {
+  // V7: scope filter (Super Admin only)
+  const [scopeFilter, setScopeFilter] = useState<{ countryId: string; chapterId: string }>({
+    countryId: "",
+    chapterId: "",
+  });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkScopeOpen, setBulkScopeOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    return events.filter((e) => {
+      if (scopeFilter.chapterId) {
+        if ((e.chapterRef?.id ?? null) !== scopeFilter.chapterId) return false;
+      } else if (scopeFilter.countryId) {
+        const country = allCountries?.find((c) => c.id === scopeFilter.countryId);
+        if (country && e.chapterRef?.country?.code !== country.code) return false;
+      }
+      return true;
+    });
+  }, [events, scopeFilter, allCountries]);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected(new Set(filtered.map((e) => e.id)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
   if (events.length === 0) {
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
@@ -77,47 +129,104 @@ export function AdminEventsListWithActions({
 
   return (
     <div className="space-y-3">
-      {events.map((e) => {
-        const start = new Date(e.startsAt);
-        const coHostSummary =
-          e.coHosts.length === 0
-            ? null
-            : e.coHosts
-                .slice(0, 3)
-                .map((c) => c.userName)
-                .join(", ") + (e.coHosts.length > 3 ? ` +${e.coHosts.length - 3}` : "");
+      {/* V7 scope filter (Super Admin only) */}
+      {isSuperAdmin && allCountries && allChapters && allCountries.length > 0 && (
+        <CountryChapterScopeFilter
+          countries={allCountries}
+          chapters={allChapters}
+          value={scopeFilter}
+          onChange={setScopeFilter}
+        />
+      )}
 
-        return (
-          <Card
-            key={e.id}
-            className="p-4 border border-black/10 bg-white flex flex-wrap items-center gap-4 ais-lift"
-          >
-            {/* Thumbnail or date block */}
-            <div className="flex-shrink-0">
-              {e.mainImage ? (
-                <div className="w-16 h-16 rounded-lg overflow-hidden border border-black/10 bg-black/5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={e.mainImage.fileUrl}
-                    alt={e.title}
-                    className="w-full h-full object-cover"
+      {/* Bulk-action bar (Super Admin only) */}
+      {isSuperAdmin && (
+        <div className="flex flex-wrap items-center gap-2 text-xs bg-[#820A7D]/5 border border-[#820A7D]/20 rounded-md px-3 py-1.5">
+          {selected.size > 0 ? (
+            <>
+              <span className="font-semibold text-[#820A7D]">{selected.size} selected</span>
+              <Button size="sm" variant="ghost" className="h-6 text-[0.65rem]" onClick={selectAllVisible}>
+                Select all {filtered.length} visible
+              </Button>
+              <BulkAssignScopeDialog
+                entityType="events"
+                selectedIds={Array.from(selected)}
+                onClear={clearSelection}
+                open={bulkScopeOpen}
+                onOpenChange={setBulkScopeOpen}
+              />
+              <Button size="sm" variant="ghost" className="h-6 text-[0.65rem] ml-auto" onClick={clearSelection}>
+                Clear
+              </Button>
+            </>
+          ) : (
+            <span className="text-black/60">
+              Tip: tick the checkbox on each event to enable bulk-assign scope.
+            </span>
+          )}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <Card className="p-8 text-center bg-white border border-black/10">
+          <p className="text-sm text-black/80">No events match your filter.</p>
+        </Card>
+      ) : (
+        <>
+          <div className="text-xs text-black/60 px-1">
+            Showing <strong>{filtered.length}</strong> of {events.length} events
+          </div>
+          {filtered.map((e) => {
+            const start = new Date(e.startsAt);
+            const coHostSummary =
+              e.coHosts.length === 0
+                ? null
+                : e.coHosts
+                    .slice(0, 3)
+                    .map((c) => c.userName)
+                    .join(", ") + (e.coHosts.length > 3 ? ` +${e.coHosts.length - 3}` : "");
+            const isSelected = selected.has(e.id);
+
+            return (
+              <Card
+                key={e.id}
+                className={`p-4 border bg-white flex flex-wrap items-center gap-4 ais-lift ${isSelected ? "border-[#820A7D] bg-[#820A7D]/5" : "border-black/10"}`}
+              >
+                {isSuperAdmin && (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(e.id)}
+                    className="h-4 w-4 accent-[#820A7D]"
                   />
-                </div>
-              ) : (
-                <div className="w-16 h-16 rounded-lg border border-black/10 bg-white text-center flex flex-col items-center justify-center">
-                  <div className="text-[0.55rem] font-bold uppercase tracking-wider text-[#FF005A]">
-                    {monthFmt.format(start).toUpperCase()}
-                  </div>
-                  <div className="text-xl font-extrabold text-black leading-none">
-                    {dayFmt.format(start)}
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            {/* Main info */}
-            <div className="flex-1 min-w-[200px]">
-              <div className="font-bold text-black text-sm">
+                {/* Thumbnail or date block */}
+                <div className="flex-shrink-0">
+                  {e.mainImage ? (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-black/10 bg-black/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={e.mainImage.fileUrl}
+                        alt={e.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg border border-black/10 bg-white text-center flex flex-col items-center justify-center">
+                      <div className="text-[0.55rem] font-bold uppercase tracking-wider text-[#FF005A]">
+                        {monthFmt.format(start).toUpperCase()}
+                      </div>
+                      <div className="text-xl font-extrabold text-black leading-none">
+                        {dayFmt.format(start)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Main info */}
+                <div className="flex-1 min-w-[200px]">
+                  <div className="font-bold text-black text-sm">
                 {e.title}
               </div>
               {e.subtitle && (
@@ -180,6 +289,8 @@ export function AdminEventsListWithActions({
           </Card>
         );
       })}
+        </>
+      )}
     </div>
   );
 }

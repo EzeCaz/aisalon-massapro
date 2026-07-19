@@ -69,6 +69,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
+import { CountryChapterScopeFilter } from "@/components/ais/country-chapter-scope-filter";
+import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
 type LinkedSpeaker = {
   id: string;
@@ -147,6 +149,11 @@ type Props = {
   currentUserEmail?: string;
   /** Role of the currently-signed-in admin (drives role dropdown visibility). */
   currentUserRole?: string;
+  /** V7: list of all countries (for the scope filter). Optional — only
+   *  rendered for Super Admin / Admin. */
+  allCountries?: { id: string; name: string; code: string; flagEmoji?: string | null; slug?: string; isActive?: boolean }[];
+  /** V7: list of all chapters (for the scope filter). Optional. */
+  allChapters?: { id: string; name: string; slug?: string; countryId: string; city?: string | null; isActive?: boolean }[];
 };
 
 export function AdminMembersTable({
@@ -155,6 +162,8 @@ export function AdminMembersTable({
   allSpeakers,
   currentUserEmail,
   currentUserRole,
+  allCountries,
+  allChapters,
 }: Props) {
   const [search, setSearch] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -167,7 +176,13 @@ export function AdminMembersTable({
   const [bulkLinkOpen, setBulkLinkOpen] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [bulkScopeOpen, setBulkScopeOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  // V7: scope filter (All / Country / Chapter). For Super Admin only.
+  const [scopeFilter, setScopeFilter] = useState<{ countryId: string; chapterId: string }>({
+    countryId: "",
+    chapterId: "",
+  });
   // Secondary-email management state (used by ManageEmailsDialog)
   const [emailMember, setEmailMember] = useState<Member | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -193,9 +208,19 @@ export function AdminMembersTable({
       const matchApplied = !filterApplied || m.appliedFor === filterApplied;
       const matchInvited = !filterInvited || m.invitedToSpeak === "Yes";
       const matchLinked = !filterLinked || m.speakers.length > 0;
-      return matchSearch && matchApplied && matchInvited && matchLinked;
+      // V7 scope filter — only applied when the user picks a country/chapter.
+      const matchCountry =
+        !scopeFilter.countryId ||
+        (m.countryId ?? undefined) === scopeFilter.countryId ||
+        // For chapter scope, also include country-wide members (chapterId null
+        // but countryId matches) — mirrors scopeUserWhere behavior.
+        (!!scopeFilter.chapterId && (m.countryId ?? undefined) === scopeFilter.countryId && !m.chapterId);
+      const matchChapter =
+        !scopeFilter.chapterId ||
+        (m.chapterId ?? undefined) === scopeFilter.chapterId;
+      return matchSearch && matchApplied && matchInvited && matchLinked && matchCountry && matchChapter;
     });
-  }, [members, search, filterApplied, filterInvited, filterLinked]);
+  }, [members, search, filterApplied, filterInvited, filterLinked, scopeFilter]);
 
   // Secondary-email handlers — call the API and reload on success
   async function addSecondaryEmail(memberId: string, email: string, label: string) {
@@ -533,6 +558,17 @@ export function AdminMembersTable({
 
   return (
     <div className="space-y-3">
+      {/* V7: Country + Chapter scope filter (Super Admin only — hidden for
+          other roles since they already have an invisible server-side scope). */}
+      {isSuperAdminEmail(currentUserEmail) && allCountries && allChapters && allCountries.length > 0 && (
+        <CountryChapterScopeFilter
+          countries={allCountries}
+          chapters={allChapters}
+          value={scopeFilter}
+          onChange={setScopeFilter}
+        />
+      )}
+
       {/* Search + filters + view toggle */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[240px] max-w-sm">
@@ -643,6 +679,17 @@ export function AdminMembersTable({
             count={selected.size}
             onSubmit={(sid) => bulkLinkSpeaker(sid)}
           />
+          {/* V7: Bulk-assign scope (Super Admin only) — lets the admin
+              bulk-tag N selected members with a country + chapter. */}
+          {isSuperAdminEmail(currentUserEmail) && (
+            <BulkAssignScopeDialog
+              entityType="members"
+              selectedIds={Array.from(selected)}
+              onClear={clearSelection}
+              open={bulkScopeOpen}
+              onOpenChange={setBulkScopeOpen}
+            />
+          )}
           {/* Merge button — always rendered so it's discoverable.
               When <2 selected, it's disabled and shows a tooltip. */}
           <Button
@@ -686,7 +733,7 @@ export function AdminMembersTable({
       {selected.size === 0 && (
         <div className="flex items-center gap-2 text-[0.7rem] text-black/80 px-1">
           <MergeIcon className="h-3 w-3 text-[#820A7D]" />
-          Tip: tick 2+ checkboxes on the left to enable Merge, Bulk edit tags, and Bulk link speaker.
+          Tip: tick 2+ checkboxes on the left to enable Merge, Bulk edit tags, Bulk link speaker{isSuperAdminEmail(currentUserEmail) ? ", and Bulk assign scope" : ""}.
         </div>
       )}
 
@@ -1820,6 +1867,121 @@ function EditMemberDialog({
     };
   }, [currentUserEmail]);
 
+  // ---- Inline "Create new country" state (Super Admin only) ----
+  // Pop open a tiny inline form below the Country selector so the Super
+  // Admin can add a new Country on the fly without leaving this dialog.
+  const [showCreateCountry, setShowCreateCountry] = useState(false);
+  const [newCountryName, setNewCountryName] = useState("");
+  const [newCountryCode, setNewCountryCode] = useState("");
+  const [newCountryFlag, setNewCountryFlag] = useState("");
+  const [creatingCountry, setCreatingCountry] = useState(false);
+
+  async function handleCreateCountry() {
+    const name = newCountryName.trim();
+    const code = newCountryCode.trim().toUpperCase();
+    if (!name) {
+      toast.error("Country name is required");
+      return;
+    }
+    if (code.length !== 2) {
+      toast.error("Country code must be 2 letters (e.g. IL, US, GB)");
+      return;
+    }
+    setCreatingCountry(true);
+    const t = toast.loading(`Creating country "${name}"…`);
+    try {
+      const res = await fetch("/api/admin/countries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          code,
+          flagEmoji: newCountryFlag.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      // Refresh the assign lists so the new country shows up.
+      const refRes = await fetch("/api/admin/chapters/for-assign");
+      if (refRes.ok) {
+        const refData = await refRes.json();
+        setAssignCountries(refData.countries ?? []);
+        setAssignChapters(refData.chapters ?? []);
+      }
+      // Auto-select the newly-created country.
+      setMemberCountryId(data.country.id);
+      setMemberChapterId("");
+      setShowCreateCountry(false);
+      setNewCountryName("");
+      setNewCountryCode("");
+      setNewCountryFlag("");
+      toast.success(`Country "${name}" created`, { id: t });
+    } catch (e) {
+      toast.error((e as Error).message, { id: t });
+    } finally {
+      setCreatingCountry(false);
+    }
+  }
+
+  // ---- Inline "Create new chapter" state (Super Admin only) ----
+  // Pop open a tiny inline form below the Chapter selector so the Super
+  // Admin can add a new Chapter (in the currently-selected country) on
+  // the fly without leaving this dialog.
+  const [showCreateChapter, setShowCreateChapter] = useState(false);
+  const [newChapterName, setNewChapterName] = useState("");
+  const [newChapterCity, setNewChapterCity] = useState("");
+  const [creatingChapter, setCreatingChapter] = useState(false);
+
+  async function handleCreateChapter() {
+    const name = newChapterName.trim();
+    if (!name) {
+      toast.error("Chapter name is required");
+      return;
+    }
+    if (!memberCountryId) {
+      toast.error("Select a country first");
+      return;
+    }
+    setCreatingChapter(true);
+    const t = toast.loading(`Creating chapter "${name}"…`);
+    try {
+      const res = await fetch("/api/admin/chapters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          countryId: memberCountryId,
+          city: newChapterCity.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      // Refresh the assign lists so the new chapter shows up.
+      const refRes = await fetch("/api/admin/chapters/for-assign");
+      if (refRes.ok) {
+        const refData = await refRes.json();
+        setAssignCountries(refData.countries ?? []);
+        setAssignChapters(refData.chapters ?? []);
+      }
+      // Auto-select the newly-created chapter.
+      setMemberChapterId(data.chapter.id);
+      setShowCreateChapter(false);
+      setNewChapterName("");
+      setNewChapterCity("");
+      toast.success(`Chapter "${name}" created`, { id: t });
+    } catch (e) {
+      toast.error((e as Error).message, { id: t });
+    } finally {
+      setCreatingChapter(false);
+    }
+  }
+
   if (!member) return null;
 
   const handleSave = async () => {
@@ -2376,6 +2538,14 @@ function EditMemberDialog({
                   <label className="block text-xs font-semibold text-black/80 mb-1 flex items-center gap-1">
                     <Globe2 className="h-3 w-3" />
                     Country
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateCountry((v) => !v)}
+                      className="ml-auto text-[0.6rem] font-bold uppercase tracking-wide text-[#820A7D] hover:text-[#820A7D]/80 flex items-center gap-0.5"
+                    >
+                      <Plus className="h-3 w-3" />
+                      {showCreateCountry ? "Cancel" : "Create new"}
+                    </button>
                   </label>
                   <select
                     value={memberCountryId}
@@ -2405,6 +2575,52 @@ function EditMemberDialog({
                     Required for <code className="bg-black/5 px-1 rounded">ADMIN</code> and{" "}
                     <code className="bg-black/5 px-1 rounded">CHAPTER_ORGANIZER</code> roles.
                   </p>
+
+                  {/* Inline "Create new country" form (Super Admin only) */}
+                  {showCreateCountry && (
+                    <div className="mt-2 rounded-md border border-[#820A7D]/30 bg-white p-2.5 space-y-2">
+                      <div className="text-[0.6rem] font-bold uppercase tracking-wider text-[#820A7D]">
+                        Create a new country
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. Israel)"
+                          value={newCountryName}
+                          onChange={(e) => setNewCountryName(e.target.value)}
+                          className="rounded border border-black/15 px-2 py-1.5 text-xs"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Code (e.g. IL)"
+                          maxLength={2}
+                          value={newCountryCode}
+                          onChange={(e) => setNewCountryCode(e.target.value)}
+                          className="rounded border border-black/15 px-2 py-1.5 text-xs uppercase"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Flag emoji (e.g. 🇮🇱) — optional"
+                        value={newCountryFlag}
+                        onChange={(e) => setNewCountryFlag(e.target.value)}
+                        className="w-full rounded border border-black/15 px-2 py-1.5 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={creatingCountry}
+                        onClick={handleCreateCountry}
+                        className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white h-7 text-xs w-full"
+                      >
+                        {creatingCountry ? (
+                          <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Creating…</>
+                        ) : (
+                          <><Plus className="h-3 w-3 mr-1" /> Create country</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Chapter selector — filtered by selected country */}
@@ -2412,6 +2628,19 @@ function EditMemberDialog({
                   <label className="block text-xs font-semibold text-black/80 mb-1 flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
                     Chapter / City
+                    <button
+                      type="button"
+                      disabled={!memberCountryId}
+                      onClick={() => setShowCreateChapter((v) => !v)}
+                      className={`ml-auto text-[0.6rem] font-bold uppercase tracking-wide flex items-center gap-0.5 ${
+                        memberCountryId
+                          ? "text-[#820A7D] hover:text-[#820A7D]/80"
+                          : "text-black/30 cursor-not-allowed"
+                      }`}
+                    >
+                      <Plus className="h-3 w-3" />
+                      {showCreateChapter ? "Cancel" : "Create new"}
+                    </button>
                   </label>
                   <select
                     value={memberChapterId}
@@ -2438,6 +2667,43 @@ function EditMemberDialog({
                     Required for <code className="bg-black/5 px-1 rounded">CHAPTER_ORGANIZER</code> role.
                     Leave empty for country-wide ADMIN scope.
                   </p>
+
+                  {/* Inline "Create new chapter" form (Super Admin only) */}
+                  {showCreateChapter && memberCountryId && (
+                    <div className="mt-2 rounded-md border border-[#820A7D]/30 bg-white p-2.5 space-y-2">
+                      <div className="text-[0.6rem] font-bold uppercase tracking-wider text-[#820A7D]">
+                        Create a new chapter in{" "}
+                        {assignCountries.find((c) => c.id === memberCountryId)?.name ?? "selected country"}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Chapter name (e.g. Tel Aviv)"
+                        value={newChapterName}
+                        onChange={(e) => setNewChapterName(e.target.value)}
+                        className="w-full rounded border border-black/15 px-2 py-1.5 text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder="City (optional, e.g. Tel Aviv-Yafo)"
+                        value={newChapterCity}
+                        onChange={(e) => setNewChapterCity(e.target.value)}
+                        className="w-full rounded border border-black/15 px-2 py-1.5 text-xs"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={creatingChapter}
+                        onClick={handleCreateChapter}
+                        className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white h-7 text-xs w-full"
+                      >
+                        {creatingChapter ? (
+                          <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Creating…</>
+                        ) : (
+                          <><Plus className="h-3 w-3 mr-1" /> Create chapter</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Live scope preview */}

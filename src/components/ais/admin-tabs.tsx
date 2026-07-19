@@ -17,6 +17,8 @@ import {
   LayoutTemplate,
   TrendingUp,
   Brain,
+  Globe2,
+  ClipboardCheck,
 } from "lucide-react";
 
 /**
@@ -86,15 +88,18 @@ const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/registrants", label: "Registrants", icon: ClipboardList, match: "/admin/registrants" },
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
   { href: "/admin/events/new", label: "New event", icon: CalendarPlus, match: "/admin/events/new" },
+  { href: "/admin/chapters", label: "Chapters", icon: Globe2, match: "/admin/chapters" },
   { href: "/admin/check-in", label: "Door Check-in", icon: QrCode, match: "/admin/check-in" },
   { href: "/admin/dashboard", label: "Dashboard", icon: BarChart3, match: "/admin/dashboard" },
   { href: "/admin/analytics", label: "Referral Analytics", icon: TrendingUp, match: "/admin/analytics" },
   { href: "/admin/dashboard/event-dashboard", label: "Event dashboard", icon: CalendarRange, match: "/admin/dashboard/event-dashboard" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, match: "/admin/reports" },
   { href: "/admin/email", label: "Email", icon: Mail, match: "/admin/email" },
   { href: "/admin/images", label: "Images", icon: Images, match: "/admin/images" },
   { href: "/admin/knowledge-base", label: "Knowledge Base", icon: BookOpen, match: "/admin/knowledge-base" },
   { href: "/admin/mockups", label: "Mockups", icon: LayoutTemplate, match: "/admin/mockups" },
   { href: "/admin/quiz", label: "Quiz", icon: Brain, match: "/admin/quiz" },
+  { href: "/admin/event-prep", label: "Event Prep", icon: ClipboardCheck, match: "/admin/event-prep" },
 ];
 
 /**

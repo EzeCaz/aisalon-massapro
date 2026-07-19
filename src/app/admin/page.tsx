@@ -121,6 +121,25 @@ export default async function AdminPage() {
     },
   });
 
+  // V7: load all countries + chapters (Super Admin only — used by the
+  // CountryChapterScopeFilter on the Members table).
+  let allCountries: { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[] = [];
+  let allChapters: { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[] = [];
+  if (isSuperAdminEmail(me.email)) {
+    [allCountries, allChapters] = await Promise.all([
+      db.country.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, code: true, flagEmoji: true, slug: true, isActive: true },
+        orderBy: { name: "asc" },
+      }),
+      db.chapter.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, countryId: true, city: true, isActive: true },
+        orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+      }),
+    ]);
+  }
+
   // Serialize to plain JSON (Date -> ISO string) so the client component
   // types match what Prisma returns at runtime.
   const membersJson = JSON.parse(JSON.stringify(members));
@@ -243,6 +262,8 @@ export default async function AdminPage() {
             allSpeakers={allSpeakersJson}
             currentUserEmail={me.email}
             currentUserRole={me.role}
+            allCountries={allCountries}
+            allChapters={allChapters}
           />
         </section>
 

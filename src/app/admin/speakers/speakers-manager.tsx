@@ -29,6 +29,12 @@ import {
   Users as UsersIcon,
   Loader2,
 } from "lucide-react";
+import {
+  CountryChapterScopeFilter,
+  type ScopeFilterCountry,
+  type ScopeFilterChapter,
+} from "@/components/ais/country-chapter-scope-filter";
+import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
 type EventRow = {
   id: string;
@@ -47,7 +53,8 @@ type Speaker = {
   photoUrl: string | null;
   contactEmail: string | null;
   order: number;
-  event: { id: string; title: string; slug: string; startsAt: string };
+  chapterId?: string | null;
+  event: { id: string; title: string; slug: string; startsAt: string; chapterRef?: { id: string; country: { name: string; code: string; flagEmoji?: string | null } | null } | null };
   user: { id: string; email: string; name: string | null } | null;
   _count: { images: number; presentations: number; messages: number };
 };
@@ -55,18 +62,40 @@ type Speaker = {
 type Props = {
   speakers: Speaker[];
   events: EventRow[];
+  /** V7 scope filter — only passed for Super Admin. */
+  allCountries?: ScopeFilterCountry[];
+  allChapters?: ScopeFilterChapter[];
+  isSuperAdmin?: boolean;
 };
 
-export function SpeakersManager({ speakers, events }: Props) {
+export function SpeakersManager({ speakers, events, allCountries, allChapters, isSuperAdmin }: Props) {
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState<string>("");
   const [addOpen, setAddOpen] = useState(false);
   const [list, setList] = useState<Speaker[]>(speakers);
+  const [scopeFilter, setScopeFilter] = useState<{ countryId: string; chapterId: string }>({
+    countryId: "",
+    chapterId: "",
+  });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkScopeOpen, setBulkScopeOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return list.filter((s) => {
       if (eventFilter && s.event.id !== eventFilter) return false;
+      // V7 scope filter (only applied when set)
+      if (scopeFilter.chapterId) {
+        if ((s.chapterId ?? undefined) !== scopeFilter.chapterId) return false;
+      } else if (scopeFilter.countryId) {
+        const evCountryCode = s.event.chapterRef?.country?.code;
+        const evChapterCountry = allChapters?.find((c) => c.id === s.chapterId)?.countryId;
+        if (!evCountryCode && !evChapterCountry) return false;
+        // We only have country code on event.chapterRef, not countryId — match by joining
+        const countryMatch = allCountries?.find((c) => c.id === scopeFilter.countryId);
+        if (countryMatch && evCountryCode !== countryMatch.code && !evChapterCountry) return false;
+        if (evChapterCountry && evChapterCountry !== scopeFilter.countryId) return false;
+      }
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
@@ -76,7 +105,24 @@ export function SpeakersManager({ speakers, events }: Props) {
         (s.contactEmail || "").toLowerCase().includes(q)
       );
     });
-  }, [list, search, eventFilter]);
+  }, [list, search, eventFilter, scopeFilter, allCountries, allChapters]);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected(new Set(filtered.map((s) => s.id)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
 
   async function handleCreate(data: {
     eventId: string;
@@ -117,6 +163,16 @@ export function SpeakersManager({ speakers, events }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* V7 scope filter (Super Admin only) */}
+      {isSuperAdmin && allCountries && allChapters && allCountries.length > 0 && (
+        <CountryChapterScopeFilter
+          countries={allCountries}
+          chapters={allChapters}
+          value={scopeFilter}
+          onChange={setScopeFilter}
+        />
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="flex flex-wrap gap-2 items-center flex-1">
@@ -145,10 +201,42 @@ export function SpeakersManager({ speakers, events }: Props) {
             {filtered.length} of {list.length}
           </Badge>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="bg-[#FF005A] hover:bg-[#FF005A]/90">
-          <Plus className="h-4 w-4 mr-1.5" /> Add speaker
-        </Button>
+        <div className="flex items-center gap-2">
+          {isSuperAdmin && selected.size > 0 && (
+            <BulkAssignScopeDialog
+              entityType="speakers"
+              selectedIds={Array.from(selected)}
+              onClear={clearSelection}
+              open={bulkScopeOpen}
+              onOpenChange={setBulkScopeOpen}
+            />
+          )}
+          <Button onClick={() => setAddOpen(true)} className="bg-[#FF005A] hover:bg-[#FF005A]/90">
+            <Plus className="h-4 w-4 mr-1.5" /> Add speaker
+          </Button>
+        </div>
       </div>
+
+      {/* Selection bar (Super Admin only) */}
+      {isSuperAdmin && (
+        <div className="flex flex-wrap items-center gap-2 text-xs bg-[#820A7D]/5 border border-[#820A7D]/20 rounded-md px-3 py-1.5">
+          {selected.size > 0 ? (
+            <>
+              <span className="font-semibold text-[#820A7D]">{selected.size} selected</span>
+              <Button size="sm" variant="ghost" className="h-6 text-[0.65rem]" onClick={selectAllVisible}>
+                Select all {filtered.length} visible
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 text-[0.65rem]" onClick={clearSelection}>
+                Clear
+              </Button>
+            </>
+          ) : (
+            <span className="text-black/60">
+              Tip: tick the checkbox on each speaker to enable bulk-assign scope.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Speaker grid */}
       {filtered.length === 0 ? (
@@ -159,8 +247,16 @@ export function SpeakersManager({ speakers, events }: Props) {
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((s) => (
-            <Card key={s.id} className="p-4 border border-black/10 bg-white">
+            <Card key={s.id} className={`p-4 border bg-white ${selected.has(s.id) ? "border-[#820A7D] bg-[#820A7D]/5" : "border-black/10"}`}>
               <div className="flex items-start gap-3">
+                {isSuperAdmin && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.id)}
+                    onChange={() => toggleSelect(s.id)}
+                    className="mt-1 h-3.5 w-3.5 accent-[#820A7D]"
+                  />
+                )}
                 <Avatar className="h-10 w-10 flex-shrink-0">
                   <AvatarImage src={s.photoUrl || undefined} alt={s.name} />
                   <AvatarFallback className="bg-black text-white text-xs font-semibold">

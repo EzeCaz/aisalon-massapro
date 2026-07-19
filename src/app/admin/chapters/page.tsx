@@ -5,8 +5,9 @@ import { db } from "@/lib/db";
 import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
+import { ChapterMapPanel } from "@/components/ais/chapter-map-panel";
 import Link from "next/link";
-import { ArrowRight, Globe2, MapPin, Users, CalendarDays } from "lucide-react";
+import { Globe2, MapPin, Users, CalendarDays, Plus } from "lucide-react";
 
 export const metadata = { title: "Chapters — AI Salon" };
 
@@ -40,7 +41,18 @@ export default async function ChaptersPage() {
     include: {
       chapters: {
         include: {
-          _count: { select: { users: true, events: true, rsvps: true, speakers: true } },
+          _count: {
+            select: {
+              users: true,
+              events: true,
+              rsvps: true,
+              speakers: true,
+              emailQueueItems: true,
+              // EventMockupDefault + QuizSession are scoped through Event,
+              // not directly on Chapter. We compute them separately below
+              // by joining through events.
+            },
+          },
         },
         orderBy: { name: "asc" },
       },
@@ -49,16 +61,72 @@ export default async function ChaptersPage() {
     orderBy: { name: "asc" },
   });
 
+  // Fetch mockup + quiz counts per chapter by joining through events.
+  // EventMockupDefault.eventId → Event.chapterId
+  // QuizSession.eventId → Event.chapterId
+  const chapterIds = countries.flatMap((c) => c.chapters.map((ch) => ch.id));
+  const [mockupCounts, quizCounts] = await Promise.all([
+    db.eventMockupDefault.groupBy({
+      by: ["eventId"],
+      where: { event: { chapterId: { in: chapterIds } } },
+      _count: { _all: true },
+    }),
+    db.quizSession.groupBy({
+      by: ["eventId"],
+      where: { event: { chapterId: { in: chapterIds } } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  // Resolve eventId → chapterId, then sum per chapter.
+  const eventsInScope = await db.event.findMany({
+    where: { chapterId: { in: chapterIds } },
+    select: { id: true, chapterId: true },
+  });
+  const eventToChapter = new Map<string, string>();
+  for (const e of eventsInScope) {
+    if (e.chapterId) eventToChapter.set(e.id, e.chapterId);
+  }
+  const mockupPerChapter = new Map<string, number>();
+  for (const m of mockupCounts) {
+    if (!m.eventId) continue;
+    const chId = eventToChapter.get(m.eventId);
+    if (!chId) continue;
+    mockupPerChapter.set(chId, (mockupPerChapter.get(chId) ?? 0) + m._count._all);
+  }
+  const quizPerChapter = new Map<string, number>();
+  for (const q of quizCounts) {
+    if (!q.eventId) continue;
+    const chId = eventToChapter.get(q.eventId);
+    if (!chId) continue;
+    quizPerChapter.set(chId, (quizPerChapter.get(chId) ?? 0) + q._count._all);
+  }
+
+  // Flatten into a chapters list for the map panel.
+  const chapters = countries.flatMap((country) =>
+    country.chapters.map((ch) => ({
+      id: ch.id,
+      name: ch.name,
+      slug: ch.slug,
+      city: ch.city,
+      countryId: country.id,
+      countryName: country.name,
+      countryCode: country.code,
+      countryFlagEmoji: country.flagEmoji,
+      memberCount: ch._count.users,
+      eventCount: ch._count.events,
+      rsvpCount: ch._count.rsvps,
+      speakerCount: ch._count.speakers,
+      emailCount: ch._count.emailQueueItems,
+      mockupCount: mockupPerChapter.get(ch.id) ?? 0,
+      quizCount: quizPerChapter.get(ch.id) ?? 0,
+    }))
+  );
+
   // Summary totals across visible scope
-  const totalChapters = countries.reduce((sum, c) => sum + c.chapters.length, 0);
-  const totalMembers = countries.reduce(
-    (sum, c) => sum + c.chapters.reduce((s, ch) => s + ch._count.users, 0),
-    0
-  );
-  const totalEvents = countries.reduce(
-    (sum, c) => sum + c.chapters.reduce((s, ch) => s + ch._count.events, 0),
-    0
-  );
+  const totalChapters = chapters.length;
+  const totalMembers = chapters.reduce((s, ch) => s + ch.memberCount, 0);
+  const totalEvents = chapters.reduce((s, ch) => s + ch.eventCount, 0);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -67,117 +135,70 @@ export default async function ChaptersPage() {
         <AdminTabs />
 
         {/* Header */}
-        <div className="mb-8">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            V7 Hierarchy
-          </p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-black flex items-center gap-3">
-            <Globe2 className="h-8 w-8 text-[#820A7D]" />
-            Global → Country → Chapter
-          </h1>
-          <p className="mt-2 text-sm text-black/80 max-w-3xl">
-            Every member, event, speaker, registrant, RSVP, email, and referral in the platform is
-            attached to a <strong>Chapter</strong> inside a <strong>Country</strong>. Super Admins
-            see the full tree; Admins see only their country. Use this page to add new countries or
-            chapters — every new chapter gets its own scope for reports, members, and email flows.
-          </p>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+              V7 Hierarchy
+            </p>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-black flex items-center gap-3">
+              <Globe2 className="h-8 w-8 text-[#820A7D]" />
+              Global → Country → Chapter
+            </h1>
+            <p className="mt-2 text-sm text-black/80 max-w-3xl">
+              Every member, event, speaker, registrant, RSVP, email, and referral in the platform is
+              attached to a <strong>Chapter</strong> inside a <strong>Country</strong>. Super Admins
+              see the full tree; Admins see only their country. Click a country or chapter pin on the
+              map to drill into its counts.
+            </p>
+          </div>
+          {isSuperAdmin && (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/admin/countries"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-2 text-xs hover:bg-[#820A7D] hover:text-white whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add country
+              </Link>
+              <Link
+                href="/admin/chapters/new"
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#820A7D] text-white font-semibold px-3 py-2 text-xs hover:bg-[#820A7D]/90 whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add chapter
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatCard label="Countries" value={countries.length} accent="#820A7D" icon={<Globe2 className="h-4 w-4" />} />
           <StatCard label="Chapters" value={totalChapters} accent="#FF005A" icon={<MapPin className="h-4 w-4" />} />
           <StatCard label="Members (scoped)" value={totalMembers} accent="#00E6FF" icon={<Users className="h-4 w-4" />} />
           <StatCard label="Events (scoped)" value={totalEvents} accent="#007E72" icon={<CalendarDays className="h-4 w-4" />} />
         </div>
 
-        {/* Country + Chapter tree */}
-        <div className="space-y-8">
-          {countries.length === 0 && (
-            <div className="rounded-md border border-black/10 bg-black/[0.02] p-8 text-center">
-              <p className="text-sm text-black/70">
-                No countries in your scope yet. Run <code className="bg-black/5 px-1.5 py-0.5 rounded text-xs">npx tsx scripts/v7-seed-israel-tel-aviv.ts</code> to seed Israel + Tel Aviv.
+        {/* World map + chapter tree panel */}
+        {chapters.length === 0 ? (
+          <div className="rounded-md border border-black/10 bg-black/[0.02] p-8 text-center">
+            <p className="text-sm text-black/70 mb-3">
+              No countries in your scope yet.
+            </p>
+            {isSuperAdmin ? (
+              <Link
+                href="/admin/countries"
+                className="inline-flex items-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-2 text-sm hover:bg-[#820A7D]/90"
+              >
+                <Plus className="h-4 w-4" /> Create your first country
+              </Link>
+            ) : (
+              <p className="text-xs text-black/60">
+                Ask a Super Admin to create a country and assign you to it.
               </p>
-            </div>
-          )}
-
-          {countries.map((country) => (
-            <section key={country.id} className="rounded-lg border border-black/10 bg-white overflow-hidden">
-              <header className="px-5 py-4 bg-[#820A7D]/[0.04] border-b border-[#820A7D]/20 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl leading-none">{country.flagEmoji ?? "🏳️"}</span>
-                  <div>
-                    <h2 className="text-lg font-bold text-black">
-                      {country.name}{" "}
-                      <span className="text-xs font-mono text-black/50">({country.code})</span>
-                    </h2>
-                    <p className="text-xs text-black/60">
-                      {country.chapters.length} chapter{country.chapters.length === 1 ? "" : "s"}
-                      {country.defaultEmailDomain && (
-                        <> · email domain <code className="bg-black/5 px-1 rounded text-[0.65rem]">{country.defaultEmailDomain}</code></>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                {isSuperAdmin && (
-                  <Link
-                    href={`/admin/chapters/new?countryId=${country.id}`}
-                    className="inline-flex items-center gap-2 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white whitespace-nowrap"
-                  >
-                    + Add chapter
-                  </Link>
-                )}
-              </header>
-
-              <div className="divide-y divide-black/5">
-                {country.chapters.map((chapter) => (
-                  <div key={chapter.id} className="px-5 py-4 flex items-center justify-between gap-3 flex-wrap hover:bg-black/[0.015]">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <MapPin className="h-4 w-4 text-[#FF005A] flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-black truncate">
-                          {chapter.name}
-                          {chapter.city && (
-                            <span className="ml-2 text-xs font-normal text-black/50">{chapter.city}</span>
-                          )}
-                          {!chapter.isActive && (
-                            <span className="ml-2 inline-flex items-center gap-1 rounded bg-black/10 px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-black/60">
-                              Inactive
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-black/60">
-                          <code className="bg-black/5 px-1 rounded text-[0.65rem]">/{chapter.slug}</code>
-                          {" · "}
-                          <code className="bg-black/5 px-1 rounded text-[0.65rem]">{chapter.timezone}</code>
-                          {chapter.whatsappGroupUrl && <> · <a href={chapter.whatsappGroupUrl} target="_blank" rel="noopener noreferrer" className="text-[#007E72] hover:underline">WhatsApp</a></>}
-                          {chapter.linkedinUrl && <> · <a href={chapter.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-[#007E72] hover:underline">LinkedIn</a></>}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs">
-                      <CountPill label="Members" value={chapter._count.users} />
-                      <CountPill label="Events" value={chapter._count.events} />
-                      <CountPill label="RSVPs" value={chapter._count.rsvps} />
-                      <CountPill label="Speakers" value={chapter._count.speakers} />
-                      <Link
-                        href={`/admin/chapters/${chapter.id}`}
-                        className="inline-flex items-center gap-1 rounded-md bg-black text-white font-semibold px-2.5 py-1 text-xs hover:bg-black/80 whitespace-nowrap"
-                      >
-                        Edit <ArrowRight className="h-3 w-3" />
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-                {country.chapters.length === 0 && (
-                  <div className="px-5 py-6 text-center text-sm text-black/50">
-                    No chapters in this country yet.
-                  </div>
-                )}
-              </div>
-            </section>
-          ))}
-        </div>
+            )}
+          </div>
+        ) : (
+          <ChapterMapPanel chapters={chapters} isSuperAdmin={isSuperAdmin} />
+        )}
 
         {/* Footer info */}
         <div className="mt-12 rounded-md border border-[#00E6FF]/30 bg-[#00E6FF]/[0.04] px-5 py-4 text-sm text-black/80">
@@ -214,14 +235,5 @@ function StatCard({ label, value, accent, icon }: { label: string; value: number
       </div>
       <div className="mt-1 text-3xl font-extrabold text-black">{value}</div>
     </div>
-  );
-}
-
-function CountPill({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex items-baseline gap-1">
-      <span className="font-bold text-black">{value}</span>
-      <span className="text-black/50">{label}</span>
-    </span>
   );
 }

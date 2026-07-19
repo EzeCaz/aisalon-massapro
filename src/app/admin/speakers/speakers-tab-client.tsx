@@ -22,12 +22,19 @@ import {
 } from "lucide-react";
 import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 import { formatDateTlv } from "@/lib/datetime-tlv";
+import {
+  CountryChapterScopeFilter,
+  type ScopeFilterCountry,
+  type ScopeFilterChapter,
+} from "@/components/ais/country-chapter-scope-filter";
+import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
 type SpeakerEvent = {
   id: string;
   title: string;
   slug: string;
   startsAt: string;
+  chapterRef?: { id: string; country: { name: string; code: string; flagEmoji?: string | null } | null } | null;
 };
 
 type SpeakerUser = {
@@ -50,6 +57,7 @@ type Speaker = {
   order: number;
   createdAt: string;
   updatedAt: string;
+  chapterId?: string | null;
   event: SpeakerEvent;
   user: SpeakerUser | null;
   _count: { images: number; presentations: number; messages: number };
@@ -74,10 +82,16 @@ export function SpeakersTabClient({
   speakers: initialSpeakers,
   events,
   users,
+  allCountries,
+  allChapters,
+  isSuperAdmin,
 }: {
   speakers: Speaker[];
   events: EventOption[];
   users: UserOption[];
+  allCountries?: ScopeFilterCountry[];
+  allChapters?: ScopeFilterChapter[];
+  isSuperAdmin?: boolean;
 }) {
   const [speakers, setSpeakers] = React.useState<Speaker[]>(initialSpeakers);
   const [search, setSearch] = React.useState("");
@@ -85,15 +99,29 @@ export function SpeakersTabClient({
   const [editing, setEditing] = React.useState<Speaker | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  // V7: scope filter (Super Admin only)
+  const [scopeFilter, setScopeFilter] = React.useState<{ countryId: string; chapterId: string }>({
+    countryId: "",
+    chapterId: "",
+  });
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [bulkScopeOpen, setBulkScopeOpen] = React.useState(false);
 
   const filtered = React.useMemo(() => {
     return speakers.filter((s) => {
       if (eventFilter !== "ALL" && s.eventId !== eventFilter) return false;
+      // V7 scope filter
+      if (scopeFilter.chapterId) {
+        if ((s.chapterId ?? undefined) !== scopeFilter.chapterId) return false;
+      } else if (scopeFilter.countryId) {
+        // Match by country code on the event's chapterRef OR by the speaker's chapterId
+        const country = allCountries?.find((c) => c.id === scopeFilter.countryId);
+        const evCode = s.event?.chapterRef?.country?.code;
+        const spChapterCountry = allChapters?.find((c) => c.id === s.chapterId)?.countryId;
+        if (country && evCode !== country.code && spChapterCountry !== scopeFilter.countryId) return false;
+      }
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
-      // Defensive: API should always include `event`, but if a future
-      // code path returns a speaker without it we degrade gracefully
-      // instead of throwing "Cannot read properties of undefined".
       const eventTitle = s.event?.title ?? "";
       return (
         s.name.toLowerCase().includes(q) ||
@@ -104,7 +132,24 @@ export function SpeakersTabClient({
         eventTitle.toLowerCase().includes(q)
       );
     });
-  }, [speakers, search, eventFilter]);
+  }, [speakers, search, eventFilter, scopeFilter, allCountries, allChapters]);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelected(new Set(filtered.map((s) => s.id)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
 
   const handleSaved = (speaker: Speaker) => {
     setSpeakers((prev) => {
@@ -139,6 +184,44 @@ export function SpeakersTabClient({
 
   return (
     <div>
+      {/* V7 scope filter (Super Admin only) */}
+      {isSuperAdmin && allCountries && allChapters && allCountries.length > 0 && (
+        <CountryChapterScopeFilter
+          countries={allCountries}
+          chapters={allChapters}
+          value={scopeFilter}
+          onChange={setScopeFilter}
+        />
+      )}
+
+      {/* Bulk-action bar (Super Admin only) */}
+      {isSuperAdmin && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 my-2 bg-[#820A7D]/5 border border-[#820A7D]/20 rounded-md px-3 py-2">
+          <span className="text-sm font-semibold text-[#820A7D]">{selected.size} selected</span>
+          <button
+            type="button"
+            onClick={selectAllVisible}
+            className="text-xs font-semibold text-black/70 hover:text-black underline-offset-4 hover:underline"
+          >
+            Select all {filtered.length} visible
+          </button>
+          <BulkAssignScopeDialog
+            entityType="speakers"
+            selectedIds={Array.from(selected)}
+            onClear={clearSelection}
+            open={bulkScopeOpen}
+            onOpenChange={setBulkScopeOpen}
+          />
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="ml-auto text-xs font-semibold text-[#FF005A] hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
         <div className="relative flex-1">
@@ -194,6 +277,7 @@ export function SpeakersTabClient({
           <table className="w-full text-sm">
             <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
               <tr>
+                {isSuperAdmin && <th className="w-8 px-2 py-3"></th>}
                 <th className="text-left px-4 py-3 font-bold">Speaker</th>
                 <th className="text-left px-4 py-3 font-bold">Topic / Role</th>
                 <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Event</th>
@@ -204,7 +288,17 @@ export function SpeakersTabClient({
             </thead>
             <tbody>
               {filtered.map((s) => (
-                <tr key={s.id} className="border-t border-black/5 hover:bg-black/[0.015]">
+                <tr key={s.id} className={`border-t border-black/5 ${selected.has(s.id) ? "bg-[#820A7D]/5" : "hover:bg-black/[0.015]"}`}>
+                  {isSuperAdmin && (
+                    <td className="px-2 py-3 text-center align-top">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(s.id)}
+                        onChange={() => toggleSelect(s.id)}
+                        className="h-3.5 w-3.5 accent-[#820A7D]"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {s.photoUrl ? (

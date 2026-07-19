@@ -6,6 +6,7 @@ import {
   canAny,
   getCoHostedEventIds,
   getUserScope,
+  isSuperAdminEmail,
   scopeEventWhere,
   scopeChapterWhere,
   scopeUserWhere,
@@ -121,6 +122,24 @@ export default async function AdminSpeakersPage() {
   const eventsJson = JSON.parse(JSON.stringify(events));
   const usersJson = JSON.parse(JSON.stringify(users));
 
+  // V7: load all countries + chapters (Super Admin only — for the scope filter).
+  let allCountries: { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[] = [];
+  let allChapters: { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[] = [];
+  if (isSuperAdminEmail(me.email)) {
+    [allCountries, allChapters] = await Promise.all([
+      db.country.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, code: true, flagEmoji: true, slug: true, isActive: true },
+        orderBy: { name: "asc" },
+      }),
+      db.chapter.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, countryId: true, city: true, isActive: true },
+        orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+      }),
+    ]);
+  }
+
   const badge = scopeBadge(scope);
 
   return (
@@ -150,6 +169,9 @@ export default async function AdminSpeakersPage() {
           speakers={speakersJson}
           events={eventsJson}
           users={usersJson}
+          allCountries={allCountries}
+          allChapters={allChapters}
+          isSuperAdmin={isSuperAdminEmail(me.email)}
         />
       </main>
     </div>

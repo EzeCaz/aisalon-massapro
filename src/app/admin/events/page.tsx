@@ -141,6 +141,24 @@ export default async function AdminEventsPage() {
     },
   }));
 
+  // V7: load all countries + chapters (Super Admin only — for the scope filter).
+  let allCountries: { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[] = [];
+  let allChapters: { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[] = [];
+  if (isSuperAdminEmail(me.email)) {
+    [allCountries, allChapters] = await Promise.all([
+      db.country.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, code: true, flagEmoji: true, slug: true, isActive: true },
+        orderBy: { name: "asc" },
+      }),
+      db.chapter.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, countryId: true, city: true, isActive: true },
+        orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+      }),
+    ]);
+  }
+
   const badge = scopeBadge(scope);
 
   return (
@@ -176,7 +194,12 @@ export default async function AdminEventsPage() {
           </Link>
         </div>
 
-        <AdminEventsListWithActions events={serialized} />
+        <AdminEventsListWithActions
+          events={serialized}
+          allCountries={allCountries}
+          allChapters={allChapters}
+          isSuperAdmin={isSuperAdminEmail(me.email)}
+        />
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">

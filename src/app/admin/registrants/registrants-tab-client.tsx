@@ -35,6 +35,12 @@ import {
 } from "lucide-react";
 import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 import { formatDateTimeTlv, formatDateTlv, formatTimeTlv } from "@/lib/datetime-tlv";
+import {
+  CountryChapterScopeFilter,
+  type ScopeFilterCountry,
+  type ScopeFilterChapter,
+} from "@/components/ais/country-chapter-scope-filter";
+import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
 type RsvpEvent = {
   id: string;
@@ -59,6 +65,7 @@ type Rsvp = {
   createdAt: string;
   updatedAt: string;
   userId: string | null;
+  chapterId?: string | null;
   checkInCode: string | null;
   checkedInAt: string | null;
   doorCheckedAt: string | null;
@@ -140,12 +147,16 @@ export function RegistrantsTabClient({
   currentUserRole,
   currentUserEmail,
   coHostedEventIds = [],
+  allCountries,
+  allChapters,
 }: {
   rsvps: Rsvp[];
   events: EventOption[];
   currentUserRole: string;
   currentUserEmail: string;
   coHostedEventIds?: string[];
+  allCountries?: ScopeFilterCountry[];
+  allChapters?: ScopeFilterChapter[];
 }) {
   const [rsvps, setRsvps] = React.useState<Rsvp[]>(initialRsvps);
   const [search, setSearch] = React.useState("");
@@ -169,6 +180,13 @@ export function RegistrantsTabClient({
   // currently-selected eventFilter, or the first event if "ALL".
   const [importEventId, setImportEventId] = React.useState<string>("");
   const [editOpen, setEditOpen] = React.useState(false);
+  // V7: scope filter (Super Admin only)
+  const [scopeFilter, setScopeFilter] = React.useState<{ countryId: string; chapterId: string }>({
+    countryId: "",
+    chapterId: "",
+  });
+  const [bulkScopeOpen, setBulkScopeOpen] = React.useState(false);
+  const isSuperAdmin = currentUserRole === "SUPER_ADMIN";
 
   // ---- Bulk selection state ----
   // Set of RSVP IDs that are currently checked. We use a Set for O(1)
@@ -207,6 +225,8 @@ export function RegistrantsTabClient({
       // "Look for members".
       if (linkFilter === "UNLINKED" && r.userId) return false;
       if (linkFilter === "LINKED" && !r.userId) return false;
+      // V7 scope filter (Super Admin only)
+      if (scopeFilter.chapterId && (r.chapterId ?? undefined) !== scopeFilter.chapterId) return false;
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
       return (
@@ -215,7 +235,7 @@ export function RegistrantsTabClient({
         r.event.title.toLowerCase().includes(q)
       );
     });
-  }, [rsvps, search, eventFilter, statusFilter, linkFilter]);
+  }, [rsvps, search, eventFilter, statusFilter, linkFilter, scopeFilter]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -667,6 +687,18 @@ export function RegistrantsTabClient({
         </button>
       </div>
 
+      {/* V7 scope filter (Super Admin only) */}
+      {isSuperAdmin && allCountries && allChapters && allCountries.length > 0 && (
+        <div className="mb-3">
+          <CountryChapterScopeFilter
+            countries={allCountries}
+            chapters={allChapters}
+            value={scopeFilter}
+            onChange={setScopeFilter}
+          />
+        </div>
+      )}
+
       {/* Selection indicator bar — only visible when rows are selected */}
       {selected.size > 0 && (
         <div className="mb-3 flex items-center justify-between rounded-md border border-[#820A7D]/30 bg-[#820A7D]/5 px-3 py-2 text-sm">
@@ -681,6 +713,15 @@ export function RegistrantsTabClient({
             >
               <SearchCheck className="h-3.5 w-3.5" /> Find members for selected
             </button>
+            {isSuperAdmin && (
+              <BulkAssignScopeDialog
+                entityType="registrants"
+                selectedIds={Array.from(selected)}
+                onClear={() => setSelected(new Set())}
+                open={bulkScopeOpen}
+                onOpenChange={setBulkScopeOpen}
+              />
+            )}
             <button
               type="button"
               onClick={() => setSelected(new Set())}
