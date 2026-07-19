@@ -3718,3 +3718,44 @@ Stage Summary:
 - All public pages now render correctly. Auth-gated pages redirect to
   /login as expected.
 - The temporary debug endpoint + error boundary have been removed.
+
+---
+Task ID: 2026-07-19-v7-seed-script-rewrite
+Agent: Super Z (main)
+Task: User asked "How do i run it? npx tsx scripts/v7-seed-israel-tel-aviv.ts". Discovered the script didn't exist; meanwhile remote origin/main had been updated by the V7 team (commits d4ecb98 + 03a96b5) with a full Country/Chapter hierarchy using FKs — making my initial flat-string approach redundant.
+
+Work Log:
+- Tried to commit my flat-string geo-scoping changes (commit e5c14c3) and push. Push was rejected — origin/main had 16 commits ahead, including d4ecb98 "V7: implement Global → Country → Chapter hierarchy" and 03a96b5 "V7 hierarchy: super admin can allocate admins to country+chapter".
+- Inspected origin/main's V7 implementation: full Country + Chapter models with FKs, CHAPTER_ORGANIZER role, scope helpers (getUserScope, scopeUserWhere, scopeEventWhere, scopeChapterWhere), /admin/chapters + /admin/reports pages, scoped queries on every admin page, scope badges in headers. Comprehensive — covers all 3 of the user's requirements and more.
+- Decision: my flat-string approach (User.country String?, User.chapter String?) was redundant and conflicting with the V7 design (User.countryId FK, User.chapterId FK). Aborted my approach.
+- `git reset --hard origin/main` to discard my local commit (e5c14c3) and adopt the V7 implementation. Verified HEAD is now at b6fee7a.
+- Discovered: scripts/v7-seed-israel-tel-aviv.ts was an UNTRACKED file (the scripts/ directory is in .gitignore). The V7 team's commit message said "scripts/v7-seed-israel-tel-aviv.ts — already existed, now run" but they never committed it. After my reset, the file on disk was MY obsolete flat-string version, which is incompatible with the V7 schema (it tries to set User.country as a string, but the V7 schema has User.countryId as an FK).
+- Rewrote scripts/v7-seed-israel-tel-aviv.ts to be V7-compatible:
+  * Upserts Country "Israel" (code=IL, slug=israel, flagEmoji=🇮🇱) by slug.
+  * Upserts Chapter "Tel Aviv" (slug=tel-aviv, timezone=Asia/Jerusalem, countryId=Israel.id) by slug.
+  * Backfills User.countryId + User.chapterId (only NULL rows — preserves admin reassignments).
+  * Backfills Event.chapterId (skips isCrossChapter=true events).
+  * Backfills EventRsvp.chapterId, Speaker.chapterId.
+  * Backfills email-related chapterId fields in parallel: EmailQueue, EmailRecipient, EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow, EmailAudience, ReferralVisit, ReferralAttribution.
+  * Verification report: lists every Country with user/chapter counts + every Chapter with user/event/rsvp/speaker counts.
+  * Sanity check: counts NULL countryId/chapterId rows; fails loudly if >0.
+  * Idempotent: re-running on already-seeded data produces 0 updates. Tested locally.
+- Updated scripts/run-seed-israel.sh wrapper comment to reflect V7 design.
+- Tested end-to-end against local SQLite sandbox:
+  * Created 2 test users + 1 test event with NULL countryId/chapterId.
+  * Ran ./scripts/run-seed-israel.sh — backfilled 2 users (countryId + chapterId) + 1 event (chapterId). Verification showed: Country "Israel (IL)" with 2 users + 1 chapter, Chapter "Tel Aviv" with 2 users + 1 event.
+  * Re-ran — 0 updates (idempotent).
+- Verified dev server starts cleanly. /admin/chapters and /admin/reports return HTTP 307 (auth redirect) when unauthenticated — correct.
+
+Stage Summary:
+- The user's 3 requirements are fully met by the V7 hierarchy on origin/main:
+  1. "All current users/members/registrants/events linked to Israel/Tel-Aviv" — the V7 schema has countryId/chapterId FKs on User, Event, EventRsvp, Speaker, and every email-related model. Run the seed script once to backfill all NULL rows to Israel/Tel-Aviv.
+  2. "Super admin can add/change country and chapter for any user/member/registrant" — the V7 implementation includes /admin/chapters (full CRUD UI for chapters), /admin/chapters/[id]/chapter-editor.tsx, /api/admin/chapters (POST + GET), /api/admin/chapters/[id] (PATCH + DELETE), and Super-Admin-only country/chapter assignment in the user-edit dialog.
+  3. "All reports linked to Israel/Tel-Aviv" — the new /admin/reports page is fully scoped by Country/Chapter with a country breakdown table + chapter breakdown table. Every admin analytics query uses scopeChapterWhere.
+- Deployment checklist for the user (PRODUCTION):
+  1. Push to origin/main (already done — V7 commits are on main).
+  2. On Vercel, ensure `prisma migrate deploy` or `prisma db push` runs in the build to apply the V7 schema to the prod Postgres DB.
+  3. Run the seed against prod: easiest is a Vercel shell, or locally with `DATABASE_URL=<prod-url> ./scripts/run-seed-israel.sh`. The wrapper detects Postgres and skips the SQLite client swap.
+  4. Verify on /admin/chapters — should show "Israel" with "Tel Aviv" chapter under it, with real member/event counts.
+  5. Verify on /admin/reports — should show country breakdown (Israel row) + chapter breakdown (Tel Aviv row).
+- Note: the scripts/ directory is gitignored, so the seed script lives only on disk. Anyone running it needs the latest version (which I just rewrote). For team coordination, consider committing it to a non-ignored path or sharing it via a private gist.
