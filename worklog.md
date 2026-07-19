@@ -3526,3 +3526,105 @@ Stage Summary:
      and use the new "Hierarchy assignment (V7)" section to allocate
      them to a country + chapter (e.g. promote a member to ADMIN role
      and assign them to a new country when expanding to other regions)
+
+---
+Task ID: 2026-07-19-fix-production-admin-crash
+Agent: Super Z (main)
+Task: User reported /admin page crashing in production with server
+  components render errors (digest: 871048232, 1437300306). Two different
+  error digests suggests multiple pages affected.
+
+Work Log:
+- Root cause analysis:
+  * Inspected prisma/schema.prisma and found the datasource provider
+    was switched from "postgresql" to "sqlite" during the prior V7
+    session (commit d4ecb98) for local sandbox dev
+  * That commit was pushed to origin/main, so Vercel auto-deployed
+    with the SQLite provider in the schema
+  * But Vercel's DATABASE_URL points at Neon Postgres — Prisma
+    generated a SQLite client, then tried to connect to Postgres,
+    causing every DB query to crash immediately
+  * Result: /admin and any other DB-using server component crashes
+    with "An error occurred in the Server Components render"
+  * The error message is intentionally vague in production builds
+    (Next.js hides details to avoid leaking sensitive info)
+
+- Secondary issue: V7 migration was incomplete
+  * Original V7-add-hierarchy migration SQL only added chapterId to
+    User and Event tables
+  * But schema.prisma has chapterId on 11 more tables: Speaker,
+    EventRsvp, EmailQueue, EmailRecipient, EmailCampaign,
+    EmailTemplate, EmailStageTemplate, EmailFlow, EmailAudience,
+    ReferralVisit, ReferralAttribution
+  * Even after fixing the provider, prisma migrate deploy would have
+    left the DB in a drifted state — runtime queries on those tables
+    would fail with "column chapterId does not exist"
+
+- Tertiary issue: V7 migration folder wasn't picked up by Prisma
+  * Folder name was "V7-add-hierarchy" — Prisma migrations need to
+    follow the <timestamp>_<name> pattern (e.g. 20260719000000_v7)
+  * prisma migrate deploy would have silently skipped this migration
+
+- Fixes applied:
+  1. prisma/schema.prisma: provider switched back to "postgresql"
+     (production schema). Comment block updated to point at the
+     sandbox file for local dev.
+
+  2. prisma/schema.sqlite-sandbox.prisma: regenerated to mirror the
+     full V7 schema.prisma (Country, Chapter, ChapterSetting,
+     ChapterEmailTemplateOverride + all chapterId columns). Provider
+     stays "sqlite". Local sandbox scripts use --schema flag.
+
+  3. prisma/migrations/V7-add-hierarchy/ → renamed to
+     prisma/migrations/20260719000000_v7_add_hierarchy/ (proper
+     Prisma timestamp folder naming so prisma migrate deploy picks
+     it up). Removed "DRAFT ONLY — DO NOT RUN YET" header.
+
+  4. Migration SQL expanded: added ALTER TABLE statements for the 11
+     missing tables (Speaker, EventRsvp, EmailQueue, EmailRecipient,
+     EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow,
+     EmailAudience, ReferralVisit, ReferralAttribution) — each gets
+     chapterId TEXT + FK to Chapter + index.
+
+  5. package.json build script:
+     OLD: prisma generate && next build && ...
+     NEW: prisma generate && prisma migrate deploy && next build && ...
+     So pending migrations auto-apply to Neon DB on every Vercel deploy.
+
+  6. package.json new helper scripts:
+     - db:migrate:deploy (manual migrate deploy)
+     - db:sandbox:push (push sqlite schema to local sandbox)
+     - db:sandbox:generate (generate sqlite client)
+     - db:sandbox:studio (open Prisma Studio against sqlite sandbox)
+
+- Verification:
+  * npx prisma validate --schema=prisma/schema.prisma with a postgres
+    DATABASE_URL → "The schema is valid"
+  * npx prisma validate --schema=prisma/schema.sqlite-sandbox.prisma → valid
+  * npx prisma generate --schema=prisma/schema.sqlite-sandbox.prisma → ok
+  * npx prisma generate --schema=prisma/schema.prisma (with postgres URL)
+    → ok
+  * node scripts/verify-v7.js against local sqlite sandbox → still
+    reports 1 country (Israel), 1 chapter (Tel Aviv), 1 user
+    (eze@massapro.com SUPER_ADMIN) correctly tagged
+
+- Committed (967f86f) and pushed to origin/main. Vercel auto-deploying.
+
+Stage Summary:
+- Vercel will redeploy with the fixed schema (postgresql provider).
+- During build, prisma migrate deploy will:
+  1. Create Country, Chapter, ChapterSetting,
+     ChapterEmailTemplateOverride tables
+  2. Add countryId + chapterId columns to User (with FK + indexes)
+  3. Add chapterId + isCrossChapter to Event (with FK + indexes)
+  4. Add chapterId to Speaker, EventRsvp, EmailQueue, EmailRecipient,
+     EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow,
+     EmailAudience, ReferralVisit, ReferralAttribution
+- After deployment, /admin will render again.
+- Super Admin (eze@massapro.com) will see Global scope — pages work
+  even before the seed script runs (queries return empty/null for
+  country/chapter but the page handles that gracefully).
+- To populate Israel + Tel Aviv + backfill existing rows, the user
+  needs to run:
+    DATABASE_URL=<production Neon URL> npx tsx scripts/v7-seed-israel-tel-aviv.ts
+  This is the ONLY manual step — the schema migration is now automated.
