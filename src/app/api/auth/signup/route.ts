@@ -58,23 +58,36 @@ export async function POST(req: NextRequest) {
 
     try {
       const existing = await db.user.findUnique({ where: { email } });
-      // Generate a utmUid for the new user (or for the existing user if
-      // they don't have one yet — covers the case where a Google-only user
-      // signed in before the utmUid column existed).
-      let utmUid: string | undefined;
-      for (let i = 0; i < 5; i++) {
-        try {
+      userExisted = !!existing;
+      userHasPassword = !!existing?.passwordHash;
+
+      // ----------------------------------------------------------------------
+      // STEP 1: ALWAYS persist the new passwordHash for existing users.
+      // This is the whole point of the signup/"forgot password" flow —
+      // the user gets a new password via email, and that same password
+      // MUST be the one whose hash is stored in the DB.
+      //
+      // BUG HISTORY (fixed 2026-07-19): previously this write was buried
+      // inside the utmUid-allocation retry loop. When an existing user
+      // already had a utmUid (which is 100% of returning users after
+      // the V5.18 backfill), the loop would `break` BEFORE reaching
+      // `db.user.update({ passwordHash })` — leaving the DB with the
+      // OLD hash while the email went out with the NEW plaintext.
+      // Symptom: signup email said password B, login only accepted
+      // password A (or failed entirely for Google-only users whose
+      // hash was null).
+      // ----------------------------------------------------------------------
+      if (existing) {
+        await db.user.update({
+          where: { id: existing.id },
+          data: { passwordHash, name: displayName },
+        });
+      } else {
+        // Brand-new user — allocate utmUid with collision retry, then create.
+        let utmUid: string | undefined;
+        for (let i = 0; i < 5; i++) {
           utmUid = generateUtmUid();
-          if (existing) {
-            if (existing.utmUid) {
-              utmUid = existing.utmUid;
-              break;
-            }
-            await db.user.update({
-              where: { id: existing.id },
-              data: { passwordHash, name: displayName, utmUid },
-            });
-          } else {
+          try {
             await db.user.create({
               data: {
                 email,
@@ -84,34 +97,46 @@ export async function POST(req: NextRequest) {
                 utmUid,
               },
             });
+            break;
+          } catch (err: unknown) {
+            const code = (err as { code?: string })?.code;
+            if (code === "P2002" && i < 4) {
+              // utmUid collision — regenerate + retry.
+              utmUid = undefined;
+              continue;
+            }
+            throw err;
           }
-          break;
-        } catch (err: unknown) {
-          const code = (err as { code?: string })?.code;
-          if (code === "P2002" && i < 4) {
-            // Unique constraint on utmUid — regenerate + retry. (Note: we
-            // don't try to disambiguate from email collisions here; those
-            // would mean a race condition where another signup created the
-            // same email between our findUnique and our create. That's a
-            // separate error path and will surface below.)
-            utmUid = undefined;
-            continue;
-          }
-          throw err;
         }
-      }
-      if (!utmUid) {
-        // All retries failed (essentially impossible). Fall back to creating
-        // the user without a utmUid — backfill script will fill it in later.
-        if (existing) {
-          await db.user.update({
-            where: { id: existing.id },
-            data: { passwordHash, name: displayName },
-          });
-        } else {
+        if (!utmUid) {
+          // All retries failed (essentially impossible). Fall back to creating
+          // the user without a utmUid — backfill script will fill it in later.
           await db.user.create({
             data: { email, name, passwordHash, role: "MEMBER" },
           });
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // STEP 2 (best-effort, non-blocking): backfill utmUid for existing
+      // users that somehow don't have one yet. Rare since V5.18 backfill.
+      // Failure here MUST NOT block signup — utmUid is non-critical.
+      // ----------------------------------------------------------------------
+      if (existing && !existing.utmUid) {
+        for (let i = 0; i < 5; i++) {
+          const candidate = generateUtmUid();
+          try {
+            await db.user.update({
+              where: { id: existing.id },
+              data: { utmUid: candidate },
+            });
+            break;
+          } catch (err: unknown) {
+            const code = (err as { code?: string })?.code;
+            if (code === "P2002" && i < 4) continue;
+            console.warn("[signup] utmUid backfill failed (non-blocking):", err);
+            break;
+          }
         }
       }
 
@@ -136,8 +161,6 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-      userExisted = !!existing;
-      userHasPassword = !!existing?.passwordHash;
     } catch (dbErr) {
       console.error("[signup] DB error:", dbErr);
       // The most common cause in production is a misconfigured DATABASE_URL
