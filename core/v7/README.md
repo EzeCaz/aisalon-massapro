@@ -66,3 +66,20 @@ columns are dropped or modified — so rollback is safe.
 - [ ] `getBrandingForContext(chapterId)` resolver in `src/lib/site-settings.ts`
 - [ ] Email orchestrator: resolve `fromEmail` / `replyTo` from chapter branding
 - [ ] Public event pages: resolve branding from `event.chapterId`
+- [ ] **URL routing** (Q2): new `src/app/(public)/[chapter]/events/[slug]/page.tsx`, `src/app/(public)/[chapter]/events/page.tsx`, `src/app/(public)/[chapter]/page.tsx` + 301 redirect from old `/events/[slug]` → `/{chapter}/events/[slug]`
+- [ ] **Event editor** (Q3): add `isCrossChapter` toggle (Super Admin only) to event create/edit form
+- [ ] **RSVP flow** (Q5): in `src/app/api/events/[slug]/rsvp/route.ts`, after successful RSVP insert, backfill `User.chapterId = event.chapterId` if currently null
+- [ ] **Role-change API** (Q4): in `/api/admin/members/[id]/role`, enforce country-scoped promotions per the plan §8 Q4 rules
+
+## Confirmed design decisions (answered 2026-07-18)
+
+See `plan.md` §8 for full details. Summary:
+
+| Q | Decision |
+|---|---|
+| 1 | Keep `@aisalon.massapro.com` globally (no per-chapter email domain at launch) |
+| 2 | Public URLs become `/{chapter-slug}/events/{event-slug}` (e.g. `/tel-aviv/events/ai-salon-37`); 301 redirect from old URLs |
+| 3 | Cross-chapter events allowed only when Super Admin sets `Event.isCrossChapter = true` (defaults to false) |
+| 4 | Admin can promote Member → Chapter Organizer within their own country (cannot touch Admin or Super Admin) |
+| 5 | Members do NOT pick their chapter — auto-assigned on first RSVP; stays null if never RSVP'd |
+| 6 | **PENDING** — speaker-message relay routing (see plan §8a for options A-E) |

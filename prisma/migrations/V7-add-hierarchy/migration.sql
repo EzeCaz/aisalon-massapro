@@ -133,15 +133,21 @@ ALTER TABLE "User"
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- ----------------------------------------------------------------------------
--- 6. Add chapterId FK to Event
+-- 6. Add chapterId FK to Event + isCrossChapter flag
 -- ----------------------------------------------------------------------------
 -- (Event already has a free-form `chapter String @default("Tel Aviv")` column;
 --  we add a real FK column alongside it. The String column stays as a
 --  denormalized cache of Chapter.name for backwards compat.)
+--
+-- isCrossChapter (Q3): when true (Super Admin only can set), the event
+-- appears in the listings of ALL chapters in its country. The event is
+-- still owned by `chapterId` for admin scope checks.
 ALTER TABLE "Event"
-  ADD COLUMN "chapterId"  TEXT;
+  ADD COLUMN "chapterId"      TEXT,
+  ADD COLUMN "isCrossChapter" BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX "Event_chapterId_idx" ON "Event"("chapterId");
+CREATE INDEX "Event_isCrossChapter_idx" ON "Event"("isCrossChapter");
 
 ALTER TABLE "Event"
   ADD CONSTRAINT "Event_chapterId_fkey"

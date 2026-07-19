@@ -428,14 +428,99 @@ Aggregated cross-chapter view for Super Admins and Admins:
 
 ---
 
-## 8. Open Questions (to confirm with eze before migration)
+## 8. Confirmed Design Decisions (answered 2026-07-18)
 
-1. **Email domain per chapter** — Should the Tel Aviv chapter send from `@aisalon.co.il` (new domain) or keep `@aisalon.massapro.com` (current)? This affects DNS SPF/DKIM setup.
-2. **Chapter slug in URL** — Should public event URLs include the chapter? e.g. `/events/tel-aviv/ai-salon-37` instead of `/events/ai-salon-37`? Or keep flat URLs and resolve chapter from the event record?
-3. **Cross-chapter events** — Can an event span multiple chapters (e.g. a joint TLV+Jerusalem event)? V7 model says NO (each event has exactly one `chapterId`), but worth confirming.
-4. **Chapter Organizer promotion flow** — Can an Admin promote a Member to Chapter Organizer within their country, or does Super Admin have to do it? (Plan says Admin can, but only within their country.)
-5. **Member self-assignment** — When a member signs up, can they pick their chapter? Or is it auto-assigned based on the event they first RSVP'd to? (Plan says: auto-assigned to the event's chapter on first RSVP.)
-6. **Country admin email relay** — V6 relays speaker messages to `ADMIN_EMAIL`. V7 should relay to the chapter admin instead. Confirm: route speaker messages to all `CHAPTER_ORGANIZER` users of that chapter?
+1. **Email domain per chapter** → **KEEP `@aisalon.massapro.com` globally for now.**
+   The `ChapterSetting.emailDomain` / `emailFromName` / `emailReplyTo` keys
+   still exist in the schema (so a future chapter CAN override), but no
+   chapter sets them initially — every chapter falls back to the global
+   default. No DNS/SPF/DKIM changes needed for V7 launch.
+   - Implication: `defaultEmailDomain` / `defaultFromName` / `defaultReplyTo`
+     on the `Country` model are **nullable** and stay null for Israel at launch.
+
+2. **Chapter slug in URL** → **YES — `/{chapter-slug}/events/{event-slug}`.**
+   Public event URLs become chapter-prefixed:
+   - Old V6: `/events/ai-salon-37`
+   - New V7: `/tel-aviv/events/ai-salon-37`
+   - Chapter listing page: `/tel-aviv/events` (was `/events`)
+   - Chapter home page: `/tel-aviv` (new)
+   - Admin URLs stay chapter-agnostic: `/admin/events/ai-salon-37` (no prefix — admins manage across chapters)
+   - Email template token `{{eventUrl}}` resolves to the chapter-prefixed URL.
+   - **Backwards compat**: `/events/{slug}` returns 301 redirect to `/{event.chapter.slug}/events/{slug}`.
+   - Default chapter (when no chapter in URL or visitor first lands): Tel Aviv.
+   - Implication: routing changes in `src/app/(public)/[chapter]/events/[slug]/page.tsx` (new), `src/app/(public)/[chapter]/events/page.tsx` (new), `src/app/(public)/[chapter]/page.tsx` (new chapter landing).
+
+3. **Cross-chapter events** → **Only if Super Admin explicitly allows.**
+   By default, every event belongs to exactly one chapter (`Event.chapterId`).
+   A Super Admin can flip `Event.isCrossChapter = true` from the admin event
+   editor. When true:
+   - The event appears in the listings of ALL chapters in its country.
+   - The event's `chapterId` is still the "owning" chapter (for admin scope checks).
+   - The event's URL uses the owning chapter's slug.
+   - Members RSVPing from another chapter's listing still get their `User.chapterId`
+     set to the **owning chapter** (not the listing chapter), because chapter
+     self-assignment is disabled (see Q5).
+   - This requires a new column: `Event.isCrossChapter Boolean @default(false)`.
+   - The flag is only editable by Super Admin (UI control hidden for everyone else).
+
+4. **Admin can promote Member → Chapter Organizer within their country** → **YES.**
+   The role-change API (`/api/admin/members/[id]/role`) enforces:
+   - Super Admin can promote/demote to any role in any country/chapter.
+   - Admin can promote a Member to Chapter Organizer, but ONLY with a `chapterId`
+     that belongs to their own country. They cannot promote to Admin or Super Admin.
+   - Admin can demote a Chapter Organizer back to Member within their country.
+   - Admin cannot touch another Admin or Super Admin.
+   - Super Admin can promote an Admin to Admin of a different country (re-scope).
+
+5. **Member self-assignment of chapter** → **NO.**
+   Members do NOT pick their chapter on signup or via a profile setting.
+   Instead:
+   - On first RSVP, `User.chapterId` is auto-set to the event's `chapterId`
+     (only if `User.chapterId` is currently null).
+   - On first event creation by a new admin, the admin's `countryId` / `chapterId`
+     are inherited from the event (only if currently null).
+   - Members who never RSVP stay `chapterId = null` (they appear only in the
+     Super Admin's "unassigned" filter, not in any chapter-scoped list).
+   - A Super Admin or Admin can manually assign a `chapterId` to a member via
+     the admin member editor.
+   - Implication: `EventRsvp` creation flow needs a hook that backfills
+     `User.chapterId` if null. Implemented in
+     `src/app/api/events/[slug]/rsvp/route.ts` after successful RSVP insert.
+
+6. **Speaker-message relay routing** → **PENDING — needs clarification** (see below).
+
+---
+
+## 8a. Q6 Explanation — Speaker-message relay routing
+
+**The V6 behavior** (current code):
+- A member visits a speaker's profile on an event page and clicks "Message speaker".
+- The member writes a message; it's saved to the `SpeakerMessage` table.
+- **A copy of the message is also emailed to `ADMIN_EMAIL` (eze@massapro.com)** as a "relay" — so the admin can monitor all member-to-speaker conversations from their inbox.
+- Code locations:
+  - `src/app/api/speakers/[id]/messages/route.ts:132` — `const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";`
+  - `src/app/api/messages/[userId]/route.ts:182` — same pattern for member-to-member DMs.
+
+**Why Q6 matters in V7:**
+With the new hierarchy, "the admin" is no longer a single person. An event in the Tel Aviv chapter is now conceptually owned by the Tel Aviv Chapter Organizer and the Israel Country Admin — not necessarily the global Super Admin. The question is: **who should receive these relay emails in V7?**
+
+**Concrete options — pick one:**
+
+| Option | Who receives the relay email | Pros | Cons |
+|---|---|---|---|
+| **A. Keep status quo** | `ADMIN_EMAIL` env var (still eze@massapro.com globally) | Simplest — zero code changes to relay logic | Super Admin becomes a bottleneck for every chapter; Chapter Organizers can't see member-speaker conversations in their chapter |
+| **B. Chapter Organizers of the event's chapter** | All users with `role=CHAPTER_ORGANIZER` where `chapterId = event.chapterId` | Local visibility — Chapter Organizers can monitor their chapter's conversations | If a chapter has no organizer yet, message is silently not relayed (need fallback) |
+| **C. Country Admin of the event's country** | All users with `role=ADMIN` where `countryId = event.chapter.countryId` | Country Admin gets full picture of their country | Country Admin may be spammed if many events run concurrently |
+| **D. Both Chapter Organizers AND Country Admin** | Union of B + C | Maximum visibility for the local team | More email volume; potential duplicate notifications |
+| **E. Stop relaying entirely** | Nobody — messages stay in-app only (admin can read them via the Speaker Messages admin page) | Simplest data flow; matches the in-app DM pattern | Admin loses passive visibility — must actively check the admin panel |
+
+**Recommendation: Option B with fallback to A.**
+- Try to relay to all Chapter Organizers of the event's chapter.
+- If the chapter has zero organizers, fall back to `ADMIN_EMAIL` (Option A behavior).
+- Country Admins can see all messages via the admin panel (filter by chapter), so they don't need an email.
+- Super Admin can also see everything via the admin panel.
+
+**My default if you don't pick:** Option A (keep status quo) — zero risk of accidentally emailing the wrong person, and Super Admin keeps full visibility.
 
 ---
 
