@@ -72,3 +72,7 @@ CORE-PRACTICE.md
 # Google Drive / GCP credentials (root-level — added 2026-07-17)
 /.gdrive-token.json
 /.gcp-service-account.json
+
+# V7: Google OAuth client secret for Drive uploader — DO NOT COMMIT
+upload/client_secret*.json
+client_secret*.json
