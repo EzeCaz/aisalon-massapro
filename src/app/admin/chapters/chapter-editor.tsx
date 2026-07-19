@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Copy, Check, ExternalLink, Globe2 } from "lucide-react";
+import { Copy, Check, ExternalLink, Globe2, ShieldCheck } from "lucide-react";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -33,7 +33,8 @@ export function ChapterEditor({
   const params = useSearchParams();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedPublic, setCopiedPublic] = useState(false);
+  const [copiedAdmin, setCopiedAdmin] = useState(false);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     slug: initial?.slug ?? "",
@@ -48,29 +49,32 @@ export function ChapterEditor({
   // Public registration URL — derived from the slug. This is the URL
   // admins share with people to register specifically for this chapter.
   // Anyone signing up via this URL gets tagged to this chapter automatically.
+  // Admin URL — slug-based admin editor URL (/admin/c/[slug]). Stable
+  // across chapter ID changes; bookmarkable; shareable with other admins.
   const siteUrl =
     typeof window !== "undefined"
       ? window.location.origin
       : process.env.NEXT_PUBLIC_SITE_URL ||
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   const registrationUrl = form.slug ? `${siteUrl}/c/${form.slug}` : "";
+  const adminUrl = form.slug ? `${siteUrl}/admin/c/${form.slug}` : "";
 
-  async function copyRegistrationUrl() {
-    if (!registrationUrl) return;
+  async function copyToClipboard(text: string, setter: (v: boolean) => void) {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(registrationUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setter(true);
+      setTimeout(() => setter(false), 1500);
     } catch {
       // Fallback for older browsers
       const ta = document.createElement("textarea");
-      ta.value = registrationUrl;
+      ta.value = text;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setter(true);
+      setTimeout(() => setter(false), 1500);
     }
   }
 
@@ -153,10 +157,10 @@ export function ChapterEditor({
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={copyRegistrationUrl}
+                  onClick={() => copyToClipboard(registrationUrl, setCopiedPublic)}
                   className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white transition"
                 >
-                  {copied ? (
+                  {copiedPublic ? (
                     <>
                       <Check className="h-3.5 w-3.5" /> Copied
                     </>
@@ -170,6 +174,54 @@ export function ChapterEditor({
                   href={registrationUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin URL — slug-based admin editor URL. Only meaningful in
+            edit mode (the chapter must exist for the URL to resolve). */}
+        {mode === "edit" && adminUrl && (
+          <div className="rounded-md border border-black/10 bg-black/[0.02] p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-black/60 flex items-center gap-1.5 mb-1">
+                  <ShieldCheck className="h-3 w-3" /> Admin URL
+                </p>
+                <p className="text-sm font-mono text-black break-all">
+                  {adminUrl}
+                </p>
+                <p className="text-xs text-black/60 mt-1.5">
+                  Stable, bookmarkable link to this chapter&apos;s admin editor.
+                  Share with other admins instead of the raw
+                  <code className="mx-1 px-1 py-0.5 rounded bg-black/5 text-[0.7rem]">
+                    /admin/chapters/[id]
+                  </code>
+                  URL — the slug won&apos;t change even if the record is migrated.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(adminUrl, setCopiedAdmin)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-black/30 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5 transition"
+                >
+                  {copiedAdmin ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" /> Copy
+                    </>
+                  )}
+                </button>
+                <a
+                  href={adminUrl}
                   className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Open

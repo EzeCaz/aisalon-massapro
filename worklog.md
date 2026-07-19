@@ -4009,3 +4009,88 @@ Stage Summary:
   * The /admin/chapters tree view (inline mini-buttons)
 - Public landing page includes chapter branding (name, city, country, flag), community links (WhatsApp/LinkedIn), upcoming events list, and the sign-up form.
 - Backwards compatible: existing /login flow still works without chapter context.
+
+---
+Task ID: 2026-07-20-admin-slug-url
+Agent: Super Z (main)
+Task: User reported "this is empty https://aisalon.massapro.com/admin/c/tel-aviv" — the slug-based admin URL returned a blank/404 page.
+
+Work Log:
+- Diagnosed: route /admin/c/[chapterSlug] did NOT exist. The previous
+  per-chapter-registration-URL task only created /c/[chapterSlug] (public
+  landing + signup). The admin-side chapter editor was only reachable via
+  /admin/chapters/[id] (by database cuid), which admins had to look up in
+  the /admin/chapters list. Visiting /admin/c/tel-aviv hit Next.js's
+  default 404 page (which renders as a near-blank page inside the admin
+  shell).
+- Fix: added /admin/c/[chapterSlug] as a stable, bookmarkable admin URL
+  that resolves the slug → chapter and renders the same editor inline
+  (URL stays as /admin/c/tel-aviv in the browser, no redirect).
+- Refactored to avoid duplicating the auth/permission/scope logic:
+  * Extracted the body of /admin/chapters/[id]/page.tsx into a shared
+    server component: src/app/admin/chapters/chapter-edit-content.tsx
+    (ChapterEditContent). It accepts a `lookup` prop of either
+    { byId: "<cuid>" } or { bySlug: "tel-aviv" } and handles auth →
+    chapter resolution → scope check → render in one pass.
+  * The slug → ID DB lookup happens INSIDE ChapterEditContent, AFTER
+    the auth check, so unauthenticated visitors get redirected to
+    /login without any DB hit. Same behavior as the legacy ID route.
+  * /admin/chapters/[id]/page.tsx now just delegates: 
+      <ChapterEditContent lookup={{ byId: id }} />
+  * /admin/c/[chapterSlug]/page.tsx delegates:
+      <ChapterEditContent lookup={{ bySlug: chapterSlug }} />
+    Also has a best-effort generateMetadata that looks up the chapter
+    name for the page title; falls back to "Edit chapter — AI Salon"
+    if the DB is unreachable or the slug doesn't exist.
+- Updated chapter-editor.tsx to show BOTH URLs alongside the slug field:
+  * "Public registration URL" panel (existing) — /c/[slug], pink-themed,
+    for sharing with prospective members.
+  * "Admin URL" panel (new) — /admin/c/[slug], neutral-themed, only
+    shown in edit mode (the chapter must exist for the URL to resolve).
+    Includes copy + open buttons + explanatory text:
+    "Stable, bookmarkable link to this chapter's admin editor. Share
+    with other admins instead of the raw /admin/chapters/[id] URL —
+    the slug won't change even if the record is migrated."
+- Refactored copy logic in chapter-editor.tsx into a reusable
+  copyToClipboard(text, setter) helper (was previously a single-purpose
+  copyRegistrationUrl). Now used by both the public and admin URL panels.
+- Login redirect preserves the slug URL: when an unauthenticated visitor
+  hits /admin/c/tel-aviv, they're sent to
+  /login?callbackUrl=%2Fadmin%2Fc%2Ftel-aviv so they land back on the
+  slug URL after signing in (instead of being bounced to the ID URL).
+
+Verification:
+- bunx tsc --noEmit: 0 errors in the new/modified files (errors in
+  non-member-dashboard.tsx + skills/* are all pre-existing).
+- Dev server (with sqlite sandbox schema): all routes compile + behave
+  correctly:
+    GET /admin/c/tel-aviv     -> 307 -> /login?callbackUrl=/admin/c/tel-aviv
+    GET /admin/c/nonexistent  -> 307 -> /login (auth check before DB lookup)
+    GET /admin/chapters/xyz   -> 307 -> /login (legacy route unchanged)
+    GET /c/tel-aviv (public)  -> 200 (unchanged)
+- Sandbox seeded with Israel + Tel Aviv so the slug lookup resolves
+  correctly when an authenticated admin hits the route.
+
+Stage Summary:
+- /admin/c/tel-aviv is no longer empty — it's now a real admin URL that
+  renders the chapter editor inline (same editor as /admin/chapters/[id]).
+- Both URL forms work:
+    /admin/chapters/[id]   (legacy, by cuid)
+    /admin/c/[chapterSlug] (new, by slug — stable/bookmarkable)
+- Auth + scope rules are identical for both routes (single source of
+  truth in ChapterEditContent).
+- The chapter editor now shows both URLs with copy/open buttons so
+  admins can see and share the slug-based admin URL directly from the
+  editor (no need to construct it manually).
+- Committed + pushed to origin/main. Vercel will auto-deploy.
+
+What the user should do next:
+1. Wait ~2-4 min for Vercel deploy to finish.
+2. Visit https://aisalon.massapro.com/admin/c/tel-aviv — should now
+   load the chapter editor (will redirect to /login first if not
+   signed in, then back to /admin/c/tel-aviv after sign-in).
+3. Optionally bookmark /admin/c/tel-aviv for quick access to the
+   Tel Aviv chapter editor.
+4. The same URL pattern works for every chapter: /admin/c/<slug>.
+   Slug is shown/editable in the chapter editor; the admin URL panel
+   updates live as the slug changes.
