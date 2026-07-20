@@ -4256,3 +4256,64 @@ What the user should do next:
    - City/Country remain editable after auto-fill
    - As a CHAPTER_ORGANIZER, the select is locked with a Lock icon
 4. After verifying, reply "deploy to main" and I'll fast-forward main + push.
+
+---
+Task ID: 2026-07-21-event-form-chapter-dropdown-preview-panel
+Agent: Super Z (main)
+Task: User couldn't preview the deployed branch via GitHub PR UI. Asked me to "generate a preview panel" — a self-contained interactive replica of /admin/events/new that shows the new V7 chapter dropdown behavior without needing Vercel/GitHub.
+
+Work Log:
+- Read new-event-form.tsx (706 lines) in full to extract the exact UI structure, field order, styling classes (pink/purple Salon theme), and interaction logic:
+  * AI Extraction panel (collapsible)
+  * Basics section (title, subtitle, chapter <select>, slug, startsAt, endsAt)
+  * Venue section (venue name, address, city, country, map URL, waze URL)
+  * Content section (description, takeaways, intendedFor, rsvpUrl)
+  * Auto-fill behavior: chapter change → city + country updated + sonner toast fires
+  * Locked state for CHAPTER_ORGANIZER: select disabled, lock icon, label changes to "Chapter (locked to your chapter)"
+  * endsAt auto-fills to startsAt + 2 hours
+- Built /home/z/my-project/download/event-form-preview.html — a 773-line self-contained interactive HTML file that replicates the form pixel-for-pixel:
+  * Same color palette (#FF005A pink, #820A7D purple, white sections with hairline borders)
+  * Same Section/Field components (fieldset + legend + grid layout)
+  * Same chapter <select> with <optgroup> country groupings (🇮🇱 Israel → Tel Aviv / Jerusalem / Haifa, 🇺🇸 USA → NYC / SF Bay, 🇬🇧 UK → London)
+  * Same auto-fill behavior: change chapter → toast fires + city/country fields update + hints update
+  * Same lock state for Chapter Organizer (disabled select, lock icon, locked label/hint)
+  * Role switcher pill bar (Super Admin / Country Admin / Chapter Organizer) — lets user toggle between the three scope behaviors without needing to log in as 3 different users
+  * Side panel explains what's new in V7 + shows a live JSON payload preview that updates as the user types
+  * Mock AI extractor (paste text + click extract → sample event populates after 1.5s loading)
+  * Mock submit (form validation + 900ms "Creating..." spinner → "Event created (mock)" toast)
+- Used agent-browser to verify the preview renders correctly:
+  * Opened file:// URL in headless browser, set viewport to 1280x900
+  * Took full-page screenshots for Super Admin / Chapter Organizer / toast states
+  * Snapshot confirmed:
+    - All form fields render correctly
+    - Chapter <select> shows all 6 chapters grouped by 3 countries (Super Admin)
+    - Chapter <select> is disabled with only "Tel Aviv — Tel Aviv-Yafo" option (Chapter Organizer)
+    - Label correctly changes to "Chapter (locked to your chapter)" with hint "You can only create events in your assigned chapter."
+    - City/Country auto-fill works: selecting "NYC" chapter → City="New York", Country="US", hints updated to "Auto-filled from \"NYC\" chapter — edit if needed."
+- Saved 4 artifacts to /home/z/my-project/download/:
+  * event-form-preview.html — the interactive replica (open in any browser)
+  * event-form-preview-super.png — Super Admin view (all chapters visible)
+  * event-form-preview-organizer.png — Chapter Organizer view (locked select)
+  * event-form-preview-toast.png — auto-fill toast after changing chapter
+
+Stage Summary:
+- Generated a self-contained interactive HTML preview panel at /home/z/my-project/download/event-form-preview.html (no server, no auth, no DB needed — just open in a browser).
+- Includes a role switcher (Super Admin / Country Admin / Chapter Organizer) so the user can verify all 3 scope behaviors from one page.
+- Replicates the auto-fill behavior, lock state, and toast notifications exactly as implemented in the actual form.
+- Verified the preview renders correctly via agent-browser headless smoke test (3 screenshots captured).
+- The actual code changes remain on branch feat/event-form-chapter-dropdown (3 commits ahead of origin/main, all 3 reviewers approved, tsc/eslint clean) — ready to fast-forward to main once user signs off on the preview.
+
+What the user should do next:
+1. Open /home/z/my-project/download/event-form-preview.html in any browser (double-click the file or `open` it).
+2. Try the role switcher pills at the top — verify all 3 scope behaviors:
+   - Super Admin: all 6 chapters grouped by 3 countries (Israel/USA/UK)
+   - Country Admin (Israel): only Israeli chapters visible
+   - Chapter Organizer (Tel Aviv): select is locked with lock icon, label says "Chapter (locked to your chapter)"
+3. As Super Admin, change the chapter select → confirm:
+   - City + Country fields auto-update (e.g. NYC → City="New York", Country="US")
+   - Toast appears at bottom-right: "Venue updated from chapter: 🇺🇸 NYC — USA"
+   - Hints below City/Country update: "Auto-filled from \"NYC\" chapter — edit if needed."
+4. Edit City/Country manually → confirm fields remain editable (no lock on those inputs)
+5. Try the AI extractor (collapsible purple panel at top) — mock extractor populates sample fields after 1.5s
+6. Inspect the live JSON payload preview on the right side panel (updates as you type)
+7. Once verified, reply "deploy to main" and I'll fast-forward main to feat/event-form-chapter-dropdown + push to origin/main.
