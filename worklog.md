@@ -4221,3 +4221,38 @@ Stage Summary:
 - 2 follow-up tickets identified (pre-existing issues, not introduced by this task).
 - Ready to push to main (pending user approval).
 - Awaiting user decision on the pre-existing `members.view` gate issue (relax now vs. track as follow-up).
+
+---
+Task ID: 2026-07-21-event-form-chapter-dropdown-preview
+Agent: Super Z (main)
+Task: User chose Option A (track the members.view gate issue as follow-up, deploy event-form-chapter-dropdown as-is) but wanted to see a preview before pushing to main. The platform-generated preview URL https://preview--z1.space-z.ai/ failed with a Kubernetes label selector error.
+
+Work Log:
+- Diagnosed the preview URL failure: platform-side infra bug. The bot-id/chat-id label is `-z1` (leading hyphen), which violates Kubernetes label syntax (must start with alphanumeric). The error message confirms: `values[0][z.ai/chat-id]: Invalid value: "-z1"`. NOT a code issue — the preview pod lookup itself fails before any of the user's code runs.
+- Confirmed the event-form-chapter-dropdown work is fully ready:
+  * 3 commits ahead of origin/main (77b026f, 8839825, 032f022)
+  * All 3 reviewers (Canvas, Forge, Aegis) returned APPROVED with no blockers
+  * tsc + eslint pass cleanly on all 3 modified files
+  * Files: page.tsx (scoped chapter fetch), new-event-form.tsx (select + auto-fill + lock icon), route.ts (chapterId FK + server-side scope check)
+- Pushed the 3 commits to a feature branch instead of main:
+  * Branch: feat/event-form-chapter-dropdown
+  * Pushed to origin (created new remote branch)
+  * Vercel will auto-detect the branch and build a preview deployment
+- Vercel CLI not installed locally; VERCEL_TOKEN not in env, so I cannot fetch the preview URL programmatically. User needs to check the Vercel dashboard (or the GitHub branch UI's "deployments" section) for the live preview URL once the build finishes (~2-4 min).
+
+Stage Summary:
+- Feature branch `feat/event-form-chapter-dropdown` pushed to origin with all 3 commits.
+- Vercel will auto-generate a real preview deployment URL from this branch (same pattern as existing preview/ai-human-flourishing and v5.14-rbac-utm-preview branches).
+- Once the user verifies the preview, fast-forward main to the same commit:
+    git checkout main && git merge --ff-only feat/event-form-chapter-dropdown && git push origin main
+- The 2 follow-up tickets (relax members.view gate; getUserScope fail-closed) remain tracked in the implementation.md.
+
+What the user should do next:
+1. Open the Vercel dashboard → aisalon-massapro project → "Deployments" tab. Filter by branch=feat/event-form-chapter-dropdown. Wait for the build to finish (~2-4 min).
+2. Or open https://github.com/EzeCaz/aisalon-massapro/pull/new/feat/event-form-chapter-dropdown — the GitHub PR UI shows the Vercel preview deployment URL once the build completes.
+3. Visit the preview URL → /admin/events/new (sign in as eze@massapro.com first). Verify:
+   - Chapter <select> appears with country groupings (🇮🇱 Israel → Tel Aviv, etc.)
+   - Selecting a chapter auto-fills City + Country with a toast
+   - City/Country remain editable after auto-fill
+   - As a CHAPTER_ORGANIZER, the select is locked with a Lock icon
+4. After verifying, reply "deploy to main" and I'll fast-forward main + push.
