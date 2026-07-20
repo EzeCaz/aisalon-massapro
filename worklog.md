@@ -4186,3 +4186,38 @@ What the user should do next:
    Chapter Organizers will see their chapter pre-selected.
 4. To populate the city filter, make sure events have their `city`
    field set (editable in the event editor).
+
+---
+Task ID: 2026-07-21-event-form-chapter-dropdown
+Agent: main (Z, as Meridian proxy)
+Task: MID-tier task — Replace the free-form Chapter text input on /admin/events/new with a <select> populated from the Chapter table (scoped to creator's UserScope). When a chapter is chosen, auto-fill Country + City in the Venue section (still editable). Persist as Event.chapterId (real FK) + legacy Event.chapter string cache.
+
+Work Log:
+- Read core/TASK_CATEGORIES.md, core/workflow.md, design/system.md to align with established process.
+- Triaged the user's 6-item request into 1 MID + 1 MID + 1 HIGH epic per Option A:
+  - MID #1: items 1+2 (this task) — event form chapter dropdown + auto-fill
+  - MID #2: item 3 — email tab country/chapter sub-filter
+  - HIGH epic: items 4, 5, 6 — images/mockups/quiz chapter scope
+- Created core/tasks/2026-07-21-event-form-chapter-dropdown/brief.md (MID tier, reviewers listed).
+- Implemented 3 files:
+  * src/app/admin/events/new/page.tsx — fetches scoped chapters (SUPER_ADMIN=all, ADMIN=own country, CHAPTER_ORGANIZER=own chapter only); maps Prisma shape to flat ChapterOption type; computes lockedChapterId + defaultChapter for locked-scope users.
+  * src/app/admin/events/new/new-event-form.tsx — replaced text input with <select> grouped by country via <optgroup>; auto-fills city/country on chapter change (with toast); city/country remain editable; defensive client-side check rejects mismatched chapterId for locked-scope users.
+  * src/app/api/admin/events/route.ts — accepts chapterId; strict server-side scope check (country/chapter/none); writes both chapterId (real FK) + chapter (legacy cache from chapterRow.name); rejects inactive chapters.
+- tsc --noEmit passes on all 3 modified files (no new errors; pre-existing errors in unrelated files remain).
+- eslint passes on all 3 modified files (0 errors, 0 warnings).
+- Wrote implementation.md with full notes (files, schema diff, API changes, auth/security, UI/UX decisions, smoke test plan).
+- Invoked 3 review subagents in parallel (Canvas=UI/UX, Forge=backend, Aegis=security).
+- All 3 returned APPROVED with no blockers. Key findings:
+  * Canvas: 4 nits (disabled-state color off-spec, Lock icon missing aria-hidden, city hint copy edge case, scaling beyond 50 chapters). Applied the aria-hidden nit; left the rest as optional polish.
+  * Forge: 1 significant observation — the pre-existing `can(me.role, "members.view")` gate at line 28 of route.ts (and page.tsx:46) requires ROLES.ADMIN (rank 3), which means CHAPTER_ORGANIZER (rank 2) cannot actually reach the new scope-check code path. The scope-check code is correct but currently unreachable for chapter organizers. PRE-EXISTING issue, not introduced by this task.
+  * Aegis: Same finding as Forge about the unreachable locked-chapter path. Also flagged a pre-existing footgun in getUserScope (chapter organizer without chapterId/countryId falls back to global scope instead of "none" scope) — but not exploitable through this PR.
+- Follow-up tickets identified (not blocking this task):
+  1. Relax the `members.view` gate on /admin/events/new (page + API) to allow CHAPTER_ORGANIZER/CO_HOST event creation, OR update implementation.md + smoke-test plan to mark CHAPTER_ORGANIZER event creation as out-of-scope/future.
+  2. Change getUserScope fallback from "global" to "none" (fail-closed) for users with no chapterId/countryId.
+
+Stage Summary:
+- Implementation complete. 3 files modified, 0 schema changes, 0 migrations.
+- All 3 reviewers APPROVED with no blockers. Trivial aria-hidden nit applied.
+- 2 follow-up tickets identified (pre-existing issues, not introduced by this task).
+- Ready to push to main (pending user approval).
+- Awaiting user decision on the pre-existing `members.view` gate issue (relax now vs. track as follow-up).

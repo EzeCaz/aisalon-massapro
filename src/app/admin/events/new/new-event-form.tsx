@@ -4,11 +4,37 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Sparkles, ClipboardPaste } from "lucide-react";
+import { ArrowLeft, Save, Sparkles, ClipboardPaste, Lock } from "lucide-react";
+
+/**
+ * Chapter option passed from the server. Includes country code + city so
+ * the form can auto-fill Venue country/city on selection without an
+ * extra round-trip.
+ */
+export type ChapterOption = {
+  id: string;
+  name: string;
+  slug: string;
+  city: string | null;
+  countryId: string;
+  countryName: string;
+  countryCode: string;
+  countryFlagEmoji: string | null;
+};
 
 /**
  * NewEventForm — admin form for creating a new Event via
  * POST /api/admin/events.
+ *
+ * V7 (2026-07-21): Chapter field is now a `<select>` populated from the
+ * Chapter table (scoped to the creator's UserScope). Selecting a chapter
+ * auto-fills Venue country + city from the chapter's data; both fields
+ * remain editable. The chosen chapter is persisted as `Event.chapterId`
+ * (the real FK); the legacy free-form `Event.chapter: String` is also
+ * written as a denormalized cache of `Chapter.name` for backward compat.
+ *
+ * For CHAPTER_ORGANIZER / CO_HOST users, the select is locked to their
+ * own chapter (passed as `lockedChapterId`).
  *
  * On success the user is redirected to /events/<slug> so they can
  * immediately add speakers, agenda, images, etc.
@@ -23,18 +49,41 @@ import { ArrowLeft, Save, Sparkles, ClipboardPaste } from "lucide-react";
  *   (they can be added manually after the event is created, since each
  *   speaker requires an event ID).
  */
-export function NewEventForm() {
+export function NewEventForm({
+  chapters,
+  lockedChapterId,
+  defaultChapter,
+}: {
+  chapters: ChapterOption[];
+  lockedChapterId: string | null;
+  defaultChapter: ChapterOption | null;
+}) {
   const router = useRouter();
+
+  // ---- Chapter (V7: select, not free text) ----
+  // If the user is locked to a chapter, preselect it. Otherwise default
+  // to the first chapter in the list (or empty if there are none — rare
+  // edge case for a brand-new deployment with no chapters seeded).
+  const initialChapterId = lockedChapterId ?? (chapters[0]?.id ?? "");
+  const [chapterId, setChapterId] = React.useState<string>(initialChapterId);
+
+  // Resolve the currently-selected ChapterOption (for auto-fill +
+  // legacy `chapter` string cache).
+  const selectedChapter = React.useMemo(
+    () => chapters.find((c) => c.id === chapterId) ?? null,
+    [chapters, chapterId]
+  );
 
   const [title, setTitle] = React.useState("");
   const [subtitle, setSubtitle] = React.useState("");
-  const [chapter, setChapter] = React.useState("Tel Aviv");
   const [startsAt, setStartsAt] = React.useState("");
   const [endsAt, setEndsAt] = React.useState("");
   const [venue, setVenue] = React.useState("");
   const [address, setAddress] = React.useState("");
-  const [city, setCity] = React.useState("Tel Aviv");
-  const [country, setCountry] = React.useState("ISR");
+  // Default city/country come from the locked chapter (if any) so the
+  // form is ready to submit out of the box for CHAPTER_ORGANIZER.
+  const [city, setCity] = React.useState(defaultChapter?.city ?? "Tel Aviv");
+  const [country, setCountry] = React.useState(defaultChapter?.countryCode ?? "ISR");
   const [mapUrl, setMapUrl] = React.useState("");
   const [wazeUrl, setWazeUrl] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -61,6 +110,28 @@ export function NewEventForm() {
   >([]);
   const [extractionWarnings, setExtractionWarnings] = React.useState<string[]>([]);
   const [showExtractPanel, setShowExtractPanel] = React.useState(false);
+
+  // ---- Auto-fill Venue country/city when chapter changes ----
+  // Per spec: "country and city is automatically selected when the Chapter
+  // field is filled, and can be edited by the event creator". So we
+  // OVERWRITE city/country on chapter change (with a toast to make the
+  // overwrite explicit) — the user can still edit afterwards. This also
+  // runs once on mount when a defaultChapter is supplied (locked-scope
+  // users), which is fine because in that case city/country are already
+  // initialized to the chapter's values, so the setters are no-ops.
+  const lastAutoFillRef = React.useRef<string | null>(defaultChapter?.id ?? null);
+  React.useEffect(() => {
+    if (!selectedChapter) return;
+    // Avoid re-running on mount for the initial chapter (state already set).
+    if (lastAutoFillRef.current === selectedChapter.id) return;
+    lastAutoFillRef.current = selectedChapter.id;
+    setCountry(selectedChapter.countryCode);
+    if (selectedChapter.city) setCity(selectedChapter.city);
+    toast.info(
+      `Venue updated from chapter: ${selectedChapter.countryFlagEmoji ?? ""} ${selectedChapter.name} — ${selectedChapter.countryName}`,
+      { duration: 4000 }
+    );
+  }, [selectedChapter]);
 
   // Auto-fill endsAt to start + 2 hours when startsAt changes and endsAt
   // is empty (the most common case). The datetime-local string is naive
@@ -204,6 +275,13 @@ export function NewEventForm() {
       toast.error("Title, start time, and end time are required");
       return;
     }
+    if (lockedChapterId && chapterId !== lockedChapterId) {
+      // Defensive: a chapter organizer should never be able to submit
+      // a different chapterId. The select is disabled client-side, but
+      // we double-check here in case of tampering.
+      toast.error("You can only create events in your own chapter");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/admin/events", {
@@ -212,7 +290,9 @@ export function NewEventForm() {
         body: JSON.stringify({
           title: title.trim(),
           subtitle: subtitle.trim() || null,
-          chapter: chapter.trim() || "Tel Aviv",
+          // V7: real FK + legacy cache (the API uses both).
+          chapterId: chapterId || null,
+          chapter: selectedChapter?.name ?? "Tel Aviv",
           slug: slug.trim() || null,
           venue: venue.trim() || null,
           address: address.trim() || null,
@@ -243,6 +323,34 @@ export function NewEventForm() {
       setSaving(false);
     }
   };
+
+  // ---- Group chapters by country for the <select> ----
+  // Produces <optgroup label="🇮🇱 Israel">…</optgroup> for each country.
+  const chapterGroups = React.useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        countryId: string;
+        countryName: string;
+        countryCode: string;
+        flagEmoji: string | null;
+        chapters: ChapterOption[];
+      }
+    >();
+    for (const c of chapters) {
+      if (!map.has(c.countryId)) {
+        map.set(c.countryId, {
+          countryId: c.countryId,
+          countryName: c.countryName,
+          countryCode: c.countryCode,
+          flagEmoji: c.countryFlagEmoji,
+          chapters: [],
+        });
+      }
+      map.get(c.countryId)!.chapters.push(c);
+    }
+    return Array.from(map.values());
+  }, [chapters]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
@@ -360,13 +468,46 @@ export function NewEventForm() {
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
         </Field>
-        <Field label="Chapter">
-          <input
-            type="text"
-            value={chapter}
-            onChange={(e) => setChapter(e.target.value)}
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
-          />
+        <Field
+          label={lockedChapterId ? "Chapter (locked to your chapter)" : "Chapter *"}
+          hint={
+            lockedChapterId
+              ? "You can only create events in your assigned chapter."
+              : "Selecting a chapter auto-fills the venue country/city below. You can still edit them."
+          }
+        >
+          <div className="relative">
+            <select
+              value={chapterId}
+              onChange={(e) => setChapterId(e.target.value)}
+              disabled={!!lockedChapterId}
+              required={!lockedChapterId}
+              className={`w-full appearance-none rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40 ${
+                lockedChapterId ? "bg-black/5 cursor-not-allowed" : "bg-white"
+              }`}
+            >
+              {chapters.length === 0 ? (
+                <option value="">No chapters available — contact a Super Admin</option>
+              ) : (
+                chapterGroups.map((g) => (
+                  <optgroup
+                    key={g.countryId}
+                    label={`${g.flagEmoji ?? ""} ${g.countryName}`.trim()}
+                  >
+                    {g.chapters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.city ? ` — ${c.city}` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              )}
+            </select>
+            {lockedChapterId && (
+              <Lock aria-hidden="true" className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 pointer-events-none" />
+            )}
+          </div>
         </Field>
         <Field label="Slug (optional — auto-generated if blank)">
           <input
@@ -415,7 +556,14 @@ export function NewEventForm() {
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
         </Field>
-        <Field label="City">
+        <Field
+          label="City"
+          hint={
+            selectedChapter?.city
+              ? `Auto-filled from "${selectedChapter.name}" chapter — edit if needed.`
+              : "Auto-filled from chapter when selected."
+          }
+        >
           <input
             type="text"
             value={city}
@@ -423,7 +571,14 @@ export function NewEventForm() {
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
         </Field>
-        <Field label="Country (ISO code)">
+        <Field
+          label="Country (ISO code)"
+          hint={
+            selectedChapter
+              ? `Auto-filled from "${selectedChapter.countryName}" (${selectedChapter.countryCode}) — edit if needed.`
+              : "Auto-filled from chapter when selected."
+          }
+        >
           <input
             type="text"
             value={country}
