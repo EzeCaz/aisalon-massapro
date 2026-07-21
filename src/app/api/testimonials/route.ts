@@ -89,13 +89,18 @@ export async function GET(req: NextRequest) {
       event: { select: { id: true, title: true, slug: true } },
       speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
       agendaItem: { select: { id: true, title: true } },
-      likes: me
+      // Only include the per-user like row when we have a signed-in user.
+      // For anonymous visitors, we skip the relation entirely (false) and
+      // hard-code likedByMe=false below.
+      ...(me
         ? {
-            where: { userId: me.id },
-            select: { id: true },
-            take: 1,
+            likes: {
+              where: { userId: me.id },
+              select: { id: true },
+              take: 1,
+            },
           }
-        : false,
+        : {}),
     },
   });
 
@@ -114,7 +119,9 @@ export async function GET(req: NextRequest) {
     event: t.event,
     speaker: t.speaker,
     agendaItem: t.agendaItem,
-    likedByMe: me ? (t.likes as unknown as { id: string }[]).length > 0 : false,
+    likedByMe: me
+      ? ((t as { likes?: { id: string }[] }).likes?.length ?? 0) > 0
+      : false,
   }));
 
   return NextResponse.json({ testimonials: serialized });
