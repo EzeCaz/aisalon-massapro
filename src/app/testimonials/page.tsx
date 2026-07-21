@@ -11,68 +11,86 @@ import { MessageSquareHeart } from "lucide-react";
 export const metadata = { title: "Testimonials — AI Salon Tel Aviv" };
 
 /**
- * /testimonials — public community testimonials feed.
+ * /testimonials — PUBLIC community testimonials feed.
  *
- * Any signed-in member can read & post. Testimonials here can be:
+ * Reading is open to the world (no login required) so prospective members
+ * and future chapter organizers can see what the community is saying.
+ *
+ * Posting, liking, and deleting still require a signed-in member session
+ * — enforced server-side at the API layer (/api/testimonials POST and
+ * /api/testimonials/[id]/like POST).
+ *
+ * For signed-in members, the form also offers 4 scopes:
  *   - 🌍 Community (no specific event)
  *   - 📍 About a specific event (user picks from a dropdown)
  *   - 🎤 About a speaker (user picks event → speaker)
  *   - 🗓 About a session (user picks event → session)
- *
- * The form supports all 4 scopes — same as the event-tab form, but
- * without being locked to a single event.
  */
 export default async function TestimonialsPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) redirect("/login?callbackUrl=/testimonials");
-
-  const me = await db.user.findUnique({
-    where: { email: session.user.email },
-  });
-  if (!me) redirect("/login");
-  if (needsSetPassword(me)) redirect("/set-password");
-  if (needsOnboarding(me)) redirect("/onboarding");
-
-  const isAdmin = me.role === "ADMIN";
-
-  // Fetch every event with its speakers + agenda items so the form's
-  // "this event / a speaker / a session" pickers can be populated when
-  // the user picks a non-community scope.
-  const events = await db.event.findMany({
-    orderBy: { startsAt: "desc" },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      speakers: {
-        orderBy: { order: "asc" },
-        select: { id: true, name: true, company: true, topic: true },
+  let me: { id: string; role: string } | null = null;
+  if (session?.user?.email) {
+    const u = await db.user.findUnique({
+      where: { email: session.user.email },
+      select: {
+        id: true,
+        role: true,
+        passwordHash: true,
+        importSource: true,
+        onboardedAt: true,
       },
-      agenda: {
-        orderBy: { startsAt: "asc" },
-        select: { id: true, startsAt: true, title: true },
-      },
-    },
-  });
+    });
+    if (u) {
+      // For signed-in users, run the same onboarding gates as before so
+      // they don't get stuck on the public feed with an unfinished profile.
+      if (needsSetPassword(u)) redirect("/set-password");
+      if (needsOnboarding(u)) redirect("/onboarding");
+      me = { id: u.id, role: u.role };
+    }
+  }
 
-  const eventsCatalog: EventOption[] = events.map((e) => ({
-    id: e.id,
-    slug: e.slug,
-    title: e.title,
-    speakers: e.speakers.map((s) => ({
-      id: s.id,
-      label: `${s.name}${s.company ? ` · ${s.company}` : ""}${s.topic ? ` — ${s.topic}` : ""}`,
-    })),
-    agendaItems: e.agenda.map((a) => {
-      const time = new Date(a.startsAt).toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: "Asia/Jerusalem",
-      });
-      return { id: a.id, label: `${time} · ${a.title}` };
-    }),
-  }));
+  const isAdmin = me?.role === "ADMIN";
+
+  // Fetch the events catalog only when there's a signed-in user (the form
+  // is hidden for anonymous visitors, so the data isn't needed).
+  let eventsCatalog: EventOption[] = [];
+  if (me) {
+    const events = await db.event.findMany({
+      orderBy: { startsAt: "desc" },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        speakers: {
+          orderBy: { order: "asc" },
+          select: { id: true, name: true, company: true, topic: true },
+        },
+        agenda: {
+          orderBy: { startsAt: "asc" },
+          select: { id: true, startsAt: true, title: true },
+        },
+      },
+    });
+
+    eventsCatalog = events.map((e) => ({
+      id: e.id,
+      slug: e.slug,
+      title: e.title,
+      speakers: e.speakers.map((s) => ({
+        id: s.id,
+        label: `${s.name}${s.company ? ` · ${s.company}` : ""}${s.topic ? ` — ${s.topic}` : ""}`,
+      })),
+      agendaItems: e.agenda.map((a) => {
+        const time = new Date(a.startsAt).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+          timeZone: "Asia/Jerusalem",
+        });
+        return { id: a.id, label: `${time} · ${a.title}` };
+      }),
+    }));
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -89,13 +107,12 @@ export default async function TestimonialsPage() {
           </h1>
           <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Real stories from our community about speakers, events, sessions,
-            and the AI Salon vibe. Share your own — add a photo, pick a rating,
-            and tell us what made it special.
+            and the AI Salon vibe. {me ? "Share your own — add a photo, pick a rating, and tell us what made it special." : "Sign in to share your own — add a photo, pick a rating, and tell us what made it special."}
           </p>
         </div>
 
         <TestimonialFeed
-          meId={me.id}
+          meId={me?.id ?? ""}
           isAdmin={isAdmin}
           eventsCatalog={eventsCatalog}
           defaultSort="recent"

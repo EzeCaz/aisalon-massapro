@@ -20,15 +20,24 @@ import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/b
  *
  * Returns: testimonials with author info, like state for the caller, and
  * denormalized counts. Hidden testimonials are excluded for non-admins.
+ *
+ * PUBLIC: This endpoint is readable by anyone — no login required — so
+ * the public /testimonials feed works for anonymous visitors. The
+ * signed-in user (if any) is used only to compute `likedByMe` and to
+ * decide whether to include hidden rows (admins see them, everyone else
+ * doesn't).
  */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let me: { id: string; role: string } | null = null;
+  if (session?.user?.email) {
+    const u = await db.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true },
+    });
+    if (u) me = u;
   }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
-  const isAdmin = me.role === "ADMIN";
+  const isAdmin = me?.role === "ADMIN";
 
   const url = req.nextUrl;
   const eventId = url.searchParams.get("eventId") || undefined;
@@ -80,11 +89,13 @@ export async function GET(req: NextRequest) {
       event: { select: { id: true, title: true, slug: true } },
       speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
       agendaItem: { select: { id: true, title: true } },
-      likes: {
-        where: { userId: me.id },
-        select: { id: true },
-        take: 1,
-      },
+      likes: me
+        ? {
+            where: { userId: me.id },
+            select: { id: true },
+            take: 1,
+          }
+        : false,
     },
   });
 
@@ -103,7 +114,7 @@ export async function GET(req: NextRequest) {
     event: t.event,
     speaker: t.speaker,
     agendaItem: t.agendaItem,
-    likedByMe: t.likes.length > 0,
+    likedByMe: me ? (t.likes as unknown as { id: string }[]).length > 0 : false,
   }));
 
   return NextResponse.json({ testimonials: serialized });

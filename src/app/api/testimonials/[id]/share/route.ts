@@ -10,25 +10,26 @@ import { db } from "@/lib/db";
  * Body: (none)
  * Returns: { shareCount: number }
  *
- * This endpoint does NOT track WHO shared — it just bumps the counter
- * so the UI can show "shared N times". The client is expected to perform
+ * PUBLIC: Anyone — including anonymous visitors — can share a testimonial.
+ * This endpoint does NOT track WHO shared; it just bumps the counter so
+ * the UI can show "shared N times". The client is expected to perform
  * the actual share (Web Share API, copy link, open social, etc.) and
  * call this endpoint as a side-effect.
+ *
+ * To prevent counter abuse, the rate is implicitly bounded by the fact
+ * that shares only fire from a real user gesture (button click) in the
+ * browser. A misbehaving client could inflate the number, but this is
+ * display-only and has no security or billing impact.
  */
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
-  if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
-
   const { id } = await params;
   const t = await db.testimonial.findUnique({ where: { id } });
   if (!t) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // Don't bump shares for hidden testimonials (would leak their existence).
+  if (t.hidden) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const updated = await db.testimonial.update({
     where: { id },

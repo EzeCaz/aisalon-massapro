@@ -64,8 +64,13 @@ type Props = {
  *   - like button (toggles), share button (Web Share API + counter)
  *   - delete button (author or admin)
  *   - "featured" + "hidden" admin badges
+ *
+ * When meId is empty (anonymous visitor), like and delete are hidden —
+ * only share remains (it just copies a link). The card itself is fully
+ * readable so the public feed works without login.
  */
 export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Props) {
+  const isAnonymous = !meId;
   const [liked, setLiked] = useState(t.likedByMe);
   const [likeCount, setLikeCount] = useState(t.likeCount);
   const [shareCount, setShareCount] = useState(t.shareCount);
@@ -333,21 +338,29 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
 
       {/* Footer: actions */}
       <div className="mt-4 pt-3 border-t border-black/5 flex items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={toggleLike}
-          disabled={busy}
-          className={`h-8 px-2 text-xs gap-1.5 ${
-            liked ? "text-[#FF005A] hover:bg-[#FF005A]/10" : "text-black/80"
-          }`}
-        >
-          <Heart
-            className={`h-3.5 w-3.5 ${liked ? "fill-[#FF005A]" : ""}`}
-          />
-          {likeCount}
-        </Button>
+        {!isAnonymous && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={toggleLike}
+            disabled={busy}
+            className={`h-8 px-2 text-xs gap-1.5 ${
+              liked ? "text-[#FF005A] hover:bg-[#FF005A]/10" : "text-black/80"
+            }`}
+          >
+            <Heart
+              className={`h-3.5 w-3.5 ${liked ? "fill-[#FF005A]" : ""}`}
+            />
+            {likeCount}
+          </Button>
+        )}
+        {isAnonymous && (
+          <span className="inline-flex items-center gap-1.5 h-8 px-2 text-xs text-black/60">
+            <Heart className="h-3.5 w-3.5" />
+            {likeCount}
+          </span>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -359,7 +372,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
           {shareCount > 0 ? shareCount : "Share"}
         </Button>
 
-        {(t.author.id === meId || isAdmin) && (
+        {!isAnonymous && (t.author.id === meId || isAdmin) && (
           <Button
             type="button"
             variant="ghost"

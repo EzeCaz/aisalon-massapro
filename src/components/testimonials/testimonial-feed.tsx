@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { TestimonialCard, Testimonial } from "./testimonial-card";
 import { TestimonialForm, AttachmentOption, EventOption } from "./testimonial-form";
-import { Loader2, MessageSquareHeart } from "lucide-react";
+import { Loader2, MessageSquareHeart, LogIn } from "lucide-react";
 
 type Props = {
+  /** Empty string when anonymous (public view). Real user id when signed in. */
   meId: string;
   isAdmin: boolean;
   /** Pre-attach the form to a specific event (event detail tab). */
@@ -31,9 +33,13 @@ type Props = {
 /**
  * TestimonialFeed — fetches & displays testimonials, with a create form
  * at the top. Used on:
- *   - /testimonials (community feed, no scope)
+ *   - /testimonials (community feed, public read — form only for signed-in members)
  *   - /events/[slug] "Testimonials" tab (event-scoped)
  *   - /admin/testimonials (admin moderation, hideForm=true)
+ *
+ * When meId is empty (anonymous visitor), the form is replaced by a
+ * "Sign in to share your story" call-to-action. The feed itself is
+ * fully readable.
  */
 export function TestimonialFeed({
   meId,
@@ -48,6 +54,7 @@ export function TestimonialFeed({
   hideForm = false,
   compactForm = false,
 }: Props) {
+  const isAnonymous = !meId;
   const [items, setItems] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<"recent" | "top" | "oldest">(defaultSort);
@@ -81,7 +88,9 @@ export function TestimonialFeed({
 
   return (
     <div className="space-y-6">
-      {!hideForm && (
+      {/* Form: only for signed-in members and not explicitly hidden.
+          Anonymous visitors see a sign-in CTA instead. */}
+      {!hideForm && !isAnonymous && (
         <TestimonialForm
           meId={meId}
           eventId={eventId}
@@ -92,6 +101,25 @@ export function TestimonialFeed({
           onCreated={fetchItems}
           compact={compactForm}
         />
+      )}
+      {!hideForm && isAnonymous && (
+        <div className="rounded-xl border border-[#FF005A]/25 bg-gradient-to-br from-[#FF005A]/5 to-[#820A7D]/5 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex-1">
+            <h3 className="text-base font-bold text-black mb-1">
+              Share your story
+            </h3>
+            <p className="text-sm text-black/70">
+              Sign in as a community member to post a testimonial — add a photo, pick a rating, and tell us what made the evening special.
+            </p>
+          </div>
+          <Link
+            href={`/login?callbackUrl=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/testimonials")}`}
+            className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-2.5 text-sm hover:bg-[#FF005A]/90 ais-lift whitespace-nowrap"
+          >
+            <LogIn className="h-4 w-4" />
+            Sign in to post
+          </Link>
+        </div>
       )}
 
       {/* Sort toggle */}
@@ -134,7 +162,9 @@ export function TestimonialFeed({
             No testimonials yet
           </p>
           <p className="text-xs text-black/80 mt-1">
-            Be the first to share one{eventId ? " for this event" : ""}!
+            {isAnonymous
+              ? "Check back soon — community stories will appear here."
+              : `Be the first to share one${eventId ? " for this event" : ""}!`}
           </p>
         </div>
       ) : (
