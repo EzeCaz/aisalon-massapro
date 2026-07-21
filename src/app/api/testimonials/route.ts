@@ -28,6 +28,17 @@ import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/b
  * doesn't).
  */
 export async function GET(req: NextRequest) {
+  // TEMPORARY DEBUG: confirm the route is actually being deployed.
+  return NextResponse.json({
+    debug: true,
+    message: "public route works",
+    timestamp: new Date().toISOString(),
+    hasDb: !!db,
+    hasReq: !!req,
+  });
+}
+
+async function _GET_real(req: NextRequest) {
   // Wrap the session lookup in try/catch — if next-auth throws for any
   // reason (e.g. misconfigured cookies, JWT secret rotation), we still
   // want the public feed to render for anonymous visitors.
