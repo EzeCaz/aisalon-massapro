@@ -4215,3 +4215,1285 @@ Stage Summary:
 - New feature 3: /admin/chapters/[id] now accepts the chapter slug (e.g. /admin/chapters/mtl). Slug lookup is tried first; falls back to ID so existing bookmarks/links keep working. Combined with the pre-existing /admin/c/[chapterSlug] route, the admin now has two slug-based URLs to choose from.
 - Files changed: src/lib/url-helpers.ts (new), src/lib/chapter-settings.ts (new), src/app/api/admin/brand-images/select/route.ts, src/app/api/admin/brand-images/route.ts, src/app/admin/images/images-gallery.tsx, src/app/c/[chapterSlug]/page.tsx, src/app/c/[chapterSlug]/chapter-landing-client.tsx, src/app/admin/chapters/[id]/page.tsx, src/app/admin/chapters/chapter-edit-content.tsx, src/app/admin/chapters/chapter-editor.tsx, src/app/api/admin/chapters/route.ts, src/app/api/admin/chapters/[id]/route.ts.
 - No DB migration needed — ChapterSetting table already exists from V7.
+
+---
+Task ID: research-platform-features
+Agent: Explore
+Task: Map every feature and screen in the AI Salon web platform at /home/z/my-project. Output a comprehensive guide covering public pages, admin console, API routes, DB models, auth, branding, image system, chapters, events, email, site settings — to be used as the basis for a user guide.
+
+Work Log:
+- Walked the entire `src/app/` tree (pages, layouts, API routes) + `prisma/schema.prisma` (1562 lines, 39 models) + key lib files (`auth.ts`, `permissions.ts`, `site-settings.ts`, `chapter-settings.ts`, `blob-paths.ts`, `email.ts`, `email-orchestrator/*`) + `tailwind.config.ts` + `globals.css` + `public/brand-book.md` + `.env.example`.
+- Enumerated 23 admin routes, 12 public/member routes, ~110 API endpoints, 39 Prisma models.
+- Verified role hierarchy (SUPER_ADMIN > ADMIN > CHAPTER_ORGANIZER ≈ CO_HOST > MEMBER > SPEAKER) and per-route auth gates.
+- Cross-checked schema vs. code references — found 4 referenced-but-undefined models (`NonMember`, `NonMemberRegistration`, `EventRegistration`, `Testimonial`) + 1 undefined column (`User.mustSetPassword`). All flagged below under "Known Discrepancies" so the user-guide author doesn't mistake scaffolding for working features.
+
+See the full platform map below.
+
+---
+
+# AI Salon — Comprehensive Platform Map
+
+This document is the authoritative map of every route, page, feature, form, API endpoint, database model, admin tab, and configuration knob in the AI Salon web platform (`aisalon.massapro.com`).
+
+**Stack**: Next.js 15 App Router · TypeScript · Tailwind CSS v4 · Prisma (PostgreSQL) · NextAuth (Google + Email/Password) · Vercel Blob · Vercel Cron · WebSocket mini-services (chat, quiz).
+
+---
+
+## 1. Public & Member Pages
+
+### 1.1 Home `/`
+- **Access**: redirects → `/login` if anonymous, else → `/events`. No UI of its own.
+
+### 1.2 Login & Signup `/login`
+- **Access**: Public. Already-signed-in → `/events`.
+- **Layout**: 2-column. Left = brand panel (black, AIS-poly background, Falafel Meerkat mark, hero image, decorative gradient orb). Right = white login card.
+- **3 tabs** (selectable):
+  1. **Google** — `Continue with Google` button → NextAuth Google OAuth (`prompt: "select_account"`).
+  2. **Sign in** — Email + Password form → NextAuth Credentials provider id=`email`.
+     - Fields: `email` (type=email), `password` (type=password).
+     - Error states mapped from NextAuth codes (OAuthCallbackError, OAuthAccountNotLinked, etc.).
+     - Helper link to switch to Sign-up tab when password is forgotten ("we'll email you a new one").
+  3. **Sign up** — Name + Email form → `POST /api/auth/signup`. Sends a randomly-generated 8-char password by email. On success switches to the Sign-in tab.
+- **Dev-only expandable**: "Dev sign-in (any email, no password)" — visible only when `NODE_ENV !== "production"`. Calls NextAuth Credentials provider id=`dev`.
+- **Branding hooks**: hero image + banner image pulled from `SiteSetting` (`loginHero`, `loginBanner`). Defaults: `/images/falafel-meerkat.jpg`.
+- **OpenGraph metadata**: title "Login — AI Salon Tel Aviv", description, banner image.
+
+### 1.3 Chapter Landing `/c/[chapterSlug]`
+- **Access**: Public.
+- **Data fetched**: Chapter by slug (with country, future events, member count, event count).
+- **Hero**: gradient background (`#820A7D → #5b0758 → #FF005A`), country flag emoji + chapter name + city, member/event stat pills, WhatsApp group + LinkedIn buttons (only if set on chapter).
+- **Signup card** (left column): Name + Email → `POST /api/auth/signup` with `chapterSlug` in body → user is created with `countryId + chapterId` pre-set so they're auto-scoped to this chapter.
+- **Hero image**: chapter-specific `loginHero` (ChapterSetting override → global SiteSetting → default).
+- **Upcoming events**: list of up to 5 future events (started within last 24h allowed for tz edge cases), each linking to `/e/[slug]`.
+- **Inactive chapter**: shows "Chapter not active" page instead of the hero.
+- **Footer**: chapter name + "All chapters" link to `/`.
+
+### 1.4 Public Event Page `/e/[slug]`
+- **Access**: Public.
+- **Data fetched**: event + mainImage + speakers (sorted by `order`) + agenda (sorted by `startsAt`) + panelists per PANEL item + RSVP count (status=GOING) + current user's RSVP (if signed in).
+- **Hero**: chapter badge (red), date/time, city, country, "X Going" black pill, title + subtitle, venue + map/waze links.
+- **Sections**: speakers grid, agenda timeline, "About this event" description, "What you'll take home" takeaways, "This event is built for" intendedFor, RSVP/check-in widget.
+- **CTA states** (server-rendered, depends on session + RSVP state):
+  - Anonymous → "Register to event" → `/login?callbackUrl=/e/[slug]`.
+  - Signed-in, no RSVP → "Register to event" → `POST /api/events/[slug]/rsvp`.
+  - RSVP'd → "You're registered" + check-in button (only if window open: from 2h before `startsAt` to 6h after `endsAt`).
+  - Checked-in → big green panel showing the 8-char `XXXX-XXXX` code.
+- **OpenGraph**: title, description, mainImage (1200×630).
+
+### 1.5 Mobile Check-in Page `/e/[slug]/my-code`
+- **Access**: Authenticated. Anonymous → `/login?callbackUrl=/e/[slug]/my-code`. `robots: noindex`.
+- **Purpose**: mobile-first focused page an attendee opens from their email/SMS on the way to the venue. No tabs, no scroll, no distractions.
+- **States**: not registered → CTA to `/e/[slug]`; RSVP'd but window closed → "Check-in opens 2h before"; RSVP'd + window open → "I'm here — Check in" button; code exists → big code + copy button.
+
+### 1.6 Events List `/events`
+- **Access**: Public (anonymous users see "Join AI Salon" banner → `/login?callbackUrl=/events`). Signed-in but not-yet-onboarded → redirected to `/onboarding`.
+- **Header**: AISALON logo + "Tel Aviv Chapter" tagline + nav (Events / Community / AI & Human Flourishing / Admin if applicable) + LinkedIn "Join us" pill (blue) + WhatsApp "Join our group" pill (green).
+- **Anonymous banner**: pink→cyan gradient card with "Join AI Salon →" CTA.
+- **Referral card** (signed-in only, compact variant): shows the member's unique share link (`?utm_uid=...`) + Copy + Share buttons.
+- **"Your registered events"** section (signed-in only, with upcoming RSVPs): compact list with Save-to-Calendar buttons (Google / Outlook web / Yahoo / .ics download).
+- **Events grid**: each card shows main image, title, subtitle, chapter/city/country, date/time, "X Going" pill, photos + speakers count.
+- **Filters** (client-side): chapter dropdown (all active chapters), city dropdown (event.venue cities within selected chapter). Auto-shown only when >1 chapter or any city data exists.
+
+### 1.7 Event Detail (Authenticated) `/events/[slug]`
+- **Access**: Authenticated + onboarded. Anonymous → `/e/[slug]` (public page).
+- **Hero**: 16:9 main image banner, title, subtitle, chapter/city/country/date/time/Going pill, venue + Maps/Waze links, large date-block on the right, RSVP/check-in widget (header variant on desktop, card variant on mobile).
+- **Tabs** (URL-hash synced via `useHashTab`, only visible if permitted):
+  | Tab | Visible to | Purpose |
+  |---|---|---|
+  | Speakers & Agenda (`#agenda`) | everyone | speaker cards + agenda timeline |
+  | Overview (`#overview`) | everyone | description, takeaways, intended-for, RSVP/check-in sidebar |
+  | Photos (`#photos`) | everyone | community photo gallery, upload, tag speakers/sessions, reorder |
+  | Slideshow (`#slideshow`) | everyone | auto-crossfade full-screen slideshow |
+  | Presentations (`#presentations`) | everyone | deck/document downloads |
+  | 🧠 Quiz (`#quiz`) | if any quizzes exist OR can host | list of quiz sessions + create form (hosts only) |
+  | 💬 Chat (`#chat`) | signed-in | event group chat (auto-membership via RSVP) |
+  | 🎯 Event prep (`#event-prep`) | managers + speakers | read-only for speakers, editable for managers |
+  | 🛠 Manage Agenda (`#admin-agenda`) | managers | full agenda CRUD + speakers + presentations |
+  | 🛠 Manage Event (`#manage-event`) | managers | event details editor, co-hosts, speakers, stats |
+- **Referral card** (signed-in with utmUid): compact share-link variant for this event.
+
+### 1.8 Profile `/profile`
+- **Access**: Authenticated + onboarded.
+- **Left card**: avatar (with `ais-gradient-ring`), display name, email, tags (admin-assigned), bio, company/LinkedIn/portfolio links.
+- **Right form**: Display name, Email (read-only), Bio (max 2000), Company + Company URL, LinkedIn, Portfolio URL, Save / Reset buttons.
+- **Photo upload** (`POST /api/profile/photo`): drag-drop, auto-cropped to 512×512 via sharp, stored on Vercel Blob.
+- **Referral card** (full variant): unique share link + stats (visits, signups, RSVPs driven by this member).
+
+### 1.9 Onboarding `/onboarding`
+- **Access**: Authenticated + needs onboarding (`onboardedAt` null + `importSource` null). Already-onboarded or pre-imported → `/events`.
+- **Hero**: "Welcome to the community" + AISALON gradient title + 3 paragraphs of welcome copy.
+- **Form** (`POST /api/user/onboarding`):
+  - Full name * · Company * · Title/Role * · Email * (must match session, read-only field) · Mobile * · LinkedIn URL * (must contain `linkedin.com`).
+  - "I am interested in…" checkboxes (multi-select, `INTERESTED_IN_OPTIONS` in `lib/onboarding.ts`) + Other free-text.
+  - "Tell us more about yourself" checkboxes (multi-select, `PROFILE_CATEGORIES_OPTIONS`).
+  - "I would like to apply for" single-select: `"" | "Fast pitch" | "Presentation/Lecture"`.
+  - Bio (long text, max 2000).
+- On success sets `onboardedAt = NOW()`.
+
+### 1.10 Set Password `/set-password`
+- **Access**: Authenticated + `mustSetPassword = true`. (Note: this column is referenced in code but is NOT in `prisma/schema.prisma` — see "Known Discrepancies".)
+- **Form**: New password + confirm. On submit → `POST /api/auth/set-password` which clears the flag and routes the user to `/onboarding` (new users) or `/events` (imported users).
+
+### 1.11 Community Directory `/community`
+- **Access**: Authenticated + onboarded.
+- **Data**: every onboarded, non-archived member except the current user, sorted (photo-first, then alphabetical).
+- **Grid of member cards**: avatar (with gradient ring), name, title, company, tags, "Contact" button → opens DM dialog (uses `MessagesDialog`, see Inbox).
+- **DM dialog**: 2-pane WhatsApp-style — conversation list on the left, thread on the right. Live updates via WebSocket (chat-service `chat:dm-received` events on `chat:user:<id>` room).
+- **Footer**: "Showing X members · AI Salon Tel Aviv".
+
+### 1.12 Testimonials Feed `/testimonials`
+- **Access**: Authenticated + onboarded.
+- **Note**: This page and the `/api/testimonials` routes reference `db.testimonial` which does NOT exist in `prisma/schema.prisma` (see "Known Discrepancies"). The page builds but the API will 500 at runtime.
+- **Form** supports 4 scopes: 🌍 Community (no event) · 📍 About a specific event · 🎤 About a speaker · 🗓 About a session. Image upload (sharp resize to 1600² JPEG q82, Vercel Blob).
+- **Feed**: filterable, sortable (recent / top / oldest), like + share buttons.
+
+### 1.13 AI & Human Flourishing Microsite `/resources/ai-human-flourishing`
+- **Access**: Public.
+- **Layout**: existing `AppHeader` on top + `SiteNav` (salon microsite nav: Home / Welcome / Map / Postures / etc.) + main content (hero, world map, conversation areas, tools, vow generator).
+- **Sub-page**: `/resources/ai-human-flourishing/tools` (index) and `/resources/ai-human-flourishing/tools/[slug]` (tool detail).
+- Content sourced from `src/lib/salon-data/` (tools-data.ts, salon-data.ts, paths.ts).
+
+### 1.14 Quiz Player `/quiz/[sessionId]`
+- **Access**: Authenticated. Live Kahoot-style quiz — 4-option questions, 30s timer, scoring with speed bonus, real-time leaderboard via WebSocket (quiz-service).
+
+### 1.15 Static / Legal Pages
+- `/privacy` — Privacy Policy page (MassaPro operator, NextAuth/Google OAuth, bcrypt password hashing).
+- `/terms` — Terms of Service.
+- `/downloads` — Developer/operator UI to download backup files from `/home/z/my-project/download/`. Calls `/api/downloads`.
+
+### 1.16 Special Routes
+- `/admin/c/[chapterSlug]` — slug-based admin chapter editor (alias of `/admin/chapters/[id]`).
+
+---
+
+## 2. Admin Console
+
+**Admin Tabs** (defined in `src/components/ais/admin-tabs-def.ts` — `ALL_TABS` array). Filtered per role by `filterTabsByRole()`:
+
+| Tab | Path | Visible to |
+|---|---|---|
+| Members | `/admin` | SUPER_ADMIN + ADMIN |
+| Speakers | `/admin/speakers` | SUPER_ADMIN + ADMIN + CO_HOST |
+| Registrants | `/admin/registrants` | SUPER_ADMIN + ADMIN + CO_HOST |
+| Events | `/admin/events` | SUPER_ADMIN + ADMIN |
+| New event | `/admin/events/new` | SUPER_ADMIN + ADMIN |
+| Chapters | `/admin/chapters` | SUPER_ADMIN + ADMIN |
+| Door Check-in | `/admin/check-in` | SUPER_ADMIN + ADMIN + CO_HOST |
+| Dashboard | `/admin/dashboard` | SUPER_ADMIN + ADMIN |
+| Event dashboard | `/admin/dashboard/event-dashboard` | SUPER_ADMIN + ADMIN + CO_HOST |
+| Reports | `/admin/reports` | SUPER_ADMIN + ADMIN |
+| Email | `/admin/email` | SUPER_ADMIN + ADMIN |
+| Images | `/admin/images` | SUPER_ADMIN + ADMIN |
+| Knowledge Base | `/admin/knowledge-base` | SUPER_ADMIN + ADMIN |
+| Mockups | `/admin/mockups` | SUPER_ADMIN + ADMIN + CO_HOST |
+| Event Prep | `/admin/event-prep` | SUPER_ADMIN + ADMIN + CO_HOST + SPEAKER |
+
+(SPEAKER sees only the Event Prep tab. CO_HOST sees: Speakers, Registrants, Door Check-in, Event dashboard, Mockups, Event Prep.)
+
+There is also a parallel **`AdminNavCards`** component (`/admin`, `/admin/dashboard`, `/admin/speakers`, `/admin/testimonials`, `/admin/registrations`) used on legacy admin pages.
+
+### 2.1 Members `/admin`
+- **Access**: SUPER_ADMIN + ADMIN only. Auto-syncs SUPER_ADMIN role from email allowlist.
+- **Header**: scope badge (Global / Country / Chapter), role label, member email, "Chapters / Reports / Email campaigns / Member dashboard" quick-action links.
+- **Stat cards**: Members, Imported, Events, Linked to speaker.
+- **Super-Admin-only archive block**: link to `/admin/members/archive`.
+- **Members table** (`AdminMembersTable`): searchable, with columns for avatar, name+email, role badge, tags, country/chapter, mobile, interested-in, profile-categories, applied-for, invited-to-speak, import-source, linked-speakers, secondary-emails, created-at. Edit dialog (admin can edit profile + Super Admin can change role + country/chapter scope). Bulk actions: import, bulk-assign-scope, bulk-tags, bulk-delete, merge, bulk-reset-password.
+- **Events list** (recent events in scope, link to `/admin/events`).
+
+### 2.2 Members — Archive `/admin/members/archive`
+- **Access**: SUPER_ADMIN only.
+- Shows soft-deleted members (archivedAt != null) + Restore button.
+
+### 2.3 Members — Activity Report `/admin/members/activity-report?email=<email>`
+- **Access**: SUPER_ADMIN + ADMIN.
+- Aggregated chronological activity for a single member by email: emails sent/opened/clicked, RSVPs, check-ins, co-host assignments, speaker slots, referral traffic driven, DMs.
+
+### 2.4 Speakers `/admin/speakers`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (scoped).
+- Lists every Speaker across every event in scope. Filter by country/chapter. Add/edit/delete speakers, link to a User account, upload photo, link/unlink agenda items, clone speaker to another event, bulk-assign-scope.
+
+### 2.5 Registrants `/admin/registrants`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (scoped).
+- Lists every EventRsvp. Columns: attendee name/email, event title, status (GOING/MAYBE/NOT_GOING), source (MANUAL/EVENT_PAGE/IMPORT), checkInCode, checkedInAt, doorCheckedAt, approvedByCoHost, referredBy (UTM UID). Bulk-import, bulk-link, bulk-assign-scope, find-members, generate-code, mark-attendance.
+
+### 2.6 Events `/admin/events`
+- **Access**: SUPER_ADMIN + ADMIN + CHAPTER_ORGANIZER.
+- Lists events in scope with country/chapter/city filter (locked to scope for Admin/Chapter Organizer). "New event" CTA → `/admin/events/new`.
+- Each row: title, date, venue, co-hosts avatars, RSVP count, checked-in count, images/speakers/agenda counts. Click to edit at `/admin/events/[id]`.
+
+### 2.7 New Event `/admin/events/new`
+- **AI Event Extractor**: paste raw event copy (LinkedIn post, marketing email, etc.) → `POST /api/admin/events/extract` → LLM extracts title/subtitle/dates/venue/description/takeaways/intended-for/RSVP URL + a list of speakers (preview only; added manually after event creation).
+- **Form sections**: Basics (title*, subtitle, chapter, slug, startsAt*, endsAt*), Venue (venue name, address, city, country ISO, mapUrl, wazeUrl), Content (description, takeaways, intendedFor, external RSVP URL).
+- On submit → `POST /api/admin/events` → redirect to `/events/<slug>`.
+
+### 2.8 Edit Event `/admin/events/[id]`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (per-event scope check via `isEventCoHost`).
+- Full EventEditor: editable Basics, Venue, Content sections + co-hosts picker + speakers manager + agenda manager + main-image picker + stats card.
+
+### 2.9 Chapters `/admin/chapters`
+- **Access**: SUPER_ADMIN + ADMIN (read).
+- World map (`ChapterMapPanel`) of all chapters with stats (members, events, RSVPs, speakers, emails, mockups, quizzes).
+- Stat cards: Countries, Chapters, Members (scoped), Events (scoped).
+- "Add country" + "Add chapter" buttons (Super Admin only) + "Seed V7 Hierarchy" button (`<SeedV7Button />` calls `POST /api/admin/v7-seed`).
+- Click chapter → `/admin/chapters/[id]` (or `/admin/c/[chapterSlug]`).
+
+### 2.10 New Chapter `/admin/chapters/new`
+- **Access**: SUPER_ADMIN + ADMIN.
+- Form: Chapter name*, Slug* (auto-generated from name), Country* (select; Admin locked to own country), City, Timezone (default `Asia/Jerusalem`), WhatsApp group URL, LinkedIn URL, Active checkbox.
+- "Public registration URL" copyable field — `${siteUrl}/c/[slug]`.
+
+### 2.11 Edit Chapter `/admin/chapters/[id]` & `/admin/c/[chapterSlug]`
+- Same form as New Chapter, plus:
+- Hero / profile picture upload (Upload / Replace / Clear override) — writes to `ChapterSetting[loginHero]`.
+- "Admin URL" copyable field — `${siteUrl}/admin/c/[slug]`.
+
+### 2.12 Countries `/admin/countries`
+- **Access**: SUPER_ADMIN only (others redirect to `/admin/chapters`).
+- CRUD countries (name, 2-letter ISO code, slug, flag emoji, default email domain, default from-name, default reply-to, isActive).
+
+### 2.13 Door Check-in `/admin/check-in`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (event-scoped).
+- Single auto-focused input → `GET /api/admin/check-in/lookup?code=XXXX-XXXX`. Returns attendee info + event + non-transferrable-code warning.
+- Confirm button → `POST /api/admin/check-in/confirm` (atomic write to set `doorCheckedAt + doorCheckedBy`). Race-safe.
+- States: `PENDING_CONFIRM` (show member info + Confirm button), `ALREADY_USED` (show original check-in time + checker name + warning), `MISS` (404 — "No attendee found").
+
+### 2.14 Member Dashboard `/admin/dashboard`
+- **Access**: SUPER_ADMIN + ADMIN.
+- Community insights from onboarding + spreadsheet import data. Breakdowns: interested-in, profile-categories, applied-for, source (imported vs self-registered), tag distribution, signups over time. Filterable + sortable members table.
+
+### 2.15 Event Dashboard `/admin/dashboard/event-dashboard`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (scoped).
+- Per-event (or all-event) breakdowns of registrants, generated check-in codes, door check-ins, member attributes of registrants (company, interested-in, profile-categories, applied-for, role, source). Per-event picker + RSVPs table including referrer's utmUid.
+
+### 2.16 Reports `/admin/reports`
+- **Access**: SUPER_ADMIN + ADMIN.
+- Top-level stats (Members, Events, RSVPs, Speakers, Emails sent, Referral visits) + country breakdown table + chapter breakdown table (members, events, RSVPs, speakers, emails, referrals per chapter).
+
+### 2.17 Analytics `/admin/analytics`
+- **Access**: SUPER_ADMIN + ADMIN.
+- UTM referral analytics dashboard — tracks how members drive traffic + signups via their unique `utm_uid` share links. Real-time visit + signup + RSVP attribution per referrer.
+
+### 2.18 Email `/admin/email`
+- **Access**: SUPER_ADMIN + ADMIN.
+- **3 top-level tabs** (URL `?tab=`):
+  1. **Campaigns** (`/admin/email`) — list of email campaigns (DRAFT / SCHEDULED / SENDING / SENT / FAILED). New campaign composer (subject, bodyHtml, bodyText, signatureHtml, template picker, from-name, from-email, reply-to, recipient list builder). Per-campaign: schedule, send, save-as-template, continue, stats, recipients list.
+  2. **Orchestrator** (`/admin/email?tab=orchestrator`) — 5-stage email orchestrator (Awareness -240h, Reminder -48h, Final Prep -4h, Day-Of 0h, Recap +24h) with stop-if-not-opened rules. Force-send-stage button. Backup-db button (download DB snapshot).
+  3. **Flows** (`/admin/email/flows`) — flow builder with 3 sub-tabs: Flows / Audiences / Templates.
+- **Email pause kill-switch**: `K_EMAIL_SEND_PAUSED` site setting (defaults to `true` on fresh deploys — admin must explicitly click "Resume sending" at `/admin/email`).
+
+### 2.19 Email Flows `/admin/email/flows`
+- Flow builder canvas: up to 8 independent triggered steps per flow. Each step has 4 sections:
+  - **A. Audience** — reusable `EmailAudience` (STATIC list or DYNAMIC filter spec).
+  - **B. Trigger** — `RSVP_GOING | DOOR_CHECKED_IN | MARKED_ATTENDED | MARKED_NO_SHOW | MANUAL` (optionally scoped to one event).
+  - **C. Email** — pick an `EmailStageTemplate` + Subject A (and optional Subject B for 50/50 A/B test).
+  - **D. Delay** — value + unit (MINUTES / HOURS / DAYS) after trigger before sending.
+- Flow report dialog: per-step → variant A/B breakdown.
+- **Audiences sub-tab**: CRUD audiences, preview email list (resolve DYNAMIC filters live).
+- **Templates sub-tab**: CRUD `EmailStageTemplate` (Awareness / Reminder / Final Prep / Day-Of / Recap seeded defaults + admin-created custom templates). Per-template features: alt-subject re-send, no-check-in-code variant body, brand-logo override.
+- **Backup DB button** + **Cleanup synthetic RSVPs button**.
+
+### 2.20 Images `/admin/images`
+- **Access**: SUPER_ADMIN (full) + ADMIN (read-only).
+- **Brand images gallery** — combined view of:
+  1. Stock images from hidden `.images/` folder (served through `/api/admin/hidden-images/[name]`).
+  2. Uploaded images on Vercel Blob `brand-assets/` prefix (production) or `/public/uploads/brand-assets/` (sandbox).
+- **Per image card**: 3 buttons (Favicon, Login hero, Login banner). Each opens a **ScopePickerModal** with "Global" option + collapsible list of countries → chapters. Writes via `POST /api/admin/brand-images/select` with `scope: { type: "global" } | { type: "chapter", chapterId }`.
+- Each card shows badges for every scope it's currently set for; chapter-scoped badges have an X to clear (via `DELETE /api/admin/brand-images/select`).
+- **WhatsApp link editor** — current URL + Save button (writes `K_WHATSAPP_GROUP_URL` + `K_WHATSAPP_GROUP_TEXT`).
+- **LinkedIn link editor** — same pattern (`K_LINKEDIN_URL`).
+- **Analytics IDs editor** — GA4 Measurement ID (`K_GA4_MEASUREMENT_ID`) + Meta Pixel ID (`K_META_PIXEL_ID`). Scripts only load after cookie consent.
+
+### 2.21 Knowledge Base `/admin/knowledge-base`
+- **Access**: SUPER_ADMIN + ADMIN.
+- 5 sections of curated Google Drive / Docs resources:
+  1. Branding and Templates (Branding Assets folder)
+  2. Marketing and Communication (Social Media Handbook, WhatsApp Guidelines)
+  3. Event Management (Chapter Formation Meeting Template, Event Flow Guide, Venue Guidelines, Volunteer Recruitment Guide)
+  4. Sponsorship (Best Practices, Sponsor Deck Template)
+  5. Chapter Governance (Roles and Expectations Guide)
+- URLs maintained in `src/app/admin/knowledge-base/page.tsx` — no DB migration needed to update.
+
+### 2.22 Mockups `/admin/mockups`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST.
+- Reference library: Brand Assets + 4 canonical mockup templates (Speaker Intro, Meet the Speaker, Agenda Profile, Event Profile) + AI Event Mockup Template Generator system prompt.
+- Each mockup has its own sub-route with editor + canvas:
+  - `/admin/mockups/speaker-intro`
+  - `/admin/mockups/meet-the-speaker`
+  - `/admin/mockups/agenda-profile`
+  - `/admin/mockups/event-profile`
+  - `/admin/mockups/qr-salon`
+- "Save as default for event" button → serializes canvas JSON + uploads PNG snapshot to Vercel Blob → creates `EventMockupDefault` row. For `event-profile` type, also sets the event's `mainImageId`.
+
+### 2.23 Event Prep `/admin/event-prep`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST + SPEAKER.
+- Landing page lists events the user can prep for (managers see all in scope; CO_HOST sees co-hosted events; SPEAKER sees events they speak at).
+- Click → `/admin/event-prep/[id]` for the full read-only detail view (agenda, speakers, basic event info). Speakers can suggest edits via `EventPrepSuggestion` (status PENDING → ACCEPTED/REJECTED by Super Admin).
+- Super Admin can generate prep questions for each event via the "Generate questions" button.
+
+### 2.24 Quiz Admin `/admin/quiz`
+- **Access**: SUPER_ADMIN + ADMIN + CO_HOST (`quiz.host` permission).
+- List of quiz sessions with status (DRAFT / LOBBY / LIVE / PAUSED / BETWEEN / FINISHED / ABORTED), host, event link, participants count. Create new session.
+- Click → `/admin/quiz/[id]` — Control Room (advance questions, pause/resume, kill switch), Question Editor (edit/toggle questions, set per-question time limit), Results View (final leaderboard + per-question breakdown).
+
+### 2.25 Registrations `/admin/registrations`
+- **Access**: ADMIN only (hardcoded `me.role !== "ADMIN"` check).
+- Upload event RSVP spreadsheet → cross-reference against existing members. Matching emails → member's event registration list; new emails → non-member leads; suspected duplicates flagged.
+- Note: depends on `EventRegistration` + `NonMember` models that don't exist in Prisma schema (see "Known Discrepancies").
+
+### 2.26 Testimonials `/admin/testimonials`
+- **Access**: ADMIN only.
+- Moderate testimonials: feature (pink badge) or hide. Hidden testimonials still visible to author + admin.
+- Note: depends on `Testimonial` model that doesn't exist in Prisma schema.
+
+### 2.27 Event `/admin/event`
+- Legacy admin "Event" tab with two inner sub-tabs: "Manage event" (searchable list → inline panel with Details/Sessions/Agenda/Speakers/Presentations/Co-hosts) + "Add new event" (reuses `<NewEventForm />`).
+- **Access**: SUPER_ADMIN + ADMIN only.
+
+---
+
+## 3. API Routes
+
+All routes under `src/app/api/`. Auth: most require a NextAuth session; some accept `Bearer CRON_SECRET` for Vercel Cron.
+
+### 3.1 Health
+- `GET /api` — returns `{ message: "Hello, world!" }`.
+
+### 3.2 Auth (`/api/auth/`)
+- `* /api/auth/[...nextauth]` — NextAuth catch-all (Google + Credentials `email` + Credentials `dev`).
+- `POST /api/auth/signup` — Email+Name (+ optional `chapterSlug`) → creates user, emails password.
+- `POST /api/auth/register` — Email+Name+Password → creates user with bcrypt hash (alternate registration path).
+- `POST /api/auth/set-password` — Sets new password, clears `mustSetPassword`, routes user.
+- `POST /api/auth/change-password` — Verifies current password, sets new (for logged-in users).
+- `GET /api/auth/post-login-redirect` — Decides redirect target after login (`/set-password` / `/onboarding` / `/events`).
+
+### 3.3 Profile & Onboarding (`/api/profile/`, `/api/user/`)
+- `GET /api/profile` — current user's profile + tags.
+- `PATCH /api/profile` — update own profile (name, bio, company, companyUrl, linkedinUrl, portfolioUrl, title).
+- `POST /api/profile/photo` — upload profile photo (sharp resize to 512², Vercel Blob).
+- `DELETE /api/profile/photo` — remove photo.
+- `POST /api/profile/set-password` — set own password from profile page.
+- `GET /api/user/onboarding` — check if current user needs onboarding.
+- `POST /api/user/onboarding` — submit onboarding form.
+- `GET /api/me/referral-stats` — current user's referral visit/signup/RSVP stats.
+
+### 3.4 Site Settings (`/api/site-settings/`, `/api/admin/site-settings/`)
+- `GET /api/site-settings` — PUBLIC. Returns favicon, loginHero, loginBanner, whatsappGroupUrl, whatsappGroupText, linkedinUrl, ga4MeasurementId, metaPixelId, emailSendPaused. 5-min CDN cache.
+- `GET /api/admin/site-settings` — admin-only, full list.
+- `POST /api/admin/site-settings/whatsapp` — Super Admin: update WhatsApp URL + text.
+- `POST /api/admin/site-settings/email-pause` — Super Admin: toggle email pause kill-switch.
+
+### 3.5 Events (`/api/events/`)
+- `GET /api/events` — all events (newest first).
+- `GET /api/events/[slug]` — single event with speakers + agenda + mainImage.
+- `GET /api/events/[slug]/rsvp` — current user's RSVP for event.
+- `POST /api/events/[slug]/rsvp` — register (idempotent upsert, status=GOING, source=EVENT_PAGE). Sends RSVP confirmation email + .ics attachment. Triggers `RSVP_GOING` email flows.
+- `DELETE /api/events/[slug]/rsvp` — cancel RSVP.
+- `GET /api/events/[slug]/check-in` — current user's check-in code + windowOpen flag.
+- `POST /api/events/[slug]/check-in` — generate or return existing 8-char Crockford base32 code. Window: startsAt-2h → endsAt+6h.
+- `GET /api/events/[slug]/images` — list event images.
+- `POST /api/events/[slug]/images` — upload photos (sharp rotate+resize, Vercel Blob `events/<eventId>/<cuid>.jpg`).
+- `GET /api/events/[slug]/presentations` — list presentation files.
+- `POST /api/events/[slug]/presentations/register` — register a URL as a presentation.
+- `POST /api/events/[slug]/presentations/client-upload` — client-side upload of a presentation file.
+- `GET /api/events/[slug]/event-prep` — list prep questions + suggestions.
+- `PATCH /api/events/[slug]/event-prep/suggestions/[id]` — accept/reject a suggestion (Super Admin).
+
+### 3.6 Admin — Members (`/api/admin/members/`)
+- `GET /api/admin/members` — list all members (with tags, speakers, image count).
+- `GET /api/admin/members/search` — search members by email/name.
+- `GET /api/admin/members/companies` — distinct company list.
+- `POST /api/admin/members` — create member (admin-only).
+- `POST /api/admin/members/bulk-import` — CSV/JSON bulk import.
+- `POST /api/admin/members/bulk-delete` — bulk delete.
+- `POST /api/admin/members/bulk-reset-password` — bulk reset password.
+- `POST /api/admin/members/bulk-tags` — bulk assign tags.
+- `POST /api/admin/members/bulk-assign-scope` — bulk assign country/chapter scope.
+- `POST /api/admin/members/merge` — merge two member accounts.
+- `GET /api/admin/members/import-template` — download CSV template.
+- `GET /api/admin/members/activity-report?email=<email>` — per-member activity feed.
+- `PATCH /api/admin/members/[id]` — edit member profile (+ role if Super Admin).
+- `POST /api/admin/members/[id]/archive` — soft-delete (archive).
+- `POST /api/admin/members/[id]/credentials` — admin-set password.
+- `POST /api/admin/members/[id]/reset-password` — admin reset password.
+- `POST /api/admin/members/[id]/photo` — admin upload photo for member.
+- `POST /api/admin/members/[id]/emails` — add secondary email.
+- `DELETE /api/admin/members/[id]/emails/[emailId]` — remove secondary email.
+- `POST /api/admin/members/[id]/tags` — assign tag.
+- `POST /api/admin/members/[id]/link-speaker` — link user to a Speaker row.
+- `POST /api/admin/members/[id]/convert-to-speaker` — convert member to speaker role.
+
+### 3.7 Admin — Events (`/api/admin/events/`)
+- `POST /api/admin/events` — create event.
+- `POST /api/admin/events/extract` — AI event extractor (LLM parses raw text).
+- `POST /api/admin/events/bulk-assign-scope` — bulk assign chapter to events.
+- `PATCH /api/admin/events/[id]` — update event details.
+- `POST /api/admin/events/[id]/main-image` — set main image.
+- `GET /api/admin/events/[id]/registrations` — list event registrations (member + non-member).
+- `POST /api/admin/events/[id]/mockup-defaults` — save mockup default for event.
+- `POST /api/admin/events/[id]/backfill-speaker-members` — backfill speaker.userId from contactEmail.
+- `GET /api/admin/events/[id]/cohosts` + `GET /api/admin/events/[id]/co-hosts` — list co-hosts.
+- `POST /api/admin/events/[id]/cohosts` + `POST /api/admin/events/[id]/co-hosts` — add co-host.
+- `DELETE /api/admin/events/[id]/cohosts/[userId]` + `DELETE /api/admin/events/[id]/co-hosts/[userId]` — remove co-host.
+- `GET /api/admin/events/[id]/rsvps` — list event RSVPs.
+- `POST /api/admin/events/[id]/rsvps/[rsvpId]/approve` — co-host pre-approve RSVP for door entry.
+
+### 3.8 Admin — Speakers (`/api/admin/speakers/`)
+- `GET /api/admin/speakers` — list all speakers in scope.
+- `GET /api/admin/speakers/full` — full speaker roster (more fields).
+- `POST /api/admin/speakers` — create speaker.
+- `POST /api/admin/speakers/bulk-assign-scope` — bulk chapter reassignment.
+- `PATCH /api/admin/speakers/[id]` — edit speaker.
+- `POST /api/admin/speakers/[id]/photo` — upload speaker photo.
+- `POST /api/admin/speakers/[id]/clone` — clone to another event.
+- `POST /api/admin/speakers/[id]/link-agenda` — link to agenda item.
+- `POST /api/admin/speakers/[id]/unlink-agenda` — unlink from agenda item.
+
+### 3.9 Admin — Registrants & RSVPs (`/api/admin/registrants/`, `/api/admin/rsvps/`)
+- `GET /api/admin/registrants` — list all RSVPs.
+- `PATCH /api/admin/registrants/[id]` — edit RSVP.
+- `POST /api/admin/registrants/bulk-import` — bulk import RSVPs.
+- `POST /api/admin/registrants/bulk-link` — bulk link to user accounts.
+- `POST /api/admin/registrants/bulk-assign-scope` — bulk assign chapter.
+- `POST /api/admin/registrants/find-members` — find user by email for linking.
+- `GET /api/admin/registrants/import-template` — download CSV template.
+- `POST /api/admin/rsvps/[id]/generate-code` — manually generate check-in code for RSVP.
+- `POST /api/admin/rsvps/[id]/attendance` — mark attended / no-show (post-event).
+
+### 3.10 Admin — Check-in (`/api/admin/check-in/`)
+- `GET /api/admin/check-in/lookup?code=XXXX-XXXX` — door-staff lookup (returns PENDING_CONFIRM / ALREADY_USED / MISS).
+- `POST /api/admin/check-in/confirm` — atomic door check-in write (race-safe).
+
+### 3.11 Admin — Agenda (`/api/admin/agenda/`)
+- `POST /api/admin/agenda` — create agenda item (multipart: supports new speaker + presentation file upload).
+- `PATCH /api/admin/agenda/[id]` — update agenda item.
+
+### 3.12 Admin — Chapters & Countries (`/api/admin/chapters/`, `/api/admin/countries/`)
+- `GET /api/admin/chapters` — list chapters in scope.
+- `POST /api/admin/chapters` — create chapter.
+- `GET /api/admin/chapters/for-assign` — minimal list for assignment pickers.
+- `PATCH /api/admin/chapters/[id]` — update chapter.
+- `GET /api/admin/countries` — list countries in scope.
+- `POST /api/admin/countries` — create country (Super Admin only).
+- `PATCH /api/admin/countries/[id]` — update country (Super Admin only).
+
+### 3.13 Admin — Non-members (`/api/admin/non-members/`)
+- `GET /api/admin/non-members` — list non-member registrants (status/eventId/q filters).
+- `POST /api/admin/non-members/[id]/ignore` — ignore duplicate suggestion.
+- `POST /api/admin/non-members/[id]/merge` — merge into existing user account.
+- (Note: depends on `NonMember` model — see "Known Discrepancies".)
+
+### 3.14 Admin — Brand Images (`/api/admin/brand-images/`, `/api/admin/hidden-images/`)
+- `GET /api/admin/brand-images` — combined list (stock `.images/` + uploaded Blob brand-assets) + current selections + chapter selections + countries with chapters.
+- `POST /api/admin/brand-images` — upload new brand image to Vercel Blob (8 MB max, JPG/PNG/WebP/GIF/AVIF).
+- `POST /api/admin/brand-images/select` — mark image as favicon / loginHero / loginBanner at global or chapter scope. Copies stock bytes to Blob if needed.
+- `DELETE /api/admin/brand-images/select` — clear chapter-scoped override.
+- `GET /api/admin/hidden-images` — list `.images/` stock folder.
+- `GET /api/admin/hidden-images/[name]` — stream stock image bytes.
+
+### 3.15 Admin — WhatsApp & LinkedIn (`/api/admin/whatsapp/`, `/api/admin/linkedin/`)
+- `GET /api/admin/whatsapp` — current WhatsApp URL + text.
+- `POST /api/admin/whatsapp` — update (Super Admin).
+- `GET /api/admin/linkedin` — current LinkedIn URL.
+- `POST /api/admin/linkedin` — update (Super Admin).
+
+### 3.16 Admin — Email Campaigns (`/api/admin/email/`)
+- `GET /api/admin/email/campaigns` — list campaigns (filter by status).
+- `POST /api/admin/email/campaigns` — create DRAFT campaign.
+- `GET /api/admin/email/campaigns/[id]` — fetch campaign.
+- `PATCH /api/admin/email/campaigns/[id]` — update.
+- `POST /api/admin/email/campaigns/[id]/send` — start sending.
+- `POST /api/admin/email/campaigns/[id]/schedule` — schedule for future send.
+- `POST /api/admin/email/campaigns/[id]/continue` — resume a paused send.
+- `POST /api/admin/email/campaigns/[id]/save-as-template` — clone as EmailTemplate.
+- `GET /api/admin/email/campaigns/[id]/stats` — open/click/reply stats.
+- `GET /api/admin/email/campaigns/[id]/recipients` — recipient list with per-recipient state.
+- `GET /api/admin/email/preview-list` — preview recipient list for a list config.
+- `POST /api/admin/email/force-send-stage` — manually force-send a stage to an RSVP.
+
+### 3.17 Email Templates (`/api/email-templates/`)
+- `GET /api/email-templates` — list stage + custom templates.
+- `POST /api/email-templates` — create custom template.
+- `GET /api/email-templates/[id]` — fetch template.
+- `PATCH /api/email-templates/[id]` — update.
+- `POST /api/email-templates/[id]/duplicate` — duplicate template.
+- `GET /api/email-templates/[id]/metrics` — template usage metrics.
+- `POST /api/email-templates/upload-image` — upload image for use in template body.
+
+### 3.18 Email Audiences (`/api/email-audiences/`)
+- `GET /api/email-audiences` — list audiences.
+- `POST /api/email-audiences` — create audience (STATIC or DYNAMIC).
+- `GET /api/email-audiences/[id]` — fetch audience.
+- `PATCH /api/email-audiences/[id]` — update.
+- `DELETE /api/email-audiences/[id]` — delete.
+- `GET /api/email-audiences/[id]/emails` — resolve dynamic audience → email list.
+- `GET /api/email-audiences/preview` — preview a filter spec → email list.
+- `GET /api/email-audiences/email-options` — list available filter fields + operators.
+
+### 3.19 Email Flows (`/api/email-flows/`)
+- `GET /api/email-flows` — list flows with per-status queue counts.
+- `POST /api/email-flows` — create flow with up to 8 steps.
+- `GET /api/email-flows/[id]` — fetch flow.
+- `PATCH /api/email-flows/[id]` — update.
+- `POST /api/email-flows/run` — manually trigger flow worker (admin or CRON_SECRET).
+- `GET /api/email-flows/runs` — list recent flow runs.
+- `POST /api/email-flows/[id]/trigger` — manually trigger a step for an audience.
+- `GET /api/email-flows/[id]/report` — per-step A/B subject variant report.
+
+### 3.20 Email Orchestrator (`/api/email-orchestrator/`)
+- `POST /api/email-orchestrator/run` — run both legacy 5-stage + flow workers (admin or CRON_SECRET). Also accepts GET.
+- `GET /api/email-orchestrator/queue` — inspect queue.
+- `POST /api/email-orchestrator/seed` — seed stage templates + Test audience.
+- `POST /api/email-orchestrator/simulate` — simulate a send without delivering.
+
+### 3.21 Cron (`/api/cron/email/`)
+- `GET /api/cron/email` — Vercel Cron job (every 10 min). Retries FAILED recipients + processes QUEUED recipients on SENDING campaigns. Requires `Bearer CRON_SECRET`.
+- `POST /api/cron/email` — manual trigger (admin or CRON_SECRET).
+- `GET /api/cron/email/send-scheduled` — send SCHEDULED campaigns whose time has come.
+- `GET /api/cron/email/imap-poll` — poll IMAP for replies/bounces.
+
+### 3.22 Email Tracking (`/api/email/`, `/api/track/`)
+- `GET /api/email/open` — open-tracking pixel.
+- `GET /api/email/click` — click-redirect.
+- `GET /api/email/unsubscribe` — unsubscribe link.
+- `GET /api/track/email-open` — alt open pixel (per-queue-id).
+- `GET /api/track/email-click` — alt click redirect.
+- `GET /api/track/open` — generic open.
+- `GET /api/track/click` — generic click.
+- `GET /api/track/pageview` — pageview tracking.
+- `GET /api/track/page-leave` — page-leave beacon.
+- `GET /api/track/event` — generic event.
+- `GET /api/track/lead` — lead event.
+- `GET /api/track/conversion` — conversion event.
+
+### 3.23 Messages (`/api/messages/`)
+- `GET /api/messages/[userId]` — DM thread with user + mark as read.
+- `POST /api/messages/[userId]` — send DM (body max 4000). Fire-and-forget email notification to recipient + ADMIN_EMAIL CC.
+- `GET /api/messages/unread-count` — current user's unread DM count.
+- `GET /api/messages/conversations` — list of DM partners.
+
+### 3.24 Chat Rooms (`/api/chat/`)
+- `GET /api/chat/rooms` — list rooms the user is a member of (with unread count + last message preview).
+- `POST /api/chat/rooms` — create a room (admin-only — for future GROUP rooms).
+- `GET /api/chat/rooms/[roomId]/messages` — list messages in a room.
+- `POST /api/chat/rooms/[roomId]/messages` — post a message (with optional replyToId).
+- `POST /api/chat/rooms/[roomId]/read` — mark room as read (update lastReadAt).
+- `GET /api/chat/events/[eventId]/room` — get-or-create the event's group chat room (one per event). Bulk-inserts ChatRoomMember rows for every RSVP'd user + co-hosts + linked speakers.
+
+### 3.25 Quiz (`/api/quiz/`, `/api/admin/quiz/`)
+- `POST /api/quiz/[sessionId]/join` — idempotent join (creates QuizParticipant, sets isOnline).
+- `GET /api/quiz/[sessionId]/state` — current state (status, currentQuestionIndex, currentQuestionStartedAt).
+- `POST /api/quiz/[sessionId]/answer` — submit answer (selected index). Scoring: 500 base + up to 500 speed bonus.
+- `GET /api/quiz/[sessionId]/leaderboard` — current leaderboard.
+- `GET /api/admin/quiz` — list sessions (co-host scoped).
+- `POST /api/admin/quiz` — create session.
+- `GET /api/admin/quiz/events` — events picker for create form.
+- `GET /api/admin/quiz/[id]` — fetch session.
+- `PATCH /api/admin/quiz/[id]` — update session.
+- `POST /api/admin/quiz/[id]/duplicate` — duplicate session.
+- `POST /api/admin/quiz/[id]/restart` — restart session.
+- `POST /api/admin/quiz/[id]/clear-responses` — clear all responses.
+- `GET /api/admin/quiz/[id]/results` — final results.
+- `GET /api/admin/quiz/[id]/questions` — list questions.
+- `POST /api/admin/quiz/[id]/questions` — add question.
+- `PATCH /api/admin/quiz/[id]/questions/[questionId]` — update question.
+
+### 3.26 Testimonials (`/api/testimonials/`)
+- `GET /api/testimonials` — list (filter by eventId/speakerId/agendaItemId/scope/authorId/featured; sort recent/top/oldest).
+- `POST /api/testimonials` — create (multipart: body, rating, eventDate, eventId/speakerId/agendaItemId, image).
+- `GET /api/testimonials/[id]` — fetch.
+- `PATCH /api/testimonials/[id]` — update (admin or author).
+- `POST /api/testimonials/[id]/like` — toggle like.
+- `POST /api/testimonials/[id]/share` — increment share count.
+- (Note: depends on `Testimonial` model — see "Known Discrepancies".)
+
+### 3.27 Speakers (`/api/speakers/`)
+- `GET /api/speakers/[id]/messages` — list SpeakerMessages for a speaker.
+
+### 3.28 Presentations (`/api/presentations/`)
+- `GET /api/presentations/[id]` — fetch presentation metadata.
+- `DELETE /api/presentations/[id]` — delete (admin or uploader).
+
+### 3.29 Images (`/api/images/`)
+- `PATCH /api/images/[id]` — update image (caption, slideOrder, link speakers, link agenda items).
+- `DELETE /api/images/[id]` — delete image.
+- `POST /api/images/bulk-link` — bulk link images to speakers/sessions.
+- `POST /api/images/reorder` — reorder images in slideshow.
+- `POST /api/images/rotate` — rotate image (90° increments).
+
+### 3.30 Analytics (`/api/admin/analytics/`)
+- `GET /api/admin/analytics` — UTM referral analytics data (per-referrer visit/signup/RSVP counts, time-series).
+
+### 3.31 Backup & Downloads (`/api/downloads/`, `/api/admin/backup-db/`)
+- `GET /api/downloads` — list files in `/home/z/my-project/download/`.
+- `GET /api/downloads/[filename]` — download a file.
+- `POST /api/admin/backup-db` — admin-triggered DB snapshot (writes to `download/`).
+
+### 3.32 V7 Seed (`/api/admin/v7-seed/`)
+- `POST /api/admin/v7-seed` — Super Admin: idempotent seed of Israel + Tel Aviv hierarchy + backfill every existing row's `countryId/chapterId` to Israel/Tel-Aviv. Returns verification report.
+
+### 3.33 Cleanup (`/api/admin/cleanup-synthetic-rsvps/`)
+- `POST /api/admin/cleanup-synthetic-rsvps` — admin: delete synthetic RSVP rows created by legacy "send to audience" flow.
+
+---
+
+## 4. Member Dashboard (Authenticated, non-admin)
+
+Authenticated members (signed in + onboarded) get these pages:
+
+| Route | Purpose |
+|---|---|
+| `/events` | Browse all events (past + future), filter by chapter/city, see "Your registered events" with calendar-save buttons, share referral link. |
+| `/events/[slug]` | Authenticated event page with 10 tabs (Agenda / Overview / Photos / Slideshow / Presentations / Quiz / Chat / Event Prep / Manage Agenda / Manage Event — last 4 are role-gated). |
+| `/e/[slug]` | Public event landing page (also works signed-in). |
+| `/e/[slug]/my-code` | Mobile check-in code display. |
+| `/profile` | Edit profile + photo + referral card. |
+| `/community` | Member directory + DMs. |
+| `/testimonials` | Testimonials feed + post form. (Note: broken — see "Known Discrepancies".) |
+| `/quiz/[sessionId]` | Kahoot-style live quiz player. |
+| `/onboarding` | One-time intake form (auto-redirected to from `/events` + `/profile` until completed). |
+| `/set-password` | Forced password reset (when `mustSetPassword=true`). |
+| `/resources/ai-human-flourishing` | Public microsite (also accessible to members). |
+| `/privacy`, `/terms` | Legal pages. |
+| `/downloads` | Developer/operator backup downloads. |
+
+---
+
+## 5. Database Schema (Prisma)
+
+Schema at `prisma/schema.prisma` (1562 lines, 39 models). Provider: PostgreSQL (production Vercel Postgres / Neon) — also see `prisma/schema.sqlite-sandbox.prisma` for offline SQLite dev.
+
+### 5.1 V7 Hierarchy Models
+- **`Country`** — `id, name (unique), code (unique, ISO alpha-2), slug (unique), flagEmoji, defaultEmailDomain, defaultFromName, defaultReplyTo, isActive`. Relations: `chapters`, `users`.
+- **`Chapter`** — `id, name, slug (unique), countryId, city, timezone (default "Asia/Jerusalem"), whatsappGroupUrl, linkedinUrl, isActive`. Relations: country, users, events, speakers, rsvps, emailQueueItems, emailRecipients, emailCampaigns, emailTemplates, stageTemplates, emailFlows, emailAudiences, referralVisits, referralAttributions, settings, templateOverrides. `@@unique([countryId, slug])`.
+- **`ChapterSetting`** — per-chapter key/value overrides. `id, chapterId, key, value, updatedBy, updatedAt`. `@@unique([chapterId, key])`. Supported keys: `favicon`, `loginHero`, `loginBanner` (mirrors global image keys).
+- **`ChapterEmailTemplateOverride`** — per-chapter override of a global `EmailStageTemplate`. `chapterId, stageTemplateId, logoUrl, subject, htmlBody, isActive`. `@@unique([chapterId, stageTemplateId])`.
+
+### 5.2 User & Member Models
+- **`User`** — primary identity. Key fields:
+  - Identity: `id, email (unique), name, image, passwordHash (bcrypt, nullable for Google-only users), utmUid (unique 12-char hex for referral tracking)`.
+  - Profile: `bio, linkedinUrl, company, companyUrl, portfolioUrl, photoUrl, title`.
+  - Imported (admin-only): `mobile, interestedIn, profileCategories, appliedFor, invitedToSpeak, importSource, importedAt`.
+  - Onboarding: `onboardedAt` (null = hasn't filled intake form).
+  - Soft-delete: `archivedAt, archivedBy` (self-relation `UserArchiver`).
+  - V7 scoping: `countryId, chapterId` (both nullable for backwards-compat).
+  - Role: `role` (default "MEMBER") — `"SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"`.
+  - Note: `mustSetPassword` is referenced in code but NOT defined in the schema (see "Known Discrepancies").
+  - Relations: tags, images, presentations, speakerMessages, sentMessages, receivedMessages, speakers, secondaryEmails, emailCampaigns, emailTemplates, emailRecipients, eventRsvps, eventCoHosts, coHostAddedBy, prepSuggestions, referralVisits, referredSignups, signupAttributedTo, referredRsvps, approvedRsvps, emailQueueItems, hostedQuizSessions, quizParticipations, chatRoomsCreated, chatMemberships, chatMessages.
+- **`UserEmail`** — secondary emails linked to a User. `userId, email (unique), label`. Allows sign-in with multiple emails → same account.
+- **`ConversationMessage`** — direct message between two users. `senderId, recipientId, body, readAt, createdAt`.
+- **`MemberTag`** — admin-assigned tag (Speaker / Builder / Investor / etc.). `label (unique), color, userId`.
+
+### 5.3 Event Models
+- **`Event`** — `id, slug (unique), title, subtitle, chapter (legacy free-form), venue, address, city, country (legacy ISO code), mapUrl, wazeUrl, startsAt, endsAt, description, takeaways, intendedFor, rsvpUrl, coverImage (legacy), chapterId (V7 FK), isCrossChapter, mainImageId, createdAt, updatedAt`.
+  - Relations: chapterRef, speakers, agenda, images, presentations, rsvps, coHosts, mockupDefaults, prepQuestions, prepSuggestions, emailQueueItems, quizSessions, chatRoom.
+- **`Speaker`** — `id, eventId, name, role, company, bio, topic, photoUrl, contactEmail, userId (optional link to User), order, chapterId`. Relations: event, user, images, presentations, agendaItems (lead), panelItems (panelist), messages, prepQuestions.
+- **`SpeakerMessage`** — one-way message from a member to a speaker. `speakerId, fromUserId, fromName, fromEmail, body, createdAt`.
+- **`EventAgendaItem`** — `id, eventId, startsAt, endsAt, title, description, type ("TALK" | "BREAK" | "NETWORKING" | "FAST_PITCH" | "WELCOME" | "PANEL"), speakerId (lead/moderator), sessionUrl, mainImageId`. M:N `panelists` (Speaker[]) + `taggedImages` (EventImage[]) + `presentations` (PresentationFile[]).
+- **`EventMockupDefault`** — saved mockup default per event per type. `eventId, type ("speaker-intro" | "meet-the-speaker" | "agenda-profile" | "event-profile"), dataJson, imageUrl (PNG snapshot on Blob), caption, eventImageId`. `@@unique([eventId, type])`.
+- **`EventImage`** — community-uploaded photo. `eventId, uploaderId, fileName, fileUrl, fileSize, width, height, mimeType, caption, slideOrder`. M:N `speakers` + `agendaItems`. Back-relations: `mainOfEvents`, `mainOfAgendaItems`.
+- **`PresentationFile`** — PDF/PPT/PPTX/Keynote/etc. `eventId, uploaderId, fileName, fileUrl (Vercel Blob), fileSize, mimeType, title, description, agendaItemId`. M:N `speakers`.
+
+### 5.4 Email Models (15)
+- **`EmailTemplate`** — reusable admin-created template. `name, slug, category, subject, bodyHtml, bodyText, signatureHtml, thumbnailUrl, createdBy, chapterId (nullable = global)`.
+- **`EmailCampaign`** — single send-out. `name, templateId, subjectSnapshot, bodyHtmlSnapshot, bodyTextSnapshot, signatureHtmlSnapshot, listSource ("ALL_MEMBERS" | "TAG:..." | "EVENT:..." | "MANUAL:..."), listConfigJson, recipientCount, status ("DRAFT" | "SCHEDULED" | "SENDING" | "SENT" | "FAILED"), scheduledAt, startedAt, completedAt, fromName, fromEmail, replyTo, createdBy, chapterId`.
+- **`EmailRecipient`** — per-recipient delivery state. `campaignId, userId, email, name, trackToken (unique), messageId, status ("QUEUED" | "SENT" | "FAILED" | "BOUNCED" | "COMPLAINED"), errorReason, retryCount, sentAt, firstOpenedAt, lastOpenedAt, openCount, firstClickedAt, lastClickedAt, clickCount, repliedAt, replySnippet, chapterId`. `@@unique([campaignId, email])`.
+- **`EmailEvent`** — per-campaign/recipient tracking event. `campaignId, recipientId, email, type ("SENT" | "DELIVERED" | "OPENED" | "CLICKED" | "REPLIED" | "BOUNCED" | "COMPLAINED"), details, userAgent, ipAddress`.
+- **`EmailQueue`** — orchestrator + flow queue. `rsvpId (optional), eventId, userId, email, stage (1..5), flowStepId (optional), status ("PENDING" | "QUEUED" | "SENT" | "OPENED" | "CLICKED" | "SKIPPED" | "FAILED"), scheduledFor, sentAt, openedAt, clickedAt, subject, htmlBody, subjectVariant ("A" | "B"), audienceId, isAltResend, altOfEmailQueueId, usedNoCodeVariant, errorMessage, attemptCount, chapterId`.
+- **`EmailStageTemplate`** — admin-editable stage + custom templates. `stage (1..5 nullable, @unique), name (@unique), subject, htmlBody, stopIfNotOpenedHours, isActive, isDefault, altSubject, altNotOpenedHours, noCodeHtmlBody, noCodeSubject, logoUrl, chapterId`. Relations: flowSteps, chapterOverrides.
+- **`TrackingLog`** — per-queue-row open/click audit log. `queueId, type ("OPEN" | "CLICK"), targetUrl, userAgent, ip, metaPayload (Json), metaSentAt`.
+- **`EmailFlow`** — rule-based flow. `name, description, status ("DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"), chapterId, createdBy`. Relations: steps.
+- **`EmailFlowStep`** — single step in a flow (max 8 per flow). `flowId, position, audienceId, triggerKind ("RSVP_GOING" | "DOOR_CHECKED_IN" | "MARKED_ATTENDED" | "MARKED_NO_SHOW" | "MANUAL"), triggerEventId, templateId, subjectVariantA, subjectVariantB, delayValue, delayUnit ("MINUTES" | "HOURS" | "DAYS")`. `@@unique([flowId, position])`.
+- **`EmailAudience`** — reusable named audience. `name (@unique), slug (@unique), description, kind ("STATIC" | "DYNAMIC"), emailsJson (STATIC), filtersJson (DYNAMIC), isTest, chapterId`.
+
+### 5.5 RSVP & Co-host Models
+- **`EventRsvp`** — RSVP. `eventId, userId, email, name, status ("GOING" | "MAYBE" | "NOT_GOING"), source ("MANUAL" | "EVENT_PAGE" | "IMPORT"), checkInCode (@unique, 8-char Crockford base32 "XXXX-XXXX"), checkedInAt, doorCheckedAt, doorCheckedBy, approvedByCoHostId, approvedAt, referredByUserId, attendedAt, noShow, attendedMarkedBy, chapterId`. `@@unique([eventId, email])`.
+- **`EventCoHost`** — admin-designated event collaborator. `eventId, userId, addedBy`. `@@unique([eventId, userId])`.
+
+### 5.6 Site Settings
+- **`SiteSetting`** — flat key/value store. `key (@id), value, updatedAt, updatedBy`. Keys (from `src/lib/site-settings.ts`): `favicon`, `loginHero`, `loginBanner`, `whatsappGroupUrl`, `whatsappGroupText`, `linkedinUrl`, `ga4MeasurementId`, `metaPixelId`, `emailSendPaused`.
+
+### 5.7 Event Prep Models
+- **`EventPrepQuestion`** — `eventId, speakerId, scope ("GENERIC" | "SPEAKER"), text, tag, order`. Relations: suggestions.
+- **`EventPrepSuggestion`** — suggested edit by Admin/Co-host, approved by Super Admin. `eventId, questionId (nullable for new-question suggestion), proposedScope, proposedSpeakerId, proposedText, proposedTag, suggestedBy, suggestedByUserId, status ("PENDING" | "ACCEPTED" | "REJECTED"), reviewerNote, reviewedBy, reviewedAt`.
+
+### 5.8 Referral Tracking
+- **`ReferralVisit`** — one row per inbound visit with `?utm_uid=<hex>` in URL (or via cookie). `referrerUserId, utmUid, utmSource, utmMedium, utmCampaign, utmContent, utmTerm, landingPath, visitorHash, isNewVisitor, chapterId`. Created by middleware (`src/middleware.ts`).
+- **`ReferralAttribution`** — successful conversion (signup). `referredUserId (@unique), referrerUserId, utmUid, referralVisitId, convertedAt, chapterId`.
+
+### 5.9 Quiz Models
+- **`QuizSession`** — `title, eventId, hostId, contentSource (default "resource:ai-human-flourishing"), status ("DRAFT" | "LOBBY" | "LIVE" | "PAUSED" | "BETWEEN" | "FINISHED" | "ABORTED"), currentQuestionStartedAt, currentQuestionIndex, questionTimeLimitSec (default 30), totalQuestions, settingsJson, startedAt, finishedAt`.
+- **`QuizQuestion`** — `sessionId, order, text, optionsJson (4 options), correctIndex, deepDive, sourceAreaId, enabled, timeLimitSec`.
+- **`QuizResponse`** — `questionId, participantId, selectedIndex, isCorrect, responseMs, points (Kahoot-style: 0 if wrong; 500 base + up to 500 speed bonus if correct), answeredAt`. `@@unique([questionId, participantId])`.
+- **`QuizParticipant`** — `sessionId, userId, displayName, avatarUrl, totalScore, correctCount, answeredCount, avgResponseMs, isOnline, lastSeenAt, joinedAt`. `@@unique([sessionId, userId])`.
+
+### 5.10 Chat Models
+- **`ChatRoom`** — `type ("EVENT" | "GROUP" — future), eventId (@unique for EVENT), title, description, createdById, archivedAt`.
+- **`ChatRoomMember`** — `roomId, userId, role ("MEMBER" | "HOST"), lastReadAt, leftAt, joinedAt`. `@@unique([roomId, userId])`.
+- **`ChatMessage`** — `roomId, senderId (nullable for system), body (max 4000), editedAt, deletedAt, replyToId`. Relations: replies.
+
+### 5.11 Known Discrepancies — Referenced-but-Undefined Models
+
+The code references the following models that DO NOT exist in `prisma/schema.prisma`:
+
+| Referenced in | Model/Field | Likely Status |
+|---|---|---|
+| `src/app/api/admin/non-members/*`, `src/app/api/admin/events/[id]/registrations/route.ts` | `NonMember`, `NonMemberRegistration`, `EventRegistration` | Schema not yet migrated. Routes will 500 at runtime. The `/admin/registrations` page UI is built but cannot function. |
+| `src/app/api/testimonials/*`, `src/app/testimonials/*`, `src/app/admin/testimonials/*` | `Testimonial`, `TestimonialLike` | Same — schema not migrated. Routes will 500. The `/testimonials` and `/admin/testimonials` pages render but the API calls fail. |
+| `src/app/set-password/page.tsx`, `src/app/api/auth/set-password/route.ts`, `src/app/api/auth/post-login-redirect/route.ts`, `src/app/api/profile/set-password/route.ts` | `User.mustSetPassword` (Boolean column) | Field not in schema. The `/set-password` page reads `me.mustSetPassword` from Prisma which will be `undefined` → treated as falsy → page always redirects away. The forced-password-reset flow is currently inert. |
+
+User-guide note: Document these features as "planned" or "under construction" — they are scaffolded in code but not wired to the database.
+
+---
+
+## 6. Authentication & Roles
+
+### 6.1 Auth Providers (NextAuth, `src/lib/auth.ts`)
+1. **Google OAuth** (`GoogleProvider`) — primary, prompts `select_account`.
+2. **Email + Password** (`CredentialsProvider` id=`email`) — bcrypt hashed passwords. Used for both sign-in and sign-up (signup emails a random 8-char password).
+3. **Dev login** (`CredentialsProvider` id=`dev`) — name + email, no password. Visible only when `NODE_ENV !== "production"`.
+
+Session strategy: **JWT**. Session sync: every sign-in resolves/syncs the user's role from the DB.
+
+### 6.2 Role System (defined in `src/lib/permissions.ts`)
+| Role | Rank | Scope | How granted |
+|---|---|---|---|
+| `SUPER_ADMIN` | 4 | Global | Hard-coded email allowlist in `permissions.ts` (`SUPER_ADMIN_EMAILS = { "eze@massapro.com" }`). Cannot be granted via UI. |
+| `ADMIN` | 3 | Country | `ADMIN_EMAIL` env var (default `eze@massapro.com`) on first sign-in, OR promoted by a Super Admin. |
+| `CHAPTER_ORGANIZER` | 2 | Chapter | V7 — promoted by an admin. Replaces `CO_HOST`. |
+| `CO_HOST` | 2 | Per-event (legacy) | V6 — assigned per-event via `EventCoHost`. Treated as same rank as `CHAPTER_ORGANIZER`. |
+| `MEMBER` | 1 | Country (set on signup; chapter set on first RSVP) | Default for all new signups. |
+| `SPEAKER` | 0 | None (outside inheritance) | V6 legacy — migrated to `MEMBER` by v7-seed. Speaker access is now per-event via `Speaker.userId` link. |
+
+**Inheritance**: `SUPER_ADMIN` inherits everything. `SPEAKER` is outside the inheritance chain — only gets the explicit `eventprep.view` permission plus standard `events.view`.
+
+### 6.3 Permission Catalog (`CAN_MAP`)
+- `members.view` (ADMIN) · `members.edit` (ADMIN) · `members.delete` (SUPER_ADMIN) · `members.changeRole` (SUPER_ADMIN) · `members.export` (ADMIN) · `members.bulkImport` (ADMIN) · `members.merge` (ADMIN)
+- `events.create` (ADMIN) · `events.edit` (ADMIN) · `events.delete` (SUPER_ADMIN) · `events.view` (MEMBER)
+- `agenda.edit` (ADMIN) · `agenda.editCoHosted` (CO_HOST)
+- `speakers.create` (ADMIN) · `speakers.edit` (ADMIN) · `speakers.delete` (SUPER_ADMIN) · `speakers.editCoHosted` (CO_HOST)
+- `registrants.view` (ADMIN) · `registrants.edit` (ADMIN) · `registrants.bulkImport` (ADMIN)
+- `email.view` (ADMIN) · `email.send` (ADMIN) · `email.templates` (ADMIN)
+- `images.manageAny` (ADMIN) · `images.rotate` (ADMIN) · `presentations.manageAny` (ADMIN)
+- `tags.manage` (ADMIN)
+- `eventdata.viewCoHosted` (CO_HOST) — per-event scope enforced via `isEventCoHost()`
+- `eventprep.view` (SPEAKER) — read-only for events the user is speaking at
+- `quiz.host` (CO_HOST)
+- `chat.moderate` (ADMIN) · `chat.createRoom` (ADMIN)
+
+### 6.4 Onboarding Flow
+1. Anonymous visitor clicks `Join AI Salon` or fills `/c/[chapterSlug]` signup form → `POST /api/auth/signup` → user row created with bcrypt-hashed random 8-char password emailed to them.
+2. User signs in via `/login` → NextAuth creates JWT session.
+3. After login, client calls `GET /api/auth/post-login-redirect` to decide where to send them:
+   - `mustSetPassword = true` → `/set-password` (imported members on first login).
+   - `importSource` set (pre-imported from spreadsheet) → `/events` (auto-marks `onboardedAt = NOW()`).
+   - `onboardedAt` set (returning member) → `/events`.
+   - Otherwise → `/onboarding` (brand-new self-registered).
+4. New users fill `/onboarding` form → `POST /api/user/onboarding` → sets `onboardedAt = NOW()`. Subsequent visits to `/events` or `/profile` no longer redirect to `/onboarding`.
+
+### 6.5 UTM Referral Tracking
+- Every User has a `utmUid` (12-char hex, unique). Generated on first creation, backfilled for legacy users.
+- Members share links with `?utm_uid=<hex>` (visible on `/profile` and `/events` as the "Referral share link" card).
+- Middleware (`src/middleware.ts`) runs on every request, sets `ais_utm_uid` cookie (30-day expiry) when the param is present, records a `ReferralVisit` row.
+- On signup, `attributeSignup()` creates a `ReferralAttribution` row linking the new user to the referrer.
+- On RSVP, `referredByUserId` is set on the `EventRsvp` row.
+- Analytics visible at `/admin/analytics`.
+
+---
+
+## 7. Branding
+
+### 7.1 Color Palette (from `public/brand-book.md` + `src/app/globals.css`)
+**Primary institutional colors:**
+| Name | HEX | Usage |
+|---|---|---|
+| AIS BLACK | `#000000` | Logo on white backgrounds, primary text, primary button bg |
+| AIS RED | `#FF005A` | Accent, destructive, primary CTA, brand gradient start |
+| AIS CYAN | `#00E6FF` | Accent, secondary highlight, brand gradient end |
+| AIS ACCENT #1 (orange) | `#FFAC30` | Highlight, "Manage Agenda" active tab |
+| AIS ACCENT #2 (teal) | `#007E72` | Chapter scope badge, reports accent |
+| AIS ACCENT #3 (dark blue) | `#004F98` | Hyperlinks, info boxes |
+| AIS ACCENT #4 (purple) | `#820A7D` | Super Admin badge, country scope, "Send me a password" button |
+
+**Tints:**
+- AIS RED #2 `#D4024D` · AIS RED #3 `#B7004B`
+- AIS CYAN #2 `#00AFD6` · AIS CYAN #3 `#0084AC`
+
+**Brand gradient (`AIS GRADIENT`)** — `linear-gradient(90deg, #FF005A 0%, #820A7D 35%, #004F98 70%, #00E6FF 100%)`. Exposed as:
+- `.ais-gradient` (background)
+- `.ais-gradient-text` (background-clip: text)
+- `.ais-gradient-border` (border-image)
+
+**Tailwind tokens** (in `globals.css` `@theme inline`): `--color-ais-black`, `--color-ais-red`, `--color-ais-cyan`, `--color-ais-accent-1` through `--color-ais-accent-4`.
+
+**Salon microsite palette** (for `/resources/ai-human-flourishing`): `--salon-cyan: oklch(0.82 0.16 200)` (#00E5FF), `--salon-pink: oklch(0.65 0.27 0)` (#FF005C), `--salon-ink`, `--salon-paper`, `--salon-mist`.
+
+### 7.2 Typography
+- **Primary**: Plus Jakarta Sans (Google Font, weights 400-800). Loaded at root via `next/font/google`, exposed as `--font-plus-jakarta` + `.font-display` alias.
+- **Web-safe fallback**: Inter (Google Font, weights 400-700). Exposed as `--font-inter`.
+- **Mono**: Geist Mono (`--font-geist-mono`).
+
+### 7.3 Logo System (`src/components/brand/aisalon-logo.tsx` + `aisalon-logo-server.tsx`)
+Per brand book (`public/brand-book.md`), 5 allowed signatures:
+1. `horizontal` — `aisalon` (lowercase wordmark)
+2. `stacked` — `ai` / `sa` / `lon` (vertical)
+3. `horizontal-tagline` — wordmark + `EMPOWERING AI CONNECTIONS` subtitle
+4. `stacked-tagline` — stacked + tagline
+5. `monogram` — `ais` (restricted to favicons/avatars/small spaces)
+
+Logo color is **only ever black or white** (never red/cyan/accent), per brand book iron rule.
+
+`<MeerkatMark />` — renders the Falafel Meerkat mascot from `/images/falafel-meerkat.jpg` (624×1686 portrait).
+
+### 7.4 Brand Assets Locations
+- `/public/logo.svg` — vector logo
+- `/public/brand/aisalon-logo.webp` — webp logo
+- `/public/images/falafel-meerkat.{jpg,png}` — Falafel Meerkat mascot
+- `/public/images/favicon.webp` — default favicon
+- `/public/images/tlv-3.png`, `banner-no-title.png`, `linkedin-banner.png`, `amdocs-google-alison-event.png`, `meerkat-book.png` — chapter/event imagery
+- `/public/uploads/brand-assets/` — admin-uploaded brand images (sandbox fallback; production uses Vercel Blob `brand-assets/` prefix)
+- `.images/` (hidden folder at project root) — admin-only stock image vault; files served via `/api/admin/hidden-images/[name]` and auto-copied to Vercel Blob when selected.
+- `/public/brand-book.md` — full 40-page brand guidelines synthesized for the Tel Aviv chapter.
+- `/public/ai-human-flourishing-booklet.pdf` (+ `.html` + `-print.pdf` + `-12.pdf`) — AI & Human Flourishing reading companion.
+
+### 7.5 Brand CSS Utilities (`src/app/globals.css`)
+- `.ais-gradient`, `.ais-gradient-text`, `.ais-gradient-border`, `.ais-gradient-ring` (multi-layer box-shadow red→cyan around avatars)
+- `.ais-poly-bg` — meerkat-style low-poly geometric pattern (conic + linear gradients on black)
+- `.ais-section-opener` — full-bleed section opener (min-h-[60vh])
+- `.ais-lift` — hover lift on cards/buttons (translate-y + shadow)
+- `.ais-tag` — tag pill (rounded-full, uppercase, tracking-wide)
+- `.ais-pulse-badge` — pulsating red ring for unread badges (1.6s infinite animation)
+- `.ais-scroll` — custom scrollbar (6px, rounded)
+- `.brand-gradient`, `.brand-gradient-text`, `.brand-gradient-soft` — salon microsite gradients (cyan→pink)
+- `.poly-pattern`, `.dot-pattern`, `.salon-pulse`, `.salon-rise`, `.salon-pulse-soft`, `.brand-scroll`, `.drop-cap`, `.angular-clip`, `.angular-clip-tl`, `.tagline` — salon microsite utilities
+
+---
+
+## 8. Image System
+
+### 8.1 Storage: Vercel Blob
+- Production: Vercel Blob (`@vercel/blob` package). `BLOB_READ_WRITE_TOKEN` env var required. Pathnames validated via `src/lib/blob-paths.ts` (`safeBlobPathname` + `safeFileExtension` + `uniqueBlobFilename`).
+- Sandbox fallback (no Blob token): local filesystem at `/public/uploads/brand-assets/` and `/public/uploads/events/<eventId>/`.
+- Why Blob: Vercel's serverless filesystem is read-only at runtime — `public/` cannot persist user uploads.
+
+### 8.2 Image Categories
+
+**Brand images** (admin-managed at `/admin/images`):
+- Prefix: `brand-assets/`
+- 3 image keys: `favicon`, `loginHero`, `loginBanner`
+- Each key can be set at GLOBAL scope (SiteSetting) or CHAPTER scope (ChapterSetting override).
+- Selection API: `POST /api/admin/brand-images/select` with `scope: { type: "global" } | { type: "chapter", chapterId }`.
+- Stock images live in `.images/` (hidden). When admin selects a stock image, bytes are streamed to Vercel Blob and the new Blob URL is stored.
+- Resolver chain (per chapter): `ChapterSetting[key]` → `SiteSetting[key]` → `DEFAULTS[key]` (hardcoded in `src/lib/site-settings.ts`).
+
+**Defaults** (from `src/lib/site-settings.ts`):
+- `favicon`: `/images/favicon.webp`
+- `loginHero`: `/images/falafel-meerkat.jpg`
+- `loginBanner`: `/images/falafel-meerkat.jpg`
+- `whatsappGroupUrl`: `https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3`
+- `whatsappGroupText`: `Join our WhatsApp`
+- `linkedinUrl`: `https://www.linkedin.com/showcase/ai-salon-tel-aviv`
+- `ga4MeasurementId`: `` (disabled)
+- `metaPixelId`: `` (disabled)
+- `emailSendPaused`: `true` (default paused on fresh deploy)
+
+**Event images** (community-uploaded via Photos tab):
+- Path: `events/<eventId>/<cuid>.jpg`
+- Upload API: `POST /api/events/[slug]/images` — multipart, sharp auto-rotate + resize (max 1600²) + JPEG q82.
+- Tagged via M:N with `Speaker` (multiple speakers per image) and `EventAgendaItem` (multiple sessions per image).
+- Reorder via `POST /api/images/reorder`.
+- Rotate via `POST /api/images/rotate`.
+- Bulk-link to speakers/sessions via `POST /api/images/bulk-link`.
+- One image per event can be set as the "main image" (Event.mainImageId) — used as the event's hero banner + thumbnail on `/events`.
+
+**Presentation files**:
+- Path: `events/<eventId>/presentations/<filename>`
+- Allowed: PDF, PPT(X), Keynote, ODP, DOC(X), ODT, TXT, MD, CSV, RTF, ZIP, image formats.
+- Linked to speakers (m:n) and optionally to a specific agenda item.
+
+**Profile photos**:
+- Path: `avatars/<cuid>.jpg`
+- Upload: `POST /api/profile/photo` — sharp resize to 512×512 square, JPEG.
+- Admin can upload via `POST /api/admin/members/[id]/photo`.
+
+**Speaker photos**:
+- Upload: `POST /api/admin/speakers/[id]/photo`.
+
+**Testimonial images**:
+- Path: `testimonials/<cuid>.jpg`
+- Upload: `POST /api/testimonials` (multipart) — sharp resize to 1600² JPEG q82.
+- (Note: Testimonial model not yet in schema — see "Known Discrepancies".)
+
+**Email template images**:
+- Upload: `POST /api/email-templates/upload-image` — for use inside rich-text email bodies.
+
+**Mockup PNG snapshots**:
+- Path: `brand-assets/` (same prefix as brand images, so they appear in `/admin/images` gallery with caption `"${eventName} — ${mockupType}"`).
+- Upload triggered by "Save as default for event" button in mockup editors.
+
+### 8.3 Image Processing (`sharp`)
+- All upload routes use `sharp` for: auto-rotate (from EXIF), resize (fit: "inside", withoutEnlargement), re-encode (JPEG quality 82, progressive).
+- Profile photos: 512×512 square crop.
+- Event photos + testimonial photos: max 1600×1600 inside.
+- Brand images: stored as-is (no sharp processing).
+
+---
+
+## 9. Chapter System (V7 Hierarchy)
+
+### 9.1 Hierarchy: Global → Country → Chapter
+- **Country** (e.g. Israel, code=IL, slug=israel, flagEmoji=🇮🇱) — created by Super Admin at `/admin/countries`. Has optional `defaultEmailDomain`, `defaultFromName`, `defaultReplyTo` for email sender identity.
+- **Chapter** (e.g. Tel Aviv, slug=tel-aviv, timezone=Asia/Jerusalem) — created by Super Admin or Admin (in their own country) at `/admin/chapters/new`. Belongs to one Country. Has `whatsappGroupUrl` + `linkedinUrl` (per-chapter override; falls back to global SiteSetting).
+- Slugs are globally unique on both Country and Chapter.
+
+### 9.2 Scoping Rules
+| Role | Scope | Visible data |
+|---|---|---|
+| SUPER_ADMIN | Global | All countries + all chapters |
+| ADMIN | Country | Their country + all chapters in it |
+| CHAPTER_ORGANIZER | Chapter | Their chapter only (+ cross-chapter events in their country) |
+| CO_HOST (legacy) | Per-event | Only events they co-host (EventCoHost table) |
+| MEMBER | Country (set on signup); chapter set on first RSVP | Public + own data |
+| SPEAKER | None (outside inheritance) | Own speaker-linked events (read-only Event Prep) |
+
+### 9.3 Chapter Settings (per-chapter branding overrides)
+- Model: `ChapterSetting` (`chapterId, key, value`).
+- Supported keys (subset of global SiteSetting): `favicon`, `loginHero`, `loginBanner`.
+- Resolver (`src/lib/chapter-settings.ts`): `ChapterSetting[key]` → `SiteSetting[key]` → `DEFAULTS[key]`.
+- Set/clear via `/api/admin/brand-images/select` with `scope: { type: "chapter", chapterId }`.
+- `hasChapterOverride` flag exposed to UI for badges.
+
+### 9.4 Public Chapter Landing Pages
+- Route: `/c/[chapterSlug]` (public, no auth).
+- Shows chapter hero image (chapter-specific loginHero override), name, city, country flag, member/event counts, upcoming events list, WhatsApp + LinkedIn buttons, signup form.
+- Signup form submits `chapterSlug` to `/api/auth/signup` → new user is auto-scoped to this chapter's `countryId + chapterId`.
+
+### 9.5 V7 Seed (one-click bootstrap)
+- Endpoint: `POST /api/admin/v7-seed` (Super Admin only).
+- Idempotent — upserts Country "Israel" + Chapter "Tel Aviv" + backfills every existing row's `countryId/chapterId` to Israel/Tel-Aviv. Covers: User (except SUPER_ADMIN), Event (except cross-chapter), EventRsvp, Speaker, EmailQueue, EmailRecipient, EmailCampaign, EmailTemplate, EmailStageTemplate, EmailFlow, EmailAudience, ReferralVisit, ReferralAttribution.
+- Triggered from `/admin/chapters` page via `<SeedV7Button />`.
+
+### 9.6 Chapter Email Template Overrides
+- Model: `ChapterEmailTemplateOverride` (`chapterId, stageTemplateId, logoUrl, subject, htmlBody, isActive`).
+- Per-chapter override of a global `EmailStageTemplate` (logo, subject, body).
+- Resolver: `ChapterEmailTemplateOverride` (if active) → `EmailStageTemplate` (global default).
+
+---
+
+## 10. Event System
+
+### 10.1 Event Creation
+- Admin-only (`events.create` permission).
+- Route: `/admin/events/new` (form) → `POST /api/admin/events` (creates Event row).
+- **AI Event Extractor**: paste raw event copy → LLM extracts title/subtitle/dates/venue/description/takeaways/intendedFor/RSVP URL + a list of speakers. Speakers are previewed but added manually after event creation (each Speaker requires an `eventId`).
+- Required fields: title, startsAt, endsAt. Slug auto-generated if not provided (`<title-slug>-<YYYY-MM-DD>`).
+
+### 10.2 Event Fields
+- Identity: `id, slug (unique), title, subtitle`.
+- Schedule: `startsAt, endsAt` (UTC datetimes; admin form shows them in Asia/Jerusalem timezone).
+- Venue: `venue, address, city, country (legacy ISO code), mapUrl, wazeUrl`.
+- Content: `description (long-form), takeaways, intendedFor, rsvpUrl (external RSVP form)`.
+- Legacy: `chapter` (free-form String — denormalized cache of Chapter.name), `coverImage` (legacy external URL).
+- V7: `chapterId` (real FK to Chapter), `isCrossChapter` (Boolean — when true, event appears in listings of ALL chapters in its country).
+- Main image: `mainImageId` (FK to EventImage — the admin-picked hero image).
+
+### 10.3 Event RSVP
+- Model: `EventRsvp` (`eventId, userId, email, name, status, source, checkInCode, checkedInAt, doorCheckedAt, doorCheckedBy, approvedByCoHostId, approvedAt, referredByUserId, attendedAt, noShow, attendedMarkedBy, chapterId`).
+- `@@unique([eventId, email])` — one RSVP per email per event.
+- Status: `GOING` | `MAYBE` | `NOT_GOING`.
+- Source: `MANUAL` (admin-added) | `EVENT_PAGE` (self-service via `/e/[slug]`) | `IMPORT` (bulk import).
+- Created via `POST /api/events/[slug]/rsvp` — idempotent upsert (clicking "Register" multiple times is safe).
+
+### 10.4 Check-in Flow (event day)
+1. **Attendee generates code**: clicks "I'm here — Check in" on `/e/[slug]` (or `/e/[slug]/my-code`). Window: `startsAt - 2h` to `endsAt + 6h`. API: `POST /api/events/[slug]/check-in` — generates 8-char Crockford base32 code (`XXXX-XXXX`), sets `checkedInAt = now()`. Idempotent — same code returned on repeat clicks. Code is GLOBALLY unique (across all events) so door staff don't need event context.
+2. **Door staff look up code**: at `/admin/check-in`, types or scans the code. API: `GET /api/admin/check-in/lookup?code=XXXX-XXXX` — returns attendee info + event + non-transferrable-code warning. Status: `PENDING_CONFIRM` (show Confirm button) or `ALREADY_USED` (show original check-in time + warning) or `MISS` (404).
+3. **Door staff confirm**: API: `POST /api/admin/check-in/confirm` — atomic write to set `doorCheckedAt + doorCheckedBy`. Race-safe (updateMany with `doorCheckedAt: null` guard).
+
+### 10.5 Co-host Pre-approval (optional gate)
+- Co-host can pre-approve an RSVP for door entry via `POST /api/admin/events/[id]/rsvps/[rsvpId]/approve`. Sets `approvedByCoHostId + approvedAt`.
+- Door lookup shows who approved + when. Codes without approval are rejected at the door with "Not approved — ask the co-host to approve this RSVP first".
+- Note: the `/admin/check-in` page comment says there's NO pre-approval gate — the confirmation itself IS the approval. So this feature appears to be in transition.
+
+### 10.6 Post-event Attendance Tracking
+- Admin can mark each RSVP as `attendedAt` (attended) or `noShow = true` via `POST /api/admin/rsvps/[id]/attendance`.
+- Independent from door check-in — someone can check in at the door and still leave early (no-show for content), or attend without a door check-in (admin override).
+- Both null = event not yet post-processed.
+
+### 10.7 Event Tabs (per `/events/[slug]`)
+See section 1.7 for the full tab list.
+
+### 10.8 Event Images & Slideshow
+- Photos uploaded via `POST /api/events/[slug]/images` (Photos tab).
+- Each image: `fileUrl, caption, slideOrder, width, height, mimeType, fileSize`.
+- M:N with `Speaker` (tag which speakers appear in the photo) + `EventAgendaItem` (tag which session the photo belongs to).
+- Admin can reorder via `POST /api/images/reorder` (lower slideOrder = earlier).
+- One image per event can be the main image (Event.mainImageId).
+- Slideshow tab: auto-crossfade full-screen player using `slideOrder`.
+
+### 10.9 Event Chat Room
+- One ChatRoom per event (`type=EVENT`, `eventId` @unique).
+- Created on-demand when a member opens the Chat tab: `GET /api/chat/events/[eventId]/room`.
+- Bulk-inserts `ChatRoomMember` rows for every user with `EventRsvp{status=GOING}` + every `EventCoHost` + every `Speaker` whose `userId` is set. Future RSVPs auto-add via the join API.
+- WebSocket real-time delivery via `mini-services/chat-service` (broadcasts `chat:message` events to `room:<roomId>`).
+
+### 10.10 Event Quiz Sessions
+- Optional link: `QuizSession.eventId`.
+- Used for post-event follow-up outreach to top performers.
+- Quiz tab visible when there are quiz sessions OR the user can host (admin/co-host).
+
+---
+
+## 11. Email & Notifications
+
+### 11.1 Email Provider (SMTP via Nodemailer)
+Configured via env vars (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_FROM`). If unset, emails are logged to console instead of sent (dev mode). `emailConfigured()` returns true only when host+user+pass are set.
+
+### 11.2 Email Pause Kill-Switch
+- Site setting `K_EMAIL_SEND_PAUSED` (default `"true"` on fresh deploys).
+- When `true`, all email sends are blocked (queue still records attempts).
+- Toggleable from `/admin/email` (Resume sending button).
+- Read in the email sender hot path via `isEmailSendPaused()` — fails open (returns `false`) on DB error so a DB outage never accidentally blocks sends.
+
+### 11.3 Transactional Emails (via `src/lib/email.ts`)
+- **`sendPasswordEmail`** — signup/forgot-password email. Renders HTML template with the plaintext password prominently displayed + login button. Subject: "Your AI Salon Tel Aviv login".
+- **`sendRsvpConfirmationEmail`** — sent on first RSVP (not re-registrations). Subject: "You're registered: <event title>". Includes event details, gradient hero card, link to event page, and a `.ics` calendar attachment (generated by `src/lib/calendar.ts`).
+- **DM notification** — `POST /api/messages/[userId]` sends an email to the recipient + CC's `ADMIN_EMAIL`. Subject: "New message from <name> on AI Salon TLV". From: `AI Salon Chat <chat@aisalon.massapro.com>`. Fire-and-forget (never blocks the DM send).
+
+### 11.4 Email Campaigns (legacy broadcast system)
+- Model: `EmailCampaign` (DRAFT → SCHEDULED → SENDING → SENT / FAILED).
+- Recipient list builder supports: `ALL_MEMBERS`, `TAG:<label>`, `EVENT:<eventId>`, `MANUAL:<comma-separated-emails>`.
+- Per-recipient state tracked in `EmailRecipient` (QUEUED → SENT → OPENED → CLICKED → REPLIED, or FAILED/BOUNCED/COMPLAINED).
+- Open tracking: 1×1 pixel `<img>` injected into HTML body.
+- Click tracking: all `<a href>` wrapped with `/api/track/email-click?id=<queueId>&url=<original>`.
+- Cron retries FAILED recipients (max 3 retries) + processes QUEUED recipients on SENDING campaigns.
+- Campaign stats: per-campaign open/click/reply rates, per-recipient timeline.
+
+### 11.5 Email Orchestrator (5-stage automated sequence)
+Defined in `src/lib/email-orchestrator/stages.ts`:
+1. **Awareness** — sent immediately on RSVP (offset -240h = 10 days before event). Stop rule: skip stages 2-5 if not opened within 5h.
+2. **Reminder** — sent 48h before event (offset -48h). Stop rule: skip stages 3-5 if not opened within 24h.
+3. **Final Prep** — sent 4h before event (offset -4h). No stop rule. Has a `noCodeHtmlBody` variant for RSVPs without a check-in code.
+4. **Day-Of** — sent at event start (offset 0h). No stop rule. Same no-code variant.
+5. **Recap** — sent 24h after event (offset +24h). No stop rule.
+
+Features per `EmailStageTemplate`:
+- Alternative subject line re-send (`altSubject` + `altNotOpenedHours`) — if primary send isn't opened within X hours, worker creates a new EmailQueue row with the same body but `altSubject`.
+- No-check-in-code variant body (`noCodeHtmlBody` + `noCodeSubject`) — used when RSVP has no `checkInCode` (e.g. flow sends to audience emails without RSVPs).
+- Brand logo override per template (`logoUrl`) — falls back to `EMAIL_BRAND_LOGO_URL` env var, then hardcoded default.
+
+### 11.6 Email Flows (newer rule-based system)
+- Model: `EmailFlow` (DRAFT → ACTIVE → PAUSED → ARCHIVED).
+- Each flow has up to 8 independent `EmailFlowStep`s — NOT chained. Each step fires independently when its trigger event occurs for a recipient in its audience.
+- Step structure: A. Audience (reusable EmailAudience) → B. Trigger (RSVP_GOING / DOOR_CHECKED_IN / MARKED_ATTENDED / MARKED_NO_SHOW / MANUAL) → C. Email (template + Subject A + optional Subject B for 50/50 A/B test) → D. Delay (MINUTES/HOURS/DAYS).
+- Built-in **Test audience** seeded with 3 emails: `eze@massapro.com`, `ezeszna@gmail.com`, `eze@hi4.ai`.
+- Flow worker: `runFlowWorker()` in `src/lib/email-orchestrator/flow-worker.ts` — sends due PENDING EmailQueue rows, picks subject based on `row.subjectVariant` (A or B).
+- Flow report: per-step → variant A/B breakdown (sent, opened, clicked, failed).
+
+### 11.7 Email Audiences
+- Model: `EmailAudience` (STATIC or DYNAMIC).
+- STATIC: stores `emailsJson` (JSON array of email strings).
+- DYNAMIC: stores `filtersJson` (filter spec resolved at query time by `src/lib/email-orchestrator/audience-filter.ts`). Filter spec shape:
+  ```json
+  {
+    "source": "users" | "rsvps" | "users_and_rsvps",
+    "combinator": "AND" | "OR",
+    "groups": [
+      { "combinator": "AND" | "OR", "rules": [{ "field": "...", "op": "...", "value": "..." }] }
+    ]
+  }
+  ```
+- Built-in Test audience (`isTest = true`) seeded automatically.
+
+### 11.8 Email Tracking Endpoints
+- `GET /api/email/open` — open-tracking pixel.
+- `GET /api/email/click?url=<original>` — click-redirect.
+- `GET /api/email/unsubscribe` — unsubscribe link.
+- Mirror endpoints under `/api/track/` for generic event tracking.
+
+### 11.9 IMAP Polling (for replies/bounces)
+- `GET /api/cron/email/imap-poll` — Vercel Cron job that polls the IMAP inbox for replies/bounces and updates `EmailRecipient.repliedAt/replySnippet` or status to BOUNCED/COMPLAINED.
+
+### 11.10 Meta CAPI Integration
+- `TrackingLog.metaPayload` (Json) — always constructed for OPEN/CLICK events.
+- Sent to Meta Graph API only when `META_ACCESS_TOKEN + META_PIXEL_ID` env vars are set (`src/lib/email-orchestrator/meta-capi.ts`).
+- `TrackingLog.metaSentAt` — null when not actually sent to Meta.
+
+---
+
+## 12. Site Settings (Global Config)
+
+Defined in `src/lib/site-settings.ts`. All keys are admin-editable at runtime via `/admin/images` (no redeploy needed).
+
+| Key | Default | Purpose |
+|---|---|---|
+| `favicon` | `/images/favicon.webp` | Site-wide favicon (also Apple touch icon) |
+| `loginHero` | `/images/falafel-meerkat.jpg` | Hero image on `/login` left panel |
+| `loginBanner` | `/images/falafel-meerkat.jpg` | OG/Twitter share image for `/login` |
+| `whatsappGroupUrl` | `https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3` | "Join our group" WhatsApp pill in header |
+| `whatsappGroupText` | `Join our WhatsApp` | Text for WhatsApp pill |
+| `linkedinUrl` | `https://www.linkedin.com/showcase/ai-salon-tel-aviv` | "Join us" LinkedIn pill in header |
+| `ga4MeasurementId` | `` (disabled) | Google Analytics 4 Measurement ID (G-XXXXXXXXXX) |
+| `metaPixelId` | `` (disabled) | Meta (Facebook) Pixel ID |
+| `emailSendPaused` | `true` | Global email pause kill-switch |
+
+**Public read endpoint**: `GET /api/site-settings` (no auth, returns all keys above, 5-min CDN cache).
+**Admin read endpoint**: `GET /api/admin/site-settings` (admin-only).
+**Write endpoints**:
+- `POST /api/admin/brand-images/select` — set favicon / loginHero / loginBanner (Super Admin).
+- `POST /api/admin/site-settings/whatsapp` — set WhatsApp URL + text (Super Admin).
+- `POST /api/admin/linkedin` — set LinkedIn URL (Super Admin).
+- `POST /api/admin/site-settings/email-pause` — toggle email pause (Super Admin).
+
+**Country-level defaults** (on the Country model, not SiteSetting): `defaultEmailDomain`, `defaultFromName`, `defaultReplyTo` — used for email sender identity per country.
+
+**Chapter-level overrides** (on ChapterSetting): `favicon`, `loginHero`, `loginBanner` — same 3 image keys, scoped to one chapter. Resolver: ChapterSetting → SiteSetting → DEFAULTS.
+
+---
+
+## 13. Other Platform Features
+
+### 13.1 Cookie Consent Banner
+- `<CookieConsentBanner />` in root layout.
+- Shows on first visit, stores choice in localStorage for 6 months.
+- GA4 + Meta Pixel scripts only load AFTER the user clicks "Accept All" (`<AnalyticsScripts />` in root layout).
+
+### 13.2 WebSocket Mini-Services (in `mini-services/`)
+- **`chat-service/`** — broadcasts `chat:message`, `chat:dm-received`, `chat:read` events. Drives real-time DM + group chat delivery.
+- **`quiz-service/`** — broadcasts `quiz:state`, `quiz:leaderboard` events. Drives real-time quiz state sync.
+- Both use `room:user:<userId>` for personal events (DMs) and `room:<roomId>` / `quiz:<sessionId>` for group/event events.
+
+### 13.3 Testimonials System (BROKEN — schema not migrated)
+- Public feed at `/testimonials`, admin moderation at `/admin/testimonials`.
+- Supports 4 scopes: community, event, speaker, session.
+- Image upload (sharp resize, Vercel Blob).
+- Like + share buttons.
+- **Status**: scaffolded but `Testimonial` + `TestimonialLike` models missing from Prisma schema. Routes will 500 at runtime.
+
+### 13.4 Non-Member Registration System (BROKEN — schema not migrated)
+- Admin upload of RSVP spreadsheets at `/admin/registrations`.
+- Cross-references against existing members; matching emails → member's event registration list; new emails → non-member leads; suspected duplicates flagged.
+- Merge/ignore duplicate suggestions.
+- **Status**: scaffolded but `NonMember`, `NonMemberRegistration`, `EventRegistration` models missing from Prisma schema. Routes will 500 at runtime.
+
+### 13.5 Forced Password Reset (BROKEN — schema column missing)
+- `/set-password` page + `POST /api/auth/set-password` + `GET /api/auth/post-login-redirect`.
+- Intended for imported members on first login (admin sets a temp password, user must change it).
+- **Status**: `User.mustSetPassword` column referenced in code but NOT in Prisma schema. The page reads `me.mustSetPassword` from Prisma which returns `undefined` → treated as falsy → page always redirects away. Feature is inert.
+
+### 13.6 Backup / Downloads
+- `/downloads` page (developer/operator UI).
+- `POST /api/admin/backup-db` — admin-triggered DB snapshot, written to `/home/z/my-project/download/`.
+- `GET /api/downloads` — list files.
+- `GET /api/downloads/[filename]` — download.
+
+### 13.7 Sitemap / Robots
+- `/public/robots.txt` — exists.
+- No explicit sitemap route found.
+
+---
+
+## 14. Environment Variables (`.env.example`)
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string (production: Vercel Postgres / Neon; local: `postgresql://postgres:postgres@localhost:5432/aisalon`) |
+| `NEXTAUTH_URL` | Public site URL (e.g. `https://aisalon.massapro.com`) |
+| `NEXTAUTH_SECRET` | NextAuth JWT signing secret (generate with `openssl rand -base64 32`) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
+| `ADMIN_EMAIL` | Email that gets ADMIN role on first sign-in (default `eze@massapro.com`) |
+| `NEXT_PUBLIC_SITE_URL` | Public site URL for OG metadata, OAuth redirects, absolute URLs |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | SMTP credentials for transactional email |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token (required for image uploads in production) |
+| `CRON_SECRET` | Bearer token for Vercel Cron jobs (`/api/cron/email`, `/api/email-orchestrator/run`) |
+| `VERCEL_TOKEN` | Vercel REST API token (for `vercel deploy --prod --yes --token $VERCEL_TOKEN` from CI) |
+| `EMAIL_BRAND_LOGO_URL` | Optional brand logo URL for emails (default: hardcoded AI Salon mark on Vercel Blob) |
+| `META_ACCESS_TOKEN` / `META_PIXEL_ID` | Optional Meta CAPI integration for email open/click conversion tracking |
+
+---
+
+## 15. Known Discrepancies & Caveats (for the user-guide author)
+
+1. **Testimonials feature is scaffolded but not wired to the DB**. The `/testimonials` and `/admin/testimonials` pages render but the API calls will 500 because `Testimonial` + `TestimonialLike` models don't exist in `prisma/schema.prisma`. Document as "Coming soon" or hide from the user guide.
+
+2. **Non-Member Registrations feature is scaffolded but not wired to the DB**. The `/admin/registrations` page renders but the API calls will 500 because `NonMember`, `NonMemberRegistration`, `EventRegistration` models don't exist. Document as "Coming soon" or hide.
+
+3. **Forced password reset is inert**. `User.mustSetPassword` column is referenced in code but missing from the Prisma schema. The `/set-password` page always redirects away (reads the column as undefined → falsy). Imported members currently skip the forced reset step entirely.
+
+4. **Pre-approval gate is in transition**. The `/admin/check-in` page comment says "TWO-STEP FLOW (no pre-approval gate)" — confirmation IS the approval. But `POST /api/admin/events/[id]/rsvps/[rsvpId]/approve` exists and sets `approvedByCoHostId + approvedAt`. The actual lookup endpoint doesn't reject unapproved codes. So pre-approval is recorded but not enforced. Document door check-in as "any admin or co-host can confirm" (current behavior).
+
+5. **Two parallel admin nav systems coexist**: `AdminTabs` (the newer sticky horizontal nav defined in `admin-tabs-def.ts`) is used on most pages, but a few legacy pages (`/admin/registrations`, `/admin/testimonials`) still use `AdminNavCards` (a different 5-card grid). Both should be documented, but only `AdminTabs` reflects the current intended navigation.
+
+6. **Two parallel "Add event" entry points**: `/admin/event` (legacy Event tab with two inner sub-tabs) and `/admin/events/new` (the dedicated New Event route). Both work. The `AdminTabs` nav has both `/admin/events` and `/admin/events/new` as separate tabs.
+
+7. **`/events` is public** (anonymous visitors see a "Join AI Salon" banner) but `/events/[slug]` (the authenticated event page with all the tabs) requires sign-in. Anonymous visitors to `/events/[slug]` are redirected to `/e/[slug]` (the public landing page). Document this clearly — it's a common user confusion point.
+
+8. **Timezone is hardcoded to Asia/Jerusalem** in many places (event form, dashboard, RSVP confirmation email). The Chapter model has a `timezone` field (default `Asia/Jerusalem`) but it's not consistently used. Document events as "Tel Aviv time" for now.
+
+9. **Email orchestrator + flow builder run in parallel**. The legacy 5-stage orchestrator (always sets `rsvpId`) and the new flow worker (sets `rsvpId` only when an RSVP already exists) both run on every cron tick. Both write to `EmailQueue`. The legacy system is preserved for backwards compat; new event campaigns should use the flow builder.
+
+10. **`prisma/schema.prisma.bak`** is a backup of an older V6 schema (17 models, no V7 hierarchy, no email flows, no quiz, no chat). Kept for reference — don't deploy it.
+
+---
+
+## 16. Summary Cheat-Sheet
+
+- **23 admin routes**, **12 public/member routes**, **~110 API endpoints**, **39 Prisma models**.
+- **6 roles** (SUPER_ADMIN > ADMIN > CHAPTER_ORGANIZER ≈ CO_HOST > MEMBER > SPEAKER).
+- **15 admin tabs** (filtered per role).
+- **10 event-detail tabs** (URL-hash synced; role-gated).
+- **3 auth providers** (Google, Email/Password, Dev).
+- **9 site settings** (admin-editable, no redeploy).
+- **3 chapter-scoped image keys** (favicon, loginHero, loginBanner).
+- **5 email orchestrator stages** + **8 max flow steps** + **2 audience kinds** (STATIC/DYNAMIC).
+- **8 brand colors** (AIS Black, AIS Red, AIS Cyan, 4 accents, white).
+- **1 brand gradient** (`#FF005A → #820A7D → #004F98 → #00E6FF`).
+- **5 logo variants** (horizontal, stacked, horizontal-tagline, stacked-tagline, monogram).
+- **2 WebSocket mini-services** (chat, quiz).
+
+---
+
+Stage Summary:
+- This document is the authoritative map of the AI Salon platform as of the current commit. It is intended as the source-of-truth outline for writing the user guide.
+- All 14 admin subdirectories under `src/app/admin/` are catalogued: `analytics`, `c/[chapterSlug]`, `chapters`, `check-in`, `countries`, `dashboard` (+ `event-dashboard`), `email` (+ `flows`), `event`, `event-prep`, `events` (+ `new`, `[id]`), `images`, `knowledge-base`, `members` (+ `activity-report`, `archive`), `mockups` (+ 5 mockup sub-editors), `quiz` (+ `[id]`), `registrants`, `registrations`, `reports`, `speakers`, `testimonials`.
+- All ~110 API endpoints under `src/app/api/` are catalogued: `auth`, `user`, `profile`, `me`, `site-settings`, `events`, `presentations`, `images`, `testimonials`, `email-templates`, `email-audiences`, `email-flows`, `email-orchestrator`, `email`, `track`, `cron/email`, `messages`, `chat`, `quiz`, `speakers`, `downloads`, and the entire `admin/` sub-tree (`members`, `events`, `speakers`, `registrants`, `rsvps`, `check-in`, `agenda`, `chapters`, `countries`, `non-members`, `brand-images`, `hidden-images`, `whatsapp`, `linkedin`, `site-settings`, `email/campaigns`, `email/templates`, `email/preview-list`, `email/force-send-stage`, `analytics`, `backup-db`, `v7-seed`, `cleanup-synthetic-rsvps`, `quiz`).
+- All 39 Prisma models catalogued with key fields + relationships.
+- 3 known discrepancies flagged (Testimonial, NonMember, mustSetPassword) so the user-guide author can mark those features as "Coming soon" instead of documenting non-functional UI.
+- Branding palette, logo system, typography, and CSS utilities all catalogued from `public/brand-book.md` + `src/app/globals.css`.
+- Image system documented across all 7 categories (brand, event, presentation, profile, speaker, testimonial, mockup) with Vercel Blob paths and sharp processing rules.
+- V7 hierarchy + scoping rules + Chapter resolver chain documented.
+- Email system documented across all 4 layers (transactional, campaigns, orchestrator, flows) + tracking + IMAP polling + Meta CAPI.
+- Site settings table complete with defaults + write endpoints.
+
+What the user should do next:
+1. Use this map as the table-of-contents skeleton for the user guide.
+2. For each route, write a dedicated user-guide page covering: who can access it, what they see, what actions they can take, common workflows.
+3. For the 3 "Coming soon" features (Testimonials, Non-Member Registrations, Forced Password Reset), either omit them from the user guide or mark them explicitly as not-yet-live.
+4. For role-specific sections, structure the guide as: Member Guide → Speaker Guide → Co-host Guide → Admin Guide → Super Admin Guide (each building on the previous).
+5. Pay special attention to the RSVP → check-in → door-confirmation flow (sections 10.4–10.6) — it's the most complex user-facing workflow and the source of most user confusion.
+6. Document the parallel `/events/[slug]` (authenticated, full tabs) vs `/e/[slug]` (public, conversion-optimized) distinction prominently — this is non-obvious.
+
+---
+Task ID: 2026-07-21-platform-guide-pdf
+Agent: Main (Super Z)
+Task: Generate a comprehensive branded PDF report covering all platform features, descriptions, knowledge base, and per-screen walkthroughs. User explicitly asked to "use the color palette and brand" and "list all features in one place".
+
+Work Log:
+- Loaded pdf skill (Skill command="pdf") → routed to Report brief (ReportLab) per skill routing matrix.
+- Ran AskUserQuestion to confirm 8 dimensions (format, audience, depth, sections, style, screenshots, language, feature index) — user re-sent same prompt twice, treated as "skip questions / just do it" with sensible defaults (PDF, all audiences, ~25-30 pages, English, full coverage + feature index + knowledge base + per-screen walkthroughs).
+- Launched Explore subagent in parallel to map every feature/screen in the platform. Result: 1,255-line platform map appended to worklog.md covering 16 sections (public pages, admin console, API routes, DB schema, auth, branding, image system, chapters, events, email, site settings) + 3 known discrepancies flagged.
+- Read full Report brief (report.md, 1703 lines), fonts.md, cover.md (partial), pagination.md (partial).
+- Set Outline: 18 sections (cover + TOC + 16 chapters).
+- Generated cascade palette via pdf.py palette.cascade — but overrode with actual AI Salon brand colors per brand-book.md (AIS Black #000000, AIS Red #FF005A, AIS Cyan #00E6FF, AIS Purple #820A7D, AIS Blue #004F98, AIS Teal #007E72, AIS Orange #FFAC30).
+- Wrote cover HTML (scripts/aisalon_cover.html) using a custom dark variant — gradient band + radial glows + watermark "AIS" + AIS-gradient brand mark + 5 audience pills (red/purple/blue/cyan/teal).
+- Wrote 4-part Python script (generate_aisalon_guide.py + 3 content parts + build script) totaling 2,252 lines. Used TocDocTemplate + multiBuild for auto-generated TOC. All tables use brand palette (HEADER_FILL = AIS Purple, stripes = subtle pink). All callouts use accent-colored left border. Running header has 3-segment gradient rule (red/purple/blue). Footer shows URL + page number.
+- Fixed font path issues (NotoSansSC-Regular.ttf doesn't exist on this system; fell back to NotoSerifSC for the CJK sans-serif slot since the document is English-only).
+- Fixed story.append(data_table(...)) → story.extend(data_table(...)) for table helpers that return lists.
+- Rendered cover via html2poster.js --width 794px → cover PDF.
+- Merged cover + body via pypdf → final 47-page PDF.
+- Ran preflight: meta.brand, pages.clean, font.check (0 issues), toc.check (only false-positive on header date "2026"), pdf_qa (10 passes, 1 page-size mismatch fixed by re-normalizing to A4, 9 cosmetic em-dash warnings that don't apply to English text).
+- Final: 47 pages, 412 KB, all fonts embedded, TOC populated, full-bleed branded cover.
+
+Stage Summary:
+- Final deliverable: /home/z/my-project/download/AI_Salon_Platform_Comprehensive_Guide.pdf (47 pages, 412 KB).
+- Structure: Cover → TOC (auto-generated, 2 levels, ~50 entries) → Ch.1 Platform Overview → Ch.2 Master Feature Index (table of ~70 features in one place, the user's explicit ask) → Ch.3 Public Pages Guide (10 screen cards) → Ch.4 Member Experience & Onboarding → Ch.5 Event Lifecycle (RSVP → check-in → door entry, 3 stages) → Ch.6 Authenticated Event Page (10 tabs) → Ch.7 Admin Members/Speakers/Registrants → Ch.8 Admin Events & Chapters → Ch.9 Admin Door Check-in & Dashboards → Ch.10 Admin Email System (campaigns + orchestrator + flows + cron + tracking) → Ch.11 Admin Images & Brand & Site Settings → Ch.12 Admin KB/Mockups/EventPrep/Quiz → Ch.13 Branding & Visual Identity (palette + typography + logo + CSS utilities) → Ch.14 Knowledge Base FAQ (16 Q&A pairs) → Ch.15 Glossary (32 terms) → Ch.16 Known Limitations & Roadmap (8 items).
+- Brand applied: AIS gradient cover, AIS Purple table headers, AIS Red accents + dividers, AIS Blue URLs/links, AIS Teal success callouts, AIS Orange warning callouts. Running header has 3-segment red/purple/blue gradient rule.
+- Source script persisted at /home/z/my-project/scripts/generate_aisalon_guide_full.py — edit + re-run for any revisions.
