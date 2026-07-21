@@ -28,14 +28,22 @@ import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/b
  * doesn't).
  */
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  // Wrap the session lookup in try/catch — if next-auth throws for any
+  // reason (e.g. misconfigured cookies, JWT secret rotation), we still
+  // want the public feed to render for anonymous visitors.
   let me: { id: string; role: string } | null = null;
-  if (session?.user?.email) {
-    const u = await db.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true, role: true },
-    });
-    if (u) me = u;
+  try {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.email) {
+      const u = await db.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true, role: true },
+      });
+      if (u) me = u;
+    }
+  } catch (err) {
+    console.error("[testimonials GET] session lookup failed:", err);
+    // Continue as anonymous — me stays null
   }
   const isAdmin = me?.role === "ADMIN";
 
