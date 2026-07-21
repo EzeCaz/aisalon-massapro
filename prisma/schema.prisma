@@ -244,6 +244,10 @@ model User {
   chatMemberships    ChatRoomMember[]
   chatMessages       ChatMessage[]
   // ----------------------------------------------------------------
+  // Testimonials — authored by this user + likes this user has given.
+  testimonials       Testimonial[]         @relation("TestimonialAuthor")
+  testimonialLikes   TestimonialLike[]     @relation("TestimonialLikeUser")
+  // ----------------------------------------------------------------
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
 
@@ -357,6 +361,9 @@ model Event {
   /// Group chat room for this event (one-to-one). Looked up via
   /// ChatRoom.eventId — the FK lives on ChatRoom.
   chatRoom        ChatRoom?
+  /// Testimonials attached to this event (optional — author picks
+  /// the scope when posting).
+  testimonials    Testimonial[]        @relation("TestimonialEvent")
 
   @@index([chapterId])
   @@index([isCrossChapter])
@@ -396,6 +403,8 @@ model Speaker {
   // ---- V7: chapter scoping (denormalized from Event.chapterId at write time) ----
   chapterId     String?
   chapter       Chapter?            @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  /// Testimonials attached to this speaker.
+  testimonials  Testimonial[]       @relation("TestimonialSpeaker")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -463,6 +472,8 @@ model EventAgendaItem {
   // images, or hides the slideshow column entirely when none exist.
   mainImageId   String?
   mainImage     EventImage?        @relation("AgendaItemMainImage", fields: [mainImageId], references: [id], onDelete: SetNull)
+  /// Testimonials attached to this agenda item (session-level).
+  testimonials  Testimonial[]      @relation("TestimonialAgendaItem")
   createdAt     DateTime           @default(now())
 }
 
@@ -1562,4 +1573,69 @@ model ChatMessage {
   @@index([roomId, createdAt])
   @@index([senderId, createdAt])
   @@index([replyToId])
+}
+
+// ---------------------------- Testimonials ----------------------------
+// Community-generated testimonials about events, speakers, agenda items,
+// or just the community vibe. Publicly readable (no login required to
+// view); posting / liking / deleting require a signed-in member.
+//
+//   - Visible to anonymous visitors on /testimonials (when hidden=false)
+//   - Admins can feature / hide / delete any testimonial
+//   - Authors can delete their own
+//   - Like and share counts are denormalized for fast reads
+
+model Testimonial {
+  id           String             @id @default(cuid())
+  authorId     String
+  author       User               @relation("TestimonialAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body         String             // the quote (3–2000 chars; validated in API)
+  rating       Int                @default(5) // 1–5 stars; clamped in API
+  imageUrl     String?            // optional photo (Vercel Blob URL)
+  eventDate    DateTime           @default(now()) // when the testimonial is "about"
+  // Optional attachment — exactly one of these is usually set:
+  //   - eventId:     testimonial about a specific event
+  //   - speakerId:   testimonial about a specific speaker
+  //   - agendaItemId: testimonial about a specific session
+  // All three null = "community" testimonial (no specific attachment).
+  eventId      String?
+  event        Event?             @relation("TestimonialEvent", fields: [eventId], references: [id], onDelete: SetNull)
+  speakerId    String?
+  speaker      Speaker?           @relation("TestimonialSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
+  agendaItemId String?
+  agendaItem   EventAgendaItem?   @relation("TestimonialAgendaItem", fields: [agendaItemId], references: [id], onDelete: SetNull)
+  // Admin moderation flags
+  featured     Boolean            @default(false)
+  hidden       Boolean            @default(false)
+  // Denormalized counters (kept in sync by the like / share API routes)
+  likeCount    Int                @default(0)
+  shareCount   Int                @default(0)
+  // Per-user like rows (m:1 back-relation)
+  likes        TestimonialLike[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([authorId, createdAt])
+  @@index([eventId])
+  @@index([speakerId])
+  @@index([agendaItemId])
+  @@index([hidden, createdAt])
+  @@index([featured, createdAt])
+  @@index([likeCount])
+}
+
+/// A single "like" by a single user on a single testimonial.
+/// Composite unique on (userId, testimonialId) — one like per user per
+/// testimonial. The Testimonial.likeCount counter is incremented /
+/// decremented atomically when these rows are created / deleted.
+model TestimonialLike {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation("TestimonialLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+  testimonialId String
+  testimonial   Testimonial @relation(fields: [testimonialId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([userId, testimonialId])
+  @@index([testimonialId])
 }
