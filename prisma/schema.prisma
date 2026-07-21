@@ -59,6 +59,10 @@ model Chapter {
   timezone             String                         @default("Asia/Jerusalem")
   whatsappGroupUrl     String? // per-chapter override
   linkedinUrl          String? // per-chapter override
+  // Optional hero image shown on the right side of the chapter landing
+  // page (/c/[slug]). Either an external URL or a Vercel Blob URL from
+  // the chapter hero image uploader. Null = render the gradient-only hero.
+  heroImageUrl         String?
   isActive             Boolean                        @default(true)
   users                User[]
   events               Event[]

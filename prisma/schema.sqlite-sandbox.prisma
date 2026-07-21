@@ -59,6 +59,7 @@ model Chapter {
   timezone             String                         @default("Asia/Jerusalem")
   whatsappGroupUrl     String? // per-chapter override
   linkedinUrl          String? // per-chapter override
+  heroImageUrl         String? // shown on the right of /c/[slug] hero
   isActive             Boolean                        @default(true)
   users                User[]
   events               Event[]

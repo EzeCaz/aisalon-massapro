@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { normalizeHttpUrl } from "@/lib/normalize-url";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -44,8 +45,11 @@ export async function PATCH(
   }
   if (typeof body.city === "string") data.city = body.city.trim() || null;
   if (typeof body.timezone === "string" && body.timezone.trim()) data.timezone = body.timezone.trim();
-  if (typeof body.whatsappGroupUrl === "string") data.whatsappGroupUrl = body.whatsappGroupUrl.trim() || null;
-  if (typeof body.linkedinUrl === "string") data.linkedinUrl = body.linkedinUrl.trim() || null;
+  // Normalize social URLs at save time so the DB never stores schemeless
+  // URLs (which the browser would treat as relative paths on render).
+  if (typeof body.whatsappGroupUrl === "string") data.whatsappGroupUrl = normalizeHttpUrl(body.whatsappGroupUrl);
+  if (typeof body.linkedinUrl === "string") data.linkedinUrl = normalizeHttpUrl(body.linkedinUrl);
+  if (typeof body.heroImageUrl === "string") data.heroImageUrl = normalizeHttpUrl(body.heroImageUrl);
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
 
   // Country change — only Super Admin

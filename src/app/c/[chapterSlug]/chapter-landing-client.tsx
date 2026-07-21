@@ -63,6 +63,35 @@ type Props = { chapter: Chapter };
 // Helpers
 // ------------------------------------------------------------------
 
+/**
+ * Normalize a URL string to ensure it has an http:// or https:// prefix.
+ *
+ * Why: when an admin enters `linkedin.com/company/foo` (no scheme) in the
+ * chapter editor, the browser treats it as a relative path and the link
+ * resolves to `https://aisalon.massapro.com/c/linkedin.com/company/foo`
+ * instead of `https://linkedin.com/company/foo`. This is defense-in-depth
+ * on the render side — the admin API also normalizes at save time, but
+ * existing rows that were saved without a scheme need to render correctly
+ * too.
+ *
+ * Behavior:
+ *   - null/empty → null (so the link is not rendered)
+ *   - already has http:// or https:// → returned as-is
+ *   - "linkedin.com/..." → "https://linkedin.com/..."
+ *   - "ftp://..." → returned as-is (we don't strip non-http schemes; the
+ *     admin API blocks them at save time anyway)
+ */
+function normalizeUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // Strip any leading protocol that isn't http/https (e.g. javascript:,
+  // data: — security hygiene, even though the admin API blocks them).
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return null;
+  return `https://${trimmed}`;
+}
+
 function fmtDate(d: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
@@ -130,6 +159,12 @@ export function ChapterLandingClient({ chapter }: Props) {
 
   const flag = chapter.country.flagEmoji || "🌍";
 
+  // Normalize social URLs at render time so links like "linkedin.com/foo"
+  // (entered without https://) still resolve to the external site instead
+  // of being treated as a relative path on aisalon.massapro.com.
+  const whatsappUrl = normalizeUrl(chapter.whatsappGroupUrl);
+  const linkedinUrl = normalizeUrl(chapter.linkedinUrl);
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -187,11 +222,11 @@ export function ChapterLandingClient({ chapter }: Props) {
           </div>
 
           {/* Community links */}
-          {(chapter.whatsappGroupUrl || chapter.linkedinUrl) && (
+          {(whatsappUrl || linkedinUrl) && (
             <div className="flex flex-wrap items-center gap-3 mt-6">
-              {chapter.whatsappGroupUrl && (
+              {whatsappUrl && (
                 <a
-                  href={chapter.whatsappGroupUrl}
+                  href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
@@ -199,9 +234,9 @@ export function ChapterLandingClient({ chapter }: Props) {
                   <MessageCircle className="h-3.5 w-3.5" /> WhatsApp group
                 </a>
               )}
-              {chapter.linkedinUrl && (
+              {linkedinUrl && (
                 <a
-                  href={chapter.linkedinUrl}
+                  href={linkedinUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"

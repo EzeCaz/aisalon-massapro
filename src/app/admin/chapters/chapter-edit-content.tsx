@@ -79,6 +79,7 @@ export async function ChapterEditContent({
             countryId: true,
             whatsappGroupUrl: true,
             linkedinUrl: true,
+            heroImageUrl: true,
             isActive: true,
           },
         })
@@ -93,6 +94,7 @@ export async function ChapterEditContent({
             countryId: true,
             whatsappGroupUrl: true,
             linkedinUrl: true,
+            heroImageUrl: true,
             isActive: true,
           },
         });
@@ -139,6 +141,7 @@ export async function ChapterEditContent({
             countryId: chapter.countryId,
             whatsappGroupUrl: chapter.whatsappGroupUrl,
             linkedinUrl: chapter.linkedinUrl,
+            heroImageUrl: chapter.heroImageUrl,
             isActive: chapter.isActive,
           }}
           countries={countries}

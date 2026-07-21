@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { normalizeHttpUrl } from "@/lib/normalize-url";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -21,8 +22,12 @@ export async function POST(req: Request) {
   const countryId = String(body.countryId ?? "").trim();
   const city = body.city ? String(body.city).trim() : null;
   const timezone = String(body.timezone ?? "Asia/Jerusalem").trim() || "Asia/Jerusalem";
-  const whatsappGroupUrl = body.whatsappGroupUrl ? String(body.whatsappGroupUrl).trim() : null;
-  const linkedinUrl = body.linkedinUrl ? String(body.linkedinUrl).trim() : null;
+  // Normalize social URLs to always include an https:// scheme. Without
+  // this, an admin entering "linkedin.com/company/foo" (no scheme) would
+  // save a value that the browser treats as a relative path on render.
+  const whatsappGroupUrl = normalizeHttpUrl(body.whatsappGroupUrl);
+  const linkedinUrl = normalizeHttpUrl(body.linkedinUrl);
+  const heroImageUrl = normalizeHttpUrl(body.heroImageUrl);
   const isActive = body.isActive !== false;
 
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -54,6 +59,7 @@ export async function POST(req: Request) {
       timezone,
       whatsappGroupUrl,
       linkedinUrl,
+      heroImageUrl,
       isActive,
     },
   });

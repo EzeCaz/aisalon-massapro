@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Copy, Check, ExternalLink, Globe2, ShieldCheck } from "lucide-react";
+import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X } from "lucide-react";
+import { toast } from "sonner";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
