@@ -28,24 +28,25 @@ import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/b
  * doesn't).
  */
 export async function GET(req: NextRequest) {
-  // Wrap the session lookup in try/catch — if next-auth throws for any
-  // reason (e.g. misconfigured cookies, JWT secret rotation), we still
-  // want the public feed to render for anonymous visitors.
-  let me: { id: string; role: string } | null = null;
   try {
-    const session = await getServerSession(authOptions);
-    if (session?.user?.email) {
-      const u = await db.user.findUnique({
-        where: { email: session.user.email },
-        select: { id: true, role: true },
-      });
-      if (u) me = u;
+    // Wrap the session lookup in try/catch — if next-auth throws for any
+    // reason (e.g. misconfigured cookies, JWT secret rotation), we still
+    // want the public feed to render for anonymous visitors.
+    let me: { id: string; role: string } | null = null;
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user?.email) {
+        const u = await db.user.findUnique({
+          where: { email: session.user.email },
+          select: { id: true, role: true },
+        });
+        if (u) me = u;
+      }
+    } catch (err) {
+      console.error("[testimonials GET] session lookup failed:", err);
+      // Continue as anonymous — me stays null
     }
-  } catch (err) {
-    console.error("[testimonials GET] session lookup failed:", err);
-    // Continue as anonymous — me stays null
-  }
-  const isAdmin = me?.role === "ADMIN";
+    const isAdmin = me?.role === "ADMIN";
 
   const url = req.nextUrl;
   const eventId = url.searchParams.get("eventId") || undefined;
@@ -139,7 +140,18 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({ testimonials: serialized });
+    return NextResponse.json({ testimonials: serialized });
+  } catch (err) {
+    console.error("[testimonials GET] FATAL:", err);
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      { status: 500 }
+    );
+  }
 }
 
 /**
