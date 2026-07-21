@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { getPublicSettings } from "@/lib/site-settings";
+import { getEffectiveBrandImagesBySlug } from "@/lib/chapter-brand-images";
 import Image from "next/image";
 
 /**
@@ -15,26 +16,41 @@ import Image from "next/image";
  * image respectively. Falls back to the hardcoded defaults if the DB is
  * unreachable or no selection has been made yet.
  *
+ * CHAPTER-SCOPED OVERRIDES:
+ *   When the visitor arrives with `?chapterSlug=<slug>` in the URL
+ *   (typically from the /c/<slug> "Sign in" link), the chapter's
+ *   `loginHero` + `loginBanner` overrides (stored in ChapterSetting)
+ *   take precedence over the global SiteSetting values. This lets each
+ *   chapter show its own branding on the login page.
+ *
  * Both URLs are passed through `next/image` with `unoptimized` when
  * they're external Blob URLs, so they work without configuring
  * `next.config.js` `images.remotePatterns`.
  */
-export async function generateMetadata() {
-  const settings = await getPublicSettings();
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ chapterSlug?: string }>;
+}) {
+  const { chapterSlug } = await searchParams;
+  const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
   const bannerUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
+  const title = chapterSlug
+    ? `Login — AI Salon ${chapterSlug}`
+    : "Login — AI Salon Tel Aviv";
   return {
-    title: "Login — AI Salon Tel Aviv",
+    title,
     description:
       "Log in to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.",
     openGraph: {
-      title: "Login — AI Salon Tel Aviv",
+      title,
       description:
         "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
       images: [{ url: bannerUrl, width: 1200, height: 630, alt: "AI Salon Tel Aviv" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Login — AI Salon Tel Aviv",
+      title,
       description:
         "Log in to AI Salon Tel Aviv — the community for AI builders in Tel Aviv.",
       images: [bannerUrl],
@@ -42,11 +58,19 @@ export async function generateMetadata() {
   };
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ chapterSlug?: string; callbackUrl?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (session) redirect("/events");
 
-  const settings = await getPublicSettings();
+  const { chapterSlug, callbackUrl: callbackParam } = await searchParams;
+
+  // Load effective brand images — chapter-scoped overrides take
+  // precedence when chapterSlug is present.
+  const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
   const heroUrl = settings.loginHero || "/images/falafel-meerkat.jpg";
   // The meerkat mark in the logo uses the admin-selected loginBanner brand
   // asset (falls back to the hardcoded falafel-meerkat.jpg if not set).
@@ -55,9 +79,7 @@ export default async function LoginPage() {
   // Is the hero an external URL (Vercel Blob) or a relative path?
   const heroIsExternal = heroUrl.startsWith("http");
 
-  const callbackUrl = new URLSearchParams(
-    typeof window !== "undefined" ? window.location.search : ""
-  ).get("callbackUrl");
+  const callbackUrl = callbackParam;
 
   return (
     <main className="min-h-screen grid md:grid-cols-2">

@@ -51,6 +51,7 @@ type Chapter = {
   timezone: string;
   whatsappGroupUrl: string | null;
   linkedinUrl: string | null;
+  heroImageUrl: string | null;
   country: Country;
   memberCount: number;
   eventCount: number;
@@ -164,6 +165,8 @@ export function ChapterLandingClient({ chapter }: Props) {
   // of being treated as a relative path on aisalon.massapro.com.
   const whatsappUrl = normalizeUrl(chapter.whatsappGroupUrl);
   const linkedinUrl = normalizeUrl(chapter.linkedinUrl);
+  // Normalize hero image URL too — admin may paste a schemeless URL.
+  const heroImageUrl = normalizeUrl(chapter.heroImageUrl);
 
   return (
     <div className="min-h-screen bg-white">
@@ -174,7 +177,7 @@ export function ChapterLandingClient({ chapter }: Props) {
             <AiSalonLogo />
           </Link>
           <Link
-            href="/login"
+            href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
             className="text-sm font-semibold text-black/70 hover:text-black"
           >
             Sign in
@@ -182,68 +185,88 @@ export function ChapterLandingClient({ chapter }: Props) {
         </div>
       </header>
 
-      {/* Hero — chapter identity */}
+      {/* Hero — chapter identity. Two-column on lg+ when a hero image
+          is set; single-column (gradient-only) when no image. */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#820A7D] via-[#5b0758] to-[#FF005A] text-white">
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage:
             "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,230,255,0.3) 0%, transparent 50%)",
         }} />
-        <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
-            <span className="text-2xl">{flag}</span>
-            AI Salon · {chapter.country.name}
-          </p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-3">
-            {chapter.name} Chapter
-          </h1>
-          {chapter.city && (
-            <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2">
-              <MapPin className="h-5 w-5" /> {chapter.city}
+        <div className={`relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20 ${heroImageUrl ? "grid lg:grid-cols-2 gap-8 lg:gap-12 items-center" : ""}`}>
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
+              <span className="text-2xl">{flag}</span>
+              AI Salon · {chapter.country.name}
             </p>
-          )}
-          <p className="text-base sm:text-lg text-white/80 max-w-2xl mb-8">
-            Join the local AI community in {chapter.name}. Sign up to register
-            for upcoming events, connect with other members, and get invited
-            to invite-only salons.
-          </p>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-3">
+              {chapter.name} Chapter
+            </h1>
+            {chapter.city && (
+              <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2">
+                <MapPin className="h-5 w-5" /> {chapter.city}
+              </p>
+            )}
+            <p className="text-base sm:text-lg text-white/80 max-w-2xl mb-8">
+              Join the local AI community in {chapter.name}. Sign up to register
+              for upcoming events, connect with other members, and get invited
+              to invite-only salons.
+            </p>
 
-          {/* Quick stats */}
-          <div className="flex flex-wrap items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <span className="font-semibold">{chapter.memberCount}</span>
-              <span className="text-white/70">members</span>
+            {/* Quick stats */}
+            <div className="flex flex-wrap items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                <span className="font-semibold">{chapter.memberCount}</span>
+                <span className="text-white/70">members</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                <span className="font-semibold">{chapter.eventCount}</span>
+                <span className="text-white/70">events hosted</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              <span className="font-semibold">{chapter.eventCount}</span>
-              <span className="text-white/70">events hosted</span>
-            </div>
+
+            {/* Community links */}
+            {(whatsappUrl || linkedinUrl) && (
+              <div className="flex flex-wrap items-center gap-3 mt-6">
+                {whatsappUrl && (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> WhatsApp group
+                  </a>
+                )}
+                {linkedinUrl && (
+                  <a
+                    href={linkedinUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
+                  >
+                    <Linkedin className="h-3.5 w-3.5" /> LinkedIn
+                  </a>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Community links */}
-          {(whatsappUrl || linkedinUrl) && (
-            <div className="flex flex-wrap items-center gap-3 mt-6">
-              {whatsappUrl && (
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp group
-                </a>
-              )}
-              {linkedinUrl && (
-                <a
-                  href={linkedinUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
-                >
-                  <Linkedin className="h-3.5 w-3.5" /> LinkedIn
-                </a>
-              )}
+          {/* Hero image — right column on lg+. Renders inside a rounded
+              white card so the brand image is the visual focal point of
+              the chapter identity. Skipped entirely when no URL is set
+              (gradient-only hero, single-column layout). */}
+          {heroImageUrl && (
+            <div className="relative">
+              <div className="relative aspect-square w-full max-w-md mx-auto rounded-2xl overflow-hidden border border-white/20 bg-white shadow-2xl">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroImageUrl}
+                  alt={`${chapter.name} chapter hero`}
+                  className="h-full w-full object-cover"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -343,7 +366,7 @@ export function ChapterLandingClient({ chapter }: Props) {
                   </h3>
                   <p className="text-sm text-black/70">{success}</p>
                   <Link
-                    href="/login"
+                    href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
                     className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2 text-sm hover:bg-black/90"
                   >
                     Sign in <ArrowRight className="h-4 w-4" />
@@ -431,7 +454,7 @@ export function ChapterLandingClient({ chapter }: Props) {
                   <p className="text-xs text-black/50 mt-4 text-center">
                     Already have an account?{" "}
                     <Link
-                      href={`/login?callbackUrl=/c/${chapter.slug}`}
+                      href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
                       className="font-semibold text-[#820A7D] hover:underline"
                     >
                       Sign in

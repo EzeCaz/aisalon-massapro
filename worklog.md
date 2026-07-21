@@ -4317,3 +4317,124 @@ What the user should do next:
 5. Try the AI extractor (collapsible purple panel at top) — mock extractor populates sample fields after 1.5s
 6. Inspect the live JSON payload preview on the right side panel (updates as you type)
 7. Once verified, reply "deploy to main" and I'll fast-forward main to feat/event-form-chapter-dropdown + push to origin/main.
+
+---
+Task ID: 2026-07-21-chapter-hero-brand-images
+Agent: Super Z (main)
+Task: User reported three issues:
+  1. LinkedIn button on /c/montreal chapter page links to
+     https://aisalon.massapro.com/c/linkedin.com/company/ai-salon-montreal
+     instead of https://linkedin.com/company/ai-salon-montreal/ — root
+     cause: chapter.linkedinUrl was stored without https:// scheme AND
+     the deployed code didn't have the normalizeUrl render-time fix.
+  2. Add chapter hero image field to chapter editor; set Montreal's hero
+     to https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1784630528181-xsnpz1.jpeg
+  3. Add country/chapter filter to /admin/images, allow attaching images
+     to a specific chapter (Login banner, Favicon, Login hero per chapter).
+
+Work Log:
+- Issue 1 (LinkedIn URL bug): Already fixed in local commit 11d6a67
+  (chapter-landing-client.tsx has normalizeUrl that prepends https://
+  for schemeless URLs). Also added a one-off admin script
+  scripts/set-montreal-hero.ts that:
+    * Sets Montreal chapter's heroImageUrl to the brand asset URL.
+    * Walks ALL chapters and normalizes any schemeless linkedinUrl /
+      whatsappGroupUrl / heroImageUrl rows in the DB (defense-in-depth).
+  Run with: bun run scripts/set-montreal-hero.ts
+- Issue 2 (chapter hero image): Completed the partial work from 11d6a67.
+  chapter-editor.tsx now has:
+    * `heroImageUrl` in the `initial` type + form state.
+    * Hero image upload UI: file picker (calls
+      /api/admin/chapters/[id]/hero-image to upload to Vercel Blob) +
+      URL paste input (for existing brand-assets URLs) + preview
+      thumbnail + remove button.
+    * Save button disabled while upload is in flight.
+  chapter-landing-client.tsx:
+    * Added `heroImageUrl` to Chapter type.
+    * Hero section reflows to a 2-column layout on lg+ when a hero
+      image is set (chapter info left, hero image right inside a
+      rounded white card). Single-column gradient-only when no image.
+    * Hero image URL is normalized at render time (defense-in-depth).
+  /c/[chapterSlug]/page.tsx: includes heroImageUrl in serialized chapter
+  data passed to the client component.
+- Issue 3 (chapter-scoped brand images):
+  New lib src/lib/chapter-brand-images.ts:
+    * Uses existing ChapterSetting model (key/value, scoped to chapterId).
+    * Keys: favicon, loginHero, loginBanner (mirrors global SiteSetting).
+    * Resolver: getEffectiveBrandImages(chapterId) returns chapter
+      overrides merged on top of global SiteSetting values.
+    * Safe to call from PUBLIC routes (only returns image URLs).
+  New API endpoints:
+    * GET  /api/admin/chapters/[id]/brand-images — returns chapter
+      overrides + global values (for the admin UI).
+    * POST /api/admin/chapters/[id]/brand-images/select — sets a
+      chapter-scoped override for one role. Same SSRF + path-traversal
+      protections as the global /api/admin/brand-images/select route.
+      Stock images are copied to Vercel Blob at
+      chapter-brand/<chapterId>/<filename>. Supports `clear: true` to
+      remove an override (falls back to global).
+  Updated /admin/images page:
+    * Loads countries + chapters (scoped: Super Admin sees all;
+      Admin sees own country; Chapter Organizer sees own chapter).
+    * Passes them to ImagesGallery as a new `countries` prop.
+  Rebuilt ImagesGallery component:
+    * New chapter filter panel (Country dropdown + Chapter dropdown).
+      When a chapter is selected:
+        - Fetches the chapter's current overrides via the new GET API.
+        - Renders a "chapter-scoped selections summary" with Clear
+          buttons per role.
+        - Renders a second row of per-chapter select buttons on every
+          image card (purple-themed, below the global pink buttons).
+        - Image cards show two badge columns: pink "(global)" and
+          purple "(chapterName)" when an image is selected for either.
+  Runtime wiring (chapter-scoped brand images actually take effect):
+    * /login/page.tsx: generateMetadata + page body now read
+      ?chapterSlug=<slug> from the URL. When set, calls
+      getEffectiveBrandImagesBySlug(chapterSlug) so the login hero +
+      login banner + OG preview image use the chapter's overrides.
+    * /c/[chapterSlug]/page.tsx: generateMetadata now sets icons.icon
+      + icons.apple + openGraph.images + twitter.images from the
+      chapter's effective brand images (favicon + loginBanner).
+    * /c/[chapterSlug]/chapter-landing-client.tsx: the "Sign in"
+      links (header + success state + "already have an account")
+      now point to /login?chapterSlug=<slug> so the chapter-scoped
+      branding carries through to the login page.
+
+Verification:
+- bunx tsc --noEmit: 0 errors in any new/modified file (chapter-brand-
+  images.ts, chapter-editor.tsx, chapter-landing-client.tsx, page.tsx,
+  brand-images/route.ts, brand-images/select/route.ts, images-gallery.tsx,
+  login/page.tsx, set-montreal-hero.ts). Pre-existing errors in
+  non-member-dashboard.tsx + mockups/ + skills/* are unchanged.
+- Prisma schema unchanged — used the existing ChapterSetting table
+  (key/value, scoped to chapterId) so no migration needed.
+
+Stage Summary:
+- LinkedIn URL bug fix is in code (commit 11d6a67, normalized at render
+  time) + DB cleanup script (scripts/set-montreal-hero.ts) that fixes
+  any pre-existing schemeless URLs in the DB.
+- Chapter hero image: full upload UI in the chapter editor (paste URL
+  OR upload file), renders on /c/[slug] in a 2-column hero layout.
+- Per-chapter brand images: admin can now set favicon, login hero, and
+  login banner OVERRIDES per chapter from /admin/images. Overrides take
+  effect on /c/[slug] and /login?chapterSlug=<slug>. Falls back to
+  global SiteSetting when no chapter override is set.
+- Montreal's hero URL will be set by running scripts/set-montreal-hero.ts
+  (one-off, idempotent, also normalizes all chapter URLs).
+
+What the user should do next:
+1. Deploy to Vercel (push to origin/main).
+2. After deploy: run `bun run scripts/set-montreal-hero.ts` against the
+   production DB to set Montreal's hero image + normalize any
+   schemeless chapter URLs (especially Montreal's linkedinUrl).
+3. Visit https://aisalon.massapro.com/c/montreal — should now show:
+   * Hero image on the right (the brand asset you provided)
+   * LinkedIn button linking to https://linkedin.com/company/ai-salon-montreal/
+4. Visit https://aisalon.massapro.com/admin/images — use the new
+   chapter filter (Country + Chapter dropdowns) to set per-chapter
+   favicon / login hero / login banner overrides. Badges show which
+   image is selected globally (pink) vs per-chapter (purple).
+5. To test chapter-scoped branding end-to-end: set a chapter override
+   for "Login hero" on Montreal, then visit
+   /login?chapterSlug=montreal — the login page should show Montreal's
+   hero image instead of the global default.

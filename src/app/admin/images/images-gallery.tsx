@@ -12,6 +12,8 @@ import {
   Loader2,
   Star,
   Upload,
+  X,
+  Globe2,
 } from "lucide-react";
 
 type BrandImage = {
@@ -33,11 +35,29 @@ type ApiResponse = {
   selections: Selections;
 };
 
+type Country = {
+  id: string;
+  name: string;
+  code: string;
+  flagEmoji: string | null;
+  chapters: Chapter[];
+};
+
+type Chapter = {
+  id: string;
+  name: string;
+  slug: string;
+  city: string | null;
+};
+
 const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
   favicon: "Favicon",
   loginHero: "Login hero",
   loginBanner: "Login banner",
 };
+
+const ROLE_KEYS = ["favicon", "loginHero", "loginBanner"] as const;
+type RoleKey = (typeof ROLE_KEYS)[number];
 
 /**
  * ImagesGallery — Super Admin UI for managing brand images.
@@ -47,18 +67,74 @@ const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
  *   2. View both stock images (from .images/) and uploaded images (from
  *      Vercel Blob) in a single grid
  *   3. Select any image as the favicon, login hero, or login banner
- *      (POST /api/admin/brand-images/select — auto-copies stock images
- *      to Vercel Blob so the resulting URL is publicly accessible)
- *   4. Visual badges show which image is currently selected for each role
+ *      GLOBALLY (POST /api/admin/brand-images/select)
+ *   4. When a chapter is selected in the filter dropdown, ALSO show
+ *      per-chapter select buttons (POST /api/admin/chapters/[id]/brand-images/select).
+ *      Chapter overrides take precedence when a visitor is on
+ *      /c/[chapterSlug] or /login?chapterSlug=….
+ *   5. Visual badges show which image is currently selected for each role
+ *      — both globally and for the active chapter.
  *
  * Loading, empty, and error states are handled inline.
  */
-export function ImagesGallery() {
+export function ImagesGallery({
+  countries,
+  isSuperAdmin,
+}: {
+  countries: Country[];
+  isSuperAdmin: boolean;
+}) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyKey, setBusyKey] = useState<string | null>(null); // "upload" | "select:imgIdx:role" | null
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Chapter filter — when a chapter is selected, the gallery shows
+  // per-chapter select buttons + the chapter's current overrides.
+  // `chapterId === ""` means "global only" (no chapter filter).
+  const [countryId, setCountryId] = useState<string>("");
+  const [chapterId, setChapterId] = useState<string>("");
+
+  // Selected chapter object (looked up from countries prop).
+  const selectedChapter = useMemo(() => {
+    if (!chapterId) return null;
+    for (const c of countries) {
+      const ch = c.chapters.find((ch) => ch.id === chapterId);
+      if (ch) return ch;
+    }
+    return null;
+  }, [countries, chapterId]);
+
+  // When country changes, reset chapter selection (chapters are
+  // country-scoped — selecting a different country invalidates the
+  // currently selected chapter).
+  useEffect(() => {
+    setChapterId("");
+  }, [countryId]);
+
+  // Chapter-scoped overrides — fetched from the chapter brand-images API
+  // when a chapter is selected. Reset to {} when no chapter is selected.
+  const [chapterOverrides, setChapterOverrides] = useState<Partial<Selections>>({});
+  useEffect(() => {
+    if (!chapterId) {
+      setChapterOverrides({});
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/admin/chapters/${chapterId}/brand-images`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((json: { overrides: Partial<Selections> }) => {
+        if (!cancelled) setChapterOverrides(json.overrides ?? {});
+      })
+      .catch((err) => {
+        console.warn("[images-gallery] could not load chapter overrides:", err);
+        if (!cancelled) setChapterOverrides({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chapterId]);
 
   const load = async () => {
     try {
@@ -79,27 +155,17 @@ export function ImagesGallery() {
   const images = data?.images ?? [];
   const selections = data?.selections ?? { favicon: "", loginHero: "", loginBanner: "" };
 
-  // Map a selection URL back to the image card it belongs to (so we can
-  // show a "Currently selected" badge on the right card).
-  const selectionToImageIdx = useMemo(() => {
-    const map: Record<string, number> = {};
-    images.forEach((img, idx) => {
-      // Match by URL (for uploaded images selected via their direct URL) or
-      // by name (for stock images selected — the URL stored is the resulting
-      // Vercel Blob URL, which won't match the .images/ source URL, so we
-      // also store a fallback match by image name).
-      map[img.url] = idx;
-    });
-    return map;
-  }, [images]);
-
   // For each role, find which image is currently selected.
-  // We compare by URL — if a stock image was previously selected, its
-  // selection URL is a Vercel Blob URL (because we copied the bytes on
-  // select), so it WON'T match the stock image's URL. The user just
-  // sees "currently set" status only on uploaded-image cards that match.
   const isImageSelectedForRole = (img: BrandImage, role: keyof Selections): boolean => {
     return selections[role] === img.url;
+  };
+
+  // Same, but for chapter-scoped overrides.
+  const isImageSelectedForChapterRole = (
+    img: BrandImage,
+    role: keyof Selections
+  ): boolean => {
+    return chapterOverrides[role] === img.url;
   };
 
   /** Handle file upload via input or drag-and-drop. */
@@ -124,13 +190,10 @@ export function ImagesGallery() {
     }
   }
 
-  /** Mark an image as the selected one for a given role. */
+  /** Mark an image as the selected one for a given GLOBAL role. */
   async function handleSelect(img: BrandImage, role: keyof Selections) {
     setBusyKey(`select:${img.url}:${role}`);
     try {
-      // For stock images, send the bare filename; the server copies bytes
-      // to Vercel Blob and returns the new public URL.
-      // For uploaded images, send the Blob URL directly.
       const source = img.kind === "stock" ? img.name : img.url;
       const res = await fetch("/api/admin/brand-images/select", {
         method: "POST",
@@ -142,7 +205,6 @@ export function ImagesGallery() {
         throw new Error(err.error ?? `Select failed (${res.status})`);
       }
       const json = await res.json();
-      // Optimistically update local state with the new selection URL.
       setData((prev) =>
         prev
           ? {
@@ -153,11 +215,85 @@ export function ImagesGallery() {
       );
       toast.success(`${ROLE_LABELS[role]} updated`, {
         description: img.kind === "stock"
-          ? `${img.name} copied to Vercel Blob and set as ${ROLE_LABELS[role]}.`
-          : `${img.name} set as ${ROLE_LABELS[role]}.`,
+          ? `${img.name} copied to Vercel Blob and set as ${ROLE_LABELS[role]} (global).`
+          : `${img.name} set as ${ROLE_LABELS[role]} (global).`,
       });
     } catch (e) {
       toast.error("Selection failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  /** Mark an image as the selected one for a given CHAPTER-SCOPED role. */
+  async function handleChapterSelect(
+    img: BrandImage,
+    role: keyof Selections,
+    chapter: Chapter
+  ) {
+    setBusyKey(`cselect:${chapter.id}:${img.url}:${role}`);
+    try {
+      const source = img.kind === "stock" ? img.name : img.url;
+      const res = await fetch(
+        `/api/admin/chapters/${chapter.id}/brand-images/select`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: role, source }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Select failed (${res.status})`);
+      }
+      const json = await res.json();
+      setChapterOverrides((prev) => ({ ...prev, [role]: json.value }));
+      toast.success(`${ROLE_LABELS[role]} set for ${chapter.name}`, {
+        description:
+          img.kind === "stock"
+            ? `${img.name} copied to Vercel Blob and set as ${ROLE_LABELS[role]} for ${chapter.name}.`
+            : `${img.name} set as ${ROLE_LABELS[role]} for ${chapter.name}.`,
+      });
+    } catch (e) {
+      toast.error("Chapter selection failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  /** Remove a chapter-scoped override for a given role. */
+  async function handleChapterClear(
+    role: keyof Selections,
+    chapter: Chapter
+  ) {
+    setBusyKey(`cclear:${chapter.id}:${role}`);
+    try {
+      const res = await fetch(
+        `/api/admin/chapters/${chapter.id}/brand-images/select`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: role, clear: true }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Clear failed (${res.status})`);
+      }
+      setChapterOverrides((prev) => {
+        const next = { ...prev };
+        delete next[role];
+        return next;
+      });
+      toast.success(`${ROLE_LABELS[role]} override cleared for ${chapter.name}`, {
+        description: "Chapter will now fall back to the global selection.",
+      });
+    } catch (e) {
+      toast.error("Clear failed", {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
@@ -231,7 +367,7 @@ export function ImagesGallery() {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={busyKey === "upload"}
+          disabled={!isSuperAdmin || busyKey === "upload"}
           className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#D8004D] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {busyKey === "upload" ? (
@@ -254,19 +390,123 @@ export function ImagesGallery() {
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) handleUpload(f);
-            // Reset value so the same file can be selected again later.
             e.target.value = "";
           }}
         />
       </div>
 
-      {/* Selections summary */}
+      {/* Chapter filter — when a chapter is selected, per-chapter
+          selection buttons appear on each image card. */}
+      <div className="rounded-lg border border-[#820A7D]/20 bg-[#820A7D]/[0.03] p-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#820A7D] flex items-center gap-1.5 mb-1">
+              <Globe2 className="h-3 w-3" /> Chapter-scoped overrides
+            </p>
+            <p className="text-xs text-black/60 mt-1.5">
+              Select a chapter to set its favicon, login hero, and login banner
+              overrides. Chapter overrides take precedence over the global
+              defaults when a visitor is on{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">/c/&lt;slug&gt;</code>{" "}
+              or{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">/login?chapterSlug=&lt;slug&gt;</code>.
+            </p>
+          </div>
+          <div className="flex items-end gap-2 flex-wrap">
+            <div>
+              <label className="block text-[0.65rem] font-semibold uppercase tracking-wider text-black/60 mb-1">
+                Country
+              </label>
+              <select
+                value={countryId}
+                onChange={(e) => setCountryId(e.target.value)}
+                className="rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D]"
+              >
+                <option value="">All countries</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.flagEmoji} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[0.65rem] font-semibold uppercase tracking-wider text-black/60 mb-1">
+                Chapter
+              </label>
+              <select
+                value={chapterId}
+                onChange={(e) => setChapterId(e.target.value)}
+                className="rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D] min-w-[180px]"
+              >
+                <option value="">Global only</option>
+                {countries
+                  .filter((c) => !countryId || c.id === countryId)
+                  .flatMap((c) => c.chapters)
+                  .map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.name}
+                      {ch.city ? ` — ${ch.city}` : ""}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Chapter-scoped selections summary — shown when a chapter is
+            selected. Each role shows the override URL (or "falling back
+            to global") with a Clear button. */}
+        {selectedChapter && (
+          <div className="mt-4 pt-3 border-t border-[#820A7D]/15">
+            <p className="text-xs font-semibold text-[#820A7D] mb-2">
+              {selectedChapter.name} chapter — current overrides
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              {ROLE_KEYS.map((role) => {
+                const url = chapterOverrides[role];
+                return (
+                  <div
+                    key={role}
+                    className="rounded-md bg-white border border-black/10 px-3 py-2"
+                  >
+                    <p className="font-semibold text-black/70 mb-0.5">
+                      {ROLE_LABELS[role]}
+                    </p>
+                    {url ? (
+                      <>
+                        <p className="text-black/80 truncate font-mono text-[0.7rem]" title={url}>
+                          {url}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleChapterClear(role, selectedChapter)}
+                          disabled={busyKey !== null}
+                          className="mt-1 inline-flex items-center gap-1 text-[0.65rem] font-semibold text-[#FF005A] hover:underline disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" /> Clear override
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-black/40 italic text-[0.7rem]">
+                        Falling back to global
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Global selections summary */}
       <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
         <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-black/50 mb-2">
-          Current selections
+          Global selections (site-wide defaults)
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          {(["favicon", "loginHero", "loginBanner"] as const).map((role) => {
+          {ROLE_KEYS.map((role) => {
             const url = selections[role];
             const isDefault = !url;
             return (
@@ -299,9 +539,12 @@ export function ImagesGallery() {
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {images.map((img) => {
-          const selectedRoles = (["favicon", "loginHero", "loginBanner"] as const).filter(
-            (role) => isImageSelectedForRole(img, role)
+          const selectedGlobalRoles = ROLE_KEYS.filter((role) =>
+            isImageSelectedForRole(img, role)
           );
+          const selectedChapterRoles = selectedChapter
+            ? ROLE_KEYS.filter((role) => isImageSelectedForChapterRole(img, role))
+            : [];
           return (
             <article
               key={`${img.kind}:${img.url}`}
@@ -327,16 +570,25 @@ export function ImagesGallery() {
                 >
                   {img.kind}
                 </span>
-                {/* Selected role badges */}
-                {selectedRoles.length > 0 && (
+                {/* Selected role badges — global (pink) + chapter (purple) */}
+                {(selectedGlobalRoles.length > 0 || selectedChapterRoles.length > 0) && (
                   <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
-                    {selectedRoles.map((role) => (
+                    {selectedGlobalRoles.map((role) => (
                       <span
-                        key={role}
+                        key={`g-${role}`}
                         className="inline-flex items-center gap-1 rounded bg-[#FF005A] px-1.5 py-0.5 text-[0.6rem] font-semibold text-white"
                       >
                         <BadgeCheck className="h-3 w-3" />
-                        {ROLE_LABELS[role]}
+                        {ROLE_LABELS[role]} (global)
+                      </span>
+                    ))}
+                    {selectedChapterRoles.map((role) => (
+                      <span
+                        key={`c-${role}`}
+                        className="inline-flex items-center gap-1 rounded bg-[#820A7D] px-1.5 py-0.5 text-[0.6rem] font-semibold text-white"
+                      >
+                        <BadgeCheck className="h-3 w-3" />
+                        {ROLE_LABELS[role]} ({selectedChapter?.name})
                       </span>
                     ))}
                   </div>
@@ -367,36 +619,81 @@ export function ImagesGallery() {
                   </Link>
                 </div>
 
-                {/* Select-as buttons */}
-                <div className="mt-3 grid grid-cols-3 gap-1">
-                  {(["favicon", "loginHero", "loginBanner"] as const).map((role) => {
-                    const isSelected = selectedRoles.includes(role);
-                    const busy = busyKey === `select:${img.url}:${role}`;
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => handleSelect(img, role)}
-                        disabled={busyKey !== null}
-                        className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          isSelected
-                            ? "bg-[#FF005A] text-white hover:bg-[#D8004D]"
-                            : "bg-black/[0.05] text-black/70 hover:bg-black/[0.1]"
-                        }`}
-                        title={`Set as ${ROLE_LABELS[role]}`}
-                      >
-                        {busy ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : isSelected ? (
-                          <BadgeCheck className="h-3 w-3" />
-                        ) : (
-                          <Star className="h-3 w-3" />
-                        )}
-                        <span className="truncate">{ROLE_LABELS[role]}</span>
-                      </button>
-                    );
-                  })}
+                {/* GLOBAL select-as buttons */}
+                <div className="mt-3">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-black/50 mb-1">
+                    Global
+                  </p>
+                  <div className="grid grid-cols-3 gap-1">
+                    {ROLE_KEYS.map((role) => {
+                      const isSelected = selectedGlobalRoles.includes(role);
+                      const busy = busyKey === `select:${img.url}:${role}`;
+                      return (
+                        <button
+                          key={`g-btn-${role}`}
+                          type="button"
+                          onClick={() => handleSelect(img, role)}
+                          disabled={!isSuperAdmin || busyKey !== null}
+                          className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            isSelected
+                              ? "bg-[#FF005A] text-white hover:bg-[#D8004D]"
+                              : "bg-black/[0.05] text-black/70 hover:bg-black/[0.1]"
+                          }`}
+                          title={`Set as ${ROLE_LABELS[role]} (global)`}
+                        >
+                          {busy ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : isSelected ? (
+                            <BadgeCheck className="h-3 w-3" />
+                          ) : (
+                            <Star className="h-3 w-3" />
+                          )}
+                          <span className="truncate">{ROLE_LABELS[role]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* CHAPTER-scoped select-as buttons — only shown when a
+                    chapter is selected in the filter. */}
+                {selectedChapter && (
+                  <div className="mt-2">
+                    <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#820A7D] mb-1">
+                      {selectedChapter.name} chapter
+                    </p>
+                    <div className="grid grid-cols-3 gap-1">
+                      {ROLE_KEYS.map((role) => {
+                        const isSelected = selectedChapterRoles.includes(role);
+                        const busy =
+                          busyKey === `cselect:${selectedChapter.id}:${img.url}:${role}`;
+                        return (
+                          <button
+                            key={`c-btn-${role}`}
+                            type="button"
+                            onClick={() => handleChapterSelect(img, role, selectedChapter)}
+                            disabled={!isSuperAdmin || busyKey !== null}
+                            className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                              isSelected
+                                ? "bg-[#820A7D] text-white hover:bg-[#6a0868]"
+                                : "bg-[#820A7D]/10 text-[#820A7D] hover:bg-[#820A7D]/20"
+                            }`}
+                            title={`Set as ${ROLE_LABELS[role]} for ${selectedChapter.name}`}
+                          >
+                            {busy ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : isSelected ? (
+                              <BadgeCheck className="h-3 w-3" />
+                            ) : (
+                              <Star className="h-3 w-3" />
+                            )}
+                            <span className="truncate">{ROLE_LABELS[role]}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </article>
           );

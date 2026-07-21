@@ -25,6 +25,7 @@ export function ChapterEditor({
     countryId: string;
     whatsappGroupUrl: string | null;
     linkedinUrl: string | null;
+    heroImageUrl: string | null;
     isActive: boolean;
   };
   countries: Country[];
@@ -36,6 +37,11 @@ export function ChapterEditor({
   const [error, setError] = useState<string | null>(null);
   const [copiedPublic, setCopiedPublic] = useState(false);
   const [copiedAdmin, setCopiedAdmin] = useState(false);
+  // Hero image upload state — tracks in-progress uploads so the UI can
+  // show a spinner + disables Save while an upload is in flight (so the
+  // admin can't save a chapter with a half-uploaded hero URL).
+  const [uploadingHero, setUploadingHero] = useState(false);
+  const heroInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     slug: initial?.slug ?? "",
@@ -44,6 +50,7 @@ export function ChapterEditor({
     countryId: initial?.countryId ?? params.get("countryId") ?? countries[0]?.id ?? "",
     whatsappGroupUrl: initial?.whatsappGroupUrl ?? "",
     linkedinUrl: initial?.linkedinUrl ?? "",
+    heroImageUrl: initial?.heroImageUrl ?? "",
     isActive: initial?.isActive ?? true,
   });
 
@@ -85,6 +92,44 @@ export function ChapterEditor({
       setForm((f) => ({ ...f, slug: f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") }));
     }
   }, [form.name, form.slug, mode]);
+
+  /**
+   * Upload a hero image file to Vercel Blob via the chapter hero-image
+   * API. On success, patches form.heroImageUrl with the returned URL.
+   *
+   * Only available in edit mode — the API needs an existing chapter ID
+   * to scope the upload path (chapter-hero/<chapterId>/<filename>).
+   * For new chapters, the admin must save first, then upload a hero.
+   */
+  async function uploadHeroImage(file: File) {
+    if (mode !== "edit" || !chapterId) {
+      toast.error("Save the chapter first, then upload a hero image.");
+      return;
+    }
+    setUploadingHero(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/admin/chapters/${chapterId}/hero-image`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Upload failed (${res.status})`);
+      }
+      const url: string = data.image?.url;
+      if (!url) throw new Error("Upload succeeded but no URL returned");
+      setForm((f) => ({ ...f, heroImageUrl: url }));
+      toast.success("Hero image uploaded", { description: file.name });
+    } catch (e) {
+      toast.error("Hero image upload failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setUploadingHero(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -279,7 +324,7 @@ export function ChapterEditor({
           />
         </Field>
 
-        <Field label="LinkedIn URL">
+        <Field label="LinkedIn URL" hint="https://www.linkedin.com/groups/...">
           <input
             type="url"
             value={form.linkedinUrl}
@@ -288,6 +333,103 @@ export function ChapterEditor({
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
+
+        {/* Hero image — shown on the chapter landing page (/c/[slug])
+            right side of the hero section. Either upload a file (saved to
+            Vercel Blob at chapter-hero/<id>/<filename>) OR paste an
+            existing https:// URL (e.g. a brand-assets URL from
+            /admin/images). */}
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
+            Hero image <span className="text-black/40 normal-case font-normal">— shown on /c/{form.slug || "slug"}</span>
+          </label>
+          <p className="text-xs text-black/50 mb-2">
+            Upload a new image, or paste an existing https:// URL (e.g. from
+            the /admin/images gallery). Renders on the right side of the
+            chapter landing page hero.
+          </p>
+
+          {/* Preview thumbnail */}
+          {form.heroImageUrl ? (
+            <div className="mb-2 relative inline-block rounded-md overflow-hidden border border-black/15 bg-black/[0.03]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={form.heroImageUrl}
+                alt="Chapter hero preview"
+                className="h-32 w-auto max-w-full object-contain"
+              />
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, heroImageUrl: "" })}
+                className="absolute top-1 right-1 inline-flex items-center justify-center h-6 w-6 rounded-full bg-black/70 text-white hover:bg-black"
+                title="Remove hero image"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="mb-2 h-32 w-full rounded-md border-2 border-dashed border-black/15 bg-black/[0.02] flex items-center justify-center text-xs text-black/40">
+              No hero image — gradient-only hero will be shown
+            </div>
+          )}
+
+          {/* URL input — lets admin paste an existing URL */}
+          <input
+            type="url"
+            value={form.heroImageUrl}
+            onChange={(e) => setForm({ ...form, heroImageUrl: e.target.value })}
+            placeholder="https://...public.blob.vercel-storage.com/brand-assets/..."
+            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
+          />
+
+          {/* Upload button — only in edit mode (needs chapterId) */}
+          {mode === "edit" && (
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => heroInputRef.current?.click()}
+                disabled={uploadingHero || saving}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploadingHero ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-3.5 w-3.5" /> Upload new image
+                  </>
+                )}
+              </button>
+              <input
+                ref={heroInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadHeroImage(f);
+                  e.target.value = "";
+                }}
+              />
+              {form.heroImageUrl && (
+                <a
+                  href={form.heroImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> Open
+                </a>
+              )}
+            </div>
+          )}
+          {mode === "new" && (
+            <p className="mt-2 text-[0.7rem] text-black/50">
+              Save the chapter first, then upload a hero image.
+            </p>
+          )}
+        </div>
 
         <label className="flex items-center gap-2 text-sm text-black/80">
           <input
@@ -309,7 +451,7 @@ export function ChapterEditor({
           <button
             type="button"
             onClick={save}
-            disabled={saving || !form.name || !form.slug || !form.countryId}
+            disabled={saving || uploadingHero || !form.name || !form.slug || !form.countryId}
             className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-2 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? "Saving…" : mode === "new" ? "Create chapter" : "Save changes"}

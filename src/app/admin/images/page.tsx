@@ -23,10 +23,13 @@ export const dynamic = "force-dynamic";
  *   - View every uploaded image in Vercel Blob (brand-assets/ prefix)
  *   - Upload new brand images to Vercel Blob (drag-and-drop or click)
  *   - Select any image as the favicon, login-page hero, or login-page banner
+ *     — globally AND per-chapter (chapter overrides take precedence when
+ *       a visitor is on /c/[chapterSlug] or /login?chapterSlug=…)
  *
- * Selections are stored in the SiteSetting table and read by layout.tsx +
- * login/page.tsx (server-side) via /api/site-settings. Changes take effect
- * immediately on the next page load — no redeploy needed.
+ * Global selections are stored in the SiteSetting table.
+ * Per-chapter overrides are stored in the ChapterSetting table.
+ * Both are read by layout.tsx + login/page.tsx + /c/[slug] (server-side).
+ * Changes take effect immediately on the next page load — no redeploy needed.
  *
  * Permission gate: SUPER_ADMIN only (writes affect every page on the site).
  * Regular ADMINs can still VIEW the stock images via the legacy
@@ -66,6 +69,27 @@ export default async function AdminImagesPage() {
   // Load the current WhatsApp link so the editor can pre-fill the input.
   const settings = await getPublicSettings();
 
+  // Load countries + chapters for the new chapter-scoped image filter.
+  // Scope: Super Admin sees all; Admin sees own country; Chapter
+  // Organizer sees own chapter only.
+  const countries = await db.country.findMany({
+    where: isSuper
+      ? {}
+      : { id: me.countryId ?? "___NEVER___" },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      flagEmoji: true,
+      chapters: {
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, city: true },
+        orderBy: { name: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
@@ -89,6 +113,14 @@ export default async function AdminImagesPage() {
             you select them, so they become publicly accessible. Changes take
             effect immediately on the next page load — no redeploy needed.
           </p>
+          <p className="mt-2 text-sm text-black/80 max-w-2xl">
+            Use the <strong>chapter filter</strong> below to set per-chapter
+            overrides for the favicon, login hero, and login banner. Chapter
+            overrides take precedence over the global defaults when a visitor
+            is on the chapter&rsquo;s landing page (<code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.85em]">/c/&lt;slug&gt;</code>){" "}
+            or signs in via{" "}
+            <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.85em]">/login?chapterSlug=&lt;slug&gt;</code>.
+          </p>
           {!isSuper && (
             <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               You are signed in as <strong>Admin</strong> (not Super Admin).
@@ -98,7 +130,7 @@ export default async function AdminImagesPage() {
           )}
         </div>
 
-        <ImagesGallery />
+        <ImagesGallery countries={countries} isSuperAdmin={isSuper} />
 
         {/* WhatsApp group link editor — sits below the brand images gallery.
             SUPER_ADMIN-only writes (enforced by the API), but visible to any
