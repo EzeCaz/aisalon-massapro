@@ -178,35 +178,153 @@ export function ChapterLandingClient({ chapter }: Props) {
         </div>
       </header>
 
-      {/* Hero — chapter identity */}
+      {/* Hero — chapter identity with sign-up form on the left */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#820A7D] via-[#5b0758] to-[#FF005A] text-white">
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage:
             "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,230,255,0.3) 0%, transparent 50%)",
         }} />
-        <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-8">
-            {/* Chapter profile / hero image — pulled from
-                ChapterSetting[loginHero] → global SiteSetting → default.
-                Falls back gracefully to a gradient placeholder if missing. */}
-            <div className="flex-shrink-0 mx-auto sm:mx-0">
-              <div className="relative h-32 w-32 sm:h-40 sm:w-40 rounded-2xl overflow-hidden border-2 border-white/20 shadow-xl bg-white/10">
-                {heroImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={heroImage}
-                    alt={`${chapter.name} chapter`}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center text-5xl sm:text-6xl">
-                    {flag}
+        <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 lg:gap-10">
+            {/* Left column: Small hero image + Join the chapter form.
+                The hero image is intentionally much smaller than before
+                and sits directly above the sign-up card. The sign-up card
+                occupies the same left column where the hero image used to
+                be, per the user's redesign request. */}
+            <div className="flex-shrink-0 w-full lg:w-80 flex flex-col gap-4">
+              {/* Small chapter profile / hero image.
+                  Pulled from ChapterSetting[loginHero] → global SiteSetting → default. */}
+              <div className="flex justify-center lg:justify-start">
+                <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-xl overflow-hidden border-2 border-white/30 shadow-lg bg-white/10">
+                  {heroImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={heroImage}
+                      alt={`${chapter.name} chapter`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-3xl sm:text-4xl">
+                      {flag}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Join the chapter — sign-up card.
+                  Rendered on a solid white surface so it stands out against
+                  the gradient hero background. */}
+              <div className="rounded-xl bg-white p-5 shadow-2xl">
+                {success ? (
+                  <div className="text-center space-y-3 py-4">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#007E72]/10">
+                      <CheckCircle2 className="h-6 w-6 text-[#007E72]" />
+                    </div>
+                    <h3 className="text-lg font-bold text-black">
+                      You&apos;re in!
+                    </h3>
+                    <p className="text-sm text-black/70">{success}</p>
+                    <Link
+                      href="/login"
+                      className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2 text-sm hover:bg-black/90"
+                    >
+                      Sign in <ArrowRight className="h-4 w-4" />
+                    </Link>
                   </div>
+                ) : (
+                  <>
+                    <div className="mb-4">
+                      <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-1.5">
+                        <Sparkles className="h-3 w-3" /> Join the chapter
+                      </p>
+                      <h3 className="text-lg font-bold text-black leading-tight">
+                        Sign up for AI Salon {chapter.name}
+                      </h3>
+                      <p className="text-xs text-black/60 mt-1">
+                        Your account will be tagged to{" "}
+                        <strong>{chapter.name}</strong>, {chapter.country.name}.
+                        You&apos;ll get a password by email.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
+                          Your name
+                        </label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Jane Cohen"
+                            autoComplete="name"
+                            required
+                            className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
+                          Email
+                        </label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            autoComplete="email"
+                            required
+                            className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
+                          />
+                        </div>
+                      </div>
+
+                      {error && (
+                        <div className="rounded-md bg-[#FF005A]/10 border border-[#FF005A]/30 px-3 py-2 text-xs text-[#FF005A]">
+                          {error}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={loading || !email || !name}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-3 text-sm hover:bg-[#820A7D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Creating
+                            your account…
+                          </>
+                        ) : (
+                          <>
+                            Sign up <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
+                    </form>
+
+                    <p className="text-xs text-black/50 mt-3 text-center">
+                      Already have an account?{" "}
+                      <Link
+                        href={`/login?callbackUrl=/c/${chapter.slug}`}
+                        className="font-semibold text-[#820A7D] hover:underline"
+                      >
+                        Sign in
+                      </Link>
+                    </p>
+                  </>
                 )}
               </div>
             </div>
 
-            <div className="flex-1 text-center sm:text-left">
+            {/* Right column: chapter identity (name, location, description,
+                stats, community links). Unchanged from the previous design. */}
+            <div className="flex-1 text-center lg:text-left">
               <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
                 <span className="text-2xl">{flag}</span>
                 AI Salon · {chapter.country.name}
@@ -215,7 +333,7 @@ export function ChapterLandingClient({ chapter }: Props) {
                 {chapter.name} Chapter
               </h1>
               {chapter.city && (
-                <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2 justify-center sm:justify-start">
+                <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2 justify-center lg:justify-start">
                   <MapPin className="h-5 w-5" /> {chapter.city}
                 </p>
               )}
@@ -226,7 +344,7 @@ export function ChapterLandingClient({ chapter }: Props) {
               </p>
 
               {/* Quick stats */}
-              <div className="flex flex-wrap items-center gap-6 text-sm justify-center sm:justify-start">
+              <div className="flex flex-wrap items-center gap-6 text-sm justify-center lg:justify-start">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   <span className="font-semibold">{chapter.memberCount}</span>
@@ -241,7 +359,7 @@ export function ChapterLandingClient({ chapter }: Props) {
 
               {/* Community links */}
               {(whatsappUrl || linkedinUrl) && (
-                <div className="flex flex-wrap items-center gap-3 mt-6 justify-center sm:justify-start">
+                <div className="flex flex-wrap items-center gap-3 mt-6 justify-center lg:justify-start">
                   {whatsappUrl && (
                     <a
                       href={whatsappUrl}
@@ -269,198 +387,85 @@ export function ChapterLandingClient({ chapter }: Props) {
         </div>
       </section>
 
+      {/* Main: only the events section (full width). The sign-up form
+          has been moved into the hero section above. */}
       <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <div className="grid lg:grid-cols-5 gap-8 lg:gap-12">
-          {/* Left: Upcoming events */}
-          <div className="lg:col-span-3 space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-black mb-1">
-                Upcoming events
-              </h2>
-              <p className="text-sm text-black/60">
-                Sign up to register for any of these.
-              </p>
-            </div>
-
-            {chapter.events.length === 0 ? (
-              <div className="rounded-lg border border-black/10 bg-black/[0.02] p-8 text-center">
-                <Calendar className="h-8 w-8 text-black/40 mx-auto mb-3" />
-                <p className="text-sm text-black/70">
-                  No upcoming events scheduled yet. Sign up to be notified
-                  when the next salon is announced.
-                </p>
-              </div>
-            ) : (
-              <ul className="space-y-4">
-                {chapter.events.map((event) => (
-                  <li key={event.id}>
-                    <Link
-                      href={`/e/${event.slug}`}
-                      className="group block rounded-lg border border-black/10 bg-white hover:border-[#FF005A]/40 hover:shadow-md transition p-4"
-                    >
-                      <div className="flex gap-4">
-                        {event.mainImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={event.mainImageUrl}
-                            alt={event.title}
-                            className="h-16 w-16 sm:h-20 sm:w-20 rounded-md object-cover flex-shrink-0"
-                          />
-                        ) : (
-                          <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-md bg-gradient-to-br from-[#820A7D] to-[#FF005A] flex items-center justify-center flex-shrink-0">
-                            <Calendar className="h-6 w-6 text-white" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-black group-hover:text-[#FF005A] transition line-clamp-1">
-                            {event.title}
-                          </h3>
-                          {event.subtitle && (
-                            <p className="text-sm text-black/60 line-clamp-2 mt-0.5">
-                              {event.subtitle}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-black/60">
-                            <span className="inline-flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {fmtDate(new Date(event.startsAt), chapter.timezone)}
-                            </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {fmtTime(new Date(event.startsAt), chapter.timezone)}
-                            </span>
-                            {event.venue && (
-                              <span className="inline-flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                {event.venue}
-                              </span>
-                            )}
-                            <span className="inline-flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              {event.rsvpCount} RSVPs
-                            </span>
-                          </div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-black/30 group-hover:text-[#FF005A] transition flex-shrink-0 mt-1" />
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-bold text-black mb-1">
+              Upcoming events
+            </h2>
+            <p className="text-sm text-black/60">
+              Sign up to register for any of these.
+            </p>
           </div>
 
-          {/* Right: Sign-up form */}
-          <aside className="lg:col-span-2">
-            <div className="lg:sticky lg:top-8 rounded-xl border border-[#820A7D]/20 bg-gradient-to-b from-[#820A7D]/[0.04] to-white p-6 shadow-sm">
-              {success ? (
-                <div className="text-center space-y-4 py-6">
-                  <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#007E72]/10">
-                    <CheckCircle2 className="h-7 w-7 text-[#007E72]" />
-                  </div>
-                  <h3 className="text-lg font-bold text-black">
-                    You&apos;re in!
-                  </h3>
-                  <p className="text-sm text-black/70">{success}</p>
-                  <Link
-                    href="/login"
-                    className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2 text-sm hover:bg-black/90"
-                  >
-                    Sign in <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <div className="mb-5">
-                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-                      <Sparkles className="h-3 w-3" /> Join the chapter
-                    </p>
-                    <h3 className="text-xl font-bold text-black">
-                      Sign up for AI Salon {chapter.name}
-                    </h3>
-                    <p className="text-xs text-black/60 mt-1">
-                      Your account will be tagged to{" "}
-                      <strong>{chapter.name}</strong>, {chapter.country.name}.
-                      You&apos;ll get a password by email — use it to sign in
-                      and register for events.
-                    </p>
-                  </div>
-
-                  <form onSubmit={handleSubmit} className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
-                        Your name
-                      </label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
-                        <input
-                          type="text"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Jane Cohen"
-                          autoComplete="name"
-                          required
-                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
-                        Email
-                      </label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40" />
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="you@example.com"
-                          autoComplete="email"
-                          required
-                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
-                        />
-                      </div>
-                    </div>
-
-                    {error && (
-                      <div className="rounded-md bg-[#FF005A]/10 border border-[#FF005A]/30 px-3 py-2 text-xs text-[#FF005A]">
-                        {error}
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={loading || !email || !name}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-3 text-sm hover:bg-[#820A7D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" /> Creating
-                          your account…
-                        </>
-                      ) : (
-                        <>
-                          Sign up for {chapter.name}{" "}
-                          <ArrowRight className="h-4 w-4" />
-                        </>
-                      )}
-                    </button>
-                  </form>
-
-                  <p className="text-xs text-black/50 mt-4 text-center">
-                    Already have an account?{" "}
-                    <Link
-                      href={`/login?callbackUrl=/c/${chapter.slug}`}
-                      className="font-semibold text-[#820A7D] hover:underline"
-                    >
-                      Sign in
-                    </Link>
-                  </p>
-                </>
-              )}
+          {chapter.events.length === 0 ? (
+            <div className="rounded-lg border border-black/10 bg-black/[0.02] p-8 text-center">
+              <Calendar className="h-8 w-8 text-black/40 mx-auto mb-3" />
+              <p className="text-sm text-black/70">
+                No upcoming events scheduled yet. Sign up to be notified
+                when the next salon is announced.
+              </p>
             </div>
-          </aside>
+          ) : (
+            <ul className="space-y-4">
+              {chapter.events.map((event) => (
+                <li key={event.id}>
+                  <Link
+                    href={`/e/${event.slug}`}
+                    className="group block rounded-lg border border-black/10 bg-white hover:border-[#FF005A]/40 hover:shadow-md transition p-4"
+                  >
+                    <div className="flex gap-4">
+                      {event.mainImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={event.mainImageUrl}
+                          alt={event.title}
+                          className="h-16 w-16 sm:h-20 sm:w-20 rounded-md object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-md bg-gradient-to-br from-[#820A7D] to-[#FF005A] flex items-center justify-center flex-shrink-0">
+                          <Calendar className="h-6 w-6 text-white" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-black group-hover:text-[#FF005A] transition line-clamp-1">
+                          {event.title}
+                        </h3>
+                        {event.subtitle && (
+                          <p className="text-sm text-black/60 line-clamp-2 mt-0.5">
+                            {event.subtitle}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-black/60">
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {fmtDate(new Date(event.startsAt), chapter.timezone)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {fmtTime(new Date(event.startsAt), chapter.timezone)}
+                          </span>
+                          {event.venue && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {event.venue}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {event.rsvpCount} RSVPs
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowRight className="h-5 w-5 text-black/30 group-hover:text-[#FF005A] transition flex-shrink-0 mt-1" />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </main>
 
