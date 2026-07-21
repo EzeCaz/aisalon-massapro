@@ -79,58 +79,65 @@ export async function GET(req: NextRequest) {
       ? { createdAt: "asc" as const }
       : { createdAt: "desc" as const };
 
+  // Base include — always present, regardless of whether the caller is
+  // signed in. We add the per-user `likes` relation ONLY when we have a
+  // signed-in user, by constructing the include object explicitly.
+  const baseInclude = {
+    author: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        photoUrl: true,
+        image: true,
+        company: true,
+      },
+    },
+    event: { select: { id: true, title: true, slug: true } },
+    speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
+    agendaItem: { select: { id: true, title: true } },
+  } as const;
+
+  // For signed-in users, also fetch the per-user like row so we can
+  // compute `likedByMe`. For anonymous visitors, skip it entirely.
+  const include = me
+    ? {
+        ...baseInclude,
+        likes: {
+          where: { userId: me.id },
+          select: { id: true },
+          take: 1,
+        },
+      }
+    : baseInclude;
+
   const testimonials = await db.testimonial.findMany({
     where,
     orderBy,
     take: limit,
-    include: {
-      author: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          photoUrl: true,
-          image: true,
-          company: true,
-        },
-      },
-      event: { select: { id: true, title: true, slug: true } },
-      speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
-      agendaItem: { select: { id: true, title: true } },
-      // Only include the per-user like row when we have a signed-in user.
-      // For anonymous visitors, we skip the relation entirely (false) and
-      // hard-code likedByMe=false below.
-      ...(me
-        ? {
-            likes: {
-              where: { userId: me.id },
-              select: { id: true },
-              take: 1,
-            },
-          }
-        : {}),
-    },
+    include,
   });
 
-  const serialized = testimonials.map((t) => ({
-    id: t.id,
-    body: t.body,
-    rating: t.rating,
-    imageUrl: t.imageUrl,
-    eventDate: t.eventDate.toISOString(),
-    featured: t.featured,
-    hidden: t.hidden,
-    likeCount: t.likeCount,
-    shareCount: t.shareCount,
-    createdAt: t.createdAt.toISOString(),
-    author: t.author,
-    event: t.event,
-    speaker: t.speaker,
-    agendaItem: t.agendaItem,
-    likedByMe: me
-      ? ((t as { likes?: { id: string }[] }).likes?.length ?? 0) > 0
-      : false,
-  }));
+  const serialized = testimonials.map((t) => {
+    const likesArr = (t as { likes?: { id: string }[] }).likes;
+    return {
+      id: t.id,
+      body: t.body,
+      rating: t.rating,
+      imageUrl: t.imageUrl,
+      eventDate: t.eventDate.toISOString(),
+      featured: t.featured,
+      hidden: t.hidden,
+      likeCount: t.likeCount,
+      shareCount: t.shareCount,
+      createdAt: t.createdAt.toISOString(),
+      author: t.author,
+      event: t.event,
+      speaker: t.speaker,
+      agendaItem: t.agendaItem,
+      likedByMe: likesArr ? likesArr.length > 0 : false,
+    };
+  });
 
   return NextResponse.json({ testimonials: serialized });
 }
