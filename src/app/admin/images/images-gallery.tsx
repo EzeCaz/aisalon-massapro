@@ -7,11 +7,15 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   BadgeCheck,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
+  Globe2,
   Images,
   Loader2,
   Star,
   Upload,
+  X,
 } from "lucide-react";
 
 type BrandImage = {
@@ -28,9 +32,25 @@ type Selections = {
   loginBanner: string;
 };
 
+type Country = {
+  id: string;
+  name: string;
+  code: string;
+  flagEmoji: string | null;
+  chapters: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    city: string | null;
+  }>;
+};
+
 type ApiResponse = {
   images: BrandImage[];
   selections: Selections;
+  /** chapterId → { key: value } */
+  chapterSelections: Record<string, Record<string, string>>;
+  countries: Country[];
 };
 
 const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
@@ -39,26 +59,29 @@ const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
   loginBanner: "Login banner",
 };
 
+type RoleKey = "favicon" | "loginHero" | "loginBanner";
+type Scope =
+  | { type: "global" }
+  | { type: "chapter"; chapterId: string; chapterName: string; chapterSlug: string };
+
 /**
  * ImagesGallery — Super Admin UI for managing brand images.
  *
- * Functionality:
- *   1. Upload new images to Vercel Blob (POST /api/admin/brand-images)
- *   2. View both stock images (from .images/) and uploaded images (from
- *      Vercel Blob) in a single grid
- *   3. Select any image as the favicon, login hero, or login banner
- *      (POST /api/admin/brand-images/select — auto-copies stock images
- *      to Vercel Blob so the resulting URL is publicly accessible)
- *   4. Visual badges show which image is currently selected for each role
- *
- * Loading, empty, and error states are handled inline.
+ * Each image card has 3 buttons: Favicon · Login hero · Login banner.
+ * Clicking a button opens a picker modal where the admin picks the target
+ * scope — either Global (applies to the main /login page) or a specific
+ * chapter (applies to /c/[chapterSlug]).
  */
 export function ImagesGallery() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyKey, setBusyKey] = useState<string | null>(null); // "upload" | "select:imgIdx:role" | null
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Picker modal state — when non-null, modal is open for this
+  // (image, role) tuple. The modal asks the user to pick a scope.
+  const [picker, setPicker] = useState<{ img: BrandImage; role: RoleKey } | null>(null);
 
   const load = async () => {
     try {
@@ -78,31 +101,41 @@ export function ImagesGallery() {
 
   const images = data?.images ?? [];
   const selections = data?.selections ?? { favicon: "", loginHero: "", loginBanner: "" };
+  const chapterSelections = data?.chapterSelections ?? {};
+  const countries = data?.countries ?? [];
 
-  // Map a selection URL back to the image card it belongs to (so we can
-  // show a "Currently selected" badge on the right card).
-  const selectionToImageIdx = useMemo(() => {
-    const map: Record<string, number> = {};
-    images.forEach((img, idx) => {
-      // Match by URL (for uploaded images selected via their direct URL) or
-      // by name (for stock images selected — the URL stored is the resulting
-      // Vercel Blob URL, which won't match the .images/ source URL, so we
-      // also store a fallback match by image name).
-      map[img.url] = idx;
-    });
-    return map;
-  }, [images]);
+  /**
+   * Returns a list of scope descriptors for which this image is currently
+   * the selected one. Used to render the "currently set for…" badges on
+   * the image card.
+   */
+  function scopesForImage(img: BrandImage, role: RoleKey): Array<{
+    label: string;
+    scope: Scope;
+  }> {
+    const out: Array<{ label: string; scope: Scope }> = [];
+    if (selections[role] === img.url) {
+      out.push({ label: "Global", scope: { type: "global" } });
+    }
+    for (const country of countries) {
+      for (const ch of country.chapters) {
+        const sel = chapterSelections[ch.id];
+        if (sel?.[role] === img.url) {
+          out.push({
+            label: `${ch.name}`,
+            scope: {
+              type: "chapter",
+              chapterId: ch.id,
+              chapterName: ch.name,
+              chapterSlug: ch.slug,
+            },
+          });
+        }
+      }
+    }
+    return out;
+  }
 
-  // For each role, find which image is currently selected.
-  // We compare by URL — if a stock image was previously selected, its
-  // selection URL is a Vercel Blob URL (because we copied the bytes on
-  // select), so it WON'T match the stock image's URL. The user just
-  // sees "currently set" status only on uploaded-image cards that match.
-  const isImageSelectedForRole = (img: BrandImage, role: keyof Selections): boolean => {
-    return selections[role] === img.url;
-  };
-
-  /** Handle file upload via input or drag-and-drop. */
   async function handleUpload(file: File) {
     setBusyKey("upload");
     try {
@@ -124,40 +157,96 @@ export function ImagesGallery() {
     }
   }
 
-  /** Mark an image as the selected one for a given role. */
-  async function handleSelect(img: BrandImage, role: keyof Selections) {
-    setBusyKey(`select:${img.url}:${role}`);
+  /**
+   * Apply the selection: write the image URL as `role` at the chosen scope.
+   */
+  async function handleApplySelection(img: BrandImage, role: RoleKey, scope: Scope) {
+    setBusyKey(`select:${img.url}:${role}:${scope.type}`);
     try {
-      // For stock images, send the bare filename; the server copies bytes
-      // to Vercel Blob and returns the new public URL.
-      // For uploaded images, send the Blob URL directly.
       const source = img.kind === "stock" ? img.name : img.url;
+      const body: Record<string, unknown> = { key: role, source };
+      if (scope.type === "global") {
+        body.scope = { type: "global" };
+      } else {
+        body.scope = { type: "chapter", chapterId: scope.chapterId };
+      }
       const res = await fetch("/api/admin/brand-images/select", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: role, source }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Select failed (${res.status})`);
       }
       const json = await res.json();
-      // Optimistically update local state with the new selection URL.
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              selections: { ...prev.selections, [role]: json.value },
-            }
-          : prev
-      );
-      toast.success(`${ROLE_LABELS[role]} updated`, {
-        description: img.kind === "stock"
-          ? `${img.name} copied to Vercel Blob and set as ${ROLE_LABELS[role]}.`
-          : `${img.name} set as ${ROLE_LABELS[role]}.`,
+      // Optimistically update local state.
+      setData((prev) => {
+        if (!prev) return prev;
+        if (scope.type === "global") {
+          return {
+            ...prev,
+            selections: { ...prev.selections, [role]: json.value },
+          };
+        }
+        const next = { ...prev.chapterSelections };
+        const chap = { ...(next[scope.chapterId] ?? {}) };
+        chap[role] = json.value;
+        next[scope.chapterId] = chap;
+        return { ...prev, chapterSelections: next };
       });
+      const targetLabel =
+        scope.type === "global"
+          ? "the global scope (main site)"
+          : `${scope.chapterName} chapter`;
+      toast.success(`${ROLE_LABELS[role]} set for ${targetLabel}`, {
+        description: img.kind === "stock"
+          ? `${img.name} copied to Vercel Blob and selected.`
+          : `${img.name} selected.`,
+      });
+      setPicker(null);
     } catch (e) {
       toast.error("Selection failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  /**
+   * Clear a chapter-scoped override so it falls back to the global value.
+   */
+  async function handleClearChapterSelection(
+    img: BrandImage,
+    role: RoleKey,
+    chapterId: string,
+    chapterName: string
+  ) {
+    setBusyKey(`clear:${img.url}:${role}:${chapterId}`);
+    try {
+      const res = await fetch("/api/admin/brand-images/select", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: role, chapterId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Clear failed (${res.status})`);
+      }
+      setData((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev.chapterSelections };
+        const chap = { ...(next[chapterId] ?? {}) };
+        delete chap[role];
+        next[chapterId] = chap;
+        return { ...prev, chapterSelections: next };
+      });
+      toast.success(`${ROLE_LABELS[role]} cleared for ${chapterName}`, {
+        description: "Will fall back to the global value.",
+      });
+    } catch (e) {
+      toast.error("Clear failed", {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
@@ -254,31 +343,38 @@ export function ImagesGallery() {
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) handleUpload(f);
-            // Reset value so the same file can be selected again later.
             e.target.value = "";
           }}
         />
       </div>
 
-      {/* Selections summary */}
-      <div className="rounded-lg border border-black/10 bg-white px-4 py-3">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-black/50 mb-2">
-          Current selections
+      {/* How-to card explaining the new flow */}
+      <div className="rounded-lg border border-[#820A7D]/20 bg-[#820A7D]/[0.04] px-4 py-3 text-xs text-black/80">
+        <p className="font-semibold text-[#820A7D] uppercase tracking-[0.2em] text-[0.7rem] mb-1">
+          How it works
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          {(["favicon", "loginHero", "loginBanner"] as const).map((role) => {
-            const url = selections[role];
-            const isDefault = !url;
-            return (
-              <div key={role} className="rounded-md bg-black/[0.03] px-3 py-2">
-                <p className="font-semibold text-black/70 mb-0.5">{ROLE_LABELS[role]}</p>
-                <p className="text-black/80 truncate" title={url}>
-                  {isDefault ? "(default)" : url}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+        <p>
+          Each image card has 3 buttons — <strong>Favicon</strong>,{" "}
+          <strong>Login hero</strong>, <strong>Login banner</strong>. Click any
+          button to choose where the image applies:
+        </p>
+        <ul className="mt-2 space-y-0.5 list-disc list-inside text-black/70">
+          <li>
+            <strong>Global</strong> — applies to the main site{" "}
+            <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">
+              /login
+            </code>{" "}
+            page (the default).
+          </li>
+          <li>
+            <strong>A specific chapter</strong> — overrides the global value
+            for{" "}
+            <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">
+              /c/[chapterSlug]
+            </code>{" "}
+            only. Pick a country → chapter in the picker.
+          </li>
+        </ul>
       </div>
 
       {/* Stats line */}
@@ -299,9 +395,6 @@ export function ImagesGallery() {
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {images.map((img) => {
-          const selectedRoles = (["favicon", "loginHero", "loginBanner"] as const).filter(
-            (role) => isImageSelectedForRole(img, role)
-          );
           return (
             <article
               key={`${img.kind}:${img.url}`}
@@ -317,7 +410,6 @@ export function ImagesGallery() {
                   className="object-contain p-2"
                   unoptimized
                 />
-                {/* Kind badge (stock vs uploaded) */}
                 <span
                   className={`absolute top-2 left-2 rounded px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide ${
                     img.kind === "uploaded"
@@ -327,20 +419,6 @@ export function ImagesGallery() {
                 >
                   {img.kind}
                 </span>
-                {/* Selected role badges */}
-                {selectedRoles.length > 0 && (
-                  <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
-                    {selectedRoles.map((role) => (
-                      <span
-                        key={role}
-                        className="inline-flex items-center gap-1 rounded bg-[#FF005A] px-1.5 py-0.5 text-[0.6rem] font-semibold text-white"
-                      >
-                        <BadgeCheck className="h-3 w-3" />
-                        {ROLE_LABELS[role]}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Metadata + actions */}
@@ -367,27 +445,24 @@ export function ImagesGallery() {
                   </Link>
                 </div>
 
-                {/* Select-as buttons */}
+                {/* Select-as buttons — each opens the picker */}
                 <div className="mt-3 grid grid-cols-3 gap-1">
                   {(["favicon", "loginHero", "loginBanner"] as const).map((role) => {
-                    const isSelected = selectedRoles.includes(role);
-                    const busy = busyKey === `select:${img.url}:${role}`;
+                    const scopes = scopesForImage(img, role);
+                    const isSelectedSomewhere = scopes.length > 0;
                     return (
                       <button
                         key={role}
                         type="button"
-                        onClick={() => handleSelect(img, role)}
-                        disabled={busyKey !== null}
-                        className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          isSelected
+                        onClick={() => setPicker({ img, role })}
+                        className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors ${
+                          isSelectedSomewhere
                             ? "bg-[#FF005A] text-white hover:bg-[#D8004D]"
                             : "bg-black/[0.05] text-black/70 hover:bg-black/[0.1]"
                         }`}
-                        title={`Set as ${ROLE_LABELS[role]}`}
+                        title={`Set as ${ROLE_LABELS[role]}…`}
                       >
-                        {busy ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : isSelected ? (
+                        {isSelectedSomewhere ? (
                           <BadgeCheck className="h-3 w-3" />
                         ) : (
                           <Star className="h-3 w-3" />
@@ -397,10 +472,322 @@ export function ImagesGallery() {
                     );
                   })}
                 </div>
+
+                {/* Scope badges — list every scope where this image is
+                    currently selected for ANY of the 3 roles. */}
+                {(["favicon", "loginHero", "loginBanner"] as const).some(
+                  (r) => scopesForImage(img, r).length > 0
+                ) && (
+                  <div className="mt-3 space-y-1.5 border-t border-black/5 pt-2">
+                    <p className="text-[0.6rem] uppercase tracking-[0.2em] text-black/40 font-semibold">
+                      Currently used for
+                    </p>
+                    {(["favicon", "loginHero", "loginBanner"] as const).map((role) => {
+                      const scopes = scopesForImage(img, role);
+                      if (scopes.length === 0) return null;
+                      return (
+                        <div key={role} className="space-y-1">
+                          {scopes.map(({ label, scope }) => {
+                            const clearBusy =
+                              scope.type === "chapter" &&
+                              busyKey === `clear:${img.url}:${role}:${scope.chapterId}`;
+                            return (
+                              <div
+                                key={`${role}:${scope.type}:${"chapterId" in scope ? scope.chapterId : "g"}`}
+                                className="inline-flex items-center gap-1.5 rounded bg-[#FF005A]/10 px-1.5 py-0.5 text-[0.6rem] font-semibold text-[#FF005A]"
+                              >
+                                <BadgeCheck className="h-3 w-3" />
+                                <span>
+                                  {ROLE_LABELS[role]} · {label}
+                                </span>
+                                {scope.type === "chapter" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleClearChapterSelection(
+                                        img,
+                                        role,
+                                        scope.chapterId,
+                                        scope.chapterName
+                                      )
+                                    }
+                                    disabled={busyKey !== null}
+                                    className="ml-0.5 text-[#FF005A]/70 hover:text-[#FF005A] disabled:opacity-50"
+                                    title={`Clear ${ROLE_LABELS[role]} override for ${scope.chapterName}`}
+                                  >
+                                    {clearBusy ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <X className="h-3 w-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </article>
           );
         })}
+      </div>
+
+      {/* Picker modal */}
+      {picker && (
+        <ScopePickerModal
+          img={picker.img}
+          role={picker.role}
+          countries={countries}
+          currentSelectionUrl={selections[picker.role]}
+          chapterSelections={chapterSelections}
+          busyKey={busyKey}
+          onApply={(scope) => handleApplySelection(picker.img, picker.role, scope)}
+          onClose={() => setPicker(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------
+// Scope picker modal
+// --------------------------------------------------------------------
+
+type ScopePickerModalProps = {
+  img: BrandImage;
+  role: RoleKey;
+  countries: Country[];
+  currentSelectionUrl: string; // global value for this role
+  chapterSelections: Record<string, Record<string, string>>;
+  busyKey: string | null;
+  onApply: (scope: Scope) => void;
+  onClose: () => void;
+};
+
+function ScopePickerModal({
+  img,
+  role,
+  countries,
+  currentSelectionUrl,
+  chapterSelections,
+  busyKey,
+  onApply,
+  onClose,
+}: ScopePickerModalProps) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(countries.map((c) => [c.id, true]))
+  );
+  const [selected, setSelected] = useState<Scope>({ type: "global" });
+
+  const isBusy = busyKey?.startsWith(`select:${img.url}:${role}:`) ?? false;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-lg bg-white shadow-xl overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-black/10 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-[#FF005A]">
+              Set as {ROLE_LABELS[role]}
+            </p>
+            <h3 className="text-base font-bold text-black mt-0.5 truncate" title={img.name}>
+              {img.name}
+            </h3>
+            <p className="text-xs text-black/60 mt-1">
+              Choose where this image applies. Global affects the main{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">
+                /login
+              </code>{" "}
+              page; chapter overrides affect only{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">
+                /c/[slug]
+              </code>
+              .
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-black/40 hover:text-black/70 flex-shrink-0"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body — scrollable scope list */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+          {/* Global option */}
+          <button
+            type="button"
+            onClick={() => setSelected({ type: "global" })}
+            className={`w-full text-left rounded-md border px-3 py-2.5 transition-colors ${
+              selected.type === "global"
+                ? "border-[#FF005A] bg-[#FF005A]/5"
+                : "border-black/10 hover:border-black/20 bg-white"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Globe2 className="h-4 w-4 text-[#820A7D]" />
+              <span className="font-semibold text-sm text-black">Global</span>
+              {currentSelectionUrl === img.url && (
+                <span className="ml-auto inline-flex items-center gap-1 rounded bg-[#FF005A] px-1.5 py-0.5 text-[0.6rem] font-semibold text-white">
+                  <BadgeCheck className="h-3 w-3" /> Current
+                </span>
+              )}
+            </div>
+            <p className="text-[0.7rem] text-black/60 mt-0.5 pl-6">
+              Applies to the main website{" "}
+              <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">
+                /login
+              </code>{" "}
+              page.
+            </p>
+          </button>
+
+          {/* Per-country → per-chapter options */}
+          {countries.length === 0 ? (
+            <p className="text-xs text-black/50 italic py-2">
+              No countries or chapters configured yet. Create one in{" "}
+              <Link href="/admin/chapters" className="underline">
+                /admin/chapters
+              </Link>{" "}
+              first.
+            </p>
+          ) : (
+            countries.map((country) => {
+              const isOpen = expanded[country.id];
+              return (
+                <div
+                  key={country.id}
+                  className="rounded-md border border-black/10 overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded((p) => ({ ...p, [country.id]: !p[country.id] }))
+                    }
+                    className="w-full text-left bg-black/[0.02] px-3 py-2 flex items-center gap-2 hover:bg-black/[0.04]"
+                  >
+                    {isOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-black/60" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 text-black/60" />
+                    )}
+                    <span className="text-base">{country.flagEmoji || "🌍"}</span>
+                    <span className="font-semibold text-sm text-black">{country.name}</span>
+                    <span className="text-[0.65rem] text-black/50 ml-1">
+                      ({country.chapters.length} chapter
+                      {country.chapters.length === 1 ? "" : "s"})
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="divide-y divide-black/5">
+                      {country.chapters.length === 0 ? (
+                        <p className="px-3 py-2 text-[0.7rem] text-black/50 italic">
+                          No active chapters in this country.
+                        </p>
+                      ) : (
+                        country.chapters.map((ch) => {
+                          const isSel =
+                            selected.type === "chapter" && selected.chapterId === ch.id;
+                          const chapSel = chapterSelections[ch.id];
+                          const isCurrent = chapSel?.[role] === img.url;
+                          return (
+                            <button
+                              key={ch.id}
+                              type="button"
+                              onClick={() =>
+                                setSelected({
+                                  type: "chapter",
+                                  chapterId: ch.id,
+                                  chapterName: ch.name,
+                                  chapterSlug: ch.slug,
+                                })
+                              }
+                              className={`w-full text-left px-3 py-2 pl-8 flex items-center gap-2 transition-colors ${
+                                isSel
+                                  ? "bg-[#FF005A]/5"
+                                  : "hover:bg-black/[0.02]"
+                              }`}
+                            >
+                              <span
+                                className={`h-3.5 w-3.5 rounded-full border-2 flex-shrink-0 ${
+                                  isSel
+                                    ? "border-[#FF005A] bg-[#FF005A]"
+                                    : "border-black/20"
+                                }`}
+                              />
+                              <span className="text-sm text-black font-medium">
+                                {ch.name}
+                              </span>
+                              {ch.city && (
+                                <span className="text-[0.7rem] text-black/50">
+                                  · {ch.city}
+                                </span>
+                              )}
+                              <code className="ml-auto text-[0.65rem] text-black/40 font-mono">
+                                /c/{ch.slug}
+                              </code>
+                              {isCurrent && (
+                                <span className="inline-flex items-center gap-1 rounded bg-[#FF005A] px-1.5 py-0.5 text-[0.6rem] font-semibold text-white">
+                                  <BadgeCheck className="h-3 w-3" /> Current
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer — Apply / Cancel */}
+        <div className="px-5 py-3 border-t border-black/10 flex items-center justify-between gap-2 bg-black/[0.02]">
+          <p className="text-[0.7rem] text-black/60">
+            {selected.type === "global"
+              ? "Will apply to the main /login page."
+              : `Will override ${ROLE_LABELS[role]} for ${selected.chapterName} (/c/${selected.chapterSlug}).`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isBusy}
+              className="rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/5 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => onApply(selected)}
+              disabled={isBusy}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white px-4 py-1.5 text-xs font-semibold hover:bg-[#D8004D] disabled:opacity-50"
+            >
+              {isBusy ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Applying…
+                </>
+              ) : (
+                <>Apply</>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

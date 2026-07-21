@@ -4186,3 +4186,32 @@ What the user should do next:
    Chapter Organizers will see their chapter pre-selected.
 4. To populate the city filter, make sure events have their `city`
    field set (editable in the event editor).
+
+---
+Task ID: admin-images-redesign-and-chapter-hero
+Agent: main
+Task: Fix /admin/images "Montreal hero image" not updating /c/mtl + redesign /admin/images to use a scope picker + change /admin/chapters/[id] to use chapter slug + add hero image upload to chapter editor + fix LinkedIn URL schemeless rendering bug.
+
+Work Log:
+- Investigated current state: /admin/images code had NO per-chapter support (only 3 global buttons). The user's report of seeing "Global / Montreal chapter" sections was actually describing the EXPECTED state from a previous incomplete task — none of it was actually in the code.
+- Traced the LinkedIn URL bug: chapter-landing-client.tsx used `chapter.linkedinUrl` directly as href. If the stored value lacked https://, the browser treated it as a relative path under /c/[chapterSlug]. No normalizeUrl helper existed.
+- Created /src/lib/url-helpers.ts — ensureAbsoluteUrl() prepends https:// to schemeless URLs (used both server-side on chapter PATCH/POST and client-side in chapter landing).
+- Created /src/lib/chapter-settings.ts — helper for ChapterSetting table (getChapterSettingsMap, resolveChapterImages, setChapterSetting, clearChapterSetting, getAllChapterImageSelections). Reuses the existing ChapterSetting Prisma model (no DB migration needed). Resolver pattern: ChapterSetting → SiteSetting → DEFAULTS.
+- Extended /api/admin/brand-images/select/route.ts: now accepts `scope: { type: "global" } | { type: "chapter", chapterId | chapterSlug }`. Writes to SiteSetting (global) or ChapterSetting (chapter). Also added DELETE handler to clear a chapter override.
+- Extended /api/admin/brand-images GET: now also returns `chapterSelections` (all per-chapter overrides) + `countries` (with nested chapters) for the picker UI.
+- Rewrote /src/app/admin/images/images-gallery.tsx: each image card has 3 buttons (Favicon, Login hero, Login banner). Clicking opens a ScopePickerModal showing "Global" option + a collapsible list of countries → chapters. Selecting one writes via the select API. Each card now also shows badges for every scope it's currently set for, with per-chapter badges having an X to clear.
+- Updated /c/[chapterSlug]/page.tsx: fetches resolveChapterImages() and passes heroImageUrl, faviconUrl, loginBannerUrl + hasChapterOverride flags to the client. generateMetadata now uses the chapter-specific favicon + login banner.
+- Updated /c/[chapterSlug]/chapter-landing-client.tsx: hero section now renders the chapter profile image (128×128 / 160×160 rounded card) alongside the chapter name. WhatsApp + LinkedIn hrefs go through normalizeUrl() so bare-domain URLs become https://. Hero section layout switched to flex-row on sm+ for image + text side-by-side.
+- Changed /admin/chapters/[id]/page.tsx to use lookup={ bySlugOrId } — tries slug first, falls back to ID. Updated ChapterEditContent to support the new lookup variant. /admin/chapters/mtl now resolves the Montreal chapter by slug.
+- Added hero/profile image upload field to /src/app/admin/chapters/chapter-editor.tsx — preview, Upload + Clear override buttons. Upload reuses the /api/admin/brand-images endpoint, then writes the resulting Blob URL via /api/admin/brand-images/select with chapter scope (key=loginHero). Field is only available in edit mode (a new chapter doesn't have an ID yet).
+- Updated chapter-edit-content.tsx to fetch the current ChapterSetting[loginHero] and pass it as initial.heroImageUrl.
+- Normalized WhatsApp + LinkedIn URLs in both /api/admin/chapters POST (create) and PATCH (update) via ensureAbsoluteUrl — fixes the /c/linkedin.com/... bug at the source.
+- Verified: npx tsc --noEmit reports ZERO errors in any of the files I touched. Pre-existing errors in unrelated files (dashboard charts, mockups) were not affected.
+
+Stage Summary:
+- Bug fix: LinkedIn + WhatsApp URLs on /c/[chapterSlug] now always render as absolute https:// URLs — both at save time (server-side normalization in POST + PATCH /api/admin/chapters) and at render time (client-side normalizeUrl in chapter-landing-client.tsx).
+- New feature 1: chapter hero/profile picture — set it either from /admin/images (click "Login hero" on an image → pick the chapter in the scope modal) OR from the chapter editor (Upload image button in the new "Hero / profile picture" field). Both write to the same ChapterSetting[loginHero] row, so /c/[chapterSlug] always shows the right image.
+- New feature 2: /admin/images redesigned — removed the implicit "Global / Montreal chapter" sections; replaced with 3 buttons per card (Favicon, Login hero, Login banner) where each opens a scope picker modal with Global + per-country/chapter options. The picker lets the admin attach an image to either the main /login (Global) or a specific chapter's landing page.
+- New feature 3: /admin/chapters/[id] now accepts the chapter slug (e.g. /admin/chapters/mtl). Slug lookup is tried first; falls back to ID so existing bookmarks/links keep working. Combined with the pre-existing /admin/c/[chapterSlug] route, the admin now has two slug-based URLs to choose from.
+- Files changed: src/lib/url-helpers.ts (new), src/lib/chapter-settings.ts (new), src/app/api/admin/brand-images/select/route.ts, src/app/api/admin/brand-images/route.ts, src/app/admin/images/images-gallery.tsx, src/app/c/[chapterSlug]/page.tsx, src/app/c/[chapterSlug]/chapter-landing-client.tsx, src/app/admin/chapters/[id]/page.tsx, src/app/admin/chapters/chapter-edit-content.tsx, src/app/admin/chapters/chapter-editor.tsx, src/app/api/admin/chapters/route.ts, src/app/api/admin/chapters/[id]/route.ts.
+- No DB migration needed — ChapterSetting table already exists from V7.

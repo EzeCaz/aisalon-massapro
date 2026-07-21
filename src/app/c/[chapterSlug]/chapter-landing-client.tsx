@@ -54,6 +54,18 @@ type Chapter = {
   country: Country;
   memberCount: number;
   eventCount: number;
+  /** Chapter hero/profile image URL (resolved from ChapterSetting → global → default). */
+  heroImageUrl: string;
+  /** Chapter favicon URL (resolved from ChapterSetting → global → default). */
+  faviconUrl: string;
+  /** Chapter login-banner URL (resolved from ChapterSetting → global → default). */
+  loginBannerUrl: string;
+  /** Per-key override flags — used to render an "override" badge in the hero. */
+  hasChapterOverride: {
+    favicon: boolean;
+    loginHero: boolean;
+    loginBanner: boolean;
+  };
   events: UpcomingEvent[];
 };
 
@@ -79,6 +91,22 @@ function fmtTime(d: Date, tz: string): string {
     minute: "2-digit",
     hour12: false,
   }).format(d);
+}
+
+/**
+ * Ensures a URL has an http(s) scheme. Bare domains like
+ * "linkedin.com/company/foo" are upgraded to "https://…" so the browser
+ * doesn't treat them as a relative path under /c/[chapterSlug].
+ *
+ * Returns null for empty input so callers can use falsy checks.
+ */
+function normalizeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed; // mailto: / tel: / etc.
+  return `https://${trimmed}`;
 }
 
 // ------------------------------------------------------------------
@@ -129,6 +157,9 @@ export function ChapterLandingClient({ chapter }: Props) {
   }
 
   const flag = chapter.country.flagEmoji || "🌍";
+  const whatsappUrl = normalizeUrl(chapter.whatsappGroupUrl);
+  const linkedinUrl = normalizeUrl(chapter.linkedinUrl);
+  const heroImage = chapter.heroImageUrl;
 
   return (
     <div className="min-h-screen bg-white">
@@ -154,63 +185,87 @@ export function ChapterLandingClient({ chapter }: Props) {
             "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,230,255,0.3) 0%, transparent 50%)",
         }} />
         <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
-            <span className="text-2xl">{flag}</span>
-            AI Salon · {chapter.country.name}
-          </p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-3">
-            {chapter.name} Chapter
-          </h1>
-          {chapter.city && (
-            <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2">
-              <MapPin className="h-5 w-5" /> {chapter.city}
-            </p>
-          )}
-          <p className="text-base sm:text-lg text-white/80 max-w-2xl mb-8">
-            Join the local AI community in {chapter.name}. Sign up to register
-            for upcoming events, connect with other members, and get invited
-            to invite-only salons.
-          </p>
-
-          {/* Quick stats */}
-          <div className="flex flex-wrap items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <span className="font-semibold">{chapter.memberCount}</span>
-              <span className="text-white/70">members</span>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-8">
+            {/* Chapter profile / hero image — pulled from
+                ChapterSetting[loginHero] → global SiteSetting → default.
+                Falls back gracefully to a gradient placeholder if missing. */}
+            <div className="flex-shrink-0 mx-auto sm:mx-0">
+              <div className="relative h-32 w-32 sm:h-40 sm:w-40 rounded-2xl overflow-hidden border-2 border-white/20 shadow-xl bg-white/10">
+                {heroImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={heroImage}
+                    alt={`${chapter.name} chapter`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-5xl sm:text-6xl">
+                    {flag}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              <span className="font-semibold">{chapter.eventCount}</span>
-              <span className="text-white/70">events hosted</span>
+
+            <div className="flex-1 text-center sm:text-left">
+              <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
+                <span className="text-2xl">{flag}</span>
+                AI Salon · {chapter.country.name}
+              </p>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-3">
+                {chapter.name} Chapter
+              </h1>
+              {chapter.city && (
+                <p className="text-lg sm:text-xl text-white/90 mb-6 flex items-center gap-2 justify-center sm:justify-start">
+                  <MapPin className="h-5 w-5" /> {chapter.city}
+                </p>
+              )}
+              <p className="text-base sm:text-lg text-white/80 max-w-2xl mb-8">
+                Join the local AI community in {chapter.name}. Sign up to register
+                for upcoming events, connect with other members, and get invited
+                to invite-only salons.
+              </p>
+
+              {/* Quick stats */}
+              <div className="flex flex-wrap items-center gap-6 text-sm justify-center sm:justify-start">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span className="font-semibold">{chapter.memberCount}</span>
+                  <span className="text-white/70">members</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  <span className="font-semibold">{chapter.eventCount}</span>
+                  <span className="text-white/70">events hosted</span>
+                </div>
+              </div>
+
+              {/* Community links */}
+              {(whatsappUrl || linkedinUrl) && (
+                <div className="flex flex-wrap items-center gap-3 mt-6 justify-center sm:justify-start">
+                  {whatsappUrl && (
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> WhatsApp group
+                    </a>
+                  )}
+                  {linkedinUrl && (
+                    <a
+                      href={linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
+                    >
+                      <Linkedin className="h-3.5 w-3.5" /> LinkedIn
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Community links */}
-          {(chapter.whatsappGroupUrl || chapter.linkedinUrl) && (
-            <div className="flex flex-wrap items-center gap-3 mt-6">
-              {chapter.whatsappGroupUrl && (
-                <a
-                  href={chapter.whatsappGroupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp group
-                </a>
-              )}
-              {chapter.linkedinUrl && (
-                <a
-                  href={chapter.linkedinUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-white/15 hover:bg-white/25 px-4 py-2 text-xs font-semibold backdrop-blur transition"
-                >
-                  <Linkedin className="h-3.5 w-3.5" /> LinkedIn
-                </a>
-              )}
-            </div>
-          )}
         </div>
       </section>
 

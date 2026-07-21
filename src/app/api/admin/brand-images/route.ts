@@ -6,6 +6,8 @@ import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin } from "@/lib/permissions";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings } from "@/lib/site-settings";
+import { getAllChapterImageSelections } from "@/lib/chapter-settings";
+import { db } from "@/lib/db";
 
 /**
  * GET /api/admin/brand-images
@@ -144,12 +146,39 @@ export async function GET() {
     }
   }
 
-  // 3. Current selections for each role.
+  // 3. Current selections for each role at GLOBAL scope (the SiteSetting
+  //    rows that apply to the main /login page).
   const settings = await getPublicSettings();
+
+  // 4. All per-chapter selections (ChapterSetting rows for the 3 image
+  //    keys), grouped by chapterId → key → value. The UI uses this to
+  //    show "currently selected for <chapter>" badges on image cards.
+  const chapterSelections = await getAllChapterImageSelections();
+
+  // 5. All countries + their chapters — the picker modal in the UI uses
+  //    this to render the Global / Country → Chapter target list. We
+  //    only include active chapters so the picker stays focused.
+  const countries = await db.country.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      flagEmoji: true,
+      chapters: {
+        where: { isActive: true },
+        select: { id: true, name: true, slug: true, city: true },
+        orderBy: { name: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
 
   return NextResponse.json({
     images: [...uploaded, ...stock],
     selections: settings,
+    chapterSelections,
+    countries,
   });
 }
 

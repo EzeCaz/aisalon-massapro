@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ChapterLandingClient } from "./chapter-landing-client";
+import { resolveChapterImages } from "@/lib/chapter-settings";
 import type { Metadata } from "next";
 
 /**
@@ -15,6 +16,15 @@ import type { Metadata } from "next";
  * already set — no admin intervention required.
  *
  * Auth: NONE required to view.
+ *
+ * Image resolution (per /admin/images redesign):
+ *   - favicon, loginHero, loginBanner each resolve to the chapter-specific
+ *     value if set, otherwise the global SiteSetting value, otherwise the
+ *     hardcoded default. See resolveChapterImages() in lib/chapter-settings.ts.
+ *   - loginHero is used as the chapter "profile" image rendered inside the
+ *     hero section of the landing page (replacing the gradient-only hero).
+ *   - loginBanner is used as the OG / Twitter share image.
+ *   - favicon is exported via generateMetadata().
  */
 
 type Params = { params: Promise<{ chapterSlug: string }> };
@@ -30,6 +40,16 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     },
   });
   if (!chapter) return { title: "Chapter — AI Salon" };
+
+  // Resolve chapter-specific favicon + login banner (with global fallback).
+  const full = await db.chapter.findUnique({
+    where: { slug: chapterSlug },
+    select: { id: true },
+  });
+  const images = full ? await resolveChapterImages(full.id) : null;
+  const favicon = images?.favicon;
+  const bannerUrl = images?.loginBanner;
+
   const title = `AI Salon ${chapter.name}`;
   const description = `Join the AI Salon ${chapter.name} chapter${
     chapter.city ? ` in ${chapter.city}` : ""
@@ -37,15 +57,18 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: `${title} — AI Salon`,
     description,
+    icons: favicon ? [{ url: favicon, type: "image/x-icon" }] : undefined,
     openGraph: {
       title,
       description,
       type: "website",
+      ...(bannerUrl ? { images: [{ url: bannerUrl }] } : {}),
     },
     twitter: {
       card: "summary",
       title,
       description,
+      ...(bannerUrl ? { images: [bannerUrl] } : {}),
     },
   };
 }
@@ -102,6 +125,10 @@ export default async function ChapterLandingPage({ params }: Params) {
     );
   }
 
+  // Resolve chapter-scoped image settings (favicon / loginHero / loginBanner).
+  // Falls back to global / hardcoded defaults — never throws.
+  const images = await resolveChapterImages(chapter.id);
+
   // Serialize dates for client component
   const serialized = {
     id: chapter.id,
@@ -114,6 +141,10 @@ export default async function ChapterLandingPage({ params }: Params) {
     country: chapter.country,
     memberCount: chapter._count.users,
     eventCount: chapter._count.events,
+    heroImageUrl: images.loginHero,
+    faviconUrl: images.favicon,
+    loginBannerUrl: images.loginBanner,
+    hasChapterOverride: images.hasChapterOverride,
     events: chapter.events.map((e) => ({
       id: e.id,
       slug: e.slug,

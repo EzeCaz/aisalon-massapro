@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { ensureAbsoluteUrl } from "@/lib/url-helpers";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -21,8 +22,14 @@ export async function POST(req: Request) {
   const countryId = String(body.countryId ?? "").trim();
   const city = body.city ? String(body.city).trim() : null;
   const timezone = String(body.timezone ?? "Asia/Jerusalem").trim() || "Asia/Jerusalem";
-  const whatsappGroupUrl = body.whatsappGroupUrl ? String(body.whatsappGroupUrl).trim() : null;
-  const linkedinUrl = body.linkedinUrl ? String(body.linkedinUrl).trim() : null;
+  // Normalize: prepend https:// if the user entered a bare domain.
+  // Prevents chapter landing page from rendering a relative-path link.
+  const whatsappGroupUrl = ensureAbsoluteUrl(
+    body.whatsappGroupUrl ? String(body.whatsappGroupUrl).trim() : ""
+  );
+  const linkedinUrl = ensureAbsoluteUrl(
+    body.linkedinUrl ? String(body.linkedinUrl).trim() : ""
+  );
   const isActive = body.isActive !== false;
 
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });

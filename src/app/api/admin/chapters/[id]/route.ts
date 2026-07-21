@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { ensureAbsoluteUrl } from "@/lib/url-helpers";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -44,9 +45,22 @@ export async function PATCH(
   }
   if (typeof body.city === "string") data.city = body.city.trim() || null;
   if (typeof body.timezone === "string" && body.timezone.trim()) data.timezone = body.timezone.trim();
-  if (typeof body.whatsappGroupUrl === "string") data.whatsappGroupUrl = body.whatsappGroupUrl.trim() || null;
-  if (typeof body.linkedinUrl === "string") data.linkedinUrl = body.linkedinUrl.trim() || null;
+  if (typeof body.whatsappGroupUrl === "string") {
+    // Normalize: prepend https:// if the user entered a bare domain.
+    // Prevents the chapter landing page from rendering a relative-path link.
+    data.whatsappGroupUrl = ensureAbsoluteUrl(body.whatsappGroupUrl.trim() || "");
+  }
+  if (typeof body.linkedinUrl === "string") {
+    // Same normalization for the LinkedIn URL — fixes the
+    // /c/linkedin.com/... bug where a bare-domain URL was being treated
+    // as a relative path under /c/[chapterSlug].
+    data.linkedinUrl = ensureAbsoluteUrl(body.linkedinUrl.trim() || "");
+  }
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
+  // NOTE: heroImageUrl is intentionally NOT persisted here — it's
+  // managed via /api/admin/brand-images/select with chapter scope, so
+  // the same image pipeline (Vercel Blob upload + ChapterSetting write)
+  // is used by both the chapter editor and /admin/images.
 
   // Country change — only Super Admin
   if (typeof body.countryId === "string" && body.countryId.trim() && body.countryId !== chapter.countryId) {

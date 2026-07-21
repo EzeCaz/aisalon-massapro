@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Copy, Check, ExternalLink, Globe2, ShieldCheck } from "lucide-react";
+import { Copy, Check, ExternalLink, Globe2, Image as ImageIcon, Loader2, ShieldCheck, Upload, X } from "lucide-react";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -25,6 +25,8 @@ export function ChapterEditor({
     whatsappGroupUrl: string | null;
     linkedinUrl: string | null;
     isActive: boolean;
+    /** Chapter hero/profile image URL (ChapterSetting[loginHero]) — null if no override. */
+    heroImageUrl?: string | null;
   };
   countries: Country[];
   isSuperAdmin: boolean;
@@ -35,6 +37,8 @@ export function ChapterEditor({
   const [error, setError] = useState<string | null>(null);
   const [copiedPublic, setCopiedPublic] = useState(false);
   const [copiedAdmin, setCopiedAdmin] = useState(false);
+  const [heroUploading, setHeroUploading] = useState(false);
+  const heroInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     slug: initial?.slug ?? "",
@@ -44,6 +48,7 @@ export function ChapterEditor({
     whatsappGroupUrl: initial?.whatsappGroupUrl ?? "",
     linkedinUrl: initial?.linkedinUrl ?? "",
     isActive: initial?.isActive ?? true,
+    heroImageUrl: initial?.heroImageUrl ?? "",
   });
 
   // Public registration URL — derived from the slug. This is the URL
@@ -106,6 +111,77 @@ export function ChapterEditor({
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * Upload a hero/profile image for this chapter and immediately persist
+   * it as the chapter's `loginHero` ChapterSetting override. Reuses the
+   * brand-images upload endpoint, then writes the resulting URL via the
+   * select endpoint with chapter scope.
+   */
+  async function handleHeroUpload(file: File) {
+    if (mode !== "edit" || !chapterId) {
+      setError("Save the chapter first before uploading a hero image.");
+      return;
+    }
+    setHeroUploading(true);
+    setError(null);
+    try {
+      // Step 1: upload bytes to Vercel Blob (brand-assets/).
+      const fd = new FormData();
+      fd.append("file", file);
+      const upRes = await fetch("/api/admin/brand-images", { method: "POST", body: fd });
+      if (!upRes.ok) {
+        const err = await upRes.json().catch(() => ({}));
+        throw new Error(err.error ?? `Upload failed (${upRes.status})`);
+      }
+      const upJson = await upRes.json();
+      const blobUrl: string = upJson.image.url;
+
+      // Step 2: write that URL as the chapter-scoped loginHero value.
+      const selRes = await fetch("/api/admin/brand-images/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "loginHero",
+          source: blobUrl,
+          scope: { type: "chapter", chapterId },
+        }),
+      });
+      if (!selRes.ok) {
+        const err = await selRes.json().catch(() => ({}));
+        throw new Error(err.error ?? `Select failed (${selRes.status})`);
+      }
+      const selJson = await selRes.json();
+      setForm((f) => ({ ...f, heroImageUrl: selJson.value }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hero image upload failed");
+    } finally {
+      setHeroUploading(false);
+    }
+  }
+
+  /** Clear the chapter hero override (falls back to global). */
+  async function handleClearHero() {
+    if (mode !== "edit" || !chapterId) return;
+    setHeroUploading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/brand-images/select", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "loginHero", chapterId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Clear failed (${res.status})`);
+      }
+      setForm((f) => ({ ...f, heroImageUrl: "" }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not clear hero image");
+    } finally {
+      setHeroUploading(false);
     }
   }
 
@@ -287,6 +363,87 @@ export function ChapterEditor({
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
+
+        {/* Hero / profile picture — chapter-scoped override for the
+            ChapterSetting[loginHero] key. Shown on /c/[chapterSlug] as
+            the big image in the hero section. Empty = fall back to the
+            global value. Only available in edit mode (a new chapter
+            doesn't have an ID yet, so we can't write a chapter-scoped
+            setting until it's been saved). */}
+        {mode === "edit" && (
+          <Field
+            label="Hero / profile picture"
+            hint="Shown on /c/[slug]. Overrides the global Login hero for this chapter only."
+          >
+            <div className="rounded-md border border-black/15 p-3 bg-black/[0.02]">
+              <div className="flex items-start gap-4">
+                {/* Preview */}
+                <div className="h-24 w-24 rounded-md overflow-hidden border border-black/10 bg-white flex-shrink-0 flex items-center justify-center">
+                  {form.heroImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={form.heroImageUrl}
+                      alt="Chapter hero"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="h-6 w-6 text-black/30" />
+                  )}
+                </div>
+
+                {/* Controls */}
+                <div className="flex-1 min-w-0 space-y-2">
+                  <p className="text-xs text-black/60">
+                    {form.heroImageUrl
+                      ? "A chapter-specific hero image is set. Clearing it makes the chapter fall back to the global Login hero."
+                      : "No chapter override. The chapter uses the global Login hero image."}
+                  </p>
+                  {form.heroImageUrl && (
+                    <p className="text-[0.65rem] text-black/40 font-mono break-all">
+                      {form.heroImageUrl}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => heroInputRef.current?.click()}
+                      disabled={heroUploading}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#FF005A] text-white px-3 py-1.5 text-xs font-semibold hover:bg-[#D8004D] disabled:opacity-50"
+                    >
+                      {heroUploading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5" />
+                      )}
+                      {form.heroImageUrl ? "Replace image" : "Upload image"}
+                    </button>
+                    {form.heroImageUrl && (
+                      <button
+                        type="button"
+                        onClick={handleClearHero}
+                        disabled={heroUploading}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-black/15 px-3 py-1.5 text-xs font-semibold text-black/70 hover:bg-black/5 disabled:opacity-50"
+                      >
+                        <X className="h-3.5 w-3.5" /> Clear override
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={heroInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleHeroUpload(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </Field>
+        )}
 
         <label className="flex items-center gap-2 text-sm text-black/80">
           <input

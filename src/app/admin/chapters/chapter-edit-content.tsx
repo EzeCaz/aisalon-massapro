@@ -6,12 +6,14 @@ import { isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ChapterEditor } from "./chapter-editor";
+import { getChapterSettingsMap } from "@/lib/chapter-settings";
+import { K_LOGIN_HERO } from "@/lib/site-settings";
 
 /**
  * Shared server component for the chapter edit page.
  *
  * Used by both:
- *   - /admin/chapters/[id]      (lookup by ID — legacy/internal)
+ *   - /admin/chapters/[id]      (lookup by slug OR id — slug first)
  *   - /admin/c/[chapterSlug]    (lookup by slug — admin-friendly URL,
  *                                stable across ID changes)
  *
@@ -23,8 +25,9 @@ import { ChapterEditor } from "./chapter-editor";
  *   - Anyone else  → redirected to /admin/chapters
  *
  * The `lookup` prop is one of:
- *   - { byId: "<cuid>" }     resolve by primary key
- *   - { bySlug: "tel-aviv" } resolve by unique slug
+ *   - { byId: "<cuid>" }            resolve by primary key
+ *   - { bySlug: "tel-aviv" }        resolve by unique slug
+ *   - { bySlugOrId: "<slug-or-id>" } try slug first, fall back to id
  *
  * IMPORTANT: the slug → ID resolution happens AFTER the auth check,
  * so unauthenticated visitors are redirected to /login without
@@ -34,7 +37,10 @@ import { ChapterEditor } from "./chapter-editor";
 export async function ChapterEditContent({
   lookup,
 }: {
-  lookup: { byId: string } | { bySlug: string };
+  lookup:
+    | { byId: string }
+    | { bySlug: string }
+    | { bySlugOrId: string };
 }) {
   // ── 1. AUTH ────────────────────────────────────────────────────────
   // Build a sensible callback URL for the login redirect based on the
@@ -43,7 +49,9 @@ export async function ChapterEditContent({
   const callbackUrl =
     "bySlug" in lookup
       ? `/admin/c/${lookup.bySlug}`
-      : `/admin/chapters/${lookup.byId}`;
+      : "bySlugOrId" in lookup
+        ? `/admin/chapters/${lookup.bySlugOrId}`
+        : `/admin/chapters/${lookup.byId}`;
 
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -64,38 +72,57 @@ export async function ChapterEditContent({
   }
 
   // ── 2. RESOLVE CHAPTER ─────────────────────────────────────────────
-  // Lookup by slug OR by ID. Both return the same shape; if not found,
-  // 404.
-  const chapter =
-    "bySlug" in lookup
-      ? await db.chapter.findUnique({
-          where: { slug: lookup.bySlug },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            city: true,
-            timezone: true,
-            countryId: true,
-            whatsappGroupUrl: true,
-            linkedinUrl: true,
-            isActive: true,
-          },
-        })
-      : await db.chapter.findUnique({
-          where: { id: lookup.byId },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            city: true,
-            timezone: true,
-            countryId: true,
-            whatsappGroupUrl: true,
-            linkedinUrl: true,
-            isActive: true,
-          },
-        });
+  // Lookup by slug, by id, or by slug-first-then-id. All return the
+  // same shape; if not found, 404.
+  const select = {
+    id: true,
+    name: true,
+    slug: true,
+    city: true,
+    timezone: true,
+    countryId: true,
+    whatsappGroupUrl: true,
+    linkedinUrl: true,
+    isActive: true,
+  };
+
+  let chapter: {
+    id: string;
+    name: string;
+    slug: string;
+    city: string | null;
+    timezone: string;
+    countryId: string;
+    whatsappGroupUrl: string | null;
+    linkedinUrl: string | null;
+    isActive: boolean;
+  } | null = null;
+
+  if ("bySlug" in lookup) {
+    chapter = await db.chapter.findUnique({
+      where: { slug: lookup.bySlug },
+      select,
+    });
+  } else if ("bySlugOrId" in lookup) {
+    // Try slug first (preferred — friendly URLs are slug-based).
+    chapter = await db.chapter.findUnique({
+      where: { slug: lookup.bySlugOrId },
+      select,
+    });
+    // Fall back to ID lookup if no slug matched. This keeps old
+    // /admin/chapters/<cuid> links working.
+    if (!chapter) {
+      chapter = await db.chapter.findUnique({
+        where: { id: lookup.bySlugOrId },
+        select,
+      });
+    }
+  } else {
+    chapter = await db.chapter.findUnique({
+      where: { id: lookup.byId },
+      select,
+    });
+  }
   if (!chapter) notFound();
 
   // ── 3. SCOPE CHECK ─────────────────────────────────────────────────
@@ -114,6 +141,12 @@ export async function ChapterEditContent({
     select: { id: true, name: true, code: true, flagEmoji: true },
     orderBy: { name: "asc" },
   });
+
+  // ── 4b. LOAD CHAPTER HERO IMAGE (ChapterSetting[loginHero]) ────────
+  // The chapter editor exposes this as the "Hero / profile picture"
+  // field. Null means "no override — fall back to the global value".
+  const chapterSettings = await getChapterSettingsMap(chapter.id);
+  const heroImageUrl = chapterSettings[K_LOGIN_HERO] ?? null;
 
   // ── 5. RENDER ──────────────────────────────────────────────────────
   return (
@@ -140,6 +173,7 @@ export async function ChapterEditContent({
             whatsappGroupUrl: chapter.whatsappGroupUrl,
             linkedinUrl: chapter.linkedinUrl,
             isActive: chapter.isActive,
+            heroImageUrl,
           }}
           countries={countries}
           isSuperAdmin={isSuperAdmin}
