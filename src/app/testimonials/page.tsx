@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { needsOnboarding, needsSetPassword } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { TestimonialFeed } from "@/components/testimonials/testimonial-feed";
-import type { EventOption } from "@/components/testimonials/testimonial-form";
+import type { EventOption, ChapterOption } from "@/components/testimonials/testimonial-form";
 import { MessageSquareHeart } from "lucide-react";
 
 export const metadata = { title: "Testimonials — AI Salon Tel Aviv" };
@@ -22,11 +22,20 @@ export const metadata = { title: "Testimonials — AI Salon Tel Aviv" };
  *
  * For signed-in members, the form also offers 4 scopes:
  *   - 🌍 Community (no specific event)
- *   - 📍 About a specific event (user picks from a dropdown)
- *   - 🎤 About a speaker (user picks event → speaker)
- *   - 🗓 About a session (user picks event → session)
+ *   - 📍 About a specific event (user picks chapter → event)
+ *   - 🎤 About a speaker (user picks chapter → event → speaker)
+ *   - 🗓 About a session (user picks chapter → event → session)
+ *
+ * Chapter auto-recognition: the page reads the `?chapter=slug` URL query
+ * param and pre-selects that chapter in the form's chapter picker. This
+ * lets chapter landing pages (/c/[chapterSlug]) link here with their
+ * chapter pre-selected.
  */
-export default async function TestimonialsPage() {
+type SearchParams = { searchParams: Promise<{ chapter?: string }> };
+
+export default async function TestimonialsPage({ searchParams }: SearchParams) {
+  const { chapter: chapterSlugParam } = await searchParams;
+
   const session = await getServerSession(authOptions);
   let me: { id: string; role: string } | null = null;
   if (session?.user?.email) {
@@ -52,8 +61,31 @@ export default async function TestimonialsPage() {
   const isAdmin = me?.role === "ADMIN";
 
   // Fetch the events catalog only when there's a signed-in user (the form
-  // is hidden for anonymous visitors, so the data isn't needed).
+  // is hidden for anonymous visitors, so the data isn't needed). Include
+  // chapterId so the form can filter events by the picked chapter.
   let eventsCatalog: EventOption[] = [];
+  // Fetch all active chapters (for the chapter picker). Needed for both
+  // signed-in and anonymous visitors so we can validate the `?chapter=`
+  // URL param and pass it through to the form.
+  const chapterRows = await db.chapter.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      city: true,
+      country: { select: { flagEmoji: true } },
+    },
+    orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+  });
+  const chapters: ChapterOption[] = chapterRows.map((c) => ({
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    city: c.city,
+    flagEmoji: c.country?.flagEmoji ?? null,
+  }));
+
   if (me) {
     const events = await db.event.findMany({
       orderBy: { startsAt: "desc" },
@@ -61,6 +93,7 @@ export default async function TestimonialsPage() {
         id: true,
         slug: true,
         title: true,
+        chapterId: true,
         speakers: {
           orderBy: { order: "asc" },
           select: { id: true, name: true, company: true, topic: true },
@@ -76,6 +109,7 @@ export default async function TestimonialsPage() {
       id: e.id,
       slug: e.slug,
       title: e.title,
+      chapterId: e.chapterId,
       speakers: e.speakers.map((s) => ({
         id: s.id,
         label: `${s.name}${s.company ? ` · ${s.company}` : ""}${s.topic ? ` — ${s.topic}` : ""}`,
@@ -115,6 +149,8 @@ export default async function TestimonialsPage() {
           meId={me?.id ?? ""}
           isAdmin={isAdmin}
           eventsCatalog={eventsCatalog}
+          chapters={chapters}
+          defaultChapterSlug={chapterSlugParam}
           defaultSort="recent"
         />
       </main>

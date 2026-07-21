@@ -4438,3 +4438,93 @@ What the user should do next:
    for "Login hero" on Montreal, then visit
    /login?chapterSlug=montreal — the login page should show Montreal's
    hero image instead of the global default.
+
+---
+Task ID: testimonials-tab-and-chapter-awareness
+Agent: main
+Task: Per user spec 2026-07-22:
+  1. Add /testimonials to the main menu as a new tab next to Community
+  2. Add chapter level above all event/session selectors; auto-recognize
+     chapter from URL ?chapter=slug; otherwise let user select
+  3. Add public testimonials section to /e/[slug] page — existing
+     testimonials on top, form below with all 4 scope chips
+     (🌍 Community / 📍 This event / 🎤 A speaker / 🗓 A session);
+     chapter auto-filled from event's chapter
+
+Work Log:
+- Read existing code: app-header.tsx, testimonials page + form + feed,
+  public event page, events list, prisma schema for Chapter/Event/Testimonial.
+- Confirmed Testimonial model has no chapter field — chapter association
+  is implicit via eventId. "Chapter auto-filled" is a UX indicator, not
+  stored data.
+- Step 1 — AppHeader: added { href: "/testimonials", label: "Testimonials" }
+  to navLinks between Community and AI & Human Flourishing.
+- Step 2 — TestimonialForm rewrite:
+  * Added ChapterOption type { id, slug, name, city?, flagEmoji? }
+  * Added EventOption.chapterId field so events can be filtered by chapter
+  * Added props: chapters, defaultChapterSlug, lockedChapterName
+  * Community mode: shows chapter picker ABOVE event picker when scope
+    is event/speaker/session. Auto-recognizes chapter from
+    defaultChapterSlug (URL ?chapter=) via useEffect on mount.
+    Changing chapter resets event/speaker/session picks.
+  * Event-locked mode: shows read-only "🔒 ChapterName · auto-filled
+    from event" badge instead of a picker.
+  * Event dropdown now filters by picked chapter (or shows all when
+    no chapter picked).
+- Step 3 — TestimonialFeed update:
+  * Added props: chapters, defaultChapterSlug, lockedChapterName, formOnTop
+  * formOnTop=false flips the order: existing testimonials on top,
+    form/sign-in CTA below — used on the public event page.
+  * Form block extracted into a single const so it can be placed either
+    above or below the feed.
+- Step 4 — /testimonials page rewrite:
+  * Added searchParams prop, reads ?chapter=slug
+  * Fetches all active chapters (with flagEmoji + city) and passes them
+    to TestimonialFeed as `chapters`
+  * Events catalog now includes chapterId per event
+  * Passes defaultChapterSlug={chapterSlugParam} so the form pre-selects
+    the chapter from the URL
+- Step 5 — /e/[slug] server page:
+  * Includes chapterRef in event query (id, name, slug, city, country)
+  * Fetches user.role (was missing) so the testimonials form can show
+    admin moderation controls
+  * Builds a single-element events catalog (the current event) with
+    its speakers + agenda items so the form's pickers work
+  * Passes event.chapterName (chapterRef.name fallback to legacy
+    chapter string) as lockedChapterName to the form
+  * Passes testimonialsEventsCatalog to the client component
+- Step 5b — /e/[slug] public-event-page.tsx client:
+  * Added MessageSquareHeart + TestimonialFeed + EventOption imports
+  * Added chapterName? field to Event type, role? to Me type,
+    testimonialsEventsCatalog? to Props
+  * Inserted a new <section> after the main grid, before </main>:
+    - Header "What people are saying" with gradient text
+    - TestimonialFeed with eventId (event-scoped feed on top)
+    - formOnTop={false} so form renders below the feed
+    - lockedChapterName={event.chapterName || event.chapter} so the
+      form shows the auto-filled chapter badge
+- Step 6 — /events list auto-recognition:
+  * events-list.tsx now imports useSearchParams + useEffect
+  * On mount, reads ?chapter=slug and preselects chapterFilter
+  * Wrapped <EventsList> in <Suspense> in events/page.tsx (required
+    by Next.js when useSearchParams is used)
+- Verification:
+  * npx tsc --noEmit: 0 errors in any of the touched files
+  * npx next build: succeeded — all routes built as dynamic (ƒ)
+  * Dev server 500s on /testimonials + /events are environmental
+    (.env has SQLite URL but schema.prisma is Postgres — pre-existing
+    sandbox limitation, not a code issue)
+
+Stage Summary:
+- /testimonials is now in the main nav between Community and AI & Human
+  Flourishing (visible to all visitors, signed-in or not).
+- Testimonial form on /testimonials gains a chapter picker above the
+  event picker; auto-selects from ?chapter=slug URL param.
+- /events list auto-selects the chapter filter from ?chapter=slug on
+  first mount.
+- /e/[slug] public event page now has a "What people are saying"
+  section after the agenda: existing event-scoped testimonials on top,
+  form below with all 4 scope chips (🌍 📍 🎤 🗓), chapter shown as
+  a read-only "auto-filled from event" badge.
+- No DB schema changes — chapter association for testimonials stays
+  implicit via eventId. The "chapter auto-filled" UX is display-only.

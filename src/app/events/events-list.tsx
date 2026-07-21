@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +92,23 @@ export function EventsList({
   // Chapter + city filter state. Both default to "" (all).
   const [chapterFilter, setChapterFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
+
+  // Auto-recognize chapter from URL ?chapter=slug. Per product spec
+  // 2026-07-22: "recognize it based on the url the users is using,
+  // otherwise let him select". Chapter landing pages (/c/[chapterSlug])
+  // and other chapter-aware links can append ?chapter=tel-aviv to /events
+  // to land the user on a pre-filtered view. We run this once on mount.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const slug = searchParams?.get("chapter");
+    if (!slug || !chapters || chapters.length === 0) return;
+    const match = chapters.find((c) => c.slug === slug);
+    if (match) setChapterFilter(match.id);
+    // We intentionally only run this on mount — once the user manually
+    // changes the filter, we don't want URL changes to override their
+    // selection. Empty dep array is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cities contextual to the selected chapter (or all cities when no
   // chapter is selected). De-duplicated by name.

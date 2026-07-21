@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
@@ -259,12 +260,14 @@ export default async function EventsPage() {
           />
         )}
 
-        <EventsList
-          events={serializedEvents}
-          goingCounts={goingCounts}
-          chapters={chapters}
-          cities={cities}
-        />
+        <Suspense fallback={null}>
+          <EventsList
+            events={serializedEvents}
+            goingCounts={goingCounts}
+            chapters={chapters}
+            cities={cities}
+          />
+        </Suspense>
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">

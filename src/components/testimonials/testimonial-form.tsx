@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Star, ImagePlus, X, Loader2 } from "lucide-react";
+import { Star, ImagePlus, X, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 export type AttachmentOption = {
@@ -13,14 +13,32 @@ export type AttachmentOption = {
 };
 
 /**
+ * ChapterOption — used by the community testimonials page to let users
+ * pick which chapter an event belongs to BEFORE picking the event itself.
+ * Mirrors the Chapter model: id, slug, name, optional city + flag.
+ */
+export type ChapterOption = {
+  id: string;
+  slug: string;
+  name: string;
+  city?: string | null;
+  flagEmoji?: string | null;
+};
+
+/**
  * EventOption — used by the community testimonials page to let users
  * pick which event they're writing about (the event-tab form doesn't
  * need this because the event is already known).
+ *
+ * `chapterId` is included so the form can filter the event dropdown by
+ * the chapter the user picked above (community mode only).
  */
 export type EventOption = {
   id: string;
   slug: string;
   title: string;
+  /** The chapter this event belongs to — used to filter by selected chapter. */
+  chapterId?: string | null;
   /** Speakers belonging to this event (for the "A speaker" picker). */
   speakers: AttachmentOption[];
   /** Agenda items belonging to this event (for the "A session" picker). */
@@ -42,6 +60,27 @@ type Props = {
    * Ignored when `eventId` is set (event-tab form is already locked).
    */
   eventsCatalog?: EventOption[];
+  /**
+   * Catalog of all chapters — used by the community testimonials page
+   * so the user can pick a chapter BEFORE picking an event. The event
+   * dropdown is then filtered to the selected chapter.
+   *
+   * Ignored when `eventId` is set (event-tab form is locked to the
+   * event's chapter — shown as a read-only badge via `lockedChapterName`).
+   */
+  chapters?: ChapterOption[];
+  /**
+   * Slug of the chapter to pre-select on first render. The community
+   * testimonials page passes the `?chapter=slug` URL param here so the
+   * chapter is auto-recognized from the URL the user landed on.
+   */
+  defaultChapterSlug?: string;
+  /**
+   * When the form is locked to an event (event-tab mode), the event's
+   * chapter is shown as a read-only badge. Pass the chapter's display
+   * name (e.g. "Tel Aviv") here. Ignored in community mode.
+   */
+  lockedChapterName?: string;
   /** Called after a successful create. Parent should refetch the list. */
   onCreated?: () => void;
   /** Compact mode: hides the header (useful when embedding in a tab). */
@@ -55,10 +94,14 @@ type Props = {
  *
  * Two modes:
  *  - Event-locked (eventId provided): the form is about a specific
- *    event. All 4 scope chips show.
+ *    event. All 4 scope chips show. The chapter is shown as a
+ *    read-only badge (lockedChapterName) since it's determined by
+ *    the event.
  *  - Community (no eventId, eventsCatalog provided): the user can
- *    pick "🌍 Community" (no event), OR pick any event from the
- *    catalog → then speakers/sessions become pickable.
+ *    pick "🌍 Community" (no event), OR pick a chapter → event →
+ *    speaker/session. The chapter picker sits ABOVE the event picker
+ *    per the product spec ("when selecting the event or session,
+ *    must have the chapter selection above").
  */
 export function TestimonialForm({
   meId,
@@ -67,6 +110,9 @@ export function TestimonialForm({
   speakers = [],
   agendaItems = [],
   eventsCatalog = [],
+  chapters = [],
+  defaultChapterSlug,
+  lockedChapterName,
   onCreated,
   compact = false,
 }: Props) {
@@ -79,6 +125,9 @@ export function TestimonialForm({
   const [scope, setScope] = useState<"community" | "event" | "speaker" | "session">(
     eventId ? "event" : "community"
   );
+  // For community mode: the chapter the user picked from the dropdown.
+  // Auto-recognized from `defaultChapterSlug` (URL ?chapter=) on mount.
+  const [pickedChapterId, setPickedChapterId] = useState<string>("");
   // For community mode: the event the user picked from the catalog.
   const [pickedEventId, setPickedEventId] = useState<string>("");
   const [speakerId, setSpeakerId] = useState<string>("");
@@ -88,7 +137,26 @@ export function TestimonialForm({
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Auto-recognize chapter from defaultChapterSlug on mount. This is
+  // how the community testimonials page passes the `?chapter=slug` URL
+  // param through so the chapter is pre-selected when the user lands.
+  useEffect(() => {
+    if (!defaultChapterSlug) return;
+    const match = chapters.find((c) => c.slug === defaultChapterSlug);
+    if (match) setPickedChapterId(match.id);
+  }, [defaultChapterSlug, chapters]);
+
   const charsLeft = useMemo(() => 2000 - body.length, [body]);
+
+  // Events filtered by the picked chapter. In community mode, the
+  // event dropdown only shows events that belong to the selected
+  // chapter. When no chapter is selected, all events show (the user
+  // can pick any event — the chapter picker is a convenience filter,
+  // not a hard requirement).
+  const filteredEvents = useMemo(() => {
+    if (!pickedChapterId) return eventsCatalog;
+    return eventsCatalog.filter((e) => e.chapterId === pickedChapterId);
+  }, [eventsCatalog, pickedChapterId]);
 
   // Resolve the "active" event id — either the locked one or the
   // user-picked one. Used to decide which speakers/sessions to show.
@@ -96,6 +164,12 @@ export function TestimonialForm({
   const activeEvent = eventsCatalog.find((e) => e.id === activeEventId);
   const activeSpeakers = eventId ? speakers : activeEvent?.speakers ?? [];
   const activeAgendaItems = eventId ? agendaItems : activeEvent?.agendaItems ?? [];
+
+  // Locked chapter display name (event-tab mode). Callers pass the
+  // event's chapter name via lockedChapterName. We don't fall back to
+  // the chapters catalog here because event-tab mode doesn't need
+  // the catalog (the event is already known, no chapter picker).
+  const lockedChapterDisplay = lockedChapterName;
 
   function pickImage(file: File | null) {
     setImage(file);
@@ -162,6 +236,15 @@ export function TestimonialForm({
     }
   }
 
+  // ---- Determine whether to show the chapter picker (community mode) ----
+  // Show only when ALL of:
+  //   - not in event-locked mode (eventId not set)
+  //   - scope is something other than "community" (community scope has
+  //     no event, so chapter picker is irrelevant)
+  //   - chapters catalog has at least one chapter to pick from
+  const showChapterPicker =
+    !eventId && scope !== "community" && chapters.length > 0;
+
   return (
     <div
       className={`rounded-2xl border border-black/10 bg-white p-5 ${
@@ -218,6 +301,52 @@ export function TestimonialForm({
         </div>
       </div>
 
+      {/* Chapter row — two variants:
+          - Event-locked mode (eventId set): read-only badge showing the
+            event's chapter. Filled automatically, no user interaction.
+          - Community mode (no eventId, scope != "community"): dropdown
+            so the user picks a chapter BEFORE picking an event. Sits
+            ABOVE the event picker per the product spec. */}
+      {(eventId || showChapterPicker) && (
+        <div className="mb-4">
+          <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1">
+            Chapter
+          </label>
+          {eventId ? (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-[#FF005A]/30 bg-[#FF005A]/5 px-3 py-1.5 text-xs font-semibold text-[#FF005A]">
+              <Lock className="h-3 w-3" />
+              {lockedChapterDisplay || lockedChapterName || "Chapter"}
+              <span className="text-[0.6rem] font-normal text-black/50 ml-1">
+                auto-filled from event
+              </span>
+            </div>
+          ) : (
+            <select
+              value={pickedChapterId}
+              onChange={(e) => {
+                setPickedChapterId(e.target.value);
+                // Reset event/speaker/session picks when the chapter
+                // changes — the previously picked event may not belong
+                // to the new chapter.
+                setPickedEventId("");
+                setSpeakerId("");
+                setAgendaItemId("");
+              }}
+              className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
+            >
+              <option value="">📍 All chapters</option>
+              {chapters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.flagEmoji ? `${c.flagEmoji} ` : ""}
+                  {c.name}
+                  {c.city ? ` — ${c.city}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       {/* Event picker — only in community mode (no locked eventId)
           and only when scope is not "community". */}
       {!eventId && scope !== "community" && eventsCatalog.length > 0 && (
@@ -236,12 +365,17 @@ export function TestimonialForm({
             className="w-full h-9 text-sm border border-black/15 rounded-md px-2 bg-white"
           >
             <option value="">Pick an event…</option>
-            {eventsCatalog.map((e) => (
+            {filteredEvents.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.title}
               </option>
             ))}
           </select>
+          {pickedChapterId && filteredEvents.length === 0 && (
+            <p className="mt-1 text-[0.65rem] text-black/50">
+              No events in this chapter yet — try another chapter.
+            </p>
+          )}
         </div>
       )}
 

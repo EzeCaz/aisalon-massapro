@@ -55,6 +55,7 @@ export async function AppHeader() {
   const navLinks = [
     { href: "/events", label: "Events" },
     { href: "/community", label: "Community" },
+    { href: "/testimonials", label: "Testimonials" },
     { href: "/resources/ai-human-flourishing", label: "AI & Human Flourishing" },
     ...(isAdmin ? [{ href: adminHref, label: "Admin" }] : []),
   ];
