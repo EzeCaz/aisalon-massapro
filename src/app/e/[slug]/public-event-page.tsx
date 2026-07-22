@@ -21,11 +21,8 @@ import {
   Copy,
   AlertCircle,
   Mic2,
-  MessageSquareHeart,
 } from "lucide-react";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
-import { TestimonialFeed } from "@/components/testimonials/testimonial-feed";
-import type { EventOption } from "@/components/testimonials/testimonial-form";
 
 // ------------------------------------------------------------------
 // Types — mirror the include shape of the server component.
@@ -88,10 +85,6 @@ type Event = {
   // total of ALL RSVP statuses.
   rsvpsGoing: number;
   rsvp: Rsvp;
-  // Display name of the chapter this event belongs to — used by the
-  // testimonials form's auto-filled chapter badge. Falls back to the
-  // legacy free-form `chapter` string when chapterRef is missing.
-  chapterName?: string;
 };
 
 type Me = { id: string; email: string; name: string | null; utmUid: string | null; role?: string } | null;
@@ -99,10 +92,6 @@ type Me = { id: string; email: string; name: string | null; utmUid: string | nul
 type Props = {
   event: Event;
   me: Me;
-  /** Catalog of events passed to the testimonials form. In event-locked
-   *  mode this only contains the current event (so the form's speaker /
-   *  session pickers work). Empty for anonymous visitors. */
-  testimonialsEventsCatalog?: EventOption[];
 };
 
 // ------------------------------------------------------------------
@@ -160,7 +149,7 @@ function isPastEvent(endsAt: string, now: Date = new Date()): boolean {
 // Main component
 // ------------------------------------------------------------------
 
-export function PublicEventPage({ event, me, testimonialsEventsCatalog = [] }: Props) {
+export function PublicEventPage({ event, me }: Props) {
   const router = useRouter();
   const start = new Date(event.startsAt);
   const end = new Date(event.endsAt);
@@ -662,55 +651,6 @@ export function PublicEventPage({ event, me, testimonialsEventsCatalog = [] }: P
             </div>
           </aside>
         </div>
-
-        {/* ============================================================
-            Community Testimonials section
-            ------------------------------------------------------------
-            Per product spec 2026-07-22:
-              - Top: existing testimonials (event-scoped feed, readable
-                by anyone — anonymous visitors see this too).
-              - Bottom: form to add a new testimonial, with all 4 scope
-                chips: 🌍 Community, 📍 This event, 🎤 A speaker, 🗓 A
-                session. Signed-in members only (anonymous see a sign-in
-                CTA rendered by TestimonialFeed).
-              - Chapter is auto-filled from the event's chapter — shown
-                as a read-only badge in the form (lockedChapterName).
-            ============================================================ */}
-        <section className="mt-12 pt-10 border-t border-black/10">
-          <div className="mb-6">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2 flex items-center gap-1">
-              <MessageSquareHeart className="h-3 w-3" />
-              Community · Testimonials
-            </p>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-black">
-              What people are <span className="ais-gradient-text">saying</span>
-            </h2>
-            <p className="mt-2 text-sm text-black/70 max-w-2xl">
-              Real stories from our community about this event — the speakers,
-              the sessions, and the vibe. {me ? "Share your own below." : "Sign in to share your own."}
-            </p>
-          </div>
-
-          <TestimonialFeed
-            meId={me?.id ?? ""}
-            isAdmin={me?.role === "ADMIN"}
-            eventId={event.id}
-            eventSlug={event.slug}
-            // Pre-built speaker + agenda pickers for the form. When the
-            // user picks the "🎤 A speaker" or "🗓 A session" scope chip,
-            // the form uses these to populate the dropdown — the event
-            // is locked so no chapter/event picker is shown.
-            speakers={testimonialsEventsCatalog[0]?.speakers}
-            agendaItems={testimonialsEventsCatalog[0]?.agendaItems}
-            // Locked chapter — shown as a read-only "auto-filled from
-            // event" badge above the scope chips. Per spec, the chapter
-            // is recognized from the event's chapter, not user-picked.
-            lockedChapterName={event.chapterName || event.chapter}
-            // Form goes BELOW the feed (existing testimonials on top).
-            formOnTop={false}
-            defaultSort="recent"
-          />
-        </section>
       </main>
 
       <PublicFooter />

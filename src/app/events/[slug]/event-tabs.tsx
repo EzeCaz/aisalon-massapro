@@ -13,6 +13,7 @@ import { ManageEventTab } from "./tabs/manage-event-tab";
 import { EventPrepTab } from "./tabs/event-prep-tab";
 import { QuizTab } from "./tabs/quiz-tab";
 import { ChatTab } from "./tabs/chat-tab";
+import { TestimonialsTab } from "./tabs/testimonials-tab";
 import type { CoHost, EventSpeaker } from "@/components/admin/event-editor";
 import type { Rsvp } from "@/components/events/rsvp-check-in-card";
 
@@ -153,7 +154,7 @@ export function EventTabs({
   // Only the tabs that are actually visible to this viewer are allowed
   // — if someone hits #admin-agenda but isn't an admin, the hook falls
   // back to "agenda" (the default) instead of opening a hidden tab.
-  const visibleTabs: string[] = ["agenda", "overview", "photos", "slideshow", "presentations"];
+  const visibleTabs: string[] = ["agenda", "overview", "photos", "slideshow", "presentations", "testimonials"];
   if (quizzes.length > 0 || canHostQuiz) visibleTabs.push("quiz");
   visibleTabs.push("chat");
   if (canViewEventPrep) visibleTabs.push("event-prep");
@@ -193,6 +194,9 @@ export function EventTabs({
         </TabsTrigger>
         <TabsTrigger value="presentations" className="data-[state=active]:bg-white data-[state=active]:text-black">
           Presentations
+        </TabsTrigger>
+        <TabsTrigger value="testimonials" className="data-[state=active]:bg-white data-[state=active]:text-black">
+          💬 Testimonials
         </TabsTrigger>
         {quizzes.length > 0 && (
           <TabsTrigger
@@ -260,6 +264,9 @@ export function EventTabs({
       </TabsContent>
       <TabsContent value="presentations" className="mt-6">
         <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
+      </TabsContent>
+      <TabsContent value="testimonials" className="mt-6">
+        <TestimonialsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
       {(quizzes.length > 0 || canHostQuiz) && (
         <TabsContent value="quiz" className="mt-6">

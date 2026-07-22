@@ -20,12 +20,6 @@ import type { Metadata } from "next";
  *      so the user lands back here after signing in).
  *   3. On the day of the event, show a second "I'm here — Check in" button
  *      that issues a unique 8-char code the user shows at the door.
- *   4. Show a Community Testimonials section — existing testimonials on
- *      top (event-scoped feed, readable by anyone) and a create form
- *      below (signed-in members only) with all 4 scope chips:
- *      🌍 Community, 📍 This event, 🎤 A speaker, 🗓 A session. The
- *      chapter is auto-filled from the event's chapter (shown as a
- *      read-only badge in the form).
  *
  * Auth: NONE required to view. The session is read to customize the CTA:
  *
@@ -71,17 +65,6 @@ export default async function PublicEventPageRoute({ params }: Params) {
     where: { slug },
     include: {
       mainImage: { select: { id: true, fileUrl: true, caption: true } },
-      // V7: include chapterRef so the page can show the chapter name and
-      // pass it to the testimonials form (auto-filled chapter badge).
-      chapterRef: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          city: true,
-          country: { select: { name: true, code: true, flagEmoji: true } },
-        },
-      },
       speakers: {
         orderBy: { order: "asc" },
         select: {
@@ -160,50 +143,6 @@ export default async function PublicEventPageRoute({ params }: Params) {
     }
   }
 
-  // Build the testimonials events catalog. This is what powers the form's
-  // "speaker" and "session" pickers on the public event page — the form
-  // is locked to this event (eventId passed), so the catalog only needs
-  // to include the current event's speakers + agenda. We still build the
-  // full shape so the form code can be reused unchanged.
-  //
-  // Only fetch when there's a signed-in user (the form is hidden for
-  // anonymous visitors — they see a sign-in CTA instead).
-  let testimonialsEventsCatalog: Array<{
-    id: string;
-    slug: string;
-    title: string;
-    chapterId: string | null;
-    speakers: Array<{ id: string; label: string }>;
-    agendaItems: Array<{ id: string; label: string }>;
-  }> = [];
-  if (me) {
-    // We only need this event's speakers + agenda for the form pickers.
-    // The form's "This event" / "A speaker" / "A session" scope chips
-    // all operate on the locked event, so a single-element catalog is
-    // sufficient. (The community-scope chip doesn't need any catalog.)
-    testimonialsEventsCatalog = [
-      {
-        id: event.id,
-        slug: event.slug,
-        title: event.title,
-        chapterId: event.chapterId,
-        speakers: event.speakers.map((s) => ({
-          id: s.id,
-          label: `${s.name}${s.company ? ` · ${s.company}` : ""}${s.topic ? ` — ${s.topic}` : ""}`,
-        })),
-        agendaItems: event.agenda.map((a) => {
-          const time = new Date(a.startsAt).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-            timeZone: "Asia/Jerusalem",
-          });
-          return { id: a.id, label: `${time} · ${a.title}` };
-        }),
-      },
-    ];
-  }
-
   // Serialize all Date fields to ISO strings for the client component.
   const serialized = {
     ...event,
@@ -225,17 +164,7 @@ export default async function PublicEventPageRoute({ params }: Params) {
     // The client component uses rsvpsGoing for the black "X Going" pill
     // in the meta line.
     rsvpsGoing,
-    // Chapter name for the testimonials form's auto-filled chapter badge.
-    // Falls back to the legacy free-form `chapter` string when the event
-    // has no chapterRef (data integrity issue — old rows).
-    chapterName: event.chapterRef?.name ?? event.chapter,
   };
 
-  return (
-    <PublicEventPage
-      event={serialized}
-      me={me}
-      testimonialsEventsCatalog={testimonialsEventsCatalog}
-    />
-  );
+  return <PublicEventPage event={serialized} me={me} />;
 }
