@@ -4543,3 +4543,25 @@ Work Log:
 Stage Summary:
 - DB is up, all routes return 200
 - Forcing fresh Vercel build to pick up commit 18762d4 (TestimonialsTab in EventTabs)
+
+---
+Task ID: force-rebuild-20260722-verify
+Agent: main
+Task: Verify new TestimonialsTab deploy after Neon quota restoration
+
+Work Log:
+- Neon quota restored (paid plan). DB compute resumed.
+- Verified DB reachable: 45 tables including Testimonial, TestimonialLike, Chapter, Country
+- Pushed empty commit b5a9cf6 to force Vercel rebuild
+- Verified new chunk 97f3375a87ad786a contains:
+  * "💬 Testimonials" (the new tab trigger label)
+  * "Testimonials for" (the TestimonialsTab heading)
+- Verified /e/<slug> no longer has the old TestimonialFeed section (0 markers found)
+- All routes return correct HTTP codes (200 for public, 307 for auth-gated)
+
+Stage Summary:
+- /e/<event-slug> public page: clean, no testimonials section (fixed render error)
+- /events/<event-slug> (members-only): new 💬 Testimonials tab live, deep-linkable as #testimonials
+- /api/testimonials: returns 200 with empty array (Testimonial table queryable)
+- /testimonials (public feed): 200
+- All 500 errors resolved
