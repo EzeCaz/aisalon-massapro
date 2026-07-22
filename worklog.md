@@ -4528,3 +4528,18 @@ Stage Summary:
   a read-only "auto-filled from event" badge.
 - No DB schema changes — chapter association for testimonials stays
   implicit via eventId. The "chapter auto-filled" UX is display-only.
+
+---
+Task ID: force-rebuild-20260722
+Agent: main
+Task: Force Vercel rebuild after Neon quota restoration
+
+Work Log:
+- Neon quota exhausted → paid plan upgrade → DB compute resumed
+- Verified DB reachable: 45 tables, _prisma_migrations table does NOT exist
+- All recent code commits (18762d4 with TestimonialsTab wiring) confirmed correct in repo
+- Pushing this empty commit to trigger Vercel rebuild and pick up the new TestimonialsTab
+
+Stage Summary:
+- DB is up, all routes return 200
+- Forcing fresh Vercel build to pick up commit 18762d4 (TestimonialsTab in EventTabs)
