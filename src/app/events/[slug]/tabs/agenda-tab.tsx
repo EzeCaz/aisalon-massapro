@@ -1186,6 +1186,15 @@ function toEmbedUrl(rawUrl: string): { kind: "iframe" | "video"; src: string } |
       return { kind: "iframe", src: rawUrl };
     }
 
+    // Google Drive — `drive.google.com/file/d/<id>/view` (or /preview).
+    // The embeddable form is `/file/d/<id>/preview`. The user pasted
+    // an example: <iframe src="https://drive.google.com/file/d/1dNF…/preview" width="640" height="480">
+    // so we rewrite /view → /preview and pass it straight through.
+    if (host === "drive.google.com") {
+      const m = u.pathname.match(/\/file\/d\/([^/]+)/);
+      if (m) return { kind: "iframe", src: `https://drive.google.com/file/d/${m[1]}/preview` };
+    }
+
     // Direct video file
     const path = u.pathname.toLowerCase();
     if (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov") || path.endsWith(".m4v")) {
@@ -1205,15 +1214,24 @@ function EventVideoCard({ url, title }: { url: string; title?: string }) {
   const [enlarged, setEnlarged] = useState(false);
   const embed = toEmbedUrl(url);
 
-  // The clickable embedded frame. Used both in the card (small) and in
-  // the dialog (large). The `enlargeable` flag adds the maximize button
-  // overlay + the click-to-enlarge affordance.
+  // The clickable embedded frame. Used both in the card (small, 640×480)
+  // and in the dialog (large, 960×720). The `enlargeable` flag adds the
+  // maximize button overlay + the click-to-enlarge affordance.
+  //
+  // Size: per spec the inline embed is width=640 height=480 (4:3). We
+  // honor that literally — the wrapper has those exact pixel dimensions
+  // and the iframe fills it. On screens narrower than 640px the wrapper
+  // shrinks via max-w-full while keeping the 4:3 ratio (aspect-[4/3]).
+  // The dialog frame uses the same 4:3 ratio but scales up to 960×720
+  // so the enlarged view stays sharp on big monitors.
   const Frame = ({
     enlargeable = false,
     onEnlarge,
+    size = "card",
   }: {
     enlargeable?: boolean;
     onEnlarge?: () => void;
+    size?: "card" | "dialog";
   }) => {
     if (!embed) {
       // Couldn't parse — show a fallback link card.
@@ -1222,7 +1240,7 @@ function EventVideoCard({ url, title }: { url: string; title?: string }) {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full aspect-video rounded-md bg-black/5 flex items-center justify-center text-black/80 hover:bg-black/10"
+          className={`block w-full aspect-[4/3] rounded-md bg-black/5 flex items-center justify-center text-black/80 hover:bg-black/10`}
         >
           <div className="flex flex-col items-center gap-1">
             <ExternalLink className="h-5 w-5" />
@@ -1233,9 +1251,9 @@ function EventVideoCard({ url, title }: { url: string; title?: string }) {
     }
     return (
       <div
-        className={`relative w-full aspect-video rounded-md overflow-hidden bg-black group ${
-          enlargeable ? "cursor-pointer" : ""
-        }`}
+        className={`relative rounded-md overflow-hidden bg-black group aspect-[4/3] ${
+          size === "card" ? "w-full max-w-[640px]" : "w-full max-w-[960px] mx-auto"
+        } ${enlargeable ? "cursor-pointer" : ""}`}
         onClick={enlargeable ? onEnlarge : undefined}
         role={enlargeable ? "button" : undefined}
         tabIndex={enlargeable ? 0 : undefined}
@@ -1301,21 +1319,24 @@ function EventVideoCard({ url, title }: { url: string; title?: string }) {
           <Maximize2 className="h-3 w-3" /> Enlarge
         </button>
       </div>
-      {/* Embedded video (clickable to enlarge) */}
+      {/* Embedded video — 640×480 (4:3) per spec, clickable to enlarge.
+          On narrower viewports the frame scales down (max-w-full + aspect-[4/3]). */}
       <div className="px-4 pb-4">
-        <Frame enlargeable onEnlarge={() => setEnlarged(true)} />
+        <Frame enlargeable onEnlarge={() => setEnlarged(true)} size="card" />
       </div>
 
       {/* Enlarge dialog — full-screen, click outside / X to close.
-          Only action allowed on the card per spec ("can only be enlarge"). */}
+          Only action allowed on the card per spec ("can only be enlarge").
+          The dialog frame keeps the same 4:3 ratio but scales up to
+          960×720 for a sharper enlarged view. */}
       {enlarged && (
         <Dialog open onOpenChange={(v) => !v && setEnlarged(false)}>
           <DialogContent className="max-w-5xl p-0 overflow-hidden bg-black border-none">
             <DialogHeader className="sr-only">
               <DialogTitle>{title || "Event video"}</DialogTitle>
             </DialogHeader>
-            <div className="relative w-full aspect-video bg-black">
-              <Frame />
+            <div className="relative w-full bg-black p-2">
+              <Frame size="dialog" />
               <button
                 type="button"
                 onClick={() => setEnlarged(false)}
