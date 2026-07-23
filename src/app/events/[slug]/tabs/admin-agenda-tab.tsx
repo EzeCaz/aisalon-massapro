@@ -40,6 +40,7 @@ import {
   X,
   UserPlus,
   ImageIcon,
+  Video,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -100,6 +101,13 @@ type Props = {
     startsAt: string;
     endsAt: string;
     speakers: Speaker[];
+    /**
+     * Optional event-level video URL (YouTube / Vimeo / direct MP4).
+     * Edited in the "Event Video" section at the top of this tab and
+     * displayed as an embedded video on the public Speakers & Agenda
+     * tab above "The lineup".
+     */
+    eventVideoUrl?: string | null;
   };
   onAgendaChanged?: () => void;
 };
@@ -202,6 +210,16 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
   // We intentionally don't gate this on canManageEvent because the
   // AdminAgendaTab is only rendered for managers (see event-tabs.tsx).
   const [eventImages, setEventImages] = useState<SlimImage[]>([]);
+  // ── Event Video state ──────────────────────────────────────────────
+  // The "Event Video" section at the top of this tab lets the admin
+  // paste a video URL (YouTube / Vimeo / direct MP4) that gets embedded
+  // on the public Speakers & Agenda tab above "The lineup".
+  // `eventVideoUrl` mirrors the server value; `videoDraft` is the local
+  // input string the admin is typing; `videoSaving` tracks the save
+  // request; `videoSavedAt` is a timestamp for the "Saved ✓" badge.
+  const [videoDraft, setVideoDraft] = useState<string>(event.eventVideoUrl || "");
+  const [videoSaving, setVideoSaving] = useState(false);
+  const [videoSavedAt, setVideoSavedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -255,6 +273,33 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
 
   function notifyChanged() {
     onAgendaChanged?.();
+  }
+
+  // ── Save event video URL ──────────────────────────────────────────
+  // PATCHes /api/admin/events/[id] with { eventVideoUrl }. Empty string
+  // clears the field on the server (data.eventVideoUrl = null). On
+  // success, shows a brief "Saved ✓" badge that auto-hides after 2s.
+  async function saveEventVideo() {
+    setVideoSaving(true);
+    try {
+      const res = await fetch(`/api/admin/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventVideoUrl: videoDraft.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      setVideoSavedAt(Date.now());
+      toast.success("Event video saved");
+      notifyChanged();
+      setTimeout(() => setVideoSavedAt(null), 2000);
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't save event video");
+    } finally {
+      setVideoSaving(false);
+    }
   }
 
   async function handleDelete(item: AgendaItem) {
@@ -312,6 +357,98 @@ export function AdminAgendaTab({ event, onAgendaChanged }: Props) {
           </CreateAgendaItemDialog>
         </div>
       </div>
+
+      {/* Event Video — admin input section.
+          Lets the admin paste a YouTube / Vimeo / direct MP4 URL. When
+          set, the public Speakers & Agenda tab shows an embedded video
+          card above "The lineup" (right panel). Empty / null hides it. */}
+      <Card className="p-4 border border-black/10 bg-white">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="h-7 w-7 rounded-md bg-[#FF005A]/10 text-[#FF005A] flex items-center justify-center">
+            <Video className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-bold text-black">Event video</h4>
+            <p className="text-xs text-black/50">
+              Paste a YouTube / Vimeo / direct MP4 URL. Appears as an embedded video on the
+              Speakers &amp; Agenda tab (above the lineup) when set.
+            </p>
+          </div>
+          {videoSavedAt && (
+            <span className="text-[0.65rem] font-semibold text-[#007E72] bg-[#007E72]/10 px-2 py-0.5 rounded-full">
+              Saved ✓
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input
+            type="url"
+            value={videoDraft}
+            onChange={(e) => setVideoDraft(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=… or https://vimeo.com/…"
+            className="flex-1 h-9"
+            disabled={videoSaving}
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={saveEventVideo}
+            disabled={videoSaving || videoDraft.trim() === (event.eventVideoUrl || "").trim()}
+            className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white gap-1.5 h-9"
+          >
+            {videoSaving ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+              </>
+            ) : (
+              "Save video"
+            )}
+          </Button>
+          {event.eventVideoUrl && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                if (!confirm("Clear the event video?")) return;
+                setVideoDraft("");
+                setVideoSaving(true);
+                try {
+                  const res = await fetch(`/api/admin/events/${event.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ eventVideoUrl: "" }),
+                  });
+                  if (!res.ok) throw new Error("Failed");
+                  toast.success("Event video cleared");
+                  notifyChanged();
+                } catch {
+                  toast.error("Couldn't clear event video");
+                } finally {
+                  setVideoSaving(false);
+                }
+              }}
+              disabled={videoSaving}
+              className="h-9"
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+        {event.eventVideoUrl && (
+          <p className="mt-2 text-[0.65rem] text-black/50">
+            Currently set to:{" "}
+            <a
+              href={event.eventVideoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#FF005A] hover:underline break-all"
+            >
+              {event.eventVideoUrl}
+            </a>
+          </p>
+        )}
+      </Card>
 
       {/* List */}
       {loading ? (

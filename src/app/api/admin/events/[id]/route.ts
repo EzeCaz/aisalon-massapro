@@ -162,6 +162,7 @@ export async function PATCH(
     intendedFor,
     rsvpUrl,
     slug,
+    eventVideoUrl,
   } = body as Record<string, string | null | undefined>;
 
   // Build the update payload — only fields that are explicitly present
@@ -180,6 +181,13 @@ export async function PATCH(
   if (takeaways !== undefined) data.takeaways = takeaways || null;
   if (intendedFor !== undefined) data.intendedFor = intendedFor || null;
   if (rsvpUrl !== undefined) data.rsvpUrl = rsvpUrl || null;
+  // Event-level video URL (YouTube / Vimeo / direct MP4). Set from the
+  // "Event Video" section on the Manage Agenda tab. Empty string / null
+  // clears it (which hides the "Event Video" card on the public tab).
+  if (eventVideoUrl !== undefined) {
+    const v = (eventVideoUrl || "").trim();
+    data.eventVideoUrl = v.length > 0 ? v : null;
+  }
   if (startsAt !== undefined) {
     if (!startsAt) return NextResponse.json({ error: "startsAt cannot be empty" }, { status: 400 });
     data.startsAt = new Date(startsAt);
@@ -222,6 +230,7 @@ export async function PATCH(
       takeaways: true,
       intendedFor: true,
       rsvpUrl: true,
+      eventVideoUrl: true,
       updatedAt: true,
     },
   });

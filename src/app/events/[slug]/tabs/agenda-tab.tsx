@@ -36,6 +36,9 @@ import {
   ArrowUp,
   ArrowDown,
   Users,
+  Video,
+  Maximize2,
+  X,
 } from "lucide-react";
 import {
   DndContext,
@@ -122,6 +125,14 @@ type EventData = {
   slug: string;
   speakers: Speaker[];
   agenda: AgendaItem[];
+  /**
+   * Optional event-level video URL (YouTube / Vimeo / direct MP4).
+   * Set by admins in the Manage Agenda → "Event Video" section.
+   * When non-null, the public Speakers & Agenda tab renders an
+   * "Event Video" card above "The lineup" with an embedded player
+   * that can be clicked to enlarge into a dialog.
+   */
+  eventVideoUrl?: string | null;
 };
 
 type Me = {
@@ -1113,6 +1124,215 @@ function SpeakerSortableRow({
 }
 
 // ============================================================================
+// EventVideoCard — embedded video that appears above "The lineup" on the
+// Speakers & Agenda tab. Renders a YouTube / Vimeo / direct-MP4 embed in
+// a 16:9 frame. The whole card is clickable to open a larger dialog view
+// (the only action allowed — no editing, no removal from this surface).
+// ============================================================================
+
+/**
+ * Convert any video URL into an embeddable <iframe src=…> URL.
+ *
+ * Supported providers:
+ *   - YouTube: youtu.be/<id>, youtube.com/watch?v=<id>,
+ *              youtube.com/embed/<id>, youtube.com/shorts/<id>
+ *   - Vimeo:   vimeo.com/<id>, player.vimeo.com/video/<id>
+ *   - Loom:    loom.com/share/<id>
+ *   - Direct .mp4/.webm/.mov: returned as-is (rendered via <video>)
+ *
+ * Returns null when the URL can't be converted — the caller should fall
+ * back to a "Open in new tab" link.
+ */
+function toEmbedUrl(rawUrl: string): { kind: "iframe" | "video"; src: string } | null {
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.replace(/^www\./, "");
+
+    // YouTube
+    if (host === "youtu.be") {
+      const id = u.pathname.slice(1);
+      if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}` };
+    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      if (u.pathname === "/watch") {
+        const id = u.searchParams.get("v");
+        if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}` };
+      }
+      if (u.pathname.startsWith("/embed/")) {
+        return { kind: "iframe", src: rawUrl };
+      }
+      if (u.pathname.startsWith("/shorts/")) {
+        const id = u.pathname.split("/")[2];
+        if (id) return { kind: "iframe", src: `https://www.youtube.com/embed/${id}` };
+      }
+    }
+
+    // Vimeo
+    if (host === "vimeo.com") {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      if (id && /^\d+$/.test(id))
+        return { kind: "iframe", src: `https://player.vimeo.com/video/${id}` };
+    }
+    if (host === "player.vimeo.com" && u.pathname.startsWith("/video/")) {
+      return { kind: "iframe", src: rawUrl };
+    }
+
+    // Loom
+    if (host === "loom.com" || host === "www.loom.com") {
+      const id = u.pathname.split("/").filter(Boolean)[1];
+      if (id) return { kind: "iframe", src: `https://www.loom.com/embed/${id}` };
+    }
+    if (host === "www.loom.com" && u.pathname.startsWith("/embed/")) {
+      return { kind: "iframe", src: rawUrl };
+    }
+
+    // Direct video file
+    const path = u.pathname.toLowerCase();
+    if (path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov") || path.endsWith(".m4v")) {
+      return { kind: "video", src: rawUrl };
+    }
+
+    // Unknown — fall back to opening the URL directly in an iframe
+    // (most providers block this, but it's the best we can do without
+    // a full oEmbed lookup). The caller can also fall back to a link.
+    return { kind: "iframe", src: rawUrl };
+  } catch {
+    return null;
+  }
+}
+
+function EventVideoCard({ url, title }: { url: string; title?: string }) {
+  const [enlarged, setEnlarged] = useState(false);
+  const embed = toEmbedUrl(url);
+
+  // The clickable embedded frame. Used both in the card (small) and in
+  // the dialog (large). The `enlargeable` flag adds the maximize button
+  // overlay + the click-to-enlarge affordance.
+  const Frame = ({
+    enlargeable = false,
+    onEnlarge,
+  }: {
+    enlargeable?: boolean;
+    onEnlarge?: () => void;
+  }) => {
+    if (!embed) {
+      // Couldn't parse — show a fallback link card.
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full aspect-video rounded-md bg-black/5 flex items-center justify-center text-black/80 hover:bg-black/10"
+        >
+          <div className="flex flex-col items-center gap-1">
+            <ExternalLink className="h-5 w-5" />
+            <span className="text-xs font-semibold">Open video in new tab</span>
+          </div>
+        </a>
+      );
+    }
+    return (
+      <div
+        className={`relative w-full aspect-video rounded-md overflow-hidden bg-black group ${
+          enlargeable ? "cursor-pointer" : ""
+        }`}
+        onClick={enlargeable ? onEnlarge : undefined}
+        role={enlargeable ? "button" : undefined}
+        tabIndex={enlargeable ? 0 : undefined}
+        onKeyDown={
+          enlargeable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEnlarge?.();
+                }
+              }
+            : undefined
+        }
+      >
+        {embed.kind === "iframe" ? (
+          <iframe
+            src={embed.src}
+            title={title || "Event video"}
+            className="absolute inset-0 w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            // `loading="lazy"` defers iframe load until the card is near
+            // the viewport — keeps the agenda tab snappy when there are
+            // many sessions below.
+            loading="lazy"
+            // No referrer — most video providers prefer this and it
+            // avoids leaking the parent URL.
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <video
+            src={embed.src}
+            controls
+            className="absolute inset-0 w-full h-full"
+            preload="metadata"
+          />
+        )}
+        {enlargeable && (
+          <div className="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-md p-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <Maximize2 className="h-3.5 w-3.5" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="mb-5 overflow-hidden border border-[#FF005A]/20 bg-white">
+      {/* Header */}
+      <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+        <div className="h-6 w-6 rounded-md bg-[#FF005A]/10 text-[#FF005A] flex items-center justify-center">
+          <Video className="h-3.5 w-3.5" />
+        </div>
+        <h3 className="text-xs font-bold uppercase tracking-widest text-[#FF005A]">
+          Event video
+        </h3>
+        <button
+          type="button"
+          onClick={() => setEnlarged(true)}
+          className="ml-auto inline-flex items-center gap-1 text-[0.65rem] font-semibold text-black/80 hover:text-[#FF005A] bg-black/5 hover:bg-[#FF005A]/10 px-2 py-0.5 rounded-full transition-colors"
+          title="Enlarge video"
+        >
+          <Maximize2 className="h-3 w-3" /> Enlarge
+        </button>
+      </div>
+      {/* Embedded video (clickable to enlarge) */}
+      <div className="px-4 pb-4">
+        <Frame enlargeable onEnlarge={() => setEnlarged(true)} />
+      </div>
+
+      {/* Enlarge dialog — full-screen, click outside / X to close.
+          Only action allowed on the card per spec ("can only be enlarge"). */}
+      {enlarged && (
+        <Dialog open onOpenChange={(v) => !v && setEnlarged(false)}>
+          <DialogContent className="max-w-5xl p-0 overflow-hidden bg-black border-none">
+            <DialogHeader className="sr-only">
+              <DialogTitle>{title || "Event video"}</DialogTitle>
+            </DialogHeader>
+            <div className="relative w-full aspect-video bg-black">
+              <Frame />
+              <button
+                type="button"
+                onClick={() => setEnlarged(false)}
+                className="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white rounded-full p-1.5 transition-colors"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
+}
+
+// ============================================================================
 // Main AgendaTab component
 // ============================================================================
 
@@ -1462,6 +1682,17 @@ export function AgendaTab({ event, me }: { event: EventData; me: Me }) {
 
       {/* Speakers list (right column — unchanged) */}
       <aside>
+        {/* Event Video — only renders when an admin has set a video URL.
+            Placed ABOVE "The lineup" per spec. Embedded 16:9 iframe with
+            a click-to-enlarge dialog (the only action allowed on this
+            surface — no editing/removal from the public view). */}
+        {event.eventVideoUrl && (
+          <EventVideoCard
+            url={event.eventVideoUrl}
+            title={event.slug ? `Event video — ${event.slug}` : "Event video"}
+          />
+        )}
+
         <h2 className="text-xs font-bold uppercase tracking-widest text-[#FF005A] mb-4">
           The lineup
         </h2>
