@@ -94,7 +94,19 @@ export async function GET(req: NextRequest) {
         company: true,
       },
     },
-    event: { select: { id: true, title: true, slug: true } },
+    // Include venue + cover image + mainImage.fileUrl so the share button
+    // can build the message "AI Salon event about {title}, at {venue}" and
+    // attach the event's profile picture as a file when sharing.
+    event: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        venue: true,
+        coverImage: true,
+        mainImage: { select: { fileUrl: true } },
+      },
+    },
     speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
     agendaItem: { select: { id: true, title: true } },
   } as const;
@@ -133,7 +145,16 @@ export async function GET(req: NextRequest) {
       shareCount: t.shareCount,
       createdAt: t.createdAt.toISOString(),
       author: t.author,
-      event: t.event,
+      event: t.event
+        ? {
+            id: t.event.id,
+            title: t.event.title,
+            slug: t.event.slug,
+            venue: t.event.venue,
+            coverImage: t.event.coverImage,
+            mainImageUrl: t.event.mainImage?.fileUrl ?? null,
+          }
+        : null,
       speaker: t.speaker,
       agendaItem: t.agendaItem,
       likedByMe: likesArr ? likesArr.length > 0 : false,
@@ -323,7 +344,16 @@ export async function POST(req: NextRequest) {
           company: true,
         },
       },
-      event: { select: { id: true, title: true, slug: true } },
+      event: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          venue: true,
+          coverImage: true,
+          mainImage: { select: { fileUrl: true } },
+        },
+      },
       speaker: { select: { id: true, name: true, company: true, photoUrl: true } },
       agendaItem: { select: { id: true, title: true } },
     },
@@ -342,7 +372,16 @@ export async function POST(req: NextRequest) {
       shareCount: t.shareCount,
       createdAt: t.createdAt.toISOString(),
       author: t.author,
-      event: t.event,
+      event: t.event
+        ? {
+            id: t.event.id,
+            title: t.event.title,
+            slug: t.event.slug,
+            venue: t.event.venue,
+            coverImage: t.event.coverImage,
+            mainImageUrl: t.event.mainImage?.fileUrl ?? null,
+          }
+        : null,
       speaker: t.speaker,
       agendaItem: t.agendaItem,
       likedByMe: false,

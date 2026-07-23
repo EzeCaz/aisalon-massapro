@@ -41,7 +41,14 @@ export type Testimonial = {
     image: string | null;
     company: string | null;
   };
-  event: { id: string; title: string; slug: string } | null;
+  event: {
+    id: string;
+    title: string;
+    slug: string;
+    venue: string | null;
+    coverImage: string | null;
+    mainImageUrl: string | null;
+  } | null;
   speaker: { id: string; name: string; company: string | null; photoUrl: string | null } | null;
   agendaItem: { id: string; title: string } | null;
   likedByMe: boolean;
@@ -52,6 +59,22 @@ type Props = {
   meId: string;
   isAdmin: boolean;
   onChanged?: () => void; // refetch callback after delete / like / share
+  /**
+   * Event context — when this card is rendered inside an event-scoped
+   * feed (e.g. the /events/[slug]#testimonials tab), the parent passes
+   * the event's title + venue + main image so the Share button can use
+   * the curated event-branded message ("I had an amazing time on this
+   * great AI Salon event about <title>, at <venue>, join the
+   * community.") and attach the event's profile picture as the share
+   * image. Optional — when omitted, the card falls back to the
+   * testimonial's own event (t.event) if attached, otherwise to the
+   * quote + author format.
+   */
+  eventContext?: {
+    title: string;
+    venue: string | null;
+    mainImageUrl: string | null;
+  };
 };
 
 /**
@@ -69,7 +92,7 @@ type Props = {
  * only share remains (it just copies a link). The card itself is fully
  * readable so the public feed works without login.
  */
-export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Props) {
+export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged, eventContext }: Props) {
   const isAnonymous = !meId;
   const [liked, setLiked] = useState(t.likedByMe);
   const [likeCount, setLikeCount] = useState(t.likeCount);
@@ -101,25 +124,63 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged }: Pr
 
   async function handleShare() {
     const shareUrl = `${window.location.origin}/testimonials?t=${t.id}`;
-    const shareText = `"${t.body.slice(0, 140)}${t.body.length > 140 ? "…" : ""}" — ${t.author.name || t.author.email}`;
+    // Curated event-branded message — used when this card is rendered
+    // inside an event-scoped feed (eventContext passed from the parent)
+    // OR when the testimonial itself is attached to an event (t.event
+    // present, which the API populates with title + venue + mainImageUrl).
+    // Format: "I had an amazing time on this great AI Salon event about
+    // <event name>, at <venue name>, join the community."
+    // Falls back to the testimonial quote + author when no event context.
+    const ev = eventContext ?? t.event;
+    const venuePart = ev?.venue ? `, at ${ev.venue}` : "";
+    const shareText = ev
+      ? `I had an amazing time on this great AI Salon event about ${ev.title}${venuePart}, join the community.`
+      : `"${t.body.slice(0, 140)}${t.body.length > 140 ? "…" : ""}" — ${t.author.name || t.author.email}`;
+    // Share image — prefer the event's profile picture (eventContext's
+    // mainImageUrl, then the testimonial's own event.mainImageUrl, then
+    // legacy coverImage), fall back to the testimonial's own image.
+    const shareImage =
+      eventContext?.mainImageUrl ||
+      ev?.mainImageUrl ||
+      (ev as { coverImage?: string | null } | undefined)?.coverImage ||
+      t.imageUrl ||
+      null;
 
     // Try the Web Share API first (mobile + some desktop browsers).
+    // The Web Share API supports sharing files (images) via `files`,
+    // but only when the browser allows it. When a share image is
+    // available we try to fetch it as a Blob and attach it; on any
+    // failure we fall back to a plain text+url share.
     if (typeof navigator !== "undefined" && (navigator as Navigator).share) {
+      let fileToShare: File | null = null;
+      if (shareImage) {
+        try {
+          const blob = await fetch(shareImage, { mode: "cors" }).then((r) => r.blob());
+          fileToShare = new File([blob], "event.jpg", { type: blob.type || "image/jpeg" });
+        } catch {
+          // CORS or network failure — share without the image file.
+          // The URL is still shared, so recipients see the link.
+        }
+      }
       try {
-        await (navigator as Navigator).share({
-          title: "AI Salon TLV — Testimonial",
+        const shareData: ShareData = {
+          title: ev ? `AI Salon — ${ev.title}` : "AI Salon — Testimonial",
           text: shareText,
           url: shareUrl,
-        });
+        };
+        if (fileToShare && (navigator as Navigator).canShare?.({ files: [fileToShare] })) {
+          shareData.files = [fileToShare];
+        }
+        await (navigator as Navigator).share(shareData);
       } catch {
         // User cancelled — don't bump the counter.
         return;
       }
     } else {
-      // Fallback: copy link to clipboard.
+      // Fallback: copy link + message to clipboard.
       try {
-        await navigator.clipboard.writeText(shareUrl);
-        toast.success("Link copied to clipboard!");
+        await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+        toast.success("Message + link copied to clipboard!");
       } catch {
         toast.error("Couldn't copy the link.");
         return;

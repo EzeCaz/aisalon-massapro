@@ -40,6 +40,18 @@ type Props = {
    *  the order — useful on the public event page where the existing
    *  testimonials should appear on top and the form below. */
   formOnTop?: boolean;
+  /**
+   * Event context — used by the share button on each card to compose
+   * a curated event-branded message ("I had an amazing time on this
+   * great AI Salon event about <title>, at <venue>, join the community.")
+   * and to attach the event's profile picture as the share image.
+   * Pass only when this feed is scoped to a specific event.
+   */
+  eventContext?: {
+    title: string;
+    venue: string | null;
+    mainImageUrl: string | null;
+  };
 };
 
 /**
@@ -70,6 +82,7 @@ export function TestimonialFeed({
   hideForm = false,
   compactForm = false,
   formOnTop = true,
+  eventContext,
 }: Props) {
   const isAnonymous = !meId;
   const [items, setItems] = useState<Testimonial[]>([]);
@@ -195,6 +208,7 @@ export function TestimonialFeed({
           meId={meId}
           isAdmin={isAdmin}
           onChanged={fetchItems}
+          eventContext={eventContext}
         />
       ))}
     </div>
