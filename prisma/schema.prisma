@@ -324,6 +324,11 @@ model Event {
   intendedFor    String? // "This event is built for: ..."
   rsvpUrl        String? // external RSVP form
   coverImage     String? // legacy: external URL for the event's cover image
+  // Optional event-level video URL (YouTube / Vimeo / direct MP4).
+  // Set by admins in the Manage Agenda tab → "Event Video" section.
+  // When non-null, the public Speakers & Agenda tab renders an
+  // "Event Video" embed above "The lineup" in the right panel.
+  eventVideoUrl  String?
   // ---- V7: real chapter FK (replaces the free-form String `chapter`) ----
   chapterId      String?
   chapterRef     Chapter?    @relation(fields: [chapterId], references: [id], onDelete: SetNull)
