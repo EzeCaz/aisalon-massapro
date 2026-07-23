@@ -102,6 +102,10 @@ type EventData = {
   // Set by the admin via the photo gallery; null when no main image
   // has been picked. PhotosTab reads this to highlight the active one.
   mainImageId?: string | null;
+  // The main image object — passed through to tabs that need the actual
+  // image URL (e.g. TestimonialsTab uses it for the social share image).
+  // Optional for backward compat with callers that haven't been updated.
+  mainImage?: { id: string; fileUrl: string; caption: string | null } | null;
 };
 
 type Me = {

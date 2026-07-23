@@ -263,17 +263,25 @@ export function TestimonialForm({
         </div>
       )}
 
-      {/* Scope selector — community / event / speaker / session */}
+      {/* Scope selector — community / event / speaker / session.
+          In event-tab mode (eventId set), the "🌍 Community" chip is
+          intentionally hidden — when you're writing a testimonial from
+          inside a specific event's tab, "community" scope (no event)
+          doesn't make sense, and the default "This event" should be
+          the only sensible starting point. */}
       <div className="mb-4">
         <label className="block text-[0.65rem] font-bold uppercase tracking-widest text-black/80 mb-1.5">
           About
         </label>
         <div className="flex flex-wrap gap-1.5">
-          <ScopeChip
-            active={scope === "community"}
-            onClick={() => setScope("community")}
-            label="🌍 Community"
-          />
+          {/* Community chip — only in community mode (no locked eventId). */}
+          {!eventId && (
+            <ScopeChip
+              active={scope === "community"}
+              onClick={() => setScope("community")}
+              label="🌍 Community"
+            />
+          )}
           {/* Event chip — show when:
               (a) event is locked (event-tab form), OR
               (b) community mode AND there's at least one event in the catalog. */}
