@@ -7247,3 +7247,53 @@ Stage Summary:
 - All SQL DDL snippets, code signatures, route tables, CRUD matrices, phase detail, risk verdicts preserved
 - All preflight checks pass: pdf_qa (13/13), font.check (0 issues), toc.check (PASS), pages.clean (0 blank)
 - File at /home/z/my-project/download/3-tier-platform-plan.pdf (314 KB, 36 pages)
+
+---
+Task ID: PDF-2
+Agent: Super Z (main)
+Task: Apply 9 user decisions to the 3-tier plan PDF + erase all Z.ai mentions → MassaPro team
+
+Work Log:
+- Read worklog.md plan content (lines 5281-6651) + IMPL-1 addendum (lines 6686-7217)
+- Verified only 5 Z.ai mentions exist in entire worklog — none in plan body; one in PDF-1 task log (line 7240) referring to old Author=Z.ai metadata
+- Inspected existing PDF metadata: Author='Z.ai · Super Z Engineering', Creator='Z.ai' → needed full replacement
+- Wrote /home/z/my-project/scripts/build_3tier_pdf_v2.py (~920 lines) with:
+  - Crystal Blue Tech Blueprint palette (navy #0a1628 + luminous cyan #4da8da)
+  - CoverBackground painted via _cover_decoration onPage callback (full-bleed navy + cyan frame + corner accents)
+  - TierDocTemplate.afterFlowable emits 'TOCEntry' notify for h1 paragraphs (TableOfContents listens for this event kind)
+  - Markdown tokenizer → ReportLab flowables (headings, body, bullets, numbered lists, tables, code blocks, callouts, horizontal rules)
+  - EMOJI_RE strip function (FreeSerif/FreeSans/DejaVu can't render pictographs)
+  - Separate code_line_format() (no backtick → <font> conversion inside code blocks — that was the first bug)
+  - Author='MassaPro team', Creator='MassaPro team' in PDF metadata
+- Replaced Section 12 'Open Questions for User' → 'Decisions Resolved' with all 9 user decisions:
+  1. Chapter-prefixed URLs: keep /events/[slug] flat + add /[chapterSlug] city-root aliases + /[countrySlug] country landing pages
+  2. Chapter admin isolation: read-only browse + copy other chapters, can't modify original
+  3. Cross-chapter events: all members see all events globally, default-filter to own chapter, "See all global events" toggle
+  4. Country-tier email templates: chapter admins edit only own, can copy others; country-tier overrides supported (chapter → country → global resolution)
+  5. Super Admin allowlist: stays code-driven for security (no DB column, no admin UI)
+  6. i18n scope: en-US only at V7.1, defer he-IL + fr-CA to V7.2 (Phase 5 timezone migration still ships)
+  7. Member auto-chapter on RSVP: auto-set chapterId ONLY IF NULL (preserves primary chapter affinity)
+  8. Media Library: unified /admin/creatives with kind filter + new BrandAsset table
+  9. Cleanup phase timing: ship Phase 7 immediately after Phase 6 (no V7.1 burn-in wait)
+- Cover footer: 'Prepared by Z.ai · Super Z' → 'Prepared by MassaPro team'
+- Cover summary: added 'All 9 design decisions resolved' sentence
+- Page 2 status: replaced 'Awaiting user decision on 10 open questions' → 'Document Status: All 9 design decisions resolved. Ready for Phase 0 implementation.'
+- Page header (every body page): 'Engineering Specification · Z.ai' → 'Engineering Specification · MassaPro team'
+- Each decision written with three parts: Decision, Rationale, Implementation impact (mapped to phases)
+- Decisions summary table at end of Section 12 with risk ratings
+- Fixed two build bugs:
+  - Bug 1: inline_format() converted backticks to <font face="Mono"> inside code blocks → XML parser broke. Fix: separate code_line_format() that only escapes XML + preserves whitespace via &nbsp;
+  - Bug 2: CoverBackground flowable returned (PAGE_W, PAGE_H) from wrap() → LayoutError "too large on page 2 in frame". Fix: moved full-bleed painting to _cover_decoration onPage callback; CoverBackground is now a no-op flowable
+- Output: /home/z/my-project/download/3-tier-platform-plan.pdf (64 pages, 282 KB, A4)
+- Backup copy: /home/z/my-project/upload/3-tier-platform-plan.pdf (same file, survives /download/ resets)
+- Preflight pdf_qa.py: 11/11 checks PASS, 4 warnings (em-dash at line-start on pages 13/14/38 — cosmetic, non-blocking)
+- Verified: 0 Z.ai mentions in entire PDF body + metadata; 64 MassaPro mentions; all 9 decisions (12.1-12.9) present with rationale + implementation impact; IMPL-1 addendum intact
+
+Stage Summary:
+- 64-page PDF with all 9 user decisions applied to Section 12
+- Zero Z.ai mentions anywhere (metadata Author/Creator + cover footer + page header all → MassaPro team)
+- Section 12 transformed from "10 open questions" → "9 decisions resolved" with binding implementation guidance
+- Cover + page 2 status updated to reflect "decisions resolved, ready for Phase 0"
+- Same Crystal Blue Tech Blueprint aesthetic as previous version
+- Live endpoints verified working: /3-tier-platform-plan (preview page), /api/downloads/3-tier-platform-plan.pdf?inline=1 (inline PDF), /api/downloads/3-tier-platform-plan.pdf (download)
+- Build script persisted at /home/z/my-project/scripts/build_3tier_pdf_v2.py for future iterations
