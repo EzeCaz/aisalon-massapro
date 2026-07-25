@@ -7213,3 +7213,37 @@ PLAN-1's critical path (Phase 1 → 6 → 7) is correct. The parallel branches (
 ---
 
 END OF IMPL-1 ADDENDUM.
+
+---
+Task ID: PDF-1
+Agent: Super Z (main)
+Task: Create a downloadable PDF of the 3-tier platform plan, well designed and structured
+
+Work Log:
+- Loaded the pdf skill (Report route with Template 07 Crystal Blue cover)
+- Asked user 6 design clarification questions (audience, style, length, structure, code, language)
+- User chose: Engineering audience, Tech Blueprint style, Comprehensive (~25-35 pages), Cover+TOC+Exec summary, All code snippets, English
+- Created Outline with 18 sections (cover, TOC, exec summary, 13 numbered sections, 2 appendices)
+- Read pdf skill files: SKILL.md, briefs/report.md (1704 lines), typesetting/cover.md (986 lines), configs/fonts.md
+- Selected Cover Template 07 (Crystal Blue) — dark navy #0a1628 + cyan #4da8da accent, matches "Tech Blueprint" style
+- Wrote cover.html with: dark navy bg, luminous cyan rectangular frame, corner accents, kicker, large 52pt Playfair Display title, subtitle with tier hierarchy, summary, 4-stat strip, footer
+- Validated cover with poster_validate.py check-html and cover_validate.js — fixed 4 iterations of text-line/text-text overlap issues
+- Rendered cover.html → cover.pdf via html2poster.js --width 794px (110 KB, vector PDF)
+- Wrote ReportLab body PDF script in 3 parts: build_body_part1.py (setup, fonts, palette, helpers, styles, TocDocTemplate, page header/footer), build_body_part2.py (TOC + Exec Summary + Sections 0-5), build_body_part3.py (Sections 6-12 + Appendices A-B)
+- Used Crystal Blue body palette: PAGE_BG #FFFFFF, HEADER_FILL #1a4a7a, ACCENT #2d7ab3, TEXT_PRIMARY #142840
+- Used FreeSerif for body, FreeSerif-Bold for headings, DejaVuSans (monospace) for code blocks
+- Implemented helpers: add_heading (with TOC bookmark), code_block (cyan left border + light bg), callout (accent left border + label), make_table (HEADER_FILL header + TABLE_STRIPE rows), stat_block (horizontal stat strip)
+- Page header: top accent rule + "3-Tier Platform Plan" / "Engineering Specification" + bottom page number in cyan
+- Sanitized all 4 build scripts with pdf.py code.sanitize
+- Executed build_main.py — assembled 307 flowables, ran multiBuild (2-pass for TOC), merged cover + body via pypdf with A4 normalization
+- Final PDF: 36 pages, 314 KB
+- Preflight: meta.brand (Author=Z.ai), pages.clean (0 blank pages), font.check (0 issues), toc.check (PASS), pdf_qa.py (13/13 checks PASS)
+- Output: /home/z/my-project/download/3-tier-platform-plan.pdf
+
+Stage Summary:
+- 36-page comprehensive PDF of the 3-tier platform plan
+- Tech Blueprint aesthetic: dark navy cover with luminous cyan accents + light-blue body with cyan-accented headings
+- Cover (Template 07 Crystal Blue) + auto-generated TOC + 13 numbered sections + 2 appendices
+- All SQL DDL snippets, code signatures, route tables, CRUD matrices, phase detail, risk verdicts preserved
+- All preflight checks pass: pdf_qa (13/13), font.check (0 issues), toc.check (PASS), pages.clean (0 blank)
+- File at /home/z/my-project/download/3-tier-platform-plan.pdf (314 KB, 36 pages)
