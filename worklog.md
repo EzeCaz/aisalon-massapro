@@ -7410,3 +7410,42 @@ Stage Summary:
 - DB recreated at db/custom.db with full schema.
 - Admin user seeded: eze@massapro.com / Massapro2026!
 - All endpoints return 200; only the auth redirect remains, which the user resolves by logging in.
+
+---
+Task ID: login-not-working-fix
+Agent: main
+Task: User reported login fails with "Incorrect email or password" using eze@massapro.com / Massapro2026!
+
+Work Log:
+- Investigated auth flow in src/lib/auth.ts: uses CredentialsProvider with id="email",
+  bcrypt.compare(password, user.passwordHash) for verification.
+- Verified DB state with a Node script using the same Prisma client + bcryptjs:
+  * User exists: id=cms7v16u40004qefkz6dtq5dg, email=eze@massapro.com
+  * passwordHash starts with $2b$10$ (valid bcrypt)
+  * bcrypt.compare('Massapro2026!', hash) = true  ← password IS correct
+- So the credentials are valid; the problem was elsewhere.
+- Found ROOT CAUSE: .env file was missing NEXTAUTH_SECRET. Without it, NextAuth
+  cannot sign JWT session tokens, so even valid credentials produce a null session
+  and the login form shows "Incorrect email or password."
+- Updated .env to add:
+  * NEXTAUTH_SECRET=dev-secret-massapro-2026-... (random dev string)
+  * NEXTAUTH_URL=https://preview-chat-604b7c23-05dc-4d4c-8ebf-db5e8a49077c.space-z.ai
+  * ADMIN_EMAIL=eze@massapro.com
+- Killed + restarted dev server so it loads the new env at startup (NextAuth caches
+  the secret on first init).
+- Tested full login flow via curl:
+  1. GET /api/auth/csrf → got csrfToken
+  2. POST /api/auth/callback/email with email+password+csrfToken → HTTP 200,
+     session cookie set, response body {"url":"...preview-chat-...space-z.ai"}
+  3. GET /api/auth/session with cookie → {"user":{"name":"Eze Admin",
+     "email":"eze@massapro.com","role":"SUPER_ADMIN","id":"cms7v16u40004qefkz6dtq5dg"}}
+  4. GET /admin/mockups/speaker-intro with cookie → HTTP 200 (was 307 redirect before)
+- Confirmed: eze@massapro.com is in the hard-coded SUPER_ADMIN_EMAILS list in
+  src/lib/permissions.ts, so the role auto-upgraded from ADMIN (as seeded) to
+  SUPER_ADMIN on first sign-in (per auth.ts signIn callback logic).
+
+Stage Summary:
+- Login now works: eze@massapro.com / Massapro2026! → SUPER_ADMIN session.
+- .env updated with NEXTAUTH_SECRET, NEXTAUTH_URL, ADMIN_EMAIL.
+- Dev server restarted to pick up new env vars.
+- Editor route returns HTTP 200 with auth cookie (no more redirect to /login).
