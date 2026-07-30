@@ -335,6 +335,19 @@
 | **Files Touched** | /home/z/my-project/docs/tasks.md (updated with TSK-0012 → TSK-0022), /home/z/my-project/download/tasks-analysis-and-execution-plan.md (new preview file, NOT deployed), /home/z/my-project/scripts/update_tasks_registry_v1_2.py (this script) |
 | **Outcome** | User uploaded /home/z/my-project/upload/Pasted Content_1785439593433.txt (167 KB, 2,418 lines) containing the full 2-day conversation history. Task: analyze every 'Me:' / 'ME:' entry (ignoring credentials, link requests, and error reports), extract the granular task requests, document what was done + any subsequent error + the fix review, register each as a TSK-XXXX entry in docs/tasks.md, generate an execution plan to verify/complete each task, and save the plan as a preview file (NOT deployed). 10 distinct user-requested tasks extracted: T1-T7 back-filled (work that got erased, restored via TSK-0001/TSK-0002) and T8-T10 post-restoration. Plus this meta-task TSK-0022 itself. Plan document saved to /home/z/my-project/download/tasks-analysis-and-execution-plan.md — user reviews before any code changes are deployed. |
 
+### TSK-0023
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0023` |
+| **Date** | 2026-07-31 |
+| **Title** | Comprehensive spec + preview (no deploy) for Speaker-Intro × {Style 1, 2, 3} + Meet-the-Speaker × {Style 1, 2, 3} + QR-Salon defaults + Toolbar reorder across all mockups |
+| **Category** | HIGH |
+| **Status** | IN_PROGRESS |
+| **Worklog Ref** | `TSK-0023 — speaker-intro-meet-style-2-3-spec-and-preview` |
+| **Files Touched** | /home/z/my-project/docs/tasks.md (this entry), /home/z/my-project/download/tsk-0023-speaker-meet-style-2-3-plan.md (preview, NOT deployed), /home/z/my-project/worklog.md (worklog entry). No src/ changes — preview only. |
+| **Outcome** | User provided a massive multi-message spec covering: (1) new Style 2 for speaker-intro from PDF page 20 "Variant A" reference + uploaded Style 2 PNG, (2) new Style 3 for meet-the-speaker from PDF page 21 "Variant B" reference, (3) toolbar reorder — Style 1/2/3 buttons + Edit Images + Edit Sections in that order, OUTSIDE the canvas frame (currently Edit buttons float absolute top-right INSIDE the canvas), (4) QR-salon new defaults (qrSize 180 not 360, fontSize 39, align left, X=15.3 Y=10 for QR, X=17.8 Y=2.8 for caption, plus "QR 50% smaller + middle-aligned"), (5) Speaker-Intro Style 1 section position defaults (header, topic, speakers, qr), (6) Speaker-Intro Style 2 spec A-G (hero+gradient+overlay, sponsors as logo URL not name, enable Edit Images/Sections for Style 2, speaker card company below title, brandingAsset field, topLogoUrl field with AI SALON replacement, erase 🦫 badge, QR 3× larger + movable), (7) Speaker-Intro Style 2 layer ordering (background gradient → hero image → QR → speakers on top), (8) Speaker-Intro Style 2 speaker section redesign with card grid + 2-3 columns + auto photo URL, (9) Meet-the-Speaker Style 2 fixes (show venue, show topic, editable background shape with 13 options), (10) Meet-the-Speaker Style 3 with new QR position. Two PDFs (3-tier, 4-tier) audited — neither contains "Variant A" or "Variant B" text on pages 20-21 (those PDF pages cover URL routing and payments respectively). User confirmed Style 2 visual via uploaded PNG. Preview document at /home/z/my-project/download/tsk-0023-speaker-meet-style-2-3-plan.md will be the single source of truth for execution. NO deploy, NO commit until user approves. |
+
 ---
 
 ## Registry — Pre-Registry History (Reference Only)

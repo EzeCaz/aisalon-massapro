@@ -7574,3 +7574,47 @@ Stage Summary:
 - No source code (src/) or Prisma schema changes.
 - No git commit made (user has not requested one). If user approves the plan, the first commit will be Phase 0.5: `[TSK-0022] Add conversation analysis + execution plan preview (not deployed)`.
 - Next step: wait for user to reply with one of the approval options in Part 7 of the preview document.
+
+---
+Task ID: TSK-0023 — speaker-intro-meet-style-2-3-spec-and-preview
+Agent: Super Z (main)
+Task: User provided a massive multi-message spec dump covering: (1) new Style 2 for speaker-intro from PDF page 20 "Variant A" reference + uploaded Style 2 PNG, (2) new Style 3 for meet-the-speaker from PDF page 21 "Variant B" reference, (3) toolbar reorder — Style 1/2/3 + Edit Images + Edit Sections in that order OUTSIDE the canvas frame, (4) QR-salon new defaults (qrSize 180, fontSize 39, align left, X=15.3 Y=10 for QR, X=17.8 Y=2.8 for caption), (5) Speaker-Intro Style 1 section position defaults, (6) Speaker-Intro Style 2 spec A-G (hero+gradient+overlay, sponsors as logo URL not name, enable Edit Images/Sections for Style 2, speaker card company below title, brandingAsset field, topLogoUrl field with AI SALON replacement, erase 🦫 badge, QR 3× larger + movable), (7) Speaker-Intro Style 2 layer ordering, (8) Speaker-Intro Style 2 speaker section redesign with card grid + 2-3 columns, (9) Meet-the-Speaker Style 2 fixes (show venue, show topic, editable background shape with 13 options), (10) Meet-the-Speaker Style 3. User explicitly said "dont deploy" and "show preview" before implementing.
+
+Work Log:
+- Registered TSK-0023 in /home/z/my-project/docs/tasks.md as the 23rd entry (HIGH category, IN_PROGRESS status). Back-filled the long Outcome field summarizing all 10 spec areas.
+- Searched both PDFs (upload/3-tier-platform-plan.pdf 64 pages, upload/4-tier-platform-plan.pdf 43 pages) for the strings "Variant A", "Variant B", "Speaker Intro", "Meet the Speaker", "geometric gradient overlay". NEITHER PDF contains these strings. Page 20 of the 3-tier PDF covers URL routing (Section 3.2); page 21 covers homepage behavior (Section 3.5) and start of admin UI completion. Page 20 of the 4-tier PDF covers /admin/payments routes; page 21 covers /admin/payments/[id]. Flagged this gap as Decision 1 in the preview document.
+- User uploaded /home/z/my-project/upload/Speaker Intro Style 2.png (1400×933 PNG). Vision-analyzed it via z-ai vision CLI (glm-5v-turbo model) to extract: split-screen asymmetric layout (left 55% white + speaker cards, right 45% dark purple hero with mountain silhouette + 4 location pins), 2×2 speaker grid with circular photos, solid magenta header bar with event name + "AI SALON" text, sponsors as text pills (not logos), meerkat character bottom-right. Confirmed user's HTML snippets match the visual.
+- Audited 8 source files directly (no subagent — user had cancelled the previous Explore dispatch):
+  * src/app/admin/mockups/speaker-intro/types.ts (466 lines) — style 1/2/3 defined, style2HeroGradient with 13 shapes, style2LayerZ (BUG: background z=1 < hero z=2 makes gradient invisible), MISSING topLogoUrl + qrSize + heroOpacity
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx (692 lines) — hero fills canvas ✓, GradientShape component with 13 shapes ✓, header/topic/speakers/qr sections ✓, sponsors as TEXT not logo ❌, brandingAsset NOT rendered ❌, topLogoUrl NOT rendered ❌, textStyles NOT applied (hard-coded) ❌, speakersLayout.columns NOT respected (hard-coded 2-col) ❌, data.qrSize NOT respected (hard-coded 120) ❌, editable/onPickImage NOT accepted ❌
+  * src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx (1014+ lines) — Style 1/2/3 segmented buttons in toolbar ✓, Edit Images/Edit Sections at absolute top-2 right-2 INSIDE canvas frame (needs to move OUTSIDE) ❌, Style2Canvas does NOT receive editable/onPickImage ❌, canvas caption is wrong text ❌
+  * src/app/admin/mockups/meet-the-speaker/types.ts — heroStyle?: 1|2 only (no Style 3) ❌, MISSING style2HeroGradient ❌
+  * src/app/admin/mockups/meet-the-speaker/meet-the-speaker-canvas.tsx — Style 1 geometric gradient triangles ✓, Style 2 network image hero ✓, Style 3 MISSING ❌, Style 2 doesn't render venue ❌, Style 2 doesn't render topic ❌, Style 2 has no gradient shape selector ❌
+  * src/app/admin/mockups/meet-the-speaker/meet-the-speaker-editor.tsx — Style selector in form-view (NOT toolbar) ❌, Edit Images/Edit Sections at absolute top-2 right-2 ❌
+  * src/app/admin/mockups/shared/meet-the-speaker-form-view.tsx — Style selector at lines 598-626 under "Hero overlay (gradient)" section, only Style 1/Style 2 buttons
+  * src/app/admin/mockups/qr-salon/sample-data.ts — qrSize=360 (should be 180) ❌, all other defaults match user spec ✓
+- Wrote /home/z/my-project/download/tsk-0023-speaker-meet-style-2-3-plan.md (comprehensive preview document, 9 parts + 3 appendices):
+  * Part 0: Critical findings (PDF gap, current Style 2 status table, current meet-the-speaker status table, QR-salon defaults comparison, toolbar state across all 3 mockups)
+  * Part 1: Speaker-Intro Style 2 authoritative spec — ASCII layout diagram, layer order table, section-by-section spec A-J (hero+gradient, sponsors as logos, Edit Images/Sections enabled, speaker card redesign, brandingAsset, topLogoUrl, erase meerkat, QR 3× larger, grid columns configurable, textStyles applied)
+  * Part 2: Meet-the-Speaker spec — Style 1 defaults (unchanged), Style 2 fixes (show venue, show topic, gradient shape selector, translucent cards), Style 3 DEFERRED pending user reference
+  * Part 3: QR-Salon spec — defaults table, "middle-aligned" contradiction flagged, canvas size confirmed
+  * Part 4: Toolbar reorder spec — ASCII layout, per-mockup change table
+  * Part 5: File map — 11 source files to modify, ~1,200 lines estimated
+  * Part 6: Execution phases — 10 phases (0 pre-flight → 9 final verify), each independently committable
+  * Part 7: 7 decision points requiring user reply before Phase 1 starts (PDF gap, speaker card company position, QR middle-aligned interpretation, topLogoUrl sync, style2LayerZ rename, execution order, deploy trigger)
+  * Part 8: Risk assessment — 8 risks with likelihood/impact/mitigation
+  * Part 9: Approval gate — reply format, what happens after reply, how to modify spec
+  * Appendix A: Source audit summary file-by-file (8 files)
+  * Appendix B: Full VLM analysis of Speaker Intro Style 2.png
+  * Appendix C: Glossary (SectionBox, style2LayerZ, style2HeroGradient, textStyles, SectionLayout, ImageSlot)
+- Did NOT deploy, did NOT commit, did NOT modify any source code. Only modified docs/tasks.md (added TSK-0023 entry), worklog.md (this entry), and created download/tsk-0023-speaker-meet-style-2-3-plan.md (the preview).
+
+Stage Summary:
+- TSK-0023 registered in docs/tasks.md as 23rd entry. Status: IN_PROGRESS. Category: HIGH.
+- Comprehensive preview document saved at /home/z/my-project/download/tsk-0023-speaker-meet-style-2-3-plan.md (9 parts + 3 appendices, ~1,200 lines).
+- 7 decision points identified requiring user reply before Phase 1 starts. Most critical: Decision 1 (PDF reference gap — Style 3 of meet-the-speaker cannot be spec'd without a reference), Decision 2 (speaker card company position — text spec says "below title", HTML snippet says "same line with · separator"), Decision 3 (QR "middle-aligned" — contradicts explicit positions 15.3/10 and 17.8/2.8).
+- 10-phase execution plan: Phase 0 pre-flight (no code), Phases 1-9 code changes (toolbar reorder, QR defaults, Style 1 fixes, Style 2 layer fix + brandingAsset + topLogoUrl, Style 2 sponsors + QR + grid + textStyles, Style 2 card redesign + Edit Images wiring, Meet-Style-2 fixes, optional Meet-Style-3, final verify). Each phase independently committable.
+- 11 source files identified for modification: speaker-intro/types.ts, speaker-intro-style2-canvas.tsx, speaker-intro-canvas.tsx, speaker-intro-editor.tsx, shared/speaker-intro-form-view.tsx, meet-the-speaker/types.ts, meet-the-speaker-canvas.tsx, meet-the-speaker-editor.tsx, shared/meet-the-speaker-form-view.tsx, qr-salon/sample-data.ts, qr-salon-editor.tsx. Estimated ~1,200 lines changed.
+- 8 risks identified; top 3: PDF gap forces Style 3 re-do, style2LayerZ rename breaks saved JSON (mitigated by backward-compat alias), topLogoUrl sync requires chapter branding lookup that may not exist (mitigated by fallback to default URL).
+- NO deploy, NO commit, NO source code changes. User reviews preview document and replies with decisions before any work begins.
+- Next step: wait for user to reply with Decision 1-7 answers (format specified in Part 9.1 of the preview document).
