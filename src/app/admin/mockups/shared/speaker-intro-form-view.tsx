@@ -54,6 +54,195 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
 
   return (
     <div className="space-y-5 p-4 bg-white text-black max-h-[640px] overflow-y-auto text-sm">
+      {/* ===== STYLE SELECTOR ===== */}
+      <Section title="Style">
+        <Field label="Layout style">
+          <select
+            value={data.style ?? "style1"}
+            onChange={(e) => update((d) => { d.style = e.target.value as "style1" | "style2" | "style3"; })}
+            className="form-input"
+          >
+            <option value="style1">Style 1 — Hero on right, text on left</option>
+            <option value="style2">Style 2 — Hero fills canvas, gradient shape overlay</option>
+            <option value="style3">Style 3 — Same as Style 2 (different QR position)</option>
+          </select>
+          <span className="text-[0.6rem] text-black/60 mt-0.5 block">
+            Style 2/3: hero image fills the entire canvas. A configurable gradient
+            shape sits on top of the hero. Text sections (header, topic, speakers,
+            qr, sponsors) are overlaid as draggable SectionBoxes.
+          </span>
+        </Field>
+      </Section>
+
+      {/* ===== STYLE 2 — HERO GRADIENT SHAPE ===== */}
+      {(data.style === "style2" || data.style === "style3") && (
+        <Section title="Style 2 — Hero gradient shape">
+          <Field label="Shape">
+            <select
+              value={data.style2HeroGradient?.shape ?? "rectangle"}
+              onChange={(e) => update((d) => {
+                if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                d.style2HeroGradient.shape = e.target.value as
+                  | "rectangle" | "circle" | "oval" | "triangle" | "square"
+                  | "pentagon" | "hexagon" | "octagon"
+                  | "sphere" | "cube" | "cone" | "cylinder" | "pyramid";
+              })}
+              className="form-input"
+            >
+              <optgroup label="2D plane shapes">
+                <option value="rectangle">Rectangle (full panel)</option>
+                <option value="circle">Circle</option>
+                <option value="oval">Oval / Ellipse</option>
+                <option value="triangle">Triangle</option>
+                <option value="square">Square</option>
+                <option value="pentagon">Pentagon (5 sides)</option>
+                <option value="hexagon">Hexagon (6 sides)</option>
+                <option value="octagon">Octagon (8 sides)</option>
+              </optgroup>
+              <optgroup label="3D solid shapes">
+                <option value="sphere">Sphere</option>
+                <option value="cube">Cube</option>
+                <option value="cone">Cone</option>
+                <option value="cylinder">Cylinder</option>
+                <option value="pyramid">Pyramid</option>
+              </optgroup>
+            </select>
+          </Field>
+
+          <Field label="Shape rotation (degrees, 0–360)">
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={360}
+                step={15}
+                value={data.style2HeroGradient?.rotation ?? 0}
+                onChange={(e) => update((d) => {
+                  if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                  d.style2HeroGradient.rotation = Number(e.target.value) || 0;
+                })}
+                className="form-input w-20"
+              />
+              <div className="flex flex-wrap gap-1">
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+                  <button
+                    key={deg}
+                    type="button"
+                    onClick={() => update((d) => {
+                      if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                      d.style2HeroGradient.rotation = deg;
+                    })}
+                    className="px-2 py-1 text-[0.65rem] rounded border border-black/20 hover:bg-black/5"
+                  >
+                    {deg}°
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => update((d) => {
+                    if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                    d.style2HeroGradient.rotation = 0;
+                  })}
+                  className="px-2 py-1 text-[0.65rem] rounded border border-black/20 hover:bg-black/5"
+                  title="Reset to 0°"
+                >
+                  ↺
+                </button>
+              </div>
+            </div>
+            <span className="text-[0.6rem] text-black/60 mt-0.5 block">
+              2D shapes rotate via CSS transform. 3D shapes rotate the SVG group.
+              The gradient direction (below) is independent of shape rotation.
+            </span>
+          </Field>
+
+          <Field label="Gradient direction (degrees, 0–360)">
+            <input
+              type="number"
+              min={0}
+              max={360}
+              value={data.style2HeroGradient?.direction ?? 135}
+              onChange={(e) => update((d) => {
+                if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                d.style2HeroGradient.direction = Number(e.target.value) || 0;
+              })}
+              className="form-input w-24"
+            />
+          </Field>
+
+          <Field label="Opacity (0–1)">
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={data.style2HeroGradient?.opacity ?? 0.85}
+              onChange={(e) => update((d) => {
+                if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                d.style2HeroGradient.opacity = Number(e.target.value) || 0;
+              })}
+              className="form-input w-24"
+            />
+          </Field>
+
+          <Field label="Gradient colors (one per line)">
+            <textarea
+              rows={3}
+              value={(data.style2HeroGradient?.colors ?? data.event.brandColors ?? []).join("\n")}
+              onChange={(e) => update((d) => {
+                if (!d.style2HeroGradient) d.style2HeroGradient = {};
+                d.style2HeroGradient.colors = e.target.value
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+              })}
+              className="form-input font-mono text-xs"
+              placeholder="#ff0056&#10;#8f0080"
+            />
+          </Field>
+
+          <Field label="Layer order (Style 2 — front/back)">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {([
+                { key: "background", label: "Background (gradient shape)", def: 1 },
+                { key: "hero", label: "Hero image", def: 2 },
+                { key: "qr", label: "QR code", def: 3 },
+                { key: "speakers", label: "Speakers panel", def: 4 },
+              ] as const).map(({ key, label, def }) => (
+                <div key={key} className="flex items-center gap-2">
+                  <span className="flex-1 text-[0.7rem] text-black/70">{label}</span>
+                  <input
+                    type="number"
+                    value={data.style2LayerZ?.[key] ?? def}
+                    onChange={(e) => update((d) => {
+                      if (!d.style2LayerZ) d.style2LayerZ = {};
+                      d.style2LayerZ[key] = Number(e.target.value) || 0;
+                    })}
+                    className="form-input w-14"
+                  />
+                </div>
+              ))}
+            </div>
+            <span className="text-[0.6rem] text-black/60 mt-0.5 block">
+              Higher number = in front. Default: bg=1 &lt; hero=2 &lt; qr=3 &lt; speakers=4 (speakers on top).
+            </span>
+          </Field>
+
+          <Field label="Speakers panel background">
+            <input
+              type="text"
+              value={data.speakersLayout?.panelBg ?? "#FFFFFF"}
+              onChange={(e) => update((d) => {
+                if (!d.speakersLayout) d.speakersLayout = {};
+                d.speakersLayout.panelBg = e.target.value;
+              })}
+              className="form-input font-mono"
+              placeholder="#FFFFFF"
+            />
+          </Field>
+        </Section>
+      )}
+
       {/* ===== EVENT ===== */}
       <Section title="Event">
         <Field label="Event name">

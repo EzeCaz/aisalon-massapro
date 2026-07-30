@@ -125,6 +125,19 @@ export type LocationPin = {
 };
 
 export type SpeakerIntroData = {
+  /**
+   * Visual style preset. Controls the overall canvas layout.
+   *   - "style1" (default): Hero on right, text sections on left, QR top-right.
+   *   - "style2": Hero fills entire canvas, gradient shape overlay behind hero,
+   *     text sections (venue/topic/speakers/qr/sponsors) overlaid on top.
+   *     Supports configurable gradient shape (13 options) + rotation.
+   *   - "style3": Same as Style 2 but with QR at a different default position.
+   *
+   * Per user spec 2026-07-30: Style 2/3 requested with gradient shape selector
+   * (2D + 3D) + rotation, venue + topic visible at Style 1 positions, new
+   * card-based speaker design with white panel fill.
+   */
+  style?: "style1" | "style2" | "style3";
   event: {
     name: string;
     date: string;

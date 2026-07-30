@@ -26,6 +26,7 @@ import type {
 import type { SectionId, SectionPos } from "../shared/section-edit";
 import { SAMPLE_DATA } from "./sample-data";
 import { SpeakerIntroCanvas } from "./speaker-intro-canvas";
+import { SpeakerIntroStyle2Canvas } from "./speaker-intro-style2-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
 import { SpeakerIntroFormView } from "../shared/speaker-intro-form-view";
@@ -51,7 +52,7 @@ import {
  *   3. Edit JSON directly → canvas re-renders live.
  */
 
-const STORAGE_KEY = "speaker-intro-data-v2";
+const STORAGE_KEY = "speaker-intro-data-v3";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */
@@ -903,26 +904,39 @@ export function SpeakerIntroEditor({ events }: Props) {
                 height: "800px",
               }}
             >
-              <SpeakerIntroCanvas
-                ref={canvasRef}
-                data={data}
-                editable={editMode}
-                sectionsEditable={sectionsEditMode}
-                previewScale={previewScale}
-                onPickImage={handlePickImage}
-                onPlacementChange={handlePlacementChange}
-                onSizeChange={handleSizeChange}
-                onSectionMove={handleSectionMove}
-                onSectionResize={handleSectionResize}
-                onSectionBoxResize={handleSectionBoxResize}
-                onHeroZChange={handleHeroZChange}
-                onTriangleZChange={handleTriangleZChange}
-                onHeroScaleXChange={handleHeroScaleXChange}
-                onHeroScaleYChange={handleHeroScaleYChange}
-                onSectionZChange={handleSectionZChange}
-                onBrandingAssetPosChange={handleBrandingAssetPosChange}
-                onHeroPosChange={handleHeroPosChange}
-              />
+              {data.style === "style2" || data.style === "style3" ? (
+                <SpeakerIntroStyle2Canvas
+                  ref={canvasRef}
+                  data={data}
+                  sectionsEditable={sectionsEditMode}
+                  previewScale={previewScale}
+                  onSectionMove={handleSectionMove}
+                  onSectionResize={handleSectionResize}
+                  onSectionBoxResize={handleSectionBoxResize}
+                  onSectionZChange={handleSectionZChange}
+                />
+              ) : (
+                <SpeakerIntroCanvas
+                  ref={canvasRef}
+                  data={data}
+                  editable={editMode}
+                  sectionsEditable={sectionsEditMode}
+                  previewScale={previewScale}
+                  onPickImage={handlePickImage}
+                  onPlacementChange={handlePlacementChange}
+                  onSizeChange={handleSizeChange}
+                  onSectionMove={handleSectionMove}
+                  onSectionResize={handleSectionResize}
+                  onSectionBoxResize={handleSectionBoxResize}
+                  onHeroZChange={handleHeroZChange}
+                  onTriangleZChange={handleTriangleZChange}
+                  onHeroScaleXChange={handleHeroScaleXChange}
+                  onHeroScaleYChange={handleHeroScaleYChange}
+                  onSectionZChange={handleSectionZChange}
+                  onBrandingAssetPosChange={handleBrandingAssetPosChange}
+                  onHeroPosChange={handleHeroPosChange}
+                />
+              )}
             </div>
           </div>
         </div>
