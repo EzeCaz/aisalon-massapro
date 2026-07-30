@@ -51,7 +51,7 @@ import {
  *   3. Edit JSON directly → canvas re-renders live.
  */
 
-const STORAGE_KEY = "speaker-intro-data-v1";
+const STORAGE_KEY = "speaker-intro-data-v2";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */

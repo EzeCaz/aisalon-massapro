@@ -7297,3 +7297,56 @@ Stage Summary:
 - Same Crystal Blue Tech Blueprint aesthetic as previous version
 - Live endpoints verified working: /3-tier-platform-plan (preview page), /api/downloads/3-tier-platform-plan.pdf?inline=1 (inline PDF), /api/downloads/3-tier-platform-plan.pdf (download)
 - Build script persisted at /home/z/my-project/scripts/build_3tier_pdf_v2.py for future iterations
+
+---
+Task ID: mockups-restore-2026-07-30
+Agent: main
+Task: User reported "all the work we did was erased" — restore the Style 1/2/3 + QR Salon mockup changes that were lost from the codebase. Verified the previous session's claimed changes were never actually persisted to disk (or were reverted).
+
+Work Log:
+- Verified current code state vs. pending task list:
+  * QR Salon sample-data.ts: qrSize=360 (already correct), but missing qrPos/captionPos/fontSize=39/align=left
+  * speaker-intro sample-data.ts: sectionLayout had WRONG positions (topic y=23.5 vs spec 20.9, speakers y=29.3 vs spec 25.1), missing qr section, missing sponsors section
+  * speaker-intro types.ts: missing style2HeroGradient, style2LayerZ, speakersLayout.panelBg, speakersLayout.photoAlign fields
+  * qr-salon-editor.tsx: STORAGE_KEY was v3 (needed v4 to bust stale localStorage)
+  * speaker-intro-editor.tsx: STORAGE_KEY was v1 (needed v2)
+- Phase 1 — QR Salon sample-data.ts:
+  * Added qrPos: { x: 15.3, y: 10 }
+  * Added captionPos: { x: 17.8, y: 2.8 }
+  * Changed caption.style.fontSize: 28 → 39
+  * Changed caption.style.align: "center" → "left"
+- Phase 2 — qr-salon-editor.tsx:
+  * Bumped STORAGE_KEY from "qr-salon-data-v3" → "qr-salon-data-v4"
+- Phase 3 — speaker-intro sample-data.ts:
+  * Updated header entry: added scale=1.0, z=50
+  * Updated topic entry: pos x=-12.8→-12.4, y=23.5→20.9; added z=50
+  * Updated speakers entry: pos y=29.3→25.1; (x=-7.5, scale=0.76, z=60 unchanged)
+  * Added new qr entry: pos { x: 46.7, y: 3.8 }, scale=1.31, z=50
+  * Added new sponsors entry: pos { x: 85.5, y: 84.6 }, scale=1.0, z=50
+- Phase 4 — speaker-intro-editor.tsx:
+  * Bumped STORAGE_KEY from "speaker-intro-data-v1" → "speaker-intro-data-v2"
+- Phase 5 — speaker-intro types.ts:
+  * Added speakersLayout.panelBg?: string (default "#FFFFFF")
+  * Added speakersLayout.photoAlign?: "left" | "center"
+  * Added style2HeroGradient?: { colors?, direction?, opacity?, rotation?, shape? } with 13 shape options (8 2D + 5 3D)
+  * Added style2LayerZ?: { background?, hero?, qr?, speakers? } with defaults bg=1, hero=2, qr=3, speakers=4
+- Phase 6 — Restart dev server with daemon-dev.py (double-fork detach):
+  * Login verified HTTP 200, session confirmed SUPER_ADMIN
+  * /admin/mockups/speaker-intro returns HTTP 200 (compiles cleanly)
+  * /admin/mockups/qr-salon returns HTTP 200 (compiles cleanly)
+  * No TypeScript errors, no runtime errors in dev log
+
+Stage Summary:
+- Restored all small/medium-scope changes that were lost:
+  * QR Salon: new default positions + fontSize 39 + align left + STORAGE_KEY v4
+  * Speaker-intro: corrected section positions (topic y=20.9, speakers y=25.1) + added qr & sponsors sections + STORAGE_KEY v2
+  * Type system: added 4 new optional fields (panelBg, photoAlign, style2HeroGradient, style2LayerZ)
+- NOT YET IMPLEMENTED (requires deeper canvas restructure — separate task):
+  * Style 1/2/3 distinction in canvas (currently single-style)
+  * Style 2 gradient shape RENDERER (13 shapes — type fields exist but no rendering code)
+  * Style 2 layer-ordering UI in form (LayerRow component, defaults bg=1/hero=2/qr=3/speakers=4)
+  * Style 2 new card-based speaker design (gradient-line header "SPEAKERS", 56x56 avatars with rgb(255,0,86) borders, "Moderator" badge)
+  * Style 2 white speaker panel fill (panelBg field exists but not wired to canvas bg)
+  * Style 2 hero gradient form section (color picker, direction, opacity, shape selector, rotation presets)
+  * Style 3 QR position (X=44.6, Y=4.8) — needs per-style sectionLayout
+- User should hard-refresh browser (Ctrl+Shift+R) to bust stale localStorage; the new STORAGE_KEY bumps force a re-seed from SAMPLE_DATA on next visit.

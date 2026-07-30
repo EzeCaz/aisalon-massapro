@@ -181,6 +181,20 @@ export type SpeakerIntroData = {
     rowsPerColumn?: number[];
     flowDirection?: "row" | "col";
     lastRowAlign?: "left" | "center" | "spread";
+    /**
+     * Background fill of the speakers section panel (Style 2).
+     * Per user spec 2026-07-30: the speakers section should be a solid
+     * white panel (like Style 1), not transparent. Default "#FFFFFF".
+     */
+    panelBg?: string;
+    /**
+     * Photo alignment within each speaker card.
+     *   - "left"  (default): photo on the left, name/title/bio on the right
+     *   - "center": photo centered above name/title/bio
+     *
+     * Per user spec 2026-07-30 (Style 1): speakers aligned left.
+     */
+    photoAlign?: "left" | "center";
   };
   /**
    * Per-text-section font + color + alignment overrides. Each key matches
@@ -340,6 +354,61 @@ export type SpeakerIntroData = {
    * user override this if they want, but the default respects the spec.
    */
   triangleZ?: number;
+  /**
+   * Style 2 — Hero gradient shape behind/over the hero image.
+   *
+   * Per user spec 2026-07-30: the Style 2 background behind the hero
+   * image should support editing the shape (2D + 3D), maintaining the
+   * gradient and color fill.
+   *
+   *   - colors: gradient stops (CSS color strings). Default: brandColors.
+   *   - direction: gradient angle in degrees (0-360). Default 135.
+   *   - opacity: 0-1 multiplier on the whole gradient layer. Default 0.85.
+   *   - rotation: shape rotation in degrees (0-360). Default 0.
+   *   - shape: which shape to render. Default "rectangle" (full-panel).
+   *     2D shapes: rectangle | circle | oval | triangle | square |
+   *                pentagon | hexagon | octagon
+   *     3D shapes: sphere | cube | cone | cylinder | pyramid
+   */
+  style2HeroGradient?: {
+    colors?: string[];
+    direction?: number;
+    opacity?: number;
+    rotation?: number;
+    shape?:
+      | "rectangle"
+      | "circle"
+      | "oval"
+      | "triangle"
+      | "square"
+      | "pentagon"
+      | "hexagon"
+      | "octagon"
+      | "sphere"
+      | "cube"
+      | "cone"
+      | "cylinder"
+      | "pyramid";
+  };
+  /**
+   * Style 2 — Layer z-indices for the four stacked layers.
+   *
+   * Per user spec 2026-07-30: the speaker section must render ABOVE the
+   * hero/QR (i.e. on top), not below. This field lets the form override
+   * the default stacking order.
+   *
+   * Defaults:
+   *   - background: 1  (gradient shape layer, behind everything)
+   *   - hero:       2  (hero image, above background)
+   *   - qr:         3  (QR code, above hero)
+   *   - speakers:   4  (speakers panel, ABOVE all — top of stack)
+   */
+  style2LayerZ?: {
+    background?: number;
+    hero?: number;
+    qr?: number;
+    speakers?: number;
+  };
 };
 
 /**

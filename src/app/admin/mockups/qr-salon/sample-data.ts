@@ -26,15 +26,20 @@ export const SAMPLE_DATA: QrSalonData = {
   qrMargin: 2,
   qrDarkColor: "#000000",
   qrLightColor: "#FFFFFF",
+  // Per user spec 2026-07-30: QR positioned at X=15.3%, Y=10% of canvas.
+  qrPos: { x: 15.3, y: 10 },
   caption: {
     text: "Scan to register",
     style: {
-      fontSize: 28,
+      // Per user spec 2026-07-30: fontSize=39, align="left".
+      fontSize: 39,
       color: "#000000",
-      align: "center",
+      align: "left",
       fontWeight: "700",
     },
   },
+  // Per user spec 2026-07-30: caption positioned at X=17.8%, Y=2.8% of canvas.
+  captionPos: { x: 17.8, y: 2.8 },
   captionWidthPct: 80,
   background: "#FFFFFF",
   brandingAsset: {

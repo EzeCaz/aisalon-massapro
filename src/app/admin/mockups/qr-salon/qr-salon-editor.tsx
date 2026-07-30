@@ -44,7 +44,7 @@ import type {
  * All state persists in localStorage so a refresh doesn't lose work.
  */
 
-const STORAGE_KEY = "qr-salon-data-v3";
+const STORAGE_KEY = "qr-salon-data-v4";
 
 export function QrSalonEditor() {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);

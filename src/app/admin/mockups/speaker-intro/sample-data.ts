@@ -114,10 +114,13 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     pos: { x: 3.1021447721179625, y: 87.5656836461126 },
   },
   /**
-   * Default section layout per user spec 2026-07-09:
-   *   - D (speakers): pos X=-7.5% Y=29.3%, box W=891px, scale=0.76, z=front
-   *   - E (header):   pos X=1.7%  Y=0.5%,  box W=100% (1200px)
-   *   - F (topic):    pos X=-12.8% Y=23.5%, box W=951px, scale=0.65
+   * Default section layout per user spec 2026-07-30 (latest revision):
+   *   - header:   pos X=1.7   Y=0.5,  box W=1200px, scale=1.00, z=50
+   *   - topic:    pos X=-12.4 Y=20.9,  box W=951px,  scale=0.65, z=50
+   *   - speakers: pos X=-7.5  Y=25.1,  box W=891px,  scale=0.76, z=60
+   *   - qr:       pos X=46.7  Y=3.8,                scale=1.31, z=50
+   *   - sponsors: pos X=85.5  Y=84.6,               scale=1.00, z=50
+   *
    * The canvas's SectionBox reads these and overrides the inline default
    * left/top/width when present. User edits in the editor override these
    * via the same sectionLayout path.
@@ -126,19 +129,32 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     header: {
       pos: { x: 1.7, y: 0.5 },
       boxSize: { width: 1200 },
+      scale: 1.0,
+      z: 50,
     },
     topic: {
-      pos: { x: -12.8, y: 23.5 },
+      pos: { x: -12.4, y: 20.9 },
       boxSize: { width: 951 },
       scale: 0.65,
+      z: 50,
     },
     speakers: {
-      pos: { x: -7.5, y: 29.3 },
+      pos: { x: -7.5, y: 25.1 },
       boxSize: { width: 891 },
       scale: 0.76,
       // "Layer front all" — render above other text sections (TEXT_Z=50)
       // and above the branding asset (z=52).
       z: 60,
+    },
+    qr: {
+      pos: { x: 46.7, y: 3.8 },
+      scale: 1.31,
+      z: 50,
+    },
+    sponsors: {
+      pos: { x: 85.5, y: 84.6 },
+      scale: 1.0,
+      z: 50,
     },
   },
 };
