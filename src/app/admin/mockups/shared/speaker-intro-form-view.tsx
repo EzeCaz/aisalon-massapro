@@ -57,16 +57,39 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
       {/* ===== STYLE SELECTOR ===== */}
       <Section title="Style">
         <Field label="Layout style">
-          <select
-            value={data.style ?? "style1"}
-            onChange={(e) => update((d) => { d.style = e.target.value as "style1" | "style2" | "style3"; })}
-            className="form-input"
-          >
-            <option value="style1">Style 1 — Hero on right, text on left</option>
-            <option value="style2">Style 2 — Hero fills canvas, gradient shape overlay</option>
-            <option value="style3">Style 3 — Same as Style 2 (different QR position)</option>
-          </select>
-          <span className="text-[0.6rem] text-black/60 mt-0.5 block">
+          <div className="grid grid-cols-3 gap-1.5">
+            {([
+              { value: "style1", label: "Style 1", sub: "Hero right · text left" },
+              { value: "style2", label: "Style 2", sub: "Hero fill · gradient shape" },
+              { value: "style3", label: "Style 3", sub: "Style 2 · QR repositioned" },
+            ] as const).map((opt) => {
+              const active = (data.style ?? "style1") === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => update((d) => { d.style = opt.value; })}
+                  className={`rounded-md border px-2 py-2 text-left transition ${
+                    active
+                      ? "border-[#FF005A] bg-[#FF005A] text-white shadow-sm"
+                      : "border-black/15 bg-white text-black hover:bg-black/5"
+                  }`}
+                >
+                  <span className="block text-[0.78rem] font-bold leading-tight">
+                    {opt.label}
+                  </span>
+                  <span
+                    className={`block text-[0.6rem] leading-tight mt-0.5 ${
+                      active ? "text-white/80" : "text-black/55"
+                    }`}
+                  >
+                    {opt.sub}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[0.6rem] text-black/60 mt-1.5 block">
             Style 2/3: hero image fills the entire canvas. A configurable gradient
             shape sits on top of the hero. Text sections (header, topic, speakers,
             qr, sponsors) are overlaid as draggable SectionBoxes.

@@ -7350,3 +7350,32 @@ Stage Summary:
   * Style 2 hero gradient form section (color picker, direction, opacity, shape selector, rotation presets)
   * Style 3 QR position (X=44.6, Y=4.8) — needs per-style sectionLayout
 - User should hard-refresh browser (Ctrl+Shift+R) to bust stale localStorage; the new STORAGE_KEY bumps force a re-seed from SAMPLE_DATA on next visit.
+
+---
+Task ID: style-buttons-fix
+Agent: main
+Task: Two fixes from user feedback:
+  1. Fix next/image hostname error for `uojldinyokysycfc.public.blob.vercel-storage.com`
+  2. Convert Style selector dropdown to Style buttons (Style 1 / Style 2 / Style 3) — both in the toolbar and in the form view
+
+Work Log:
+- Read next.config.ts — no images config existed; next/image was rejecting all Vercel Blob URLs.
+- Added `images.remotePatterns` to next.config.ts allowing:
+  * *.public.blob.vercel-storage.com  (the failing host)
+  * public.blob.vercel-storage.com
+  * *.vercel-storage.com              (catch-all)
+  * images.unsplash.com / lh3.googleusercontent.com / avatars.githubusercontent.com (common extras)
+- Restarted dev server with cleared .next/cache to pick up the config change.
+- Verified: GET /_next/image?url=https://uojldinyokysycfc.public.blob.vercel-storage.com/...&w=128&q=75 → HTTP 200 (was 400 before).
+- speaker-intro-editor.tsx — added a Style 1 / Style 2 / Style 3 segmented button group at the very start of the toolbar (left of the Form/JSON toggle). Active style highlighted in #FF005A.
+- shared/speaker-intro-form-view.tsx — replaced the `<select>` dropdown under "Style → Layout style" with a 3-column grid of style buttons. Each button shows the style label (Style 1/2/3) + a one-line subtitle. Active button is filled in #FF005A with white text; inactive buttons are white with a black border.
+- Bumped STORAGE_KEY from v3 → v4 so any cached editor state gets re-loaded fresh with the new style fields.
+- Verified: HTTP 200 on /admin/mockups/speaker-intro, no compile errors in dev.log.
+
+Stage Summary:
+- next/image error fixed by adding images.remotePatterns in next.config.ts.
+- Style buttons (Style 1 / Style 2 / Style 3) now appear in TWO places:
+  1. Top toolbar of the editor (segmented button group, left of Form/JSON toggle) — always visible
+  2. "Style" section at the top of the form view (3-column button grid with subtitles)
+- The dropdown has been removed from the form view.
+- STORAGE_KEY bumped to v4.

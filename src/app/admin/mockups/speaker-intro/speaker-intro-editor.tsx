@@ -52,7 +52,7 @@ import {
  *   3. Edit JSON directly → canvas re-renders live.
  */
 
-const STORAGE_KEY = "speaker-intro-data-v3";
+const STORAGE_KEY = "speaker-intro-data-v4";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */
@@ -629,6 +629,40 @@ export function SpeakerIntroEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
+        {/* Style switcher — Style 1 / Style 2 / Style 3 */}
+        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+          {([
+            { value: "style1", label: "Style 1" },
+            { value: "style2", label: "Style 2" },
+            { value: "style3", label: "Style 3" },
+          ] as const).map((opt, i) => {
+            const active = (data.style ?? "style1") === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                  i > 0 ? "border-l border-black/10" : ""
+                } ${
+                  active
+                    ? "bg-[#FF005A] text-white"
+                    : "text-black hover:bg-black/5"
+                }`}
+                title={
+                  opt.value === "style1"
+                    ? "Style 1 — hero on right, text on left"
+                    : opt.value === "style2"
+                    ? "Style 2 — hero fills canvas, gradient shape overlay"
+                    : "Style 3 — same as Style 2 with QR repositioned"
+                }
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="h-5 w-px bg-black/15 mx-0.5" />
         {/* View-mode toggle: Form vs JSON */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
