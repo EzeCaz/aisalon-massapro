@@ -7449,3 +7449,46 @@ Stage Summary:
 - .env updated with NEXTAUTH_SECRET, NEXTAUTH_URL, ADMIN_EMAIL.
 - Dev server restarted to pick up new env vars.
 - Editor route returns HTTP 200 with auth cookie (no more redirect to /login).
+
+---
+Task ID: TSK-0006 — tasks-registry-and-protocol
+Agent: main
+Task: User requested (verbatim): "go back to all my last two days tasks, and create a md file call tasks, under the docs folder, and from now on generate a precise and meticulous registry of all my tasks, and provide to each one a unique serial id, that is ascending.... On the core folder add a task called task management, describing step by step how to implement this in every taks i request, starting from my las 48 hours tasks list"
+
+Work Log:
+- Reviewed project structure: confirmed docs/ folder exists (3 files), core/ folder exists with README.md, TASK_CATEGORIES.md, workflow.md, tasks/, team/, etc.
+- Read core/README.md (v1.1, 137 lines) and core/TASK_CATEGORIES.md (154 lines) to understand the existing constitution + tier system.
+- Read core/tasks/README.md and a sample task folder (2026-07-17-qr-salon-fix/brief.md) to understand the existing task-folder convention.
+- Extracted last 48 hours of work from worklog.md (7,415 lines) and git log --since="2026-07-29":
+  * TSK-0001 (2026-07-30) — mockups-restore-2026-07-30 (MID)
+  * TSK-0002 (2026-07-30) — Style 2 canvas: hero-fill + 13-shape gradient selector + rotation (HIGH)
+  * TSK-0003 (2026-07-30) — style-buttons-fix (SMALL)
+  * TSK-0004 (2026-07-30) — page-not-loading-fix (MID)
+  * TSK-0005 (2026-07-30) — login-not-working-fix (SMALL)
+- Created /home/z/my-project/docs/tasks.md (the registry):
+  * Defines TSK-XXXX serial ID format (zero-padded ascending integer, immutable, never reused).
+  * 8 columns: Serial, Date, Title, Category, Status, Worklog Ref, Files Touched, Outcome.
+  * Back-filled TSK-0001 → TSK-0006 with full per-task detail.
+  * Includes a "Pre-Registry History" reference table for tasks before 2026-07-29 (not back-filled with serial IDs — registry is forward-only).
+  * "How to Add a New Task" section with 6 steps.
+- Created /home/z/my-project/core/task-management.md (the protocol):
+  * 7-step intake-to-close protocol: Intake → Triage → Create task folder → Implement (per tier) → Reference serial ID everywhere → Verify → Close.
+  * "Worked Example" table showing TSK-0001 → TSK-0006 with tier justifications.
+  * "Anti-Patterns" section listing 5 failure modes from the last 48 hours that this protocol cures (claimed-done-but-never-persisted, silent context loss, no traceability, wrong tier applied, infra fixes mixed with feature work).
+  * "Current Task" header for session continuity.
+  * Amendment process + v1.0 changelog entry.
+- Updated /home/z/my-project/core/README.md:
+  * Added "Intake rule (v1.2, 2026-07-31)" block at the top alongside the existing Golden rule + Triage rule.
+  * Added 5th item to "Why this exists" list: serial-ID task registry.
+  * Updated Folder Layout to show core/task-management.md and the new task folder naming convention <YYYY-MM-DD>-TSK-<XXXX>-<slug>/.
+  * Added docs/tasks.md as a companion file outside core/.
+  * Added v1.2 changelog entry.
+- Bumped core/ constitution version from v1.1 → v1.2.
+
+Stage Summary:
+- New permanent artifacts:
+  * /home/z/my-project/docs/tasks.md — the live task registry (TSK-XXXX index)
+  * /home/z/my-project/core/task-management.md — the 7-step intake-to-close protocol
+- Updated /home/z/my-project/core/README.md to v1.2 (added Intake rule, 5th "Why this exists" item, updated folder layout, added changelog entry).
+- Registry is back-filled with TSK-0001 → TSK-0006 (the last 48 hours) so it starts with real history, not an empty page.
+- From TSK-0007 onward, every user request will be logged in docs/tasks.md BEFORE work begins, with the serial ID referenced in commits, worklog, task folder, and user-facing replies.
