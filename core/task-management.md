@@ -2,7 +2,7 @@
 
 > *Every task — no exceptions — flows through this protocol.*
 >
-> **Purpose**: Defines the step-by-step process that Z (the main agent) MUST follow for every task requested by the user, starting from the last 48 hours of tasks (TSK-0001 onward). This file sits alongside `core/workflow.md` (the 11-gate agent workflow) and `core/TASK_CATEGORIES.md` (the SMALL/MID/HIGH tier definitions) — it is the **intake + tracking** layer that runs BEFORE the workflow picks a tier.
+> **Purpose**: Defines the step-by-step process that Z (the main agent) MUST follow for every task requested by the user, starting from the last 72 hours of tasks (TSK-0001 onward). This file sits alongside `core/workflow.md` (the 11-gate agent workflow) and `core/TASK_CATEGORIES.md` (the SMALL/MID/HIGH tier definitions) — it is the **intake + tracking** layer that runs BEFORE the workflow picks a tier.
 >
 > **Owner**: Z (the main agent), acting as Meridian's proxy for intake + Codex's proxy for the registry.
 >
@@ -12,7 +12,7 @@
 
 ## Why this protocol exists
 
-Over the last 48 hours (2026-07-29 → 2026-07-31), five tasks were worked on (TSK-0001 → TSK-0005) without a shared registry. The worklog (`/home/z/my-project/worklog.md`) captured the *execution detail*, but there was no single index that answered:
+Over the last 72 hours (2026-07-28 → 2026-07-31), eleven tasks were worked on (TSK-0001 → TSK-0011) without a shared registry initially. The worklog (`/home/z/my-project/worklog.md`) captured the *execution detail*, but there was no single index that answered:
 
 - *What was asked, in the user's words?*
 - *What serial ID does this task have?*
@@ -123,9 +123,9 @@ If the task is BLOCKED (cannot complete due to an external dependency) or CANCEL
 
 ---
 
-## Worked Example — TSK-0001 through TSK-0006
+## Worked Example — TSK-0001 through TSK-0011
 
-The six tasks below are the seed of this registry. They show the protocol applied to real work over the last 48 hours. Each one followed (or is following) the 7 steps above.
+The eleven tasks below are the seed of this registry. They show the protocol applied to real work over the last 72 hours. TSK-0001 → TSK-0006 were registered first (most recent visible work); TSK-0007 → TSK-0011 were back-filled after a worklog audit discovered five additional tasks (EXPLORE-1, PLAN-1, IMPL-1, PDF-1, PDF-2) that pre-dated TSK-0001 but had never been registered.
 
 | Serial | Date | Title | Category | Status | Tier-justification |
 |---|---|---|---|---|---|
@@ -134,7 +134,12 @@ The six tasks below are the seed of this registry. They show the protocol applie
 | **TSK-0003** | 2026-07-30 | Fix `next/image` hostname error + convert Style selector dropdown to Style 1 / Style 2 / Style 3 buttons | SMALL | DONE | `next.config.ts` add only + small UI tweak to swap a `<select>` for buttons. No DB, no existing-UI change beyond the dropdown swap. |
 | **TSK-0004** | 2026-07-30 | Editor page "not loading" — restore dead dev server + recreate missing SQLite DB | MID | DONE | Touched infrastructure (dev server, DB file) but no source code beyond a new seed script. MID because it touched multiple systems. |
 | **TSK-0005** | 2026-07-30 | Login fails with "Incorrect email or password" — add missing NEXTAUTH_SECRET to .env | SMALL | DONE | Single-file fix (`.env`). No source code changes. SMALL. |
-| **TSK-0006** | 2026-07-31 | Build this task registry (`docs/tasks.md`) + task-management protocol (`core/task-management.md`) | MID | IN_PROGRESS | New docs + protocol update. No DB, but new persistent artifact + cross-references to existing core/ system. |
+| **TSK-0006** | 2026-07-31 | Build this task registry (`docs/tasks.md`) + task-management protocol (`core/task-management.md`) | MID | DONE | New docs + protocol update. No DB, but new persistent artifact + cross-references to existing core/ system. Seeded with TSK-0001 → TSK-0005, then back-filled TSK-0007 → TSK-0011 after user feedback that the registry was missing 72-hour work. |
+| **TSK-0007** | 2026-07-28 | Inventory current platform codebase for 3-tier multi-tenancy planning *(back-filled from `EXPLORE-1`)* | MID | DONE | Read-only inventory (no source modifications). MID because it produced a comprehensive 15-section inventory that fed into a HIGH planning task. |
+| **TSK-0008** | 2026-07-28 | Architect 3-tier (Global→Country→City/Chapter) completion plan — 7-phase migration *(back-filled from `PLAN-1`)* | HIGH | DONE | 12-section plan covering schema, scope switcher, brand assets, email tier resolver, timezone, scope enforcement, cleanup + i18n. HIGH because it touches `prisma/schema.prisma`, ~30 API routes, and every admin page. |
+| **TSK-0009** | 2026-07-29 | Stress-test PLAN-1 + produce Implementation Feasibility Addendum *(back-filled from `IMPL-1`)* | HIGH | DONE | Read-only feasibility analysis. HIGH because it discovered 5 critical risk hotspots (build-script footgun, EmailQueue write-path gap, Socket.IO scope gap, timezone scope, Event.chapter drop audit) that block PLAN-1's Phase 1. |
+| **TSK-0010** | 2026-07-29 | Create downloadable PDF of the 3-tier platform plan *(back-filled from `PDF-1`)* | MID | DONE | 36-page PDF using ReportLab + Cover Template 07 Crystal Blue. MID because it's a new artifact with persistent build scripts, but no source code or DB impact. |
+| **TSK-0011** | 2026-07-30 | Apply 9 user decisions to the PDF + erase Z.ai mentions → MassaPro team *(back-filled from `PDF-2`)* | MID | DONE | 64-page PDF rewrite + new ~920-line build script. MID because it's a substantial revision of an existing artifact with brand-level changes. |
 
 For the full per-task detail (files touched, outcome, worklog reference), see [`/home/z/my-project/docs/tasks.md`](../docs/tasks.md).
 
@@ -142,7 +147,7 @@ For the full per-task detail (files touched, outcome, worklog reference), see [`
 
 ## Anti-Patterns (what NOT to do)
 
-These are the failure modes that this protocol exists to prevent. They all happened in the last 48 hours; the protocol is the cure.
+These are the failure modes that this protocol exists to prevent. They all happened in the last 72 hours; the protocol is the cure.
 
 ### ❌ Anti-pattern 1 — "Claimed done but never persisted"
 
@@ -154,7 +159,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 > Each new session had no idea what the previous session had worked on. The user had to re-explain everything: "review all chats from yesterday until today and re-do all changes."
 
-**Protocol cure**: The registry is a single file (`docs/tasks.md`) that any new session reads first. The serial IDs give an instant overview of the last 48 hours without needing to grep the 7,400-line worklog.
+**Protocol cure**: The registry is a single file (`docs/tasks.md`) that any new session reads first. The serial IDs give an instant overview of the last 72 hours without needing to grep the 7,400-line worklog.
 
 ### ❌ Anti-pattern 3 — "No traceability from request to commit"
 
@@ -178,7 +183,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 ## Current Task
 
-> **TSK-0006** — Build this task registry (`docs/tasks.md`) + task-management protocol (`core/task-management.md`). Status: `IN_PROGRESS`. Category: `MID`. Files touched: `docs/tasks.md` (new), `core/task-management.md` (this file, new), `core/README.md` (updated to reference this protocol).
+> **No task in flight.** TSK-0006 (the registry + protocol itself) is now `DONE` — the registry at `docs/tasks.md` holds all 11 back-filled tasks (TSK-0001 → TSK-0011) covering the last 72 hours (2026-07-28 → 2026-07-31). The next task the user requests will be logged as `TSK-0012` BEFORE work begins, per Step 1 of the protocol.
 
 When a new session starts, read this section first to know what's in flight. Update it before ending a session so the next agent can pick up seamlessly.
 
@@ -197,3 +202,4 @@ This protocol can be amended by the user at any time. When amended:
 ## Changelog
 
 - **v1.0** (2026-07-31) — Initial protocol. 7-step intake-to-close process. Serial ID format `TSK-XXXX`. Back-filled with TSK-0001 → TSK-0006 (the last 48 hours of work) as the seed registry. Approved by the user.
+- **v1.1** (2026-07-31) — After user feedback that the registry was missing tasks from the last 72 hours, audited the worklog and back-filled 5 additional tasks (EXPLORE-1, PLAN-1, IMPL-1, PDF-1, PDF-2) as TSK-0007 → TSK-0011. Expanded the registry window from 48h to 72h. Added the "Back-fill rule" to the Serial ID Rules in `docs/tasks.md` to formalize the ascending-ID-even-with-earlier-dates pattern. TSK-0006 marked DONE. Next user request will be TSK-0012.

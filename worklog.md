@@ -7492,3 +7492,44 @@ Stage Summary:
 - Updated /home/z/my-project/core/README.md to v1.2 (added Intake rule, 5th "Why this exists" item, updated folder layout, added changelog entry).
 - Registry is back-filled with TSK-0001 → TSK-0006 (the last 48 hours) so it starts with real history, not an empty page.
 - From TSK-0007 onward, every user request will be logged in docs/tasks.md BEFORE work begins, with the serial ID referenced in commits, worklog, task folder, and user-facing replies.
+
+---
+Task ID: TSK-0006 — tasks-registry-and-protocol (v1.1 back-fill)
+Agent: Super Z (main)
+Task: User reported that docs/tasks.md was missing "most of the last 20 tasks" and that "all the tasks in the last 72 hours are not listed." Audit the worklog, find the missing tasks, and back-fill them into the registry with ascending serial IDs.
+
+Work Log:
+- Read existing docs/tasks.md (191 lines) — found only TSK-0001 → TSK-0006 registered, with a "Pre-Registry History" reference table covering earlier work.
+- Read existing core/task-management.md (200 lines) — confirmed it described a 48-hour window and listed only 6 tasks in its worked-example table.
+- Ran `grep -n "^Task ID:" /home/z/my-project/worklog.md` to enumerate all 50 worklog entries.
+- Cross-referenced worklog entries against the registry. Found 5 entries with no serial ID:
+  * EXPLORE-1 (line 4571) — codebase inventory for 3-tier multi-tenancy planning
+  * PLAN-1   (line 5263) — 3-tier completion plan, 7-phase migration
+  * IMPL-1   (line 6652) — feasibility addendum stress-testing PLAN-1
+  * PDF-1    (line 7218) — 36-page PDF of the 3-tier plan
+  * PDF-2    (line 7252) — 64-page PDF with 9 user decisions + MassaPro rebrand
+- Verified chronological order: all 5 entries appear BEFORE mockups-restore-2026-07-30 (TSK-0001) in the worklog, meaning they pre-date the registry but fall within the last 72 hours (2026-07-28 → 2026-07-30).
+- Read the full Work Log + Stage Summary of each missing entry to extract: files touched, outcome, category.
+- Verified via `git log --since="72 hours ago"` that the only code commits in the window were the 3 already-attributed to TSK-0002 (493d5b0), TSK-0003 (b60c885), TSK-0004 (4b0e4ba), and TSK-0006 (3a26426). EXPLORE-1/PLAN-1/IMPL-1 produced no commits (research/planning only); PDF-1/PDF-2 produced files in /download/ and /upload/ but no git commits.
+- Updated docs/tasks.md:
+  * Expanded section header from "Last 48 Hours (2026-07-29 → 2026-07-31)" to "Last 72 Hours (2026-07-28 → 2026-07-31)".
+  * Added a 7th Serial ID Rule: "Back-fill rule" — when previously-unlogged work is discovered, it receives the next available serial ID (not a retroactive earlier one). The Date field reflects when the work actually happened; the serial ID reflects when it was registered.
+  * Added TSK-0007 → TSK-0011 as 5 new sections, each marked *(back-filled)* in the title and pointing at the original worklog slug (EXPLORE-1, PLAN-1, IMPL-1, PDF-1, PDF-2) as the Worklog Ref.
+  * Marked TSK-0006 as DONE (was IN_PROGRESS).
+  * Expanded the "Pre-Registry History" reference table to include the 8 tasks between ~2026-07-14 and ~2026-07-15 that were previously omitted (tasks 5-11, launch-flow-bugs, 11-cleanup-endpoint, 11-cleanup-button-visibility, 12-backup-db, 13-meet-the-speaker-style1-preserve, 14-meet-the-speaker-v4-header-metagraphic, 15-force-send-stage-2).
+- Updated core/task-management.md:
+  * Bumped "Why this protocol exists" from "last 48 hours / five tasks" to "last 72 hours / eleven tasks".
+  * Replaced the 6-row worked-example table with an 11-row table including TSK-0007 → TSK-0011 with tier justifications.
+  * Updated "Current Task" section: was "TSK-0006 IN_PROGRESS"; now "No task in flight. TSK-0006 DONE. Next request will be TSK-0012."
+  * Updated both stale "last 48 hours" references in the Anti-Patterns section to "last 72 hours".
+  * Added v1.1 changelog entry documenting the back-fill.
+- No source code (src/) or Prisma schema changes — docs + protocol only.
+
+Stage Summary:
+- docs/tasks.md now holds 11 registered tasks (TSK-0001 → TSK-0011) covering 2026-07-28 → 2026-07-31 (72 hours).
+- 5 previously-unlogged tasks back-filled: EXPLORE-1 → TSK-0007, PLAN-1 → TSK-0008, IMPL-1 → TSK-0009, PDF-1 → TSK-0010, PDF-2 → TSK-0011.
+- New "Back-fill rule" added to the Serial ID Rules: ascending IDs even when dates are earlier, so historical work can be registered without rewriting existing IDs.
+- core/task-management.md bumped to v1.1 with 11-row worked-example table and updated "Current Task" pointer.
+- TSK-0006 marked DONE. Next user request will be logged as TSK-0012 BEFORE work begins, per Step 1 of the protocol.
+- Files modified: docs/tasks.md (rewritten), core/task-management.md (edited in place), /home/z/my-project/scripts/append_worklog_backfill.py (this script).
+- No git commit made (user has not requested one); the user can commit when ready with message like `[TSK-0006] Back-fill 5 missing tasks into registry (TSK-0007 → TSK-0011)`.
