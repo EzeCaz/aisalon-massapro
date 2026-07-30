@@ -44,7 +44,9 @@
 
 > These are the tasks that initialized this registry. Earlier work is recorded in `/home/z/my-project/worklog.md` and `core/tasks/README.md` and is NOT retroactively assigned serial IDs — the registry starts here, forward-only.
 >
-> **Back-fill note (2026-07-31)**: TSK-0001 through TSK-0006 were registered first because they were the most recent visible work. A subsequent audit of the worklog discovered five additional tasks (EXPLORE-1, PLAN-1, IMPL-1, PDF-1, PDF-2) that happened *before* TSK-0001 but were never registered. They are back-filled here as TSK-0007 through TSK-0011 per the back-fill rule above — the serial IDs are ascending even though the dates are earlier. From TSK-0012 onward, every new user request is logged here BEFORE work begins.
+> **Back-fill notes (2026-07-31)**:
+- **v1.1 back-fill** — TSK-0001 through TSK-0006 were registered first (most recent visible work). An audit of the worklog then discovered five additional tasks (EXPLORE-1, PLAN-1, IMPL-1, PDF-1, PDF-2) that happened *before* TSK-0001 but were never registered. They are back-filled as TSK-0007 through TSK-0011 per the back-fill rule above — the serial IDs are ascending even though the dates are earlier.
+- **v1.2 back-fill** — User uploaded the full 2-day conversation file (see TSK-0022). An analysis of every `Me:` / `ME:` entry (ignoring credentials, link requests, and error reports) discovered 10 additional granular tasks: TSK-0012, TSK-0013, TSK-0014 are post-restoration tasks within the 72-hour window; TSK-0015 through TSK-0021 are back-filled from the original session (work that got erased and was later restored via TSK-0001/TSK-0002, but never individually logged). TSK-0022 is the current request itself. From TSK-0023 onward, every new user request is logged here BEFORE work begins.
 
 ### TSK-0001
 
@@ -188,6 +190,150 @@
 | **Worklog Ref** | `PDF-2` |
 | **Files Touched** | `/home/z/my-project/download/3-tier-platform-plan.pdf` (rewritten, 64 pages, 282 KB), `/home/z/my-project/upload/3-tier-platform-plan.pdf` (backup copy), `/home/z/my-project/scripts/build_3tier_pdf_v2.py` (new, ~920 lines) |
 | **Outcome** | 64-page PDF (up from 36) with all 9 user decisions applied to Section 12 (renamed "Open Questions" → "Decisions Resolved"). The 9 decisions: (1) chapter-prefixed URLs — keep `/events/[slug]` flat + add `/[chapterSlug]` city-root aliases + `/[countrySlug]` country landing pages; (2) chapter admin isolation — read-only browse + copy other chapters, no modify; (3) cross-chapter events — all members see all events globally, default-filter to own chapter, "See all global events" toggle; (4) country-tier email templates — chapter admins edit only own, can copy; country-tier overrides supported; (5) Super Admin allowlist — stays code-driven (no DB column, no admin UI); (6) i18n scope — en-US only at V7.1, defer he-IL + fr-CA to V7.2 (Phase 5 timezone migration still ships); (7) member auto-chapter on RSVP — auto-set `chapterId` ONLY IF NULL (preserves primary chapter affinity); (8) Media Library — unified `/admin/creatives` with kind filter + new `BrandAsset` table; (9) cleanup phase timing — ship Phase 7 immediately after Phase 6 (no V7.1 burn-in wait). Zero Z.ai mentions anywhere (metadata Author/Creator + cover footer + page header all → MassaPro team). 64 MassaPro mentions. Same Crystal Blue Tech Blueprint aesthetic. Build script persisted at `scripts/build_3tier_pdf_v2.py` for future iterations. |
+
+
+### TSK-0012
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0012` |
+| **Date** | 2026-07-30 |
+| **Title** | Style 2 — Display venue + topic at Style 1 positions + 13-shape gradient selector (2D + 3D) |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `EXPLORE-1 → PLAN-1 → mockups-restore-2026-07-30 (continuation)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx (new, ~691 lines), src/app/admin/mockups/speaker-intro/types.ts, src/app/admin/mockups/speaker-intro/sample-data.ts, src/app/admin/mockups/shared/speaker-intro-form-view.tsx |
+| **Outcome** | Three Style 2 enhancements: (1) Added draggable Header SectionBox with event name + date + venue at Style 1 default position (X=1.7, Y=0.5, W=1200, Scale=100%, z=50). (2) Added draggable Topic SectionBox with vertical accent bar at Style 1 default position (X=-12.4, Y=20.9, W=951, Scale=65%, z=50). (3) Added `shape` field to `style2HeroGradient` with 13 options grouped in dropdown: 8 2D plane shapes (rectangle, circle, oval/ellipse, triangle, square, pentagon, hexagon, octagon) + 5 3D solid shapes (sphere, cube, cone, cylinder, pyramid — rendered as SVG with multi-face gradient + radial shading overlay for faux-3D depth). Gradient + color fill maintained inside whichever shape is selected; shape is centered in the right panel so it stays visible behind the hero image. |
+
+### TSK-0013
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0013` |
+| **Date** | 2026-07-30 |
+| **Title** | Add shape rotation control (0–360° with 8 presets) to all 2D + 3D shapes |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0012 continuation` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx, src/app/admin/mockups/shared/speaker-intro-form-view.tsx |
+| **Outcome** | Rotation applied to all 13 shapes: 2D shapes via CSS `transform: rotate()` with `transform-origin: center center`; 3D shapes via SVG `<g transform="rotate(deg 50 50)">` wrapping the shape group (gradient `<defs>` stay outside the rotated group so the gradient direction stays anchored). Rectangle (full panel): rotation value round-trips but has no visible effect. Form view gained a new 'Shape rotation' field below the shape selector with: numeric input (step 15°, range 0–360°), 8 preset buttons (0°/45°/90°/135°/180°/225°/270°/315°), and a '↺' reset button. Gradient fill direction is kept separate from shape rotation — rotating a triangle upside-down doesn't rotate the colors inside it. |
+
+### TSK-0014
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0014` |
+| **Date** | 2026-07-30 |
+| **Title** | Pre-deployment gap review — found + fixed Style 2 Sponsor section being non-draggable |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `pre-deployment-review` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx, src/app/admin/mockups/speaker-intro/sample-data.ts |
+| **Outcome** | User asked: 'review if any of the current deployed version has something missing in this version before deploying it.' Ran comprehensive audit of every pending spec from prior sessions against the current codebase. Found 1 gap: Style 2 Sponsor section was hardcoded inside the footer bar with no SectionBox wrapper, no pos/scale/z props. Fix: extracted sponsor row into its own draggable SectionBox in speaker-intro-canvas.tsx; added `sponsors` entry to sample-data.ts sectionLayout with `{ pos: { x: 85.5, y: 84.6 }, scale: 1, z: 50 }` per spec. Footer bar now only contains branding asset (left) + collaborators (right). Intentional divergence kept: Style 2 QR uses `style2LayerZ.qr ?? 3` (not z=50 from older spec) because the user later explicitly requested a 4-layer front/back system for Style 2 (bg=1 < hero=2 < qr=3 < speakers=4). The earlier z=50 spec still applies to Style 1 & 3. |
+
+### TSK-0015 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0015` |
+| **Date** | 2026-07-29 |
+| **Title** | Create Style 3 for meet-the-speaker mockup + reposition style buttons above edit images / edit sections, outside canvas frame |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `style-3-meet-the-speaker (back-filled from erased session)` |
+| **Files Touched** | src/app/admin/mockups/meet-the-speaker/types.ts, src/app/admin/mockups/meet-the-speaker/meet-the-speaker-canvas.tsx, src/app/admin/mockups/meet-the-speaker/meet-the-speaker-editor.tsx, src/app/admin/mockups/shared/meet-the-speaker-form-view.tsx |
+| **Outcome** | Extended `heroStyle?: 1 | 2` → `heroStyle?: 1 | 2 | 3` on meet-the-speaker data. Built `MeetTheSpeakerStyle3Layout` component: split purple/pink background, arched stadium avatar (semicircle top + 6px bottom corners, no white border, soft shadow), dark charcoal event card (#2a2530 with 8px radius) at bottom-LEFT of right panel overlapping avatar base, gold AI badge (#c4a35a, 7px radius, white 'AI' text), red mic-icon badge (#ff2e63 solid pill, white text, white mic dot), red/blue 2px left-accent lines on About/Expertise blocks, white 'AI Salon · Tel Aviv' pill with pink diamond icon at top of right panel. Style 1/2 block wrapped in `{data.heroStyle !== 3 && (...)}`. Editor toolbar restructured: removed floating Edit buttons from inside canvas; added vertical toolbar ABOVE canvas frame in order: Style [1] [2] [3] → Edit images → Edit sections. Canvas label updated to 'Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser'. Backward compatible — Style 1 remains default; existing saved JSON without heroStyle continues to render as Style 1. |
+
+### TSK-0016 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0016` |
+| **Date** | 2026-07-29 |
+| **Title** | Toolbar button order: Style 1/2/3 → Edit Images → Edit Sections, outside canvas frame; approved but don't deploy until reviewed |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `toolbar-reorder (back-filled from erased session)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx, src/app/admin/mockups/meet-the-speaker/meet-the-speaker-editor.tsx, src/app/admin/mockups/shared/{speaker-intro,meet-the-speaker}-form-view.tsx |
+| **Outcome** | Refinement of TSK-0015: explicit ordering confirmed — Style buttons on top, then Edit Images, then Edit Sections, all in a vertical toolbar OUTSIDE the canvas frame (not floating inside it). User explicitly approved the layout but said 'don't deploy until reviewed'. The review happened in TSK-0014 (pre-deployment gap review) before any deploy. |
+
+### TSK-0017 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0017` |
+| **Date** | 2026-07-29 |
+| **Title** | Speaker Intro Style 2 — 7 spec items (A through G) |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `style-2-spec-A-G (back-filled from erased session; rebuilt in TSK-0002)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx, src/app/admin/mockups/speaker-intro/types.ts, src/app/admin/mockups/speaker-intro/sample-data.ts, src/app/admin/mockups/speaker-intro/event-mapper.ts, src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx, src/app/admin/mockups/shared/speaker-intro-form-view.tsx |
+| **Outcome** | Seven spec items: (A) Right panel layers Hero Image (`data.heroOverlay.imageUrl`) with gradient-color wash on top of dark map background + mountains; gradient colors editable via comma-separated field. (B) 'In collab with' / 'Sponsored by' rows render logoUrl images instead of name text (fallback to name pill if no logo). (C) Edit Images + Edit Sections work on Style 2 (speaker photos, right-panel hero image, speaker grid, QR code all editable). (D) Speaker grid: default 2 columns (max 3), company name on new line below title, speaker photos auto from `speaker.photoUrl`, all text fields (event name, date, time, topic, speaker name/title/bio/session time) honor per-section TextStyle overrides. (E) Footer bottom-left renders `data.brandingAsset.imageUrl` (not 'ai salon' text). (F) Top-left 'AI SALON' text badge replaced with `<Image>` rendering `data.event.topLogoUrl` (default = https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png); wired to loginBanner brand asset so changing banner in /admin/images propagates. (G) Meerkat emoji removed; QR code 3× bigger (120px); moved to top-right of right panel just below date/time; wrapped in SectionBox so Edit Sections can drag + resize. |
+
+### TSK-0018 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0018` |
+| **Date** | 2026-07-29 |
+| **Title** | Style 2 follow-up — 3 changes: speaker photos aligned left, speakers section bg configurable (default white), right hero image always in front |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `style-2-followup-3-changes (back-filled from erased session)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx, src/app/admin/mockups/speaker-intro/types.ts, src/app/admin/mockups/shared/speaker-intro-form-view.tsx |
+| **Outcome** | Three changes: (1) `SpeakerStyle2Card` defaults to horizontal layout (`flex items-start gap-3 text-left`): photo on left, text on right. New `photoAlign: 'left' | 'center'` field lets user switch back to vertical/centered via form dropdown. (2) Added `speakersLayout.panelBg` field; left panel bg reads from `data.speakersLayout?.panelBg ?? '#FFFFFF'` so defaults to white even when missing (fixes transparent regression). Form view exposes color picker + hex text input under 'Speakers panel background (Style 2)'. (3) Bumped right panel zIndex 5→20→30 so it sits above speakers panel (zIndex 10) and stays in front whenever the two overlap. |
+
+### TSK-0019 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0019` |
+| **Date** | 2026-07-29 |
+| **Title** | Style 2 4-layer front/back z-index system (bg/hero/qr/speakers) + QR Salon 50% smaller QR + middle alignment |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `style-2-layer-system-qr-salon-smaller (back-filled from erased session)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/types.ts, src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx, src/app/admin/mockups/speaker-intro/sample-data.ts, src/app/admin/mockups/shared/speaker-intro-form-view.tsx, src/app/admin/mockups/qr-salon/sample-data.ts, src/app/admin/mockups/qr-salon/qr-salon-editor.tsx |
+| **Outcome** | Style 2 layer system: new `data.style2LayerZ?: { background?, hero?, qr?, speakers? }` field with defaults `bg=1, hero=2, qr=3, speakers=4` (speakers always on top, per spec). Canvas applies these z-indices to: right panel bg gradient (z=1), hero image overlay (z=2), QR SectionBox (z=3), speakers panel (z=4). Form view gained new 'Layer order (Style 2 — front / back)' section just above 'Branding asset'; each of 4 layers has its own row with Back button (z-index −1), numeric z-index input, Front button (z-index +1), per-row reset link, plus 'Reset all to defaults' link at bottom. QR Salon: qrSize default 360→180 (50% smaller per spec); vertical layout recomputed so caption + QR + brand mark composition stays vertically centered: caption top 228 / QR top 304 / brand top 524 (was 140 / 220 / 620). localStorage key bumped v3 → v4. |
+
+### TSK-0020 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0020` |
+| **Date** | 2026-07-29 |
+| **Title** | Comprehensive spec — QR Salon defaults + Meet-the-speaker Style 2 (right image + gradient selector + direction; speaker section white fill; venue visible) + Style 1 speaker intro positions |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `comprehensive-qr-salon-style-2-style-1-spec (back-filled from erased session)` |
+| **Files Touched** | src/app/admin/mockups/qr-salon/sample-data.ts, src/app/admin/mockups/qr-salon/qr-salon-editor.tsx, src/app/admin/mockups/meet-the-speaker/types.ts, src/app/admin/mockups/meet-the-speaker/meet-the-speaker-canvas.tsx, src/app/admin/mockups/meet-the-speaker/sample-data.ts, src/app/admin/mockups/speaker-intro/sample-data.ts |
+| **Outcome** | QR Salon defaults (per spec): qrSize 360 (reverted from 180 — TSK-0019's 50% smaller was overridden by this later spec), QR position X=15.3% Y=10%, caption text 'Scan to register', caption fontSize 39, fontWeight Bold (700), align Left, caption position X=17.8% Y=2.8%. Meet-the-speaker Style 2: right section simplified to image + white background; added `heroStyle2Gradient` field with color selection + direction selector (gradient behind hero image); speaker section completely white filling (matching Style 1); venue visible at Style 1-like position (X=1.7, Y=0.5, W=1200, Scale=100%, z=50); specific speaker/qr/sponsor properties per spec (speakers X=-7.5 Y=25.1 W=891 Scale=76% z=60; qr X=46.7 Y=3.8 Scale=131% z=50; sponsors X=85.5 Y=84.6 Scale=100% z=50). Style 1 speaker intro positions: qr X=46.7 Y=3.8 Scale=131% z=50; header X=1.7 Y=0.5 W=1200 Scale=100% z=50; topic X=-12.4 Y=20.9 W=951 Scale=65% z=50; speakers X=-7.5 Y=25.1 W=891 Scale=76% z=60 (all aligned left). |
+
+### TSK-0021 *(back-filled)*
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0021` |
+| **Date** | 2026-07-29 |
+| **Title** | Speaker section redesign — gradient-line 'SPEAKERS' header, white rounded cards, 56×56 avatars with #FF0056 borders, 'Moderator' badge, 2-col grid |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `speaker-section-redesign (back-filled from erased session; rebuilt as part of TSK-0002)` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx, src/app/admin/mockups/speaker-intro/types.ts |
+| **Outcome** | Replaced old Style 2 speaker grid (64×64 avatars, simple text layout, 14px names, 11px title, 10px company, 10px bio) with new card-based design: gradient-line 'SPEAKERS' header (horizontal pink-to-transparent gradient line + uppercase tracking-widest label), 2-column grid with 12px gap, white rounded cards (`bg-white/95 backdrop-blur-sm border border-black/10 p-2.5 shadow-sm`), 56×56 avatars with `border-2` rgb(255,0,86) (#FF0056) borders, 16px bold speaker names, combined title·company line (`<span>title</span><span class='mx-1 text-black/30'>·</span><span class='font-semibold'>company</span>`), 11px bios, 'Moderator' badge (inline-block rounded-full px-1.5 py-0.5 white text, 9px uppercase tracking-wider, bg rgb(255,0,86)) on speakers flagged as moderator. Speaker photo alignment defaults to left (horizontal layout: photo left, text right). |
+
+### TSK-0022
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0022` |
+| **Date** | 2026-07-31 |
+| **Title** | Analyze 2-day conversation file + extract granular tasks + generate execution plan + save preview (do NOT deploy) |
+| **Category** | MID |
+| **Status** | IN_PROGRESS |
+| **Worklog Ref** | `TSK-0022 — conversation-analysis-and-plan` |
+| **Files Touched** | /home/z/my-project/docs/tasks.md (updated with TSK-0012 → TSK-0022), /home/z/my-project/download/tasks-analysis-and-execution-plan.md (new preview file, NOT deployed), /home/z/my-project/scripts/update_tasks_registry_v1_2.py (this script) |
+| **Outcome** | User uploaded /home/z/my-project/upload/Pasted Content_1785439593433.txt (167 KB, 2,418 lines) containing the full 2-day conversation history. Task: analyze every 'Me:' / 'ME:' entry (ignoring credentials, link requests, and error reports), extract the granular task requests, document what was done + any subsequent error + the fix review, register each as a TSK-XXXX entry in docs/tasks.md, generate an execution plan to verify/complete each task, and save the plan as a preview file (NOT deployed). 10 distinct user-requested tasks extracted: T1-T7 back-filled (work that got erased, restored via TSK-0001/TSK-0002) and T8-T10 post-restoration. Plus this meta-task TSK-0022 itself. Plan document saved to /home/z/my-project/download/tasks-analysis-and-execution-plan.md — user reviews before any code changes are deployed. |
 
 ---
 

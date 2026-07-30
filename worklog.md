@@ -7533,3 +7533,44 @@ Stage Summary:
 - TSK-0006 marked DONE. Next user request will be logged as TSK-0012 BEFORE work begins, per Step 1 of the protocol.
 - Files modified: docs/tasks.md (rewritten), core/task-management.md (edited in place), /home/z/my-project/scripts/append_worklog_backfill.py (this script).
 - No git commit made (user has not requested one); the user can commit when ready with message like `[TSK-0006] Back-fill 5 missing tasks into registry (TSK-0007 → TSK-0011)`.
+
+---
+Task ID: TSK-0022 — conversation-analysis-and-plan
+Agent: Super Z (main)
+Task: User uploaded the full 2-day conversation history (/home/z/my-project/upload/Pasted Content_1785439593433.txt, 167 KB, 2,418 lines) and asked: (1) analyze all "Me:" entries (ignoring credentials/link requests/error reports), (2) document what was done + any error after + fix review for each task, (3) generate a detailed list for the md tasks registry, (4) generate a plan to do these tasks, (5) show a preview which is saved and NOT deployed.
+
+Work Log:
+- Read the conversation file in chunks (2,418 lines). Identified 25 "Me:" markers; classified each as TASK / CREDENTIALS / LINK-REQUEST / ERROR-REPORT per the user's exclusion instructions.
+- Extracted 10 distinct task requests: T1 (Style 3 for meet-the-speaker + button reposition), T2 (toolbar reorder), T3 (Speaker Intro Style 2 spec A-G), T4 (Style 2 follow-up 3 changes), T5 (Style 2 layer system + QR Salon smaller), T6 (comprehensive QR Salon + Style 2 + Style 1 spec), T7 (speaker section redesign), T8 (Style 2 venue + topic + 13-shape selector), T9 (rotate button for shapes), T10 (pre-deployment gap review).
+- Dispatched an Explore agent (read-only) to verify each of the 10 tasks against the actual source files in /home/z/my-project/src/app/admin/mockups/. The agent reported:
+  * T1 (meet-the-speaker Style 3): MISSING — heroStyle?: 1|2 only, no Style3Layout component, toolbar reorder absent
+  * T2 (toolbar reorder): MISSING — same as T1
+  * T3 (Style 2 spec A-G): PARTIAL — 3 of 7 items present (A hero+gradient, G QR size+SectionBox), 4 missing/deviating (B sponsors as text not images, C Edit Images non-functional on Style 2, D speaker cards ignore textStyles + company not on new line, E no brandingAsset, F no topLogoUrl)
+  * T4 (Style 2 follow-up): PARTIAL — panelBg ✓, photoAlign orphan (declared but unused), hero zIndex superseded by T5's style2LayerZ system
+  * T5 (layer system): PARTIAL — data model + defaults ✓, but form uses numeric inputs not Back/Front buttons
+  * T6 (comprehensive spec): PARTIAL — QR Salon defaults ✓, Style 1 positions ✓, meet-the-speaker heroStyle2Gradient MISSING
+  * T7 (speaker section redesign): PARTIAL — most items ✓ but card styling uses solid white instead of translucent white + blur + border
+  * T8 (Style 2 venue + topic + 13-shape): PRESENT ✓
+  * T9 (rotate button): PARTIAL — 2D rotation ✓, 3D uses CSS on svg root instead of SVG <g> transform
+  * T10 (Style buttons in toolbar): PRESENT ✓
+- Updated /home/z/my-project/docs/tasks.md via /home/z/my-project/scripts/update_tasks_registry_v1_2.py: added 11 new entries TSK-0012 → TSK-0022 (3 post-restoration: TSK-0012/0013/0014; 7 back-filled: TSK-0015-0021; 1 current: TSK-0022). Updated the back-fill note paragraph to v1.2 documenting the second back-fill round. Total TSK sections in docs/tasks.md now: 23.
+- Wrote /home/z/my-project/download/tasks-analysis-and-execution-plan.md (comprehensive preview document, 7 parts):
+  * Part 1: Methodology (input parsing, granularity, back-fill rule, codebase verification)
+  * Part 2: Detailed task list TSK-0012 → TSK-0022 with error-after + fix-review columns
+  * Part 3: Execution plan with 10 phases (Phase 0 pre-flight → Phase 9 final verify), each phase has goal, files to modify, verification steps, commit message
+  * Part 4: Effort & risk summary (~10.5 hr total, 4 risk hotspots)
+  * Part 5: 5 decision points for user (execution order, spec contradiction, optional phase, commit granularity, deploy trigger)
+  * Part 6: Files modified summary (~10 files, ~600 lines added)
+  * Part 7: Approval gate — explicit reply options for the user
+- Did NOT deploy, did NOT run dev server, did NOT commit. The preview file is saved and the user reviews it before any code changes.
+
+Stage Summary:
+- /home/z/my-project/docs/tasks.md now holds 23 registered tasks (TSK-0001 → TSK-0022) covering 2026-07-28 → 2026-07-31 (72 hours + 2-day conversation history).
+- 10 granular tasks extracted from conversation file: T1-T7 back-filled (work that got erased, restored via TSK-0001/TSK-0002), T8-T10 post-restoration.
+- Codebase audit found: 2 fully PRESENT (TSK-0012, TSK-0010-equivalent), 1 fully MISSING (TSK-0015 meet-the-speaker Style 3), 7 PARTIAL (most have type defs + scaffolding but miss UI controls or were superseded).
+- Execution plan: 10 phases, ~10.5 hr total, 5 user decision points. Phase 0 = pre-flight verification; Phase 9 = final verify + status updates + commit (no deploy).
+- Preview saved at /home/z/my-project/download/tasks-analysis-and-execution-plan.md (NOT deployed). User reviews before approval.
+- Files modified this task: docs/tasks.md (updated), download/tasks-analysis-and-execution-plan.md (new), scripts/update_tasks_registry_v1_2.py (new), scripts/append_worklog_tsk0022.py (this script).
+- No source code (src/) or Prisma schema changes.
+- No git commit made (user has not requested one). If user approves the plan, the first commit will be Phase 0.5: `[TSK-0022] Add conversation analysis + execution plan preview (not deployed)`.
+- Next step: wait for user to reply with one of the approval options in Part 7 of the preview document.
