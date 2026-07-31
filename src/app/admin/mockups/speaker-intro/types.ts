@@ -222,6 +222,17 @@ export type SpeakerIntroData = {
      * Per user spec 2026-07-30 (Style 1): speakers aligned left.
      */
     photoAlign?: "left" | "center";
+    /**
+     * Per user spec 2026-07-31 (TSK-0033): global toggle for whether the
+     * session-time pill is shown on speaker cards. When `false`, the
+     * pill is hidden on ALL speaker cards (Style 1 + Style 2). When
+     * `true` or undefined (default), the pill is shown if the speaker
+     * has a `sessionTime` value. This is a top-level toggle — it does
+     * NOT clear the underlying `speaker.sessionTime` data, it just
+     * hides the visual rendering. Re-checking the box restores the
+     * pill immediately.
+     */
+    showSessionTime?: boolean;
   };
   /**
    * Per-text-section font + color + alignment overrides. Each key matches

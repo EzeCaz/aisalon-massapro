@@ -580,6 +580,28 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               return `${n} speaker${n === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"} · ${rows} row${rows === 1 ? "" : "s"} (ordered by # field)`;
             })()}
           </p>
+          {/* PER USER SPEC 2026-07-31 (TSK-0033): global toggle for whether
+              the session-time pill is shown on speaker cards. When
+              unchecked, the pill is hidden on ALL speaker cards (Style 1 +
+              Style 2) regardless of the underlying speaker.sessionTime
+              value. The data is preserved — only the visual rendering is
+              suppressed. Re-checking restores the pill immediately. */}
+          <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={data.speakersLayout?.showSessionTime !== false}
+              onChange={(e) =>
+                update((d) => {
+                  if (!d.speakersLayout) d.speakersLayout = {};
+                  d.speakersLayout.showSessionTime = e.target.checked;
+                })
+              }
+              className="h-4 w-4 rounded border-black/30 text-[#FF005A] focus:ring-[#FF005A] cursor-pointer"
+            />
+            <span className="text-[0.7rem] font-semibold text-black/80">
+              Show session time on speaker cards
+            </span>
+          </label>
         </div>
         {/* ===== Per-section TextStyle controls for the speaker cards =====
             These apply uniformly to EVERY speaker card on the canvas

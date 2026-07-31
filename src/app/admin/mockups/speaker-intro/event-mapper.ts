@@ -52,11 +52,16 @@ const DEFAULT_AVATAR =
 
 const DEFAULT_HERO = "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782987131384-reozea.png";
 
+// PER USER SPEC 2026-07-31 (TSK-0033): default location pin positions.
+//   Pin 1: Sarona      X=22  Y=23
+//   Pin 2: Dizengoff   X=65  Y=18
+//   Pin 3: Neve Tzedek X=30  Y=80
+//   Pin 4: Yafo        X=61  Y=65
 const DEFAULT_PINS = [
-  { label: "Sarona", x: 78, y: 18 },
-  { label: "Dizengoff", x: 60, y: 12 },
-  { label: "Neve Tzedek", x: 90, y: 48 },
-  { label: "Yafo", x: 70, y: 78 },
+  { label: "Sarona", x: 22, y: 23 },
+  { label: "Dizengoff", x: 65, y: 18 },
+  { label: "Neve Tzedek", x: 30, y: 80 },
+  { label: "Yafo", x: 61, y: 65 },
 ];
 
 const DEFAULT_PLACEMENT: ImagePlacement = { focusX: 50, focusY: 50, zoom: 1 };
@@ -97,14 +102,14 @@ const DEFAULT_SECTION_LAYOUT = {
     boxSize: { width: 951 },
     scale: 0.65,
   },
-  speakers: {
-    pos: { x: -7.5, y: 29.3 },
-    boxSize: { width: 891 },
-    scale: 0.76,
-    // "Layer front all" — render the speakers grid above other text
-    // sections (default TEXT_Z=50) and above the branding asset (52).
-    z: 60,
-  },
+  // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is NOT in
+  // DEFAULT_SECTION_LAYOUT. When an event is picked, the speakers
+  // section falls back to the canvas-level defaults:
+  //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.8, Y=22.1, W=891, Scale=76%, z=60
+  //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%, z=60
+  // This way each style uses its own speakers defaults after event-pick,
+  // instead of being forced to the same layout. (Same approach TSK-0031
+  // took for `header`.)
 } as const;
 
 /**

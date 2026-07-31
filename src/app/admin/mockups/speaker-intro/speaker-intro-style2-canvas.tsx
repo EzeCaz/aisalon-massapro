@@ -168,7 +168,16 @@ function deriveInitials(fullName: string, fallback?: string): string {
 // ============================================================================
 // Style2SpeakerCard — the per-speaker card in the 2×2 grid.
 // ============================================================================
-function Style2SpeakerCard({ speaker }: { speaker: Speaker }) {
+function Style2SpeakerCard({
+  speaker,
+  showSessionTime = true,
+}: {
+  speaker: Speaker;
+  /** PER USER SPEC 2026-07-31 (TSK-0033): global toggle for the
+   *  session-time pill on Style 2 speaker cards. When `false`, the
+   *  time/session-title row is hidden entirely. Default `true`. */
+  showSessionTime?: boolean;
+}) {
   const initials = deriveInitials(speaker.fullName, speaker.initials);
   const placement = resolvePlacement(speaker.photoPlacement);
   const titleCompany = [speaker.title, speaker.company].filter(Boolean).join(" · ");
@@ -291,8 +300,12 @@ function Style2SpeakerCard({ speaker }: { speaker: Speaker }) {
         </div>
       )}
 
-      {/* Time + session type (teal) */}
-      {(speaker.sessionTime || speaker.sessionTitle) && (
+      {/* Time + session type (teal)
+          PER USER SPEC 2026-07-31 (TSK-0033): hidden entirely when
+          `showSessionTime` is false. The underlying speaker.sessionTime
+          + speaker.sessionTitle data are preserved — only the visual
+          rendering is suppressed. */}
+      {showSessionTime && (speaker.sessionTime || speaker.sessionTitle) && (
         <div
           style={{
             marginTop: "auto",
@@ -962,7 +975,11 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 }}
               >
                 {visibleSpeakers.map((s) => (
-                  <Style2SpeakerCard key={`${s.order}-${s.fullName}`} speaker={s} />
+                  <Style2SpeakerCard
+                    key={`${s.order}-${s.fullName}`}
+                    speaker={s}
+                    showSessionTime={data.speakersLayout?.showSessionTime !== false}
+                  />
                 ))}
               </div>
             </div>

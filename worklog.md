@@ -8398,3 +8398,203 @@ Stage Summary:
       Typing values into X/Y moves the hero across the canvas; typing
       W/H resizes the hero container (in canvas px); typing Scale%
       scales the hero proportionally.
+
+---
+Task ID: TSK-0033
+Agent: main
+Task: User spec 2026-07-31 — four Speaker-Intro changes:
+  (1) Default 4 location pins:
+        Pin 1: Sarona      X=22  Y=23
+        Pin 2: Dizengoff   X=65  Y=18
+        Pin 3: Neve Tzedek X=30  Y=80
+        Pin 4: Yafo        X=61  Y=65
+  (2) Style 1 + Style 3 (both use SpeakerIntroCanvas) speakers Properties
+      defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto, Scale=76%.
+  (3) Fix: "The Speakers (4) align arrow not working for any of the text
+      fields" — the ⟵ L / ↔ C / ⟶ R buttons in the form view's Speakers
+      section weren't producing any visible change on the canvas for the
+      6 speaker text fields (speakersLabel, speakerName, speakerTitle,
+      speakerBio, speakerSessionTime, speakerRole).
+  (4) NEW: Add a checkbox in the speakers section to toggle showing the
+      session-time pill on speaker cards (Style 1 + Style 2).
+
+Work Log:
+- Task 1 (location pins defaults):
+  * event-mapper.ts DEFAULT_PINS array — updated all 4 entries to the
+    user's spec values: Sarona 22/23, Dizengoff 65/18, Neve Tzedek
+    30/80, Yafo 61/65. Added a comment block citing TSK-0033.
+  * sample-data.ts locationPins array — same 4 entries updated to
+    match (so the initial canvas load shows the spec pins, and any
+    event picked via the dropdown also gets the spec pins via
+    DEFAULT_PINS in event-mapper.ts).
+- Task 2 (Style 1/3 speakers defaults):
+  * speaker-intro-canvas.tsx STYLE1_DEFAULTS — added a new `speakers`
+    entry: { pos: { x: -8.8, y: 22.1 }, boxSize: { width: 891 },
+    scale: 0.76, z: 60 }. z=60 preserved from the previous
+    sample-data + event-mapper defaults so the speakers grid stays
+    above the other text sections (TEXT_Z=50) and branding asset (52).
+  * Updated the speakers SectionBox to use STYLE1_DEFAULTS.speakers
+    as fallback for pos/scale/boxSize (same pattern TSK-0031 used for
+    header/topic/qr/sponsors):
+      pos={data.sectionLayout?.speakers?.pos ?? STYLE1_DEFAULTS.speakers.pos}
+      scale={data.sectionLayout?.speakers?.scale ?? STYLE1_DEFAULTS.speakers.scale}
+      boxSize={data.sectionLayout?.speakers?.boxSize ?? STYLE1_DEFAULTS.speakers.boxSize}
+  * Removed the hardcoded `left: "48px", top: "260px"` from the
+    speakers SectionBox inline style — replaced with `{ left: 0, top: 0 }`
+    so the pos% fallback applies cleanly (the SectionBox's pos override
+    takes precedence anyway, but removing the 48px/40px hard offset
+    avoids any visual surprise if pos is missing). Same approach TSK-0031
+    took for header/topic.
+  * sample-data.ts sectionLayout — REMOVED the `speakers` entry. This
+    was the key fix — previously the sample data had
+    `speakers: { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 }`
+    which OVERRIDDEN the Style 1 canvas fallback AND forced Style 2
+    to use the same layout. Now each style uses its own canvas-level
+    defaults:
+      - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.8, Y=22.1, W=891, Scale=76%, z=60
+      - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%, z=60
+  * event-mapper.ts DEFAULT_SECTION_LAYOUT — REMOVED the `speakers`
+    entry. This means when an event is picked from the dropdown, the
+    speakers section falls back to the canvas-level defaults (instead
+    of being forced to the old X=-7.5, Y=29.3 layout). Same approach
+    TSK-0031 took for `header`. The `header` and `topic` entries are
+    still in DEFAULT_SECTION_LAYOUT (TSK-0031 didn't touch them) —
+    left as-is to avoid scope creep.
+- Task 3 (fix align arrows for speaker text fields):
+  * Root cause: the 6 speaker text fields are all rendered as inline
+    `<span>` elements inside flex containers. `textAlign` on a span
+    in a flex row has NO visible effect — spans shrink-to-fit content,
+    so there's no extra horizontal space for text-align to push the
+    text into. The user clicks ⟵ L / ↔ C / ⟶ R, the data updates,
+    but the canvas looks identical. The title/bio `<p>` elements
+    SHOULD work (block elements with full width), but to be safe I
+    added explicit `width: "100%"` to guarantee textAlign produces a
+    visible change.
+  * speakersLabel row — restructured the row based on `speakersLabel.align`:
+      - "left" / undefined (default): label on LEFT, gradient line on RIGHT
+      - "center": gradient line on BOTH sides, label in the MIDDLE
+      - "right":  gradient line on LEFT,  label on RIGHT (old default)
+    This way clicking the align buttons produces a clear, visible
+    change in the speakers section header.
+  * speakerName row (contains sessionTime + name + role) — applied
+    `justifyContent` to the flex row based on `speakerName.align`:
+      - "left" / undefined → "flex-start"
+      - "center" → "center"
+      - "right" → "flex-end"
+    The sessionTime and role pills ride along (they're in the same
+    flex row, so they can't have independent alignment — speakerName
+    is the primary element and drives the row's alignment).
+  * speakerTitle `<p>` — added explicit `width: "100%"` to guarantee
+    textAlign produces a visible change. Block `<p>` already defaults
+    to width:auto (fill parent), but setting it explicitly avoids any
+    edge case where the parent flex item shrinks below content width.
+  * speakerBio `<p>` — same `width: "100%"` fix.
+- Task 4 (session-time toggle):
+  * types.ts — added `showSessionTime?: boolean` to `speakersLayout`.
+    Documented as a global toggle: when `false`, the pill is hidden
+    on ALL speaker cards (Style 1 + Style 2). When `true` or
+    undefined (default), the pill is shown if `speaker.sessionTime`
+    has a value. The toggle does NOT clear the underlying
+    `speaker.sessionTime` data — only hides the visual rendering.
+  * speaker-intro-canvas.tsx SpeakerCard — added `showSessionTime`
+    prop (default `true`). Updated the sessionTime pill condition
+    from `{speaker.sessionTime && (...)}` to
+    `{speaker.sessionTime && showSessionTime && (...)}`.
+  * speaker-intro-canvas.tsx SpeakerCard usage — passed
+    `showSessionTime={data.speakersLayout?.showSessionTime !== false}`
+    so the canvas reads from the global toggle.
+  * speaker-intro-style2-canvas.tsx Style2SpeakerCard — added
+    `showSessionTime` prop (default `true`). Updated the
+    "Time + session type" row condition from
+    `{(speaker.sessionTime || speaker.sessionTitle) && (...)}` to
+    `{showSessionTime && (speaker.sessionTime || speaker.sessionTitle) && (...)}`.
+    When the toggle is off, the entire teal time/session-title row
+    is hidden.
+  * speaker-intro-style2-canvas.tsx Style2SpeakerCard usage — passed
+    `showSessionTime={data.speakersLayout?.showSessionTime !== false}`.
+  * speaker-intro-form-view.tsx — added a checkbox in the Speakers
+    section (right after the "speaker grid layout" box, before the
+    TextStyleRow controls). Label: "Show session time on speaker
+    cards". Bound to `data.speakersLayout?.showSessionTime !== false`
+    so the checkbox is checked by default (when undefined → true).
+    On toggle, writes `d.speakersLayout.showSessionTime = e.target.checked`.
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro", "mockups-client", "hero-shape",
+  or "speaker-intro-form-view".
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 307 → 200
+  (307 is the auth redirect, 200 is the final page load).
+
+Stage Summary:
+- Task 1 DONE: 4 default location pins updated to Sarona 22/23,
+  Dizengoff 65/18, Neve Tzedek 30/80, Yafo 61/65 in both sample-data.ts
+  and event-mapper.ts (so the spec pins appear on initial load AND
+  after picking an event).
+- Task 2 DONE: Style 1/3 speakers Properties defaults = X=-8.8, Y=22.1,
+  W=891, H=auto, Scale=76%, z=60. Achieved by:
+  (a) Adding `speakers` to STYLE1_DEFAULTS in speaker-intro-canvas.tsx.
+  (b) Wiring the speakers SectionBox to use STYLE1_DEFAULTS.speakers
+      as fallback for pos/scale/boxSize.
+  (c) Removing the `speakers` entry from sample-data.ts sectionLayout
+      (each style now falls back to its own canvas-level defaults —
+      Style 1/3 uses the new spec values, Style 2 keeps its
+      STYLE2_DEFAULTS.speakers X=-8.7, Y=5).
+  (d) Removing the `speakers` entry from event-mapper.ts
+      DEFAULT_SECTION_LAYOUT (so event-pick also uses canvas-level
+      defaults instead of the old X=-7.5, Y=29.3).
+  The Properties panel will show the spec values on initial load
+  when the user selects Speakers in Edit Sections mode — even before
+  dragging anything.
+- Task 3 DONE: Align arrows now visibly work for all 6 speaker text
+  fields:
+  - speakersLabel: row restructures based on align (label-left /
+    line-both-sides / label-right).
+  - speakerName (drives sessionTime + name + role row): justifyContent
+    applied based on align.
+  - speakerTitle + speakerBio: explicit width:100% guarantees
+    textAlign produces a visible change.
+- Task 4 DONE: New "Show session time on speaker cards" checkbox in
+  the Speakers section of the form view. Bound to
+  `data.speakersLayout.showSessionTime` (default true). When unchecked,
+  the session-time pill is hidden on ALL speaker cards (Style 1 +
+  Style 2). The underlying `speaker.sessionTime` data is preserved —
+  only the visual rendering is suppressed. Re-checking restores the
+  pill immediately.
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/event-mapper.ts
+    (DEFAULT_PINS updated to spec values; `speakers` entry removed
+     from DEFAULT_SECTION_LAYOUT)
+  * src/app/admin/mockups/speaker-intro/sample-data.ts
+    (locationPins updated to spec values; `speakers` entry removed
+     from sectionLayout)
+  * src/app/admin/mockups/speaker-intro/types.ts
+    (added `showSessionTime?: boolean` to speakersLayout)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (STYLE1_DEFAULTS: added `speakers` entry; speakers SectionBox:
+     uses STYLE1_DEFAULTS.speakers fallback + removed hardcoded
+     left/top; speakersLabel row: restructured based on align;
+     SpeakerCard: added `showSessionTime` prop, applied
+     justifyContent to name row, added explicit width:100% to title
+     + bio `<p>`, conditional render of sessionTime pill on
+     showSessionTime; SpeakerCard usage: passed showSessionTime)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (Style2SpeakerCard: added `showSessionTime` prop, conditional
+     render of time/session-title row on showSessionTime; usage:
+     passed showSessionTime)
+  * src/app/admin/mockups/shared/speaker-intro-form-view.tsx
+    (added "Show session time on speaker cards" checkbox in Speakers
+     section, bound to data.speakersLayout.showSessionTime)
+- No git commit (user has not requested one). Suggested message:
+  "[TSK-0033] Speaker-Intro: location pins defaults + Style 1/3 speakers
+  defaults + fix speaker text align arrows + session-time toggle".
+- Next step: user previews /admin/mockups/speaker-intro.
+  (a) Initial load → 4 location pins at Sarona 22/23, Dizengoff 65/18,
+      Neve Tzedek 30/80, Yafo 61/65.
+  (b) Edit Sections mode ON → click Speakers → Properties panel shows
+      X=-8.8, Y=22.1, W=891, Scale=76%.
+  (c) Open the right-side form → Speakers section → click ⟵ L / ↔ C /
+      ⟶ R for any speaker text field → canvas visibly changes
+      (speakersLabel row restructures; speakerName row shifts left/
+      center/right; title/bio text re-aligns).
+  (d) Speakers section → uncheck "Show session time on speaker cards"
+      → session-time pill disappears from all speaker cards. Re-check
+      → pill reappears.

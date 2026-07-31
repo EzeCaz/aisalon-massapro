@@ -99,11 +99,16 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     gradientColors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
     gradientOpacity: 0.55,
   },
+  // PER USER SPEC 2026-07-31 (TSK-0033): default location pin positions.
+  //   Pin 1: Sarona      X=22  Y=23
+  //   Pin 2: Dizengoff   X=65  Y=18
+  //   Pin 3: Neve Tzedek X=30  Y=80
+  //   Pin 4: Yafo        X=61  Y=65
   locationPins: [
-    { label: "Sarona", x: 30, y: 18 },
-    { label: "Dizengoff", x: 65, y: 12 },
-    { label: "Neve Tzedek", x: 22, y: 48 },
-    { label: "Yafo", x: 70, y: 60 },
+    { label: "Sarona", x: 22, y: 23 },
+    { label: "Dizengoff", x: 65, y: 18 },
+    { label: "Neve Tzedek", x: 30, y: 80 },
+    { label: "Yafo", x: 61, y: 65 },
   ],
   qrCodeUrl: "https://aisalon.massapro.com/events",
   // Per user spec 2026-07-09 (item I): footer credit is "MassaPro".
@@ -147,8 +152,12 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     // Scale=65%); Style 2 uses STYLE2_DEFAULTS (header: X=0, Y=0, W=1200,
     // H=80). This way the two styles don't share the same header layout
     // entry — they look and behave differently as the user spec requires.
+    //
+    // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is ALSO no longer in
+    // sample-data. Each style falls back to its own canvas-level defaults:
+    //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.8, Y=22.1, W=891, Scale=76%
+    //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
-    speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
     // PER USER SPEC 2026-07-31 (TSK-0030): renamed from "sponsors" →
     // "style2-footer" to unlink Style 2's footer from Style 1/3's

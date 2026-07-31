@@ -177,6 +177,13 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       qr:       { pos: { x: 91, y: 2.2 }, scale: 1.14, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
+      // PER USER SPEC 2026-07-31 (TSK-0033): Style 1/3 speakers Properties
+      // defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto, Scale=76%.
+      // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
+      // and above the branding asset (52) — same z as the previous defaults
+      // in sample-data + event-mapper, so existing user drag/resize edits
+      // continue to layer correctly.
+      speakers: { pos: { x: -8.8, y: 22.1 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
     };
 
     // --- Section 4: Scroll Isolation ---
@@ -648,14 +655,21 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </span>
         </SectionBox>
 
-        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
+        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) =====
+            PER USER SPEC 2026-07-31 (TSK-0033): Style 1/3 speakers
+            Properties defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto,
+            Scale=76%, z=60. When the user has not dragged the speakers
+            section yet, data.sectionLayout.speakers is undefined and the
+            STYLE1_DEFAULTS.speakers fallback below applies — the Properties
+            panel shows the spec values on initial load. Once dragged, the
+            user's data.sectionLayout.speakers.pos/scale/boxSize overrides. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "speakers"}
           onSelect={() => setSelectedId("speakers")}
-          pos={data.sectionLayout?.speakers?.pos}
-          scale={data.sectionLayout?.speakers?.scale ?? 1}
-          boxSize={data.sectionLayout?.speakers?.boxSize}
+          pos={data.sectionLayout?.speakers?.pos ?? STYLE1_DEFAULTS.speakers.pos}
+          scale={data.sectionLayout?.speakers?.scale ?? STYLE1_DEFAULTS.speakers.scale}
+          boxSize={data.sectionLayout?.speakers?.boxSize ?? STYLE1_DEFAULTS.speakers.boxSize}
           onMove={(p) => onSectionMove?.("speakers", p)}
           onResize={(s) => onSectionResize?.("speakers", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
@@ -663,7 +677,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col gap-3"
-          style={{ left: "48px", top: "260px", width: `${(() => {
+          style={{ left: 0, top: 0, width: `${(() => {
             // Per user spec 2026-07-09 (item C): auto-compute columns from
             // visible speaker count when not explicitly set. The width
             // here is a fallback — when `sectionLayout.speakers.boxSize.width`
@@ -681,25 +695,47 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           label="Speakers"
           guideId="speakers"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <div
-              className="h-px flex-1"
-              style={{
-                background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
-              }}
-            />
-            <span
-              className="font-bold text-black uppercase tracking-widest"
-              style={{
-                fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 12}px`,
-                letterSpacing: "0.2em",
-                color: data.textStyles?.speakersLabel?.color,
-                textAlign: data.textStyles?.speakersLabel?.align,
-              }}
-            >
-              Speakers
-            </span>
-          </div>
+          {/* PER USER SPEC 2026-07-31 (TSK-0033): The speakersLabel row is
+              a flex container with a gradient line + "Speakers" span.
+              Previously, `textAlign` was set on the span itself, which had
+              no visible effect — spans in a flex row shrink-to-fit content,
+              so text-align can't push them left/center/right. The fix is
+              to restructure the row based on `speakersLabel.align`:
+                - "left"   / undefined (default): label on LEFT, gradient line on RIGHT
+                - "center": gradient line on BOTH sides, label in the MIDDLE
+                - "right":  gradient line on LEFT,  label on RIGHT (old default)
+              This way clicking the ⟵ L / ↔ C / ⟶ R buttons in the form
+              view produces a visible change on the canvas. */}
+          {(() => {
+            const labelAlign = data.textStyles?.speakersLabel?.align;
+            const showLineBefore = !labelAlign || labelAlign === "right";
+            const showLineAfter = labelAlign === "left" || labelAlign === "center";
+            const lineEl = (
+              <div
+                className="h-px flex-1"
+                style={{
+                  background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
+                }}
+              />
+            );
+            return (
+              <div className="flex items-center gap-2 mb-1">
+                {showLineBefore && lineEl}
+                <span
+                  className="font-bold text-black uppercase tracking-widest"
+                  style={{
+                    fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 12}px`,
+                    letterSpacing: "0.2em",
+                    color: data.textStyles?.speakersLabel?.color,
+                    textAlign: data.textStyles?.speakersLabel?.align,
+                  }}
+                >
+                  Speakers
+                </span>
+                {showLineAfter && lineEl}
+              </div>
+            );
+          })()}
           {(() => {
             // Sorted + filtered speakers (paired with their sort index).
             const sortedSpeakers = [...data.speakers]
@@ -802,6 +838,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                         onPlacementChange={onPlacementChange}
                         onSizeChange={onSizeChange}
                         textStyles={data.textStyles}
+                        showSessionTime={data.speakersLayout?.showSessionTime !== false}
                       />
                     </div>
                   );
@@ -1382,6 +1419,7 @@ function SpeakerCard({
   onPlacementChange,
   onSizeChange,
   textStyles,
+  showSessionTime = true,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -1396,6 +1434,10 @@ function SpeakerCard({
    *  from the parent canvas so all speaker cards share one visual
    *  treatment. */
   textStyles?: SpeakerIntroData["textStyles"];
+  /** PER USER SPEC 2026-07-31 (TSK-0033): global toggle for the
+   *  session-time pill on speaker cards. When `false`, the pill is
+   *  hidden regardless of `speaker.sessionTime`. Default `true`. */
+  showSessionTime?: boolean;
 }) {
   // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
@@ -1429,8 +1471,28 @@ function SpeakerCard({
       </div>
       {/* Text block */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {speaker.sessionTime && (
+        {/* PER USER SPEC 2026-07-31 (TSK-0033): The name row is a flex
+            container holding sessionTime + name + role spans. Previously,
+            `textAlign` was set on each span individually, which had NO
+            visible effect — spans in a flex row shrink-to-fit content, so
+            text-align can't push them left/center/right. The fix is to
+            apply `justifyContent` to the row based on speakerName.align
+            (name is the primary element; sessionTime + role are pills
+            that ride along). We also still set textAlign on each span
+            for data-flow consistency, but the visible alignment comes
+            from justifyContent below. */}
+        <div
+          className="flex items-center gap-2 flex-wrap"
+          style={{
+            justifyContent:
+              textStyles?.speakerName?.align === "center"
+                ? "center"
+                : textStyles?.speakerName?.align === "right"
+                ? "flex-end"
+                : "flex-start",
+          }}
+        >
+          {speaker.sessionTime && showSessionTime && (
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold tracking-wider"
               style={{
@@ -1489,6 +1551,12 @@ function SpeakerCard({
             fontSize: `${textStyles?.speakerTitle?.fontSize ?? 12}px`,
             color: textStyles?.speakerTitle?.color,
             textAlign: textStyles?.speakerTitle?.align,
+            // PER USER SPEC 2026-07-31 (TSK-0033): explicit width:100% so
+            // textAlign left/center/right produces a visible change. Block
+            // `<p>` already defaults to width:auto (fill parent), but
+            // setting it explicitly avoids any edge case where the parent
+            // flex item shrinks below content width.
+            width: "100%",
           }}
         >
           {speaker.title}
@@ -1506,6 +1574,9 @@ function SpeakerCard({
               fontSize: `${textStyles?.speakerBio?.fontSize ?? 11}px`,
               color: textStyles?.speakerBio?.color,
               textAlign: textStyles?.speakerBio?.align,
+              // PER USER SPEC 2026-07-31 (TSK-0033): explicit width:100%
+              // (see comment on title <p> above).
+              width: "100%",
             }}
           >
             {speaker.bio}
