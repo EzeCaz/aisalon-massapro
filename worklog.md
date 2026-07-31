@@ -9019,3 +9019,33 @@ Stage Summary:
   - src/app/admin/mockups/shared/speaker-intro-form-view.tsx
     (defaultFontSize: venue 20, topic 26, speakersLabel 16)
 - Deployed: pushed to origin/main (commit be2b3bc). Vercel building.
+
+---
+Task ID: TSK-0037
+Agent: main
+Task: Style 2 speaker-intro defaults — (1) Hero Shape defaults X=55/Y=10/W=540/H=640/Scale=110%/z=40, (2) Hero image resize arrows must work independently from hero shape (drag arrow → resize ONLY the hero image, not the shape)
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0036 work).
+- Read speaker-intro-style2-canvas.tsx — found STYLE2_DEFAULTS, hero-shape SectionBox, and the hero-image block (lines 1051-1177) using DraggablePhotoContainer (which has NO resize arrows — only a "⠿ Move hero" grip bar for move). The widthPct/heightPct were also hardcoded to defaults so even typing W/H in the properties panel had no effect.
+- Confirmed STYLE2_DEFAULTS["hero-shape"] already had X=55, Y=10, W=540, H=640, z=40 — only Scale needed update 1 → 1.10 (110%).
+- Task 1 fix: edited STYLE2_DEFAULTS["hero-shape"].scale: 1 → 1.10.
+- Task 2 root cause: the hero image was rendered via DraggablePhotoContainer (a plain absolutely-positioned div with a move grip bar). It had NO 8-direction resize handles and didn't respond to boxSize changes from the section layout system. Resizing was impossible.
+- Task 2 fix: replaced the entire DraggablePhotoContainer-based hero image block (the IIFE at lines 1051-1177) with a SectionBox-based implementation. The new SectionBox:
+  * Uses `effectiveLayout("hero-image")` for pos/boxSize/scale/z (so it responds to the Object Properties Panel and to drag/resize interactions)
+  * Wires onMove → onSectionMove("hero-image", p)
+  * Wires onResize → onSectionResize("hero-image", s)
+  * Wires onBoxResize → onSectionBoxResize("hero-image", sz)
+  * Wires onSelect → setSelectedId("hero-image") so the standard ObjectPropertiesPanel shows up
+  * SectionBox automatically renders 8-direction resize arrows (ResizeHandle8) when selected — independent of hero-shape's arrows
+- Updated STYLE2_DEFAULTS["hero-image"] defaults to match the right panel area: pos {x:55, y:10}, boxSize {width:540, height:640}, scale 1, z 50. (Was pos {x:31.9, y:10.4}, boxSize {width:951} — that was a leftover from the old "treated as image, not section" implementation and would have placed the hero image over the LEFT panel.)
+- Removed unused `DraggablePhotoContainer` import (the file no longer uses it). Updated the import comment to reflect the new SectionBox-based approach.
+- Kept `onHeroPosChange` prop declared (optional) for backward compat — the parent editor still passes it but Style 2 no longer uses it. Move interactions now go through onSectionMove("hero-image", p) instead, which writes to data.sectionLayout["hero-image"].pos.
+- TypeScript check (`npx tsc --noEmit`): 0 errors in any speaker-intro file. (Pre-existing errors elsewhere in the codebase are unrelated.)
+
+Stage Summary:
+- Task 1 (Hero Shape defaults): DONE — Scale updated 1 → 1.10 (110%). X/Y/W/H/z already matched spec.
+- Task 2 (Hero image independent resize): DONE — hero image is now a SectionBox with its own 8-direction resize arrows. Dragging any arrow resizes ONLY the hero image; the hero-shape SectionBox is completely unaffected (and vice versa).
+- Files modified: src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+- Hero image still supports pan/zoom/replace via EditableImage (when `editable` mode is on). When `sectionsEditable` mode is on, the SectionBox drag/resize takes precedence (EditableImage pan is gated on `editable`).
+- Backward compat note: existing mockups that saved `data.heroOverlay.pos` will no longer use that value for positioning (position is now read from `data.sectionLayout["hero-image"].pos` with the right-panel default as fallback). If a user had a custom hero position saved via the old grip-bar drag, they may need to re-position once.

@@ -22,13 +22,12 @@ import {
 } from "../shared/section-edit";
 import { HeroShape, HeroShapePanelFields, type HeroShapeConfig } from "../shared/hero-shape";
 // PER USER SPEC 2026-07-31 (TSK-0030): Style 2 hero image gets the SAME
-// capabilities (zoom, pan, resize, move) as Style 1's hero. We import
-// Style 1's `EditableImage` (provides wheel-to-zoom, drag-to-pan,
-// 4-corner resize handles, replace button) and `DraggablePhotoContainer`
-// (provides the "⠿ Move hero" grip bar) so the UX matches Style 1.
+// image-content capabilities (zoom, pan, replace) as Style 1's hero via
+// `EditableImage`. PER USER SPEC 2026-08-01 (TSK-0037): the hero image
+// CONTAINER is now a SectionBox (not DraggablePhotoContainer), giving it
+// independent 8-direction resize arrows that don't affect the hero shape.
 import {
   EditableImage,
-  DraggablePhotoContainer,
 } from "./speaker-intro-canvas";
 
 /**
@@ -100,17 +99,22 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   // updated to X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50 (was
   // X=0, Y=0, W=1200, H=80, Scale=100% per TSK-0031).
   header:       { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 50 },
-  "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 40 },
+  // PER USER SPEC 2026-08-01 (TSK-0037): hero-shape defaults updated
+  // to Scale=110% (was 100%). Position/Size already match the spec
+  // (X=55, Y=10, W=540, H=640, z=40).
+  "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.10, z: 40 },
+  // PER USER SPEC 2026-08-01 (TSK-0037): hero-image is now a full
+  // SectionBox (independent of hero-shape) so the user gets 8-direction
+  // resize arrows on the hero image that DON'T affect the hero shape.
+  // Default pos/size matches the right panel area (LEFT_W..CANVAS_W,
+  // HEADER_H..HEADER_H+MAIN_H) so the image starts where the user
+  // expects, but can be freely moved/resized independently of the
+  // gradient shape behind it.
+  "hero-image":  { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 50 },
   // PER USER SPEC 2026-07-31 (TSK-0035): updated speakers defaults to
   // match the desired rendered HTML spec — top=19.9229%, left=-8.53358%,
   // width=891px, height=auto, transform=scale(0.746885), z-index=60.
   speakers:     { pos: { x: -8.53358, y: 19.9229 }, boxSize: { width: 891 }, scale: 0.746885, z: 60 },
-  // PER USER SPEC 2026-07-31 (TSK-0027): renamed section id "topic" →
-  // "hero-image" so it stops colliding with Style 1's "topic" section
-  // (which is the EVENT TOPIC text, not the hero image). Both styles now
-  // use a hero-image section id to refer to the hero image element —
-  // "Style 2 use the same section for the style 1 hero image."
-  "hero-image":  { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1, z: 50 },
   // PER USER SPEC 2026-07-31 (TSK-0030): renamed section id "sponsors" →
   // "style2-footer" to UNLINK it from Style 1/3's "sponsors" section.
   // Style 1/3's sponsors section is the SPONSORS list (bottom-right);
@@ -1044,132 +1048,114 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
           </SectionBox>
 
           {/* ============================================================
-              Layer 3b: HERO IMAGE — PER USER SPEC 2026-07-31 (TSK-0028):
-              "The intro speaker style 2 the hero image is now a section,
-              but should be treated as an image, so erase that section,
-              copy the entire right section from the style 1, but instead
-              of triangle, separate the image from the background."
+              Layer 3b: HERO IMAGE — PER USER SPEC 2026-08-01 (TSK-0037):
+              "Hero image resize arrows not working, make sure i can drag
+              the arrow and enlarge or shrink the hero image alone, not
+              with the hero shape."
 
-              This is NO LONGER a SectionBox — it's a plain absolutely-
-              positioned div containing the hero image + location pins +
-              mountain silhouette + meerkat mascot. It sits on top of
-              the hero-shape SectionBox (higher z-index: 50 > 40).
+              The hero image is now wrapped in its OWN SectionBox
+              (independent of the hero-shape SectionBox above). This gives
+              it 8-direction resize arrows + click-to-select + the standard
+              Object Properties Panel (Position X/Y, Size W/H, Scale %,
+              Layer z-index). Resizing the hero image does NOT affect the
+              hero shape (and vice versa) — the two sections are fully
+              independent.
 
-              The image is pannable (drag) + zoomable (wheel) + replaceable
-              (Replace button) when `editable` is true, just like Style 1.
-              A "⠿ Move hero" grip bar at the top lets the user drag the
-              hero position freely across the canvas (same UX as Style 1).
+              The image content retains all Style 1 capabilities
+              (pan / zoom / replace) via EditableImage when `editable`
+              is true. When `sectionsEditable` is true, the SectionBox's
+              drag/resize interactions take precedence (the EditableImage
+              pan/zoom is gated on `editable`).
               ============================================================ */}
-          {(() => {
-            // Compute hero image position + size as % of canvas.
-            // Default: anchored to the right panel (LEFT_W..CANVAS_W,
-            // HEADER_H..HEADER_H+MAIN_H). The user can drag it elsewhere
-            // via the grip bar — `data.heroOverlay.pos` overrides.
-            const heroZ = effectiveLayout("hero-image").z ?? 50;
-            const defaultLeftPct = (LEFT_W / CANVAS_W) * 100;
-            const defaultTopPct = (HEADER_H / CANVAS_H) * 100;
-            const defaultWidthPct = (RIGHT_W / CANVAS_W) * 100;
-            const defaultHeightPct = (MAIN_H / CANVAS_H) * 100;
-            const pos = data.heroOverlay?.pos;
-            const heroLeftPct = pos?.x ?? defaultLeftPct;
-            const heroTopPct = pos?.y ?? defaultTopPct;
-            const heroWidthPct = defaultWidthPct;
-            const heroHeightPct = defaultHeightPct;
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "hero-image"}
+            pos={effectiveLayout("hero-image").pos}
+            boxSize={effectiveLayout("hero-image").boxSize}
+            scale={effectiveLayout("hero-image").scale}
+            onMove={(p) => onSectionMove?.("hero-image", p)}
+            onResize={(s) => onSectionResize?.("hero-image", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("hero-image", sz)}
+            onSelect={() => setSelectedId("hero-image")}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            zIndex={effectiveLayout("hero-image").z ?? 50}
+            anchor="top-left"
+            guideId="hero-image"
+            label="Hero Image"
+            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
+          >
+            {/* Hero image — full capabilities via EditableImage.
+                The image is the BACKGROUND of the right panel —
+                the gradient shape (hero-shape section) sits BEHIND
+                it, and location pins + mountain + mascot sit ON TOP
+                of it. */}
+            <div className="absolute inset-0 overflow-hidden">
+              {data.heroOverlay?.imageUrl ? (
+                <EditableImage
+                  slot={{ kind: "hero" }}
+                  src={data.heroOverlay.imageUrl}
+                  alt="Hero"
+                  placement={data.heroOverlay.imagePlacement}
+                  editable={editable}
+                  previewScale={previewScale}
+                  onPickImage={onPickImage}
+                  onPlacementChange={onPlacementChange}
+                  onSizeChange={onSizeChange}
+                  sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+                  sizeLabel="hero scale"
+                  containerClass="absolute inset-0"
+                  objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+                />
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(255,255,255,0.04)",
+                  }}
+                />
+              )}
 
-            // PER USER SPEC 2026-07-31 (TSK-0030): "On style 2 for the
-            // hero section and image, set the same properties and
-            // capabilities of zoom, move and enlarge as the style 1 hero."
-            // We now use Style 1's `DraggablePhotoContainer` (provides
-            // the "⠿ Move hero" grip bar + free-form drag) + Style 1's
-            // `EditableImage` (provides wheel-to-zoom, drag-to-pan,
-            // 4-corner resize handles, Replace button, double-click-to-
-            // reset, placement + size readouts). The hero image is now
-            // functionally identical to Style 1's hero.
-            return (
-              <DraggablePhotoContainer
-                leftPct={heroLeftPct}
-                topPct={heroTopPct}
-                widthPct={heroWidthPct}
-                heightPct={heroHeightPct}
-                zIndex={heroZ}
-                rotation={0}
-                editable={editable}
-                previewScale={previewScale}
-                onPosChange={onHeroPosChange}
-                moveLabel="⠿ Move hero"
-              >
-                {/* Hero image — full capabilities via EditableImage.
-                    The image is the BACKGROUND of the right panel —
-                    the gradient shape (hero-shape section) sits BEHIND
-                    it, and location pins + mountain + mascot sit ON TOP
-                    of it. */}
-                <div className="absolute inset-0 overflow-hidden">
-                  {data.heroOverlay?.imageUrl ? (
-                    <EditableImage
-                      slot={{ kind: "hero" }}
-                      src={data.heroOverlay.imageUrl}
-                      alt="Hero"
-                      placement={data.heroOverlay.imagePlacement}
-                      editable={editable}
-                      previewScale={previewScale}
-                      onPickImage={onPickImage}
-                      onPlacementChange={onPlacementChange}
-                      onSizeChange={onSizeChange}
-                      sizeMultiplier={data.heroOverlay.imageScale ?? 1}
-                      sizeLabel="hero scale"
-                      containerClass="absolute inset-0"
-                      objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background: "rgba(255,255,255,0.04)",
-                      }}
-                    />
-                  )}
+              {/* Location pins (4 — cycled through white/teal/magenta variants) */}
+              {locationPins.slice(0, 4).map((pin, i) => (
+                <Style2LocationPin
+                  key={`pin-${i}-${pin.label}`}
+                  label={pin.label}
+                  x={pin.x}
+                  y={pin.y}
+                  variant={pinVariants[i % pinVariants.length]}
+                />
+              ))}
 
-                  {/* Location pins (4 — cycled through white/teal/magenta variants) */}
-                  {locationPins.slice(0, 4).map((pin, i) => (
-                    <Style2LocationPin
-                      key={`pin-${i}-${pin.label}`}
-                      label={pin.label}
-                      x={pin.x}
-                      y={pin.y}
-                      variant={pinVariants[i % pinVariants.length]}
-                    />
-                  ))}
+              {/* Mountain silhouette bottom decoration */}
+              <MountainSilhouette />
 
-                  {/* Mountain silhouette bottom decoration */}
-                  <MountainSilhouette />
-
-                  {/* Meerkat / mascot bottom-right */}
-                  {data.branding?.imageUrl && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: "12px",
-                        right: "16px",
-                        height: `${data.branding?.height ?? 80}px`,
-                        width: "auto",
-                        pointerEvents: "none",
-                        filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
-                      }}
-                    >
-                      <Image
-                        src={data.branding.imageUrl}
-                        alt="Mascot"
-                        width={data.branding?.height ?? 80}
-                        height={data.branding?.height ?? 80}
-                        style={{ height: "100%", width: "auto", objectFit: "contain" }}
-                      />
-                    </div>
-                  )}
+              {/* Meerkat / mascot bottom-right */}
+              {data.branding?.imageUrl && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "12px",
+                    right: "16px",
+                    height: `${data.branding?.height ?? 80}px`,
+                    width: "auto",
+                    pointerEvents: "none",
+                    filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
+                  }}
+                >
+                  <Image
+                    src={data.branding.imageUrl}
+                    alt="Mascot"
+                    width={data.branding?.height ?? 80}
+                    height={data.branding?.height ?? 80}
+                    style={{ height: "100%", width: "auto", objectFit: "contain" }}
+                  />
                 </div>
-              </DraggablePhotoContainer>
-            );
-          })()}
+              )}
+            </div>
+          </SectionBox>
 
           {/* ============================================================
               Layer 4: FOOTER BAR — dark charcoal, full-width, 80px tall
