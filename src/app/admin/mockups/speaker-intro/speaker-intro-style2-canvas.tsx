@@ -1015,8 +1015,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               "separate the hero image from the background colors gradient
               and set to shapes with gradient colors that you can edit."
               This section renders ONLY the gradient shape (SVG). The hero
-              image + pins + mountain + mascot are in the hero image
+              image + pins + mountain are in the hero image
               element below, which sits on top (higher z-index).
+              (Mascot was removed per TSK-0038.)
 
               PER USER SPEC 2026-07-31 (TSK-0028): the shape now uses the
               shared `HeroShape` component (supports fillMode solid |
@@ -1087,74 +1088,62 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
           >
             {/* Hero image — full capabilities via EditableImage.
-                The image is the BACKGROUND of the right panel —
-                the gradient shape (hero-shape section) sits BEHIND
-                it, and location pins + mountain + mascot sit ON TOP
-                of it. */}
-            <div className="absolute inset-0 overflow-hidden">
-              {data.heroOverlay?.imageUrl ? (
-                <EditableImage
-                  slot={{ kind: "hero" }}
-                  src={data.heroOverlay.imageUrl}
-                  alt="Hero"
-                  placement={data.heroOverlay.imagePlacement}
-                  editable={editable}
-                  previewScale={previewScale}
-                  onPickImage={onPickImage}
-                  onPlacementChange={onPlacementChange}
-                  onSizeChange={onSizeChange}
-                  sizeMultiplier={data.heroOverlay.imageScale ?? 1}
-                  sizeLabel="hero scale"
-                  containerClass="absolute inset-0"
-                  objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
-                />
-              ) : (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "rgba(255,255,255,0.04)",
-                  }}
-                />
-              )}
+                PER USER SPEC 2026-08-01 (TSK-0038):
+                The image is the BACKGROUND of the right panel — the
+                gradient shape (hero-shape section) sits BEHIND it, and
+                location pins + mountain sit ON TOP of it.
+                The mascot (falafel-meerkat) has been REMOVED per user
+                request ("Delete this image").
+                The `overflow-hidden` wrapper has been REMOVED so the
+                image behaves like Style 1 — when the user scrolls to
+                zoom IN, the image bleeds BEYOND the section border and
+                is only clipped by the canvas border (1200×800). This
+                matches Style 1's scroll/zoom effect exactly. */}
+            {/* EditableImage renders its own `absolute inset-0` container
+                that fills the SectionBox content area. The image inside
+                uses `transform: scale(zoom)` from `center center` — when
+                zoom > 1, it overflows and is clipped by the CANVAS border
+                (since this SectionBox has no overflow-hidden), exactly
+                like Style 1's DraggablePhotoContainer. */}
+            {data.heroOverlay?.imageUrl ? (
+              <EditableImage
+                slot={{ kind: "hero" }}
+                src={data.heroOverlay.imageUrl}
+                alt="Hero"
+                placement={data.heroOverlay.imagePlacement}
+                editable={editable}
+                previewScale={previewScale}
+                onPickImage={onPickImage}
+                onPlacementChange={onPlacementChange}
+                onSizeChange={onSizeChange}
+                sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+                sizeLabel="hero scale"
+                containerClass="absolute inset-0"
+                objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+              />
+            ) : (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(255,255,255,0.04)",
+                }}
+              />
+            )}
 
-              {/* Location pins (4 — cycled through white/teal/magenta variants) */}
-              {locationPins.slice(0, 4).map((pin, i) => (
-                <Style2LocationPin
-                  key={`pin-${i}-${pin.label}`}
-                  label={pin.label}
-                  x={pin.x}
-                  y={pin.y}
-                  variant={pinVariants[i % pinVariants.length]}
-                />
-              ))}
+            {/* Location pins (4 — cycled through white/teal/magenta variants) */}
+            {locationPins.slice(0, 4).map((pin, i) => (
+              <Style2LocationPin
+                key={`pin-${i}-${pin.label}`}
+                label={pin.label}
+                x={pin.x}
+                y={pin.y}
+                variant={pinVariants[i % pinVariants.length]}
+              />
+            ))}
 
-              {/* Mountain silhouette bottom decoration */}
-              <MountainSilhouette />
-
-              {/* Meerkat / mascot bottom-right */}
-              {data.branding?.imageUrl && (
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: "12px",
-                    right: "16px",
-                    height: `${data.branding?.height ?? 80}px`,
-                    width: "auto",
-                    pointerEvents: "none",
-                    filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
-                  }}
-                >
-                  <Image
-                    src={data.branding.imageUrl}
-                    alt="Mascot"
-                    width={data.branding?.height ?? 80}
-                    height={data.branding?.height ?? 80}
-                    style={{ height: "100%", width: "auto", objectFit: "contain" }}
-                  />
-                </div>
-              )}
-            </div>
+            {/* Mountain silhouette bottom decoration */}
+            <MountainSilhouette />
           </SectionBox>
 
           {/* ============================================================
@@ -1258,22 +1247,56 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                     >
                       In collab with
                     </span>
-                    {collaborators.map((c, i) => (
-                      <span
-                        key={`collab-${i}`}
-                        style={{
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          color: "#FFFFFF",
-                          background: "rgba(255,255,255,0.08)",
-                          padding: "4px 10px",
-                          borderRadius: "6px",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                        }}
-                      >
-                        {c.name}
-                      </span>
-                    ))}
+                    {/* PER USER SPEC 2026-08-01 (TSK-0038): show the LOGO
+                        URL (not the name) for each collaborator. Logos
+                        render on a white pill (so dark logos are visible
+                        against the dark footer) using object-contain so
+                        the full logo is always shown without cropping. */}
+                    {collaborators.map((c, i) => {
+                      const sizeMult = Math.max(0.01, c.logoSize ?? 1);
+                      const logoH = Math.round(24 * sizeMult);
+                      const logoMinW = Math.round(60 * sizeMult);
+                      return (
+                        <div
+                          key={`collab-${i}`}
+                          style={{
+                            height: `${logoH + 8}px`,
+                            minWidth: `${logoMinW}px`,
+                            background: "#FFFFFF",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            padding: "4px 8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            position: "relative",
+                          }}
+                        >
+                          {c.logoUrl ? (
+                            <Image
+                              src={c.logoUrl}
+                              alt={c.name}
+                              fill
+                              unoptimized
+                              className="object-contain"
+                              sizes="80px"
+                              draggable={false}
+                              style={{ padding: "2px 4px" }}
+                            />
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "#0F172A",
+                              }}
+                            >
+                              {c.name}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {sponsors.length > 0 && (
@@ -1289,22 +1312,54 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                     >
                       Sponsored by
                     </span>
-                    {sponsors.map((s, i) => (
-                      <span
-                        key={`sponsor-${i}`}
-                        style={{
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          color: "#FFFFFF",
-                          background: "rgba(255,255,255,0.08)",
-                          padding: "4px 10px",
-                          borderRadius: "6px",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                        }}
-                      >
-                        {s.name}
-                      </span>
-                    ))}
+                    {/* PER USER SPEC 2026-08-01 (TSK-0038): show the LOGO
+                        URL (not the name) for each sponsor. Same white-pill
+                        treatment as collaborators above. */}
+                    {sponsors.map((s, i) => {
+                      const sizeMult = Math.max(0.01, s.logoSize ?? 1);
+                      const logoH = Math.round(24 * sizeMult);
+                      const logoMinW = Math.round(60 * sizeMult);
+                      return (
+                        <div
+                          key={`sponsor-${i}`}
+                          style={{
+                            height: `${logoH + 8}px`,
+                            minWidth: `${logoMinW}px`,
+                            background: "#FFFFFF",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            padding: "4px 8px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            position: "relative",
+                          }}
+                        >
+                          {s.logoUrl ? (
+                            <Image
+                              src={s.logoUrl}
+                              alt={s.name}
+                              fill
+                              unoptimized
+                              className="object-contain"
+                              sizes="80px"
+                              draggable={false}
+                              style={{ padding: "2px 4px" }}
+                            />
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "#0F172A",
+                              }}
+                            >
+                              {s.name}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
