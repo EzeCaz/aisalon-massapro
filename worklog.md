@@ -8929,3 +8929,93 @@ Stage Summary:
   (c) Style 2 top-left AI Salon logo (36×36) now uses the new
       1785506059156-4chc96.png image. Style 1/3 bottom-left branding
       asset (48px) also uses the new image.
+
+---
+Task ID: TSK-0036
+Agent: main
+Task: User spec 2026-07-31 — seven Speaker-Intro changes:
+  (1) Style 1/3 header defaults: X=-1.1, Y=0.3, W=1100, H=auto, Scale=97%.
+  (2) Venue font size default 20 (was 14).
+  (3) Topic defaults: X=-12.8, Y=21.9, W=864, H=45, Scale=65%; font size 26 (was 24).
+  (4) Speakers "Speakers" header label: font-size 16, color black, align left default.
+  (5) Style 1/3 speakers defaults: X=-8.5, Y=23.7, W=891, H=381, Scale=76%.
+  (6) Style 2 header defaults: X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50.
+  (7) Style 2 speakers section background transparent (speaker cards keep white bg).
+
+Work Log:
+- Task 1 (Style 1/3 header defaults):
+  * Updated STYLE1_DEFAULTS.header in speaker-intro-canvas.tsx from
+    { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 }
+    to { pos: { x: -1.1, y: 0.3 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 }.
+- Task 2 (venue font size):
+  * Updated the venue <p> fallback in speaker-intro-canvas.tsx from
+    `?? 14` to `?? 20`.
+  * Updated form view TextStyleRow defaultFontSize for eventVenue: 14 → 20.
+- Task 3 (topic defaults + font size):
+  * Updated STYLE1_DEFAULTS.topic from
+    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 }
+    to { pos: { x: -12.8, y: 21.9 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 }.
+  * Updated topic <h2> fallback from `24 * topicFontScale` to `26 * topicFontScale`.
+  * Updated form view defaultFontSize for eventTopic: 24 → 26.
+- Task 4 (speakersLabel defaults):
+  * Updated speakersLabel span fallback from `?? 12` to `?? 16`.
+  * Updated form view defaultFontSize for speakersLabel: 12 → 16.
+  * Color: already black by default (Tailwind `text-black` class applies
+    when speakersLabel.color is unset). No change needed.
+  * Align: changed the default behavior so undefined align = label-left /
+    line-right (was line-left / label-right). Updated the logic:
+      OLD: showLineBefore = !labelAlign || labelAlign === "right"
+           showLineAfter  = labelAlign === "left" || labelAlign === "center"
+      NEW: showLineBefore = labelAlign === "right"
+           showLineAfter  = !labelAlign || labelAlign === "left" || labelAlign === "center"
+- Task 5 (Style 1/3 speakers defaults):
+  * Updated STYLE1_DEFAULTS.speakers from
+    { pos: { x: -7.9, y: 17.6 }, boxSize: { width: 891 }, scale: 0.76, z: 60 }
+    to { pos: { x: -8.5, y: 23.7 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 }.
+- Task 6 (Style 2 header defaults):
+  * Updated STYLE2_DEFAULTS.header in speaker-intro-style2-canvas.tsx from
+    { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1, z: 50 }
+    to { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 50 }.
+  * Removed the explicit height: 80 (H=auto per spec).
+- Task 7 (Style 2 speakers section transparent bg):
+  * Updated the speakers section container div in
+    speaker-intro-style2-canvas.tsx from `background: "#FFFFFF"` to
+    `background: "transparent"`.
+  * The individual speaker cards (Style2SpeakerCard component) keep their
+    own `background: #FFFFFF` styling — only the outer container is
+    transparent, so the canvas/hero shows through between cards.
+- Event-mapper cleanup:
+  * Removed `header` and `topic` from DEFAULT_SECTION_LAYOUT (same approach
+    TSK-0033 took for `speakers`). Now when an event is picked, each style
+    falls back to its own canvas-level header/topic defaults instead of
+    being forced to a shared layout. This was necessary because Style 1/3
+    and Style 2 now have DIFFERENT header defaults (X=-1.1 vs X=-1.5).
+- Updated comments in speaker-intro-canvas.tsx, sample-data.ts, and
+  event-mapper.ts to reflect the new TSK-0036 values.
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports
+  ZERO errors in any speaker-intro / mockup / form-view file.
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 307 redirect
+  to /login (expected — admin page requires auth).
+- Git: committed as be2b3bc, pushed to origin/main. Vercel auto-deploy
+  triggered.
+
+Stage Summary:
+- Task 1 DONE: Style 1/3 header defaults = X=-1.1, Y=0.3, W=1100, H=auto, Scale=97%, z=50.
+- Task 2 DONE: Venue font size default = 20 (was 14).
+- Task 3 DONE: Topic defaults = X=-12.8, Y=21.9, W=864, H=45, Scale=65%, z=50; font size 26.
+- Task 4 DONE: SpeakersLabel = font-size 16, color black (default), align left (default).
+- Task 5 DONE: Style 1/3 speakers defaults = X=-8.5, Y=23.7, W=891, H=381, Scale=76%, z=60.
+- Task 6 DONE: Style 2 header defaults = X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50.
+- Task 7 DONE: Style 2 speakers section bg = transparent; speaker cards keep #FFFFFF.
+- Files changed (5):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (STYLE1_DEFAULTS header/topic/speakers; venue/topic/speakersLabel font sizes; speakersLabel align default)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (STYLE2_DEFAULTS header; speakers section bg transparent)
+  - src/app/admin/mockups/speaker-intro/event-mapper.ts
+    (removed header + topic from DEFAULT_SECTION_LAYOUT; updated comments)
+  - src/app/admin/mockups/speaker-intro/sample-data.ts
+    (updated comments to reflect new canvas-level defaults)
+  - src/app/admin/mockups/shared/speaker-intro-form-view.tsx
+    (defaultFontSize: venue 20, topic 26, speakersLabel 16)
+- Deployed: pushed to origin/main (commit be2b3bc). Vercel building.
