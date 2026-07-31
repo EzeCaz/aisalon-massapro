@@ -21,6 +21,15 @@ import {
   type SectionLayoutEntry,
 } from "../shared/section-edit";
 import { HeroShape, HeroShapePanelFields, type HeroShapeConfig } from "../shared/hero-shape";
+// PER USER SPEC 2026-07-31 (TSK-0030): Style 2 hero image gets the SAME
+// capabilities (zoom, pan, resize, move) as Style 1's hero. We import
+// Style 1's `EditableImage` (provides wheel-to-zoom, drag-to-pan,
+// 4-corner resize handles, replace button) and `DraggablePhotoContainer`
+// (provides the "⠿ Move hero" grip bar) so the UX matches Style 1.
+import {
+  EditableImage,
+  DraggablePhotoContainer,
+} from "./speaker-intro-canvas";
 
 /**
  * SpeakerIntroStyle2Canvas — Style 2 layout for the Speaker Intro mockup.
@@ -96,7 +105,13 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   // use a hero-image section id to refer to the hero image element —
   // "Style 2 use the same section for the style 1 hero image."
   "hero-image":  { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1, z: 50 },
-  sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1, z: 50 },
+  // PER USER SPEC 2026-07-31 (TSK-0030): renamed section id "sponsors" →
+  // "style2-footer" to UNLINK it from Style 1/3's "sponsors" section.
+  // Style 1/3's sponsors section is the SPONSORS list (bottom-right);
+  // Style 2's footer is the dark FOOTER BAR (bottom). They are two
+  // different sections and must not share the same sectionLayout key.
+  // Updated defaults: X=-0.1, Y=92.5, W=auto, H=auto, Scale=100%, z=50.
+  "style2-footer": { pos: { x: -0.1, y: 92.5 }, scale: 1, z: 50 },
 };
 
 // Human-readable labels shown in the Object Properties Panel header.
@@ -105,7 +120,7 @@ const SECTION_LABELS: Record<string, string> = {
   speakers: "Speakers",
   "hero-image": "Hero Image",
   "hero-shape": "Hero Shape",
-  sponsors: "Footer",
+  "style2-footer": "Footer",
 };
 
 type HeroGradientConfig = NonNullable<SpeakerIntroData["style2HeroGradient"]>;
@@ -1023,135 +1038,99 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             const heroTopPct = pos?.y ?? defaultTopPct;
             const heroWidthPct = defaultWidthPct;
             const heroHeightPct = defaultHeightPct;
-            const placement = resolvePlacement(data.heroOverlay?.imagePlacement);
 
+            // PER USER SPEC 2026-07-31 (TSK-0030): "On style 2 for the
+            // hero section and image, set the same properties and
+            // capabilities of zoom, move and enlarge as the style 1 hero."
+            // We now use Style 1's `DraggablePhotoContainer` (provides
+            // the "⠿ Move hero" grip bar + free-form drag) + Style 1's
+            // `EditableImage` (provides wheel-to-zoom, drag-to-pan,
+            // 4-corner resize handles, Replace button, double-click-to-
+            // reset, placement + size readouts). The hero image is now
+            // functionally identical to Style 1's hero.
             return (
-              <div
-                className="absolute overflow-hidden"
-                style={{
-                  left: `${heroLeftPct}%`,
-                  top: `${heroTopPct}%`,
-                  width: `${heroWidthPct}%`,
-                  height: `${heroHeightPct}%`,
-                  zIndex: heroZ,
-                }}
+              <DraggablePhotoContainer
+                leftPct={heroLeftPct}
+                topPct={heroTopPct}
+                widthPct={heroWidthPct}
+                heightPct={heroHeightPct}
+                zIndex={heroZ}
+                rotation={0}
+                editable={editable}
+                previewScale={previewScale}
+                onPosChange={onHeroPosChange}
+                moveLabel="⠿ Move hero"
               >
-                {/* Hero image — pannable + zoomable when in edit mode.
-                    Rendered as a Next.js Image with object-fit cover.
+                {/* Hero image — full capabilities via EditableImage.
                     The image is the BACKGROUND of the right panel —
                     the gradient shape (hero-shape section) sits BEHIND
                     it, and location pins + mountain + mascot sit ON TOP
                     of it. */}
-                {data.heroOverlay?.imageUrl ? (
-                  <Image
-                    src={data.heroOverlay.imageUrl}
-                    alt="Hero"
-                    fill
-                    style={{
-                      objectFit: data.heroOverlay?.fit === "contain" ? "contain" : "cover",
-                      objectPosition: `${placement.focusX}% ${placement.focusY}%`,
-                      transform: `scale(${placement.zoom})`,
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: "rgba(255,255,255,0.04)",
-                    }}
-                  />
-                )}
-
-                {/* "⠿ Move hero" grip bar — only shown in edit mode.
-                    Dragging it updates `data.heroOverlay.pos`, which
-                    overrides the default right-panel anchor. */}
-                {editable && onHeroPosChange && (
-                  <div
-                    onMouseDown={(e) => {
-                      if (!editable || !onHeroPosChange) return;
-                      if (e.button !== 0) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const startX = e.clientX;
-                      const startY = e.clientY;
-                      const startLeftPct = heroLeftPct;
-                      const startTopPct = heroTopPct;
-                      const onMove = (ev: MouseEvent) => {
-                        const dx = ev.clientX - startX;
-                        const dy = ev.clientY - startY;
-                        const pctX = (dx / (CANVAS_W * previewScale)) * 100;
-                        const pctY = (dy / (CANVAS_H * previewScale)) * 100;
-                        onHeroPosChange({
-                          x: startLeftPct + pctX,
-                          y: startTopPct + pctY,
-                        });
-                      };
-                      const onUp = () => {
-                        window.removeEventListener("mousemove", onMove);
-                        window.removeEventListener("mouseup", onUp);
-                      };
-                      window.addEventListener("mousemove", onMove);
-                      window.addEventListener("mouseup", onUp);
-                    }}
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-100 transition"
-                    style={{ pointerEvents: "auto" }}
-                    title="Drag to move the hero image — can be placed anywhere on the canvas"
-                  >
-                    ⠿ Move hero
-                  </div>
-                )}
-
-                {/* Replace image button — only shown in edit mode */}
-                {editable && onPickImage && (
-                  <button
-                    type="button"
-                    onClick={() => onPickImage({ kind: "hero" })}
-                    className="absolute top-2 right-2 z-40 inline-flex items-center gap-1 rounded bg-white text-black px-2 py-1 text-[10px] font-bold shadow-md hover:bg-black/10"
-                    style={{ pointerEvents: "auto" }}
-                    title="Replace the hero image"
-                  >
-                    Replace
-                  </button>
-                )}
-
-                {/* Location pins (4 — cycled through white/teal/magenta variants) */}
-                {locationPins.slice(0, 4).map((pin, i) => (
-                  <Style2LocationPin
-                    key={`pin-${i}-${pin.label}`}
-                    label={pin.label}
-                    x={pin.x}
-                    y={pin.y}
-                    variant={pinVariants[i % pinVariants.length]}
-                  />
-                ))}
-
-                {/* Mountain silhouette bottom decoration */}
-                <MountainSilhouette />
-
-                {/* Meerkat / mascot bottom-right */}
-                {data.branding?.imageUrl && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: "12px",
-                      right: "16px",
-                      height: `${data.branding?.height ?? 80}px`,
-                      width: "auto",
-                      pointerEvents: "none",
-                      filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
-                    }}
-                  >
-                    <Image
-                      src={data.branding.imageUrl}
-                      alt="Mascot"
-                      width={data.branding?.height ?? 80}
-                      height={data.branding?.height ?? 80}
-                      style={{ height: "100%", width: "auto", objectFit: "contain" }}
+                <div className="absolute inset-0 overflow-hidden">
+                  {data.heroOverlay?.imageUrl ? (
+                    <EditableImage
+                      slot={{ kind: "hero" }}
+                      src={data.heroOverlay.imageUrl}
+                      alt="Hero"
+                      placement={data.heroOverlay.imagePlacement}
+                      editable={editable}
+                      previewScale={previewScale}
+                      onPickImage={onPickImage}
+                      onPlacementChange={onPlacementChange}
+                      onSizeChange={onSizeChange}
+                      sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+                      sizeLabel="hero scale"
+                      containerClass="absolute inset-0"
+                      objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
                     />
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background: "rgba(255,255,255,0.04)",
+                      }}
+                    />
+                  )}
+
+                  {/* Location pins (4 — cycled through white/teal/magenta variants) */}
+                  {locationPins.slice(0, 4).map((pin, i) => (
+                    <Style2LocationPin
+                      key={`pin-${i}-${pin.label}`}
+                      label={pin.label}
+                      x={pin.x}
+                      y={pin.y}
+                      variant={pinVariants[i % pinVariants.length]}
+                    />
+                  ))}
+
+                  {/* Mountain silhouette bottom decoration */}
+                  <MountainSilhouette />
+
+                  {/* Meerkat / mascot bottom-right */}
+                  {data.branding?.imageUrl && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "12px",
+                        right: "16px",
+                        height: `${data.branding?.height ?? 80}px`,
+                        width: "auto",
+                        pointerEvents: "none",
+                        filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
+                      }}
+                    >
+                      <Image
+                        src={data.branding.imageUrl}
+                        alt="Mascot"
+                        width={data.branding?.height ?? 80}
+                        height={data.branding?.height ?? 80}
+                        style={{ height: "100%", width: "auto", objectFit: "contain" }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </DraggablePhotoContainer>
             );
           })()}
 
@@ -1163,20 +1142,20 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               ============================================================ */}
           <SectionBox
             active={sectionsEditable}
-            selected={selectedId === "sponsors"}
-            pos={effectiveLayout("sponsors").pos}
-            boxSize={effectiveLayout("sponsors").boxSize}
-            scale={effectiveLayout("sponsors").scale}
-            onMove={(p) => onSectionMove?.("sponsors", p)}
-            onResize={(s) => onSectionResize?.("sponsors", s)}
-            onBoxResize={(sz) => onSectionBoxResize?.("sponsors", sz)}
-            onSelect={() => setSelectedId("sponsors")}
+            selected={selectedId === "style2-footer"}
+            pos={effectiveLayout("style2-footer").pos}
+            boxSize={effectiveLayout("style2-footer").boxSize}
+            scale={effectiveLayout("style2-footer").scale}
+            onMove={(p) => onSectionMove?.("style2-footer", p)}
+            onResize={(s) => onSectionResize?.("style2-footer", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("style2-footer", sz)}
+            onSelect={() => setSelectedId("style2-footer")}
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={effectiveLayout("sponsors").z ?? 50}
+            zIndex={effectiveLayout("style2-footer").z ?? 50}
             anchor="top-left"
-            guideId="sponsors"
+            guideId="style2-footer"
             label="Footer"
             style={{ position: "absolute", left: 0, top: `${HEADER_H + MAIN_H}px`, width: `${CANVAS_W}px`, height: "auto" }}
           >
@@ -1308,7 +1287,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               </div>
 
               {/* Right: QR code (plain div, not a SectionBox — the entire
-                  footer is draggable via the "sponsors" SectionBox above) */}
+                  footer is draggable via the "style2-footer" SectionBox above) */}
               <div
                 style={{
                   background: "#FFFFFF",

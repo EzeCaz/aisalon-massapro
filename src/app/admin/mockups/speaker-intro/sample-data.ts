@@ -144,7 +144,10 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
-    sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1.0, z: 50 },
+    // PER USER SPEC 2026-07-31 (TSK-0030): renamed from "sponsors" →
+    // "style2-footer" to unlink Style 2's footer from Style 1/3's
+    // sponsors section. Defaults updated to X=-0.1, Y=92.5, z=50.
+    "style2-footer": { pos: { x: -0.1, y: 92.5 }, scale: 1.0, z: 50 },
     qr:           { pos: { x: 92, y: 91 }, scale: 1.0, z: 50 },
   },
   /**

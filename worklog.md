@@ -8081,3 +8081,111 @@ Stage Summary:
   * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (removed opacity: 0.45 + mixBlendMode: "luminosity" from hero image)
 - No git commit (user has not requested one).
+
+---
+Task ID: TSK-0030
+Agent: main
+Task: User spec 2026-07-31 — 4 sub-tasks:
+  (1) Style 2 Footer Properties defaults: X=-0.1, Y=92.5, W=auto, H=auto,
+      Scale=100%, z-index=50.
+  (2) Style 1+3 sponsors Properties defaults: X=37.9, Y=85.5, W=auto,
+      H=auto, Scale=100%, z-index=1. The footer (Style 2) and sponsors
+      (Style 1/3) are two DIFFERENT sections and must NOT be linked —
+      they must have independent sectionLayout keys.
+  (3) Style 2 hero section + image: must have the same zoom/move/enlarge
+      capabilities as Style 1's hero.
+
+Work Log:
+- Task 1 + unlink (Style 2 footer):
+  * Renamed Style 2's footer section id from "sponsors" → "style2-footer"
+    in speaker-intro-style2-canvas.tsx. This UNLINKS Style 2's footer
+    from Style 1/3's sponsors section — they previously shared the same
+    sectionLayout.sponsors key, so dragging one moved the other too.
+    Now they are independent keys in sectionLayout.
+  * Updated STYLE2_DEFAULTS["style2-footer"] = { pos: { x: -0.1, y: 92.5 },
+    scale: 1, z: 50 }.
+  * Updated SECTION_LABELS: "style2-footer" → "Footer".
+  * Updated the SectionBox that renders the footer bar (selected,
+    pos, boxSize, scale, onMove, onResize, onBoxResize, onSelect, zIndex,
+    guideId) to use the new "style2-footer" key.
+  * Updated the QR comment ("footer is draggable via the 'style2-footer'
+    SectionBox above").
+  * Updated sample-data.ts sectionLayout: replaced `sponsors: {...}` with
+    `"style2-footer": { pos: { x: -0.1, y: 92.5 }, scale: 1.0, z: 50 }`.
+- Task 2 (Style 1/3 sponsors defaults + z-index 1):
+  * In speaker-intro-canvas.tsx, changed the sponsors SectionBox default
+    pos from { x: 25.9, y: 85.3 } → { x: 37.9, y: 85.5 }.
+  * Updated `sectionZFor()` to return 1 (instead of TEXT_Z = 50) when
+    id === "sponsors" and no explicit z is set in sectionLayout.
+  * This is backward compatible — existing JSON with explicit z values
+    still overrides the default.
+- Task 3 (Style 2 hero same capabilities as Style 1):
+  * Exported `EditableImage` and `DraggablePhotoContainer` from Style 1's
+    speaker-intro-canvas.tsx (they were previously internal helpers).
+    EditableImage provides: wheel-to-zoom, drag-to-pan, double-click-
+    to-reset, 4-corner resize handles (NW/NE/SE/SW), Replace button,
+    placement readout (focusX/focusY/zoom), size readout pill.
+    DraggablePhotoContainer provides: the "⠿ Move hero" grip bar at the
+    top-center + free-form drag of the entire container.
+  * Imported them into speaker-intro-style2-canvas.tsx.
+  * Replaced the plain absolutely-positioned <div> + <Image> + custom
+    move grip + Replace button with:
+      <DraggablePhotoContainer leftPct/topPct/widthPct/heightPct
+        zIndex/rotation/editable/previewScale/onPosChange/moveLabel>
+        <div className="absolute inset-0 overflow-hidden">
+          <EditableImage slot={kind:"hero"} ... />
+          {location pins, mountain, mascot}
+        </div>
+      </DraggablePhotoContainer>
+  * The hero image in Style 2 now has the SAME UX as Style 1's hero:
+    - Wheel-to-zoom (mouse wheel inside the hero area)
+    - Drag-to-pan (left-click + drag on the image)
+    - Double-click to reset placement to default (50/50/1.0)
+    - 4 corner resize handles to enlarge/shrink (NW/NE/SE/SW)
+    - Replace button (top-left, blue, hover to reveal)
+    - Placement readout (bottom-right, hover to reveal)
+    - Size readout pill (top-center, pink, hover to reveal)
+    - "⠿ Move hero" grip bar (top-center, blue, always visible in edit
+      mode) to drag the entire hero container freely across the canvas
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro", "mockups-client", or "hero-shape"
+  (the only remaining errors are pre-existing in unrelated files like
+  non-member-dashboard.tsx, stock-analysis-skill, set-montreal-hero.ts).
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 307 → 200 OK
+  (follows redirect to the editor with default style).
+
+Stage Summary:
+- Task 1 DONE: Style 2 Footer Properties defaults are now X=-0.1, Y=92.5,
+  W=auto, H=auto, Scale=100%, z=50.
+- Task 2 DONE: Style 1/3 sponsors Properties defaults are now X=37.9,
+  Y=85.5, W=auto, H=auto, Scale=100%, z=1. Critically, the "sponsors"
+  key in sectionLayout is now EXCLUSIVELY owned by Style 1/3's sponsors
+  list — Style 2's footer uses a separate "style2-footer" key, so they
+  no longer move in sync.
+- Task 3 DONE: Style 2 hero image now uses Style 1's `EditableImage` +
+  `DraggablePhotoContainer` components, giving it the full set of
+  capabilities: zoom (wheel), pan (drag), enlarge/shrink (corner
+  handles), move (grip bar), replace (button), and reset (double-click).
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (export EditableImage + DraggablePhotoContainer; sponsors default
+    pos → {x:37.9, y:85.5}; sectionZFor returns 1 for sponsors)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (renamed section id "sponsors" → "style2-footer" everywhere;
+    imported EditableImage + DraggablePhotoContainer; replaced plain
+    hero div with DraggablePhotoContainer + EditableImage)
+  * src/app/admin/mockups/speaker-intro/sample-data.ts
+    (sectionLayout.sponsors → sectionLayout["style2-footer"])
+- No git commit (user has not requested one). Suggested message:
+  "[TSK-0030] Speaker-Intro: unlink Style 2 footer from Style 1/3
+  sponsors + Style 2 hero same capabilities as Style 1".
+- Next step: user previews /admin/mockups/speaker-intro. Verify:
+  (a) Style 2 Footer Properties panel shows X=-0.1, Y=92.5, Scale=100%,
+      z=50 by default.
+  (b) Style 1 (and Style 3) sponsors Properties panel shows X=37.9,
+      Y=85.5, Scale=100%, z=1 by default.
+  (c) Moving Style 1's sponsors no longer moves Style 2's footer (and
+      vice versa) — they are now independent.
+  (d) Style 2 hero image now has corner resize handles, wheel zoom,
+      drag pan, Replace button (top-left), placement + size readouts,
+      and the "⠿ Move hero" grip bar — same UX as Style 1's hero.

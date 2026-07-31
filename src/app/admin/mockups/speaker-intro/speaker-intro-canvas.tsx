@@ -170,12 +170,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     }, [sectionsEditable]);
 
     /** Compute the z-index for a given section. Falls back to a sensible
-     *  default based on the section id (text sections at TEXT_Z+). */
+     *  default based on the section id (text sections at TEXT_Z+).
+     *
+     *  PER USER SPEC 2026-07-31 (TSK-0030): Style 1/3 sponsors default
+     *  z-index is 1 (not 50). */
     function sectionZFor(id: SectionId): number {
       const explicit = data.sectionLayout?.[id]?.z;
       if (typeof explicit === "number") return explicit;
       // Default z by section type
       if (id === "footer") return TEXT_Z + 1;
+      if (id === "sponsors") return 1;
       return TEXT_Z;
     }
 
@@ -714,8 +718,13 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         </SectionBox>
 
         {/* ===== 8. SPONSORS (bottom-right) =====
-            PER USER SPEC 2026-07-31 (TSK-0027): Default sponsors Properties
-            to X=25.9%, Y=85.3%, W=auto, H=auto, Scale=100%, z-index=50.
+            PER USER SPEC 2026-07-31 (TSK-0030): Default sponsors Properties
+            to X=37.9%, Y=85.5%, W=auto, H=auto, Scale=100%, z-index=1.
+            PER USER SPEC 2026-07-31 (TSK-0030): Style 1/3 sponsors MUST
+            NOT be linked to Style 2's footer — Style 2's footer now uses
+            a separate section id "style2-footer" (see speaker-intro-style2-
+            canvas.tsx). The "sponsors" key in sectionLayout is exclusively
+            owned by Style 1/3's sponsors list.
             Anchor switched from top-right (right/bottom) to top-left
             (left/top) so the X/Y % match the Properties form. The default
             pos applies when the user has not dragged the section yet;
@@ -724,7 +733,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "sponsors"}
           onSelect={() => setSelectedId("sponsors")}
-          pos={data.sectionLayout?.sponsors?.pos ?? { x: 25.9, y: 85.3 }}
+          pos={data.sectionLayout?.sponsors?.pos ?? { x: 37.9, y: 85.5 }}
           scale={data.sectionLayout?.sponsors?.scale ?? 1}
           boxSize={data.sectionLayout?.sponsors?.boxSize}
           onMove={(p) => onSectionMove?.("sponsors", p)}
@@ -937,7 +946,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
  *
  * Used for the hero background and the speaker headshots.
  */
-function EditableImage({
+export function EditableImage({
   slot,
   src,
   alt,
@@ -1651,7 +1660,7 @@ export function PlacementControls({
  * replaceable" + "Should be able to drag the [image] all around the
  * canvas without limitation".
  */
-function DraggablePhotoContainer({
+export function DraggablePhotoContainer({
   leftPct,
   topPct,
   widthPct,
