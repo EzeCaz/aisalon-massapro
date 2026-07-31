@@ -150,16 +150,17 @@ export const SAMPLE_DATA: SpeakerIntroData = {
   sectionLayout: {
     // PER USER SPEC 2026-07-31 (TSK-0031): `header` and `topic` are NOT
     // in sample-data. Each style falls back to its own canvas-level
-    // defaults — Style 1/3 uses STYLE1_DEFAULTS (header: X=1.5, Y=0.2,
-    // W=1200, H=auto, Scale=100%; topic: X=-13, Y=14.4, W=951, H=auto,
-    // Scale=65%); Style 2 uses STYLE2_DEFAULTS (header: X=0, Y=0, W=1200,
-    // H=80). This way the two styles don't share the same header layout
-    // entry — they look and behave differently as the user spec requires.
+    // defaults. PER USER SPEC 2026-07-31 (TSK-0036): updated values:
+    //   - Style 1/3 → STYLE1_DEFAULTS.header = X=-1.1, Y=0.3, W=1100, H=auto, Scale=97%
+    //                 STYLE1_DEFAULTS.topic  = X=-12.8, Y=21.9, W=864, H=45, Scale=65%
+    //   - Style 2   → STYLE2_DEFAULTS.header = X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%
+    // This way the two styles don't share the same header layout entry —
+    // they look and behave differently as the user spec requires.
     //
     // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is ALSO no longer in
     // sample-data. Each style falls back to its own canvas-level defaults:
-    //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-7.9, Y=17.6, W=891, Scale=76% (TSK-0034)
-    //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.53358, Y=19.9229, W=891, Scale=74.69% (TSK-0035)
+    //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.5, Y=23.7, W=891, H=381, Scale=76% (TSK-0036)
+    //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.53358, Y=19.9229, W=891, H=auto, Scale=74.69% (TSK-0035)
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
     // PER USER SPEC 2026-07-31 (TSK-0030): renamed from "sponsors" →

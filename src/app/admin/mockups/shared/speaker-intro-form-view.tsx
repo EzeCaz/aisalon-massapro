@@ -358,7 +358,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.eventVenue?.fontSize}
           fontColor={data.textStyles?.eventVenue?.color}
           align={data.textStyles?.eventVenue?.align}
-          defaultFontSize={14}
+          defaultFontSize={20}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
@@ -384,7 +384,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.eventTopic?.fontSize}
           fontColor={data.textStyles?.eventTopic?.color}
           align={data.textStyles?.eventTopic?.align}
-          defaultFontSize={24}
+          defaultFontSize={26}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
@@ -624,7 +624,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.speakersLabel?.fontSize}
           fontColor={data.textStyles?.speakersLabel?.color}
           align={data.textStyles?.speakersLabel?.align}
-          defaultFontSize={12}
+          defaultFontSize={16}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};

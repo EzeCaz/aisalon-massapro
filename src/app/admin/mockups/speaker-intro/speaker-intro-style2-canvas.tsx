@@ -96,7 +96,10 @@ const RIGHT_W = CANVAS_W - LEFT_W; // 540
 // The user can still override by dragging or typing in the properties panel.
 // ============================================================================
 const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
-  header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1, z: 50 },
+  // PER USER SPEC 2026-07-31 (TSK-0036): Style 2 header defaults
+  // updated to X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50 (was
+  // X=0, Y=0, W=1200, H=80, Scale=100% per TSK-0031).
+  header:       { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 50 },
   "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 40 },
   // PER USER SPEC 2026-07-31 (TSK-0035): updated speakers defaults to
   // match the desired rendered HTML spec — top=19.9229%, left=-8.53358%,
@@ -929,7 +932,12 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               style={{
                 width: "100%",
                 height: "100%",
-                background: "#FFFFFF",
+                // PER USER SPEC 2026-07-31 (TSK-0036): speakers section
+                // background changed from #FFFFFF to transparent. The
+                // individual speaker cards (rendered below) keep their
+                // white background — only the outer container is transparent
+                // so the canvas/hero shows through between cards.
+                background: "transparent",
                 padding: "28px 32px",
                 display: "flex",
                 flexDirection: "column",

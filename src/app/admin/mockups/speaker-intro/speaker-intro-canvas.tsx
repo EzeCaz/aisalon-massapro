@@ -198,8 +198,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     // Used as fallbacks when `data.sectionLayout[id]` is missing — both
     // for the SectionBox (rendering position) and the ObjectPropertiesPanel
     // (the floating form that shows X/Y/W/H/Scale/z).
-    //   - header: X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50
-    //   - topic:  X=-13, Y=14.4, W=951,  H=auto, Scale=65%,  z=50
+    //   - header: X=-1.1, Y=0.3, W=1100, H=auto, Scale=97%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=1.5, Y=0.2,
+    //              W=1200, Scale=100% per TSK-0031)
+    //   - topic:  X=-12.8, Y=21.9, W=864, H=45, Scale=65%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=-13, Y=14.4,
+    //              W=951, H=auto per TSK-0031)
     //   - qr:     X=91.6, Y=2.5, W=auto, H=auto, Scale=124%, z=50
     //             (PER USER SPEC 2026-07-31 TSK-0034 — was X=91, Y=2.2,
     //              Scale=114% per TSK-0032)
@@ -209,26 +213,32 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     //             bound to data.heroOverlay.pos/imageScale/imageScaleY.
     //             Default pos used when data.heroOverlay.pos is undefined.
     //             (PER USER SPEC 2026-07-31 TSK-0032)
-    //   - speakers: X=-7.9, Y=17.6, W=891, H=auto, Scale=76%, z=60
-    //             (PER USER SPEC 2026-07-31 TSK-0034 — was X=-8.8, Y=22.1
-    //              per TSK-0033)
+    //   - speakers: X=-8.5, Y=23.7, W=891, H=381, Scale=76%, z=60
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=-7.9, Y=17.6,
+    //              H=auto per TSK-0034)
     const STYLE1_DEFAULTS: Record<string, SectionLayoutEntry> = {
-      header:   { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 },
-      topic:    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 },
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 header defaults
+      // updated to X=-1.1, Y=0.3, W=1100, H=auto, Scale=97% (was
+      // X=1.5, Y=0.2, W=1200, Scale=100% per TSK-0031).
+      header:   { pos: { x: -1.1, y: 0.3 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 topic defaults
+      // updated to X=-12.8, Y=21.9, W=864, H=45, Scale=65% (was
+      // X=-13, Y=14.4, W=951, H=auto, Scale=65% per TSK-0031).
+      topic:    { pos: { x: -12.8, y: 21.9 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
       // PER USER SPEC 2026-07-31 (TSK-0034): updated QR defaults to
       // X=91.6, Y=2.5, Scale=124% (was X=91, Y=2.2, Scale=1.14 per
       // TSK-0032).
       qr:       { pos: { x: 91.6, y: 2.5 }, scale: 1.24, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      // PER USER SPEC 2026-07-31 (TSK-0034): Style 1/3 speakers Properties
-      // defaults updated to Position X=-7.9 Y=17.6, Size W=891 H=auto,
-      // Scale=76% (was X=-8.8, Y=22.1 per TSK-0033).
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
+      // defaults updated to Position X=-8.5 Y=23.7, Size W=891 H=381,
+      // Scale=76% (was X=-7.9, Y=17.6, H=auto per TSK-0034).
       // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
       // and above the branding asset (52) — same z as the previous defaults
       // in sample-data + event-mapper, so existing user drag/resize edits
       // continue to layer correctly.
-      speakers: { pos: { x: -7.9, y: 17.6 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
+      speakers: { pos: { x: -8.5, y: 23.7 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
     };
 
     // --- Section 4: Scroll Isolation ---
@@ -584,7 +594,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           <p
             className="mt-1 text-black/80"
             style={{
-              fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 14}px`,
+              fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 20}px`,
               color: data.textStyles?.eventVenue?.color,
               textAlign: data.textStyles?.eventVenue?.align,
             }}
@@ -629,7 +639,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           <h2
             className="font-extrabold text-black leading-tight"
             style={{
-              fontSize: `${data.textStyles?.eventTopic?.fontSize ?? (24 * (data.event.topicFontScale ?? 1))}px`,
+              fontSize: `${data.textStyles?.eventTopic?.fontSize ?? (26 * (data.event.topicFontScale ?? 1))}px`,
               color: data.textStyles?.eventTopic?.color,
               textAlign: data.textStyles?.eventTopic?.align,
             }}
@@ -729,13 +739,18 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               to restructure the row based on `speakersLabel.align`:
                 - "left"   / undefined (default): label on LEFT, gradient line on RIGHT
                 - "center": gradient line on BOTH sides, label in the MIDDLE
-                - "right":  gradient line on LEFT,  label on RIGHT (old default)
+                - "right":  gradient line on LEFT,  label on RIGHT
+              PER USER SPEC 2026-07-31 (TSK-0036): default align changed
+              from "right" to "left" — undefined now means label-left /
+              line-right (was line-left / label-right). Default font size
+              also changed from 12 to 16, color stays black (text-black
+              Tailwind class applies when speakersLabel.color is unset).
               This way clicking the ⟵ L / ↔ C / ⟶ R buttons in the form
               view produces a visible change on the canvas. */}
           {(() => {
             const labelAlign = data.textStyles?.speakersLabel?.align;
-            const showLineBefore = !labelAlign || labelAlign === "right";
-            const showLineAfter = labelAlign === "left" || labelAlign === "center";
+            const showLineBefore = labelAlign === "right";
+            const showLineAfter = !labelAlign || labelAlign === "left" || labelAlign === "center";
             const lineEl = (
               <div
                 className="h-px flex-1"
@@ -750,7 +765,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 <span
                   className="font-bold text-black uppercase tracking-widest"
                   style={{
-                    fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 12}px`,
+                    fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 16}px`,
                     letterSpacing: "0.2em",
                     color: data.textStyles?.speakersLabel?.color,
                     textAlign: data.textStyles?.speakersLabel?.align,

@@ -81,32 +81,29 @@ const HIDDEN_BY_DEFAULT_NAMES = ["ezequiel sznaider"];
 /**
  * Default section layout for the Speaker Intro mockup.
  *
- * Per user spec 2026-07-09:
- *   - D (speakers): pos X=-7.5% Y=29.3%, box W=891px, scale=0.76, z=front
- *   - E (header):   pos X=1.7%  Y=0.5%,  box W=100% (1200px)
- *   - F (topic):    pos X=-12.8% Y=23.5%, box W=951px, scale=0.65
- *   - H (branding): pos X≈3.10% Y≈87.57% (handled separately on brandingAsset)
+ * PER USER SPEC 2026-07-31 (TSK-0036): `header` and `topic` are NO LONGER
+ * in DEFAULT_SECTION_LAYOUT — same approach TSK-0033 took for `speakers`.
+ * When an event is picked, each style falls back to its own canvas-level
+ * defaults:
+ *   - Style 1/3 → STYLE1_DEFAULTS.header  = X=-1.1,  Y=0.3,  W=1100, H=auto,  Scale=97%  (TSK-0036)
+ *                 STYLE1_DEFAULTS.topic   = X=-12.8, Y=21.9, W=864,  H=45,    Scale=65%  (TSK-0036)
+ *   - Style 2   → STYLE2_DEFAULTS.header  = X=-1.5,  Y=0.3,  W=1247, H=auto,  Scale=97%  (TSK-0036)
+ *                 (Style 2 has no `topic` section — the topic is rendered
+ *                 as part of the header subtitle.)
+ *   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.5, Y=23.7, W=891, H=381, Scale=76% (TSK-0036)
+ *   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.53358, Y=19.9229, W=891, H=auto, Scale=74.69% (TSK-0035)
  *
- * These defaults are baked into the data so the canvas renders the
- * canonical layout on first event-pick, before the user has touched
- * anything. The user can still drag/resize sections in the editor —
- * their edits override these defaults via the same sectionLayout path.
+ * This way each style uses its own header/topic/speakers defaults after
+ * event-pick, instead of being forced to the same layout.
+ *
+ *   - H (branding): pos X≈3.10% Y≈87.57% (handled separately on brandingAsset)
  */
 const DEFAULT_SECTION_LAYOUT = {
-  header: {
-    pos: { x: 1.7, y: 0.5 },
-    boxSize: { width: 1200 },
-  },
-  topic: {
-    pos: { x: -12.8, y: 23.5 },
-    boxSize: { width: 951 },
-    scale: 0.65,
-  },
   // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is NOT in
   // DEFAULT_SECTION_LAYOUT. When an event is picked, the speakers
   // section falls back to the canvas-level defaults:
-  //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-7.9, Y=17.6, W=891, Scale=76%, z=60 (TSK-0034)
-  //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%, z=60
+  //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.5, Y=23.7, W=891, H=381, Scale=76%, z=60 (TSK-0036)
+  //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.53358, Y=19.9229, W=891, H=auto, Scale=74.69%, z=60 (TSK-0035)
   // This way each style uses its own speakers defaults after event-pick,
   // instead of being forced to the same layout. (Same approach TSK-0031
   // took for `header`.)
