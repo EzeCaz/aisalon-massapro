@@ -84,6 +84,12 @@ type Props = {
   onHeroScaleXChange?: (n: number) => void;
   /** Called when the hero overlay Y scale changes (slider). */
   onHeroScaleYChange?: (n: number) => void;
+  /**
+   * Called when the hero image's boxSize W/H changes (from the new
+   * "Hero Image Properties" floating panel — per user spec 2026-07-31
+   * TSK-0032). Updates `data.heroOverlay.boxSize` (canvas px).
+   */
+  onHeroBoxResize?: (size: { width?: number; height?: number }) => void;
   /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
   /**
@@ -122,6 +128,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       onTriangleZChange,
       onHeroScaleXChange,
       onHeroScaleYChange,
+      onHeroBoxResize,
       onSectionZChange,
       onBrandingAssetPosChange,
       onHeroPosChange,
@@ -156,12 +163,20 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     // (the floating form that shows X/Y/W/H/Scale/z).
     //   - header: X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50
     //   - topic:  X=-13, Y=14.4, W=951,  H=auto, Scale=65%,  z=50
-    //   - sponsors: X=37.9, Y=85.5, W=auto, H=auto, Scale=100%, z=1
-    //              (z=1 set in sectionZFor() below)
+    //   - qr:     X=91, Y=2.2, W=auto, H=auto, Scale=114%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0032)
+    //   - sponsors: X=23.8, Y=82.6, W=auto, H=auto, Scale=100%, z=1
+    //             (PER USER SPEC 2026-07-31 TSK-0032; z=1 also in sectionZFor)
+    //   - hero-image: virtual section id for the hero overlay image —
+    //             bound to data.heroOverlay.pos/imageScale/imageScaleY.
+    //             Default pos used when data.heroOverlay.pos is undefined.
+    //             (PER USER SPEC 2026-07-31 TSK-0032)
     const STYLE1_DEFAULTS: Record<string, SectionLayoutEntry> = {
       header:   { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 },
       topic:    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 },
-      sponsors: { pos: { x: 37.9, y: 85.5 }, scale: 1, z: 1 },
+      qr:       { pos: { x: 91, y: 2.2 }, scale: 1.14, z: 50 },
+      sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
+      "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
     };
 
     // --- Section 4: Scroll Isolation ---
@@ -217,8 +232,22 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
           }}
         >
-        {/* ===== 5. HERO VISUAL (right side, behind everything else on right) ===== */}
+        {/* ===== 5. HERO VISUAL (right side, behind everything else on right) =====
+            PER USER SPEC 2026-07-31 (TSK-0032): the hero image is now
+            SELECTABLE in Edit Sections mode — clicking it (or its grip)
+            sets selectedId="hero-image" and shows the ObjectPropertiesPanel
+            with Position X/Y, Size W/H, Scale % just like other sections.
+            The panel is wired to data.heroOverlay.pos / boxSize /
+            imageScale via onHeroPosChange / onHeroBoxResize /
+            onHeroScaleXChange. When boxSize is set, it overrides the
+            legacy imageScale/imageScaleY multipliers. */}
         {(() => {
+          // boxSize override (from the new Hero Image Properties panel).
+          // When set, the hero container is sized in canvas px instead of
+          // the legacy imageScale/imageScaleY multipliers.
+          const heroBoxSize = data.heroOverlay.boxSize;
+          const hasBoxW = !!(heroBoxSize?.width && heroBoxSize.width > 0);
+          const hasBoxH = !!(heroBoxSize?.height && heroBoxSize.height > 0);
           // imageScale (X): 1 = default 58% width starting at 42% left.
           //   - scale < 1 shrinks the hero (anchored to the right edge).
           //   - scale > 1.72 grows the hero beyond the canvas width; the
@@ -226,20 +255,32 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           //   - The ONLY limitation is the canvas border — no arbitrary
           //     min/max clamp is applied here. (User spec 2026-06-28.)
           const scale = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
-          const heroWidth = 58 * scale; // % of canvas
+          // Width: explicit px (from boxSize) wins over legacy multiplier.
+          // Convert px → % of canvas so DraggablePhotoContainer can still
+          // use widthPct/heightPct.
+          const heroWidth = hasBoxW
+            ? ((heroBoxSize!.width as number) / CANVAS_W) * 100
+            : 58 * scale; // % of canvas
           // Default anchor: top-right (clamped so the right edge stays
           // anchored to the canvas right border; the bleed goes off the
           // LEFT side and is clipped by overflow-hidden). When the user
           // has dragged the hero via the "⠿ Move hero" grip bar,
           // `data.heroOverlay.pos` overrides this default.
           const defaultHeroLeft = Math.max(0, 100 - heroWidth);
-          const pos = data.heroOverlay.pos;
-          const heroLeft = pos ? pos.x : defaultHeroLeft;
+          const pos = data.heroOverlay.pos ?? STYLE1_DEFAULTS["hero-image"].pos ?? { x: defaultHeroLeft, y: 0 };
+          const heroLeft = pos.x ?? defaultHeroLeft;
           // imageScaleY: 1 = full canvas height. scale < 1 shrinks
           // vertically; scale > 1 bleeds off the bottom (clipped).
           const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
-          const heroHeight = 100 * scaleY; // % of canvas
-          const heroTop = pos ? pos.y : 0; // default: anchored to top
+          // Height: explicit px (from boxSize) wins over legacy multiplier.
+          const heroHeight = hasBoxH
+            ? ((heroBoxSize!.height as number) / CANVAS_H) * 100
+            : 100 * scaleY; // % of canvas
+          const heroTop = pos.y ?? 0; // default: anchored to top
+          // Selection state — when selectedId === "hero-image", show a
+          // dashed outline so the user knows the Hero Image Properties
+          // panel is bound to this element.
+          const heroSelected = selectedId === "hero-image";
           return (
         <DraggablePhotoContainer
           leftPct={heroLeft}
@@ -253,6 +294,30 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           onPosChange={onHeroPosChange}
           moveLabel="⠿ Move hero"
         >
+          {/* Click-catcher for selecting the hero image in Edit Sections
+              mode. Sits ABOVE the image but BELOW the EditableImage's
+              own pan/zoom interactions (so it only intercepts clicks
+              when sectionsEditable is on). */}
+          {sectionsEditable && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId("hero-image");
+              }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                cursor: "pointer",
+                zIndex: 999,
+                outline: heroSelected
+                  ? "2px dashed #0066FF"
+                  : "1px dashed rgba(0, 102, 255, 0.4)",
+                outlineOffset: "-2px",
+                pointerEvents: "auto",
+              }}
+              title="Click to edit Hero Image properties"
+            />
+          )}
           {/* Background image (Tel Aviv skyline + beach).
               Wrapped in a div with explicit zIndex = triangleZ + 1 so the
               hero image always renders IN FRONT of the triangle overlay
@@ -540,13 +605,17 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </h2>
         </SectionBox>
 
-        {/* ===== 3. QR CODE (top-right) ===== */}
+        {/* ===== 3. QR CODE (top-right) =====
+            PER USER SPEC 2026-07-31 (TSK-0032): Default qr Properties
+            to X=91%, Y=2.2%, W=auto, H=auto, Scale=114%, z=50.
+            Anchor switched from top-right to top-left (default) so X/Y
+            match the Properties form. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "qr"}
           onSelect={() => setSelectedId("qr")}
-          pos={data.sectionLayout?.qr?.pos}
-          scale={data.sectionLayout?.qr?.scale ?? 1}
+          pos={data.sectionLayout?.qr?.pos ?? STYLE1_DEFAULTS.qr.pos}
+          scale={data.sectionLayout?.qr?.scale ?? STYLE1_DEFAULTS.qr.scale}
           boxSize={data.sectionLayout?.qr?.boxSize}
           onMove={(p) => onSectionMove?.("qr", p)}
           onResize={(s) => onSectionResize?.("qr", s)}
@@ -555,8 +624,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col items-center gap-1"
-          style={{ right: "48px", top: "40px", zIndex: sectionZFor("qr") }}
-          anchor="top-right"
+          style={{ left: 0, top: 0, zIndex: sectionZFor("qr") }}
           accentColor="#FF005A"
           label="QR"
           guideId="qr"
@@ -939,7 +1007,29 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                    placement.
                  - Layering: Front and Back toggles to reorder the
                    z-index of the currently selected element." */}
-        {sectionsEditable && selectedId && (
+        {/* PER USER SPEC 2026-07-31 (TSK-0032): when "hero-image" is
+            selected, render a special Hero Image Properties panel that
+            binds Position to data.heroOverlay.pos, Size W/H to
+            data.heroOverlay.boxSize, and Scale % to data.heroOverlay.imageScale.
+            For any other selected id, fall back to the standard section
+            ObjectPropertiesPanel bound to data.sectionLayout[id]. */}
+        {sectionsEditable && selectedId && selectedId === "hero-image" && (
+          <ObjectPropertiesPanel
+            label="Hero Image"
+            pos={data.heroOverlay.pos ?? STYLE1_DEFAULTS["hero-image"].pos}
+            onPosChange={(p) => onHeroPosChange?.(p)}
+            z={heroZ}
+            onZChange={(z) => onHeroZChange?.(z)}
+            peers={sectionPeerZs}
+            onDeselect={() => setSelectedId(null)}
+            showBoxSize
+            boxSize={data.heroOverlay.boxSize}
+            onBoxSizeChange={(sz) => onHeroBoxResize?.(sz)}
+            scale={data.heroOverlay.imageScale ?? STYLE1_DEFAULTS["hero-image"].scale ?? 1}
+            onScaleChange={(s) => onHeroScaleXChange?.(s)}
+          />
+        )}
+        {sectionsEditable && selectedId && selectedId !== "hero-image" && (
           <ObjectPropertiesPanel
             label={selectedId}
             pos={data.sectionLayout?.[selectedId]?.pos ?? STYLE1_DEFAULTS[selectedId]?.pos}

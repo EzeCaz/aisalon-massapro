@@ -318,6 +318,19 @@ export type SpeakerIntroData = {
      */
     pos?: { x: number; y: number };
     /**
+     * Explicit hero container dimensions in canvas px (1200×800 canvas).
+     * When set, the W/H override the default `imageScale`/`imageScaleY`
+     * multipliers — the hero container becomes exactly this many px wide
+     * / tall, anchored at `pos`.
+     *
+     * PER USER SPEC 2026-07-31 (TSK-0032): exposed via the new "Hero Image
+     * Properties" floating panel so the user can type precise W/H values
+     * (in canvas px) just like other SectionBoxes. When undefined, the
+     * hero falls back to the legacy `imageScale` × 58% canvas width (X)
+     * and `imageScaleY` × 100% canvas height (Y).
+     */
+    boxSize?: { width?: number; height?: number };
+    /**
      * Whether to render the geometric triangle SVG overlay on top of the
      * hero image. Defaults to true. Automatically set to false when the
      * user picks a new hero image (per user spec: "when the hero image is

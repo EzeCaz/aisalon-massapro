@@ -8280,3 +8280,121 @@ Stage Summary:
   should show X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50. Click on
   Topic → X=-13, Y=14.4, W=951, H=auto, Scale=65%, z=50. Style 2's
   header should remain at X=0, Y=0 with H=80 (dark header bar).
+
+---
+Task ID: TSK-0032
+Agent: main
+Task: User spec 2026-07-31 — Style 1/3 (Style 1 + Style 3 duplicate):
+  (1) QR Properties defaults: X=91, Y=2.2, W=auto, H=auto, Scale=114%.
+  (2) Sponsors Properties defaults: X=23.8, Y=82.6, W=auto, H=auto,
+      Scale=100% (was X=37.9, Y=85.5 — corrected per this spec).
+  (3) NEW: Add a "Hero Image Properties" panel for the hero image /
+      overlay section. Must include Position X/Y (% of canvas),
+      Size W/H (canvas px), Scale % — same format as other sections.
+
+Work Log:
+- Task 1 (QR defaults):
+  * Added `qr: { pos: { x: 91, y: 2.2 }, scale: 1.14, z: 50 }` to
+    STYLE1_DEFAULTS in speaker-intro-canvas.tsx.
+  * Updated QR SectionBox to use STYLE1_DEFAULTS.qr fallback for pos
+    and scale.
+  * Removed the hardcoded `style={{ right: "48px", top: "40px" }}`
+    + `anchor="top-right"` from the QR SectionBox — replaced with
+    `{ left: 0, top: 0 }` + default anchor so the pos% fallback works
+    cleanly (X=91% from left, Y=2.2% from top).
+- Task 2 (Sponsors defaults):
+  * Updated `sponsors` entry in STYLE1_DEFAULTS from
+    `{ pos: { x: 37.9, y: 85.5 }, scale: 1, z: 1 }` to
+    `{ pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 }`.
+  * The sponsors SectionBox already uses STYLE1_DEFAULTS.sponsors as
+    fallback (set in TSK-0031), so no JSX change needed — the new
+    values automatically apply.
+- Task 3 (NEW Hero Image Properties panel):
+  * Added `boxSize?: { width?: number; height?: number }` to the
+    `heroOverlay` type in types.ts. When set, the W/H (canvas px)
+    override the legacy imageScale/imageScaleY multipliers.
+  * Added `onHeroBoxResize?: (size: { width?: number; height?: number }) => void`
+    to SpeakerIntroCanvas Props.
+  * Wired `onHeroBoxResize` through the canvas destructure.
+  * Modified the hero image IIFE in speaker-intro-canvas.tsx:
+    - Reads `data.heroOverlay.boxSize` and converts W/H (canvas px) to
+      % of canvas (widthPct = W / 1200 * 100, heightPct = H / 800 * 100)
+      for DraggablePhotoContainer.
+    - When boxSize is set, those %s override the legacy
+      `58 * imageScale` / `100 * imageScaleY` calculation.
+    - Added a click-catcher div (only when sectionsEditable is on) that
+      sits ABOVE the image (z=999) with `pointerEvents: "auto"` + an
+      `onClick` that sets `selectedId = "hero-image"`. Shows a dashed
+      blue outline when selected, faint dashed outline when not.
+    - Default hero pos falls back to STYLE1_DEFAULTS["hero-image"].pos
+      ({ x: 42, y: 0 }) when data.heroOverlay.pos is undefined.
+  * Added a NEW branch in the ObjectPropertiesPanel rendering:
+      - When `selectedId === "hero-image"` → render a special panel
+        labeled "Hero Image" bound to:
+          pos           = data.heroOverlay.pos ?? STYLE1_DEFAULTS["hero-image"].pos
+          onPosChange   = onHeroPosChange (updates data.heroOverlay.pos)
+          boxSize       = data.heroOverlay.boxSize
+          onBoxSizeChange = onHeroBoxResize (updates data.heroOverlay.boxSize)
+          scale         = data.heroOverlay.imageScale ?? STYLE1_DEFAULTS["hero-image"].scale ?? 1
+          onScaleChange = onHeroScaleXChange (updates data.heroOverlay.imageScale)
+          z             = heroZ (data.heroZ ?? 2)
+          onZChange     = onHeroZChange
+      - Otherwise → fall back to the standard section panel bound to
+        data.sectionLayout[id] (unchanged).
+  * Added `handleHeroBoxResize` callback in speaker-intro-editor.tsx
+    (next to handleHeroScaleXChange/handleHeroScaleYChange). Updates
+    `data.heroOverlay.boxSize` — cleans up the field if both W and H
+    are empty/zero (delete the field entirely so legacy multipliers
+    resume).
+  * Passed `onHeroBoxResize={handleHeroBoxResize}` to SpeakerIntroCanvas
+    in the editor's Style 1/3 branch (Style 2 branch unchanged — Style 2
+    already has its own hero-image section via SectionBox with its own
+    effectiveLayout fallback).
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro", "mockups-client", or "hero-shape".
+  (Fixed one initial TS18048 "pos is possibly undefined" by adding a
+  final `?? { x: defaultHeroLeft, y: 0 }` fallback in the hero IIFE.)
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 200 OK.
+
+Stage Summary:
+- Task 1 DONE: Style 1/3 QR Properties defaults = X=91, Y=2.2, W=auto,
+  H=auto, Scale=114%, z=50.
+- Task 2 DONE: Style 1/3 sponsors Properties defaults = X=23.8, Y=82.6,
+  W=auto, H=auto, Scale=100%, z=1.
+- Task 3 DONE: NEW "Hero Image Properties" panel in Style 1/3. In Edit
+  Sections mode, click the hero image (a dashed blue outline appears)
+  → the floating ObjectPropertiesPanel shows "Hero Image" with:
+    - Position X/Y (% of canvas) → updates data.heroOverlay.pos
+    - Size W/H (canvas px) → updates data.heroOverlay.boxSize
+      (overrides legacy imageScale/imageScaleY when set)
+    - Scale % → updates data.heroOverlay.imageScale
+    - Layer (z-index Front/Back) → updates data.heroZ
+  The hero image is also still draggable via its "⠿ Move hero" grip
+  bar (which calls onHeroPosChange → updates the same pos field that
+  the panel's X/Y inputs read from — they stay in sync).
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/types.ts (added heroOverlay.boxSize)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (STYLE1_DEFAULTS: added qr + hero-image entries, updated sponsors
+    pos to 23.8/82.6; QR SectionBox uses STYLE1_DEFAULTS.qr fallback;
+    hero IIFE: boxSize override + click-catcher + selection outline;
+    ObjectPropertiesPanel: new "hero-image" branch with Hero Image
+    label + hero-bound handlers; added onHeroBoxResize to Props +
+    destructure)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+    (added handleHeroBoxResize callback; passed onHeroBoxResize to
+    SpeakerIntroCanvas)
+- No git commit (user has not requested one). Suggested message:
+  "[TSK-0032] Speaker-Intro: Style 1/3 QR + sponsors defaults + new
+  Hero Image Properties panel with Position/Size/Scale".
+- Next step: user previews /admin/mockups/speaker-intro. With Edit
+  Sections mode ON:
+  (a) Click the QR section → Properties panel shows X=91, Y=2.2,
+      Scale=114% (or the user's saved override).
+  (b) Click the sponsors section → Properties panel shows X=23.8,
+      Y=82.6, Scale=100%.
+  (c) Click the hero image (right side) → dashed blue outline appears
+      + Properties panel shows "Hero Image" with X/Y/W/H/Scale/z.
+      Typing values into X/Y moves the hero across the canvas; typing
+      W/H resizes the hero container (in canvas px); typing Scale%
+      scales the hero proportionally.

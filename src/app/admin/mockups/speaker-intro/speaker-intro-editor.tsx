@@ -431,6 +431,34 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /**
+   * Apply a hero boxSize change (W/H in canvas px) from the new Hero
+   * Image Properties panel — PER USER SPEC 2026-07-31 (TSK-0032).
+   * Updates `data.heroOverlay.boxSize`. When W/H are set, they override
+   * the legacy imageScale/imageScaleY multipliers in the canvas.
+   */
+  const handleHeroBoxResize = useCallback(
+    (size: { width?: number; height?: number }) => {
+      const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+      next.heroOverlay.boxSize = {
+        width: size.width && size.width > 0 ? size.width : undefined,
+        height: size.height && size.height > 0 ? size.height : undefined,
+      };
+      // Clean up: if both are undefined, remove the field entirely.
+      if (!next.heroOverlay.boxSize.width && !next.heroOverlay.boxSize.height) {
+        delete next.heroOverlay.boxSize;
+      }
+      setData(next);
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          setJsonText(JSON.stringify(next, null, 2));
+        });
+      }
+    },
+    [data],
+  );
+
   /** Apply a hero z-index change (Front/Back button). */
   function handleHeroZChange(z: number) {
     const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
@@ -1015,6 +1043,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onTriangleZChange={handleTriangleZChange}
                   onHeroScaleXChange={handleHeroScaleXChange}
                   onHeroScaleYChange={handleHeroScaleYChange}
+                  onHeroBoxResize={handleHeroBoxResize}
                   onSectionZChange={handleSectionZChange}
                   onBrandingAssetPosChange={handleBrandingAssetPosChange}
                   onHeroPosChange={handleHeroPosChange}
