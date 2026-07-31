@@ -465,7 +465,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             anchor="top-left"
             guideId="header"
             label="Header"
-            style={{ left: 0, top: 0, width: `${CANVAS_W}px`, height: `${HEADER_H}px` }}
+            style={{ position: "absolute", left: 0, top: 0, width: `${CANVAS_W}px`, height: `${HEADER_H}px` }}
           >
             <div
               style={{
@@ -546,7 +546,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             anchor="top-left"
             guideId="speakers"
             label="Speakers"
-            style={{ left: 0, top: `${HEADER_H}px`, width: `${LEFT_W}px`, height: `${MAIN_H}px` }}
+            style={{ position: "absolute", left: 0, top: `${HEADER_H}px`, width: `${LEFT_W}px`, height: `${MAIN_H}px` }}
           >
             <div
               style={{
@@ -637,7 +637,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             anchor="top-left"
             guideId="topic"
             label="Hero (right panel)"
-            style={{ left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
+            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
           >
             <div
               style={{
@@ -727,7 +727,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             anchor="top-left"
             guideId="sponsors"
             label="Footer"
-            style={{ left: 0, top: `${HEADER_H + MAIN_H}px`, width: `${CANVAS_W}px`, height: `${FOOTER_H}px` }}
+            style={{ position: "absolute", left: 0, top: `${HEADER_H + MAIN_H}px`, width: `${CANVAS_W}px`, height: `${FOOTER_H}px` }}
           >
             <div
               style={{
