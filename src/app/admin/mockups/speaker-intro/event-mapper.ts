@@ -131,9 +131,11 @@ const DEFAULT_BRAND_COLORS: [string, string] = ["#ff0056", "#8f0080"];
 /** Footer credit per user spec 2026-07-09 (item I). */
 const DEFAULT_FOOTER_CREDIT = "MassaPro";
 
-/** Branding asset image URL — AI Salon mark on Vercel Blob. */
+/** Branding asset image URL — AI Salon mark on Vercel Blob.
+ *  PER USER SPEC 2026-07-31 (TSK-0035): updated to the new logo
+ *  1785506059156-4chc96.png (was 1782505047256-bpy1ln.png). */
 const DEFAULT_BRANDING_ASSET_IMAGE =
-  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png";
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png";
 
 /**
  * Minimal shape of `event` returned by GET /api/events/[slug].

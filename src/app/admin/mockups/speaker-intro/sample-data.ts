@@ -119,8 +119,11 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * 2026-07-02). Replaceable + draggable — see speaker-intro-canvas.tsx.
    */
   brandingAsset: {
+    // PER USER SPEC 2026-07-31 (TSK-0035): updated branding asset URL to
+    // the new AI Salon logo (1785506059156-4chc96.png). Replaces the
+    // previous 1782505047256-bpy1ln.png asset across all 3 styles.
     imageUrl:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png",
     height: 48,
     pos: { x: 3.1021447721179625, y: 87.5656836461126 },
   },
@@ -156,7 +159,7 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is ALSO no longer in
     // sample-data. Each style falls back to its own canvas-level defaults:
     //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-7.9, Y=17.6, W=891, Scale=76% (TSK-0034)
-    //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%
+    //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.53358, Y=19.9229, W=891, Scale=74.69% (TSK-0035)
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
     // PER USER SPEC 2026-07-31 (TSK-0030): renamed from "sponsors" →

@@ -98,7 +98,10 @@ const RIGHT_W = CANVAS_W - LEFT_W; // 540
 const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1, z: 50 },
   "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 40 },
-  speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
+  // PER USER SPEC 2026-07-31 (TSK-0035): updated speakers defaults to
+  // match the desired rendered HTML spec — top=19.9229%, left=-8.53358%,
+  // width=891px, height=auto, transform=scale(0.746885), z-index=60.
+  speakers:     { pos: { x: -8.53358, y: 19.9229 }, boxSize: { width: 891 }, scale: 0.746885, z: 60 },
   // PER USER SPEC 2026-07-31 (TSK-0027): renamed section id "topic" →
   // "hero-image" so it stops colliding with Style 1's "topic" section
   // (which is the EVENT TOPIC text, not the hero image). Both styles now

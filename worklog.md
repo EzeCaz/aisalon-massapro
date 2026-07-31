@@ -8796,3 +8796,136 @@ Stage Summary:
       there's a new "Position & Size" section with X/Y/W/H/Scale inputs.
       Type values into X/Y → shape moves on the canvas. Type W/H →
       shape resizes. Type Scale% → shape scales proportionally.
+
+---
+Task ID: TSK-0035
+Agent: main
+Task: User spec 2026-07-31 — four Speaker-Intro changes:
+  (1) Site footer text: change "AI Salon Tel Aviv" → "AI Salon Global"
+      (with no space before the "·" separator per user's exact spec).
+  (2) Wrap "Platform by MassaPro" footer text in a link to
+      https://massapro.com/ (target=_blank, rel=noopener noreferrer).
+  (3) Style 2 speakers section defaults: per rendered HTML spec,
+      Position X=-8.53358%, Y=19.9229%, W=891px, H=auto,
+      Scale=0.746885, z=60.
+  (4) Replace AI Salon branding asset image src across the speaker-intro
+      mockup — from 1782505047256-bpy1ln.png to the new
+      1785506059156-4chc96.png.
+
+Work Log:
+- Task 1 + 2 (footer text + MassaPro link):
+  * Found 9 page files with the shared admin/mockup footer pattern:
+      <span>© {year} AI Salon Tel Aviv · Empowering AI Connections</span>
+      <span>Platform by MassaPro</span>
+    Files updated:
+      - src/app/admin/event-prep/page.tsx
+      - src/app/admin/event-prep/[id]/page.tsx
+      - src/app/admin/knowledge-base/page.tsx
+      - src/app/admin/mockups/meet-the-speaker/page.tsx
+      - src/app/admin/mockups/speaker-intro/page.tsx
+      - src/app/admin/mockups/page.tsx
+      - src/app/admin/mockups/qr-salon/page.tsx
+      - src/app/admin/mockups/event-profile/page.tsx
+      - src/app/admin/mockups/agenda-profile/page.tsx
+  * Two text-shape variants handled: (a) single-line copyright span
+    and (b) copyright split across two lines (meet-the-speaker,
+    speaker-intro, qr-salon).
+  * In each file:
+      OLD: <span>© {year} AI Salon Tel Aviv · Empowering AI Connections</span>
+           <span>Platform by MassaPro</span>
+      NEW: <span>© {year} AI Salon Global· Empowering AI Connections</span>
+           <a href="https://massapro.com/" target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline">Platform by MassaPro</a>
+  * Note: per the user's exact spec, there is NO space between "Global"
+    and "·" — i.e. "AI Salon Global· Empowering AI Connections".
+- Task 3 (Style 2 speakers defaults):
+  * Updated STYLE2_DEFAULTS.speakers in speaker-intro-style2-canvas.tsx
+    from
+      { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 }
+    to
+      { pos: { x: -8.53358, y: 19.9229 },
+        boxSize: { width: 891 }, scale: 0.746885, z: 60 }
+    matching the user's rendered HTML spec exactly:
+      inset: 19.9229% auto auto -8.53358%;
+      width: 891px; height: auto;
+      transform: scale(0.746885); z-index: 60;
+  * Updated sample-data.ts comment to reflect the new Style 2
+    speakers default (X=-8.53358, Y=19.9229, Scale=74.69%).
+- Task 4 (branding asset image src replacement):
+  * The user pointed at the Style 2 top-left AI Salon logo (36x36
+    `<img alt="AI Salon">` rendered from `data.brandingAsset.imageUrl`).
+    Because `brandingAsset.imageUrl` is shared by all 3 styles, updating
+    it changes BOTH Style 2's top-left logo AND Style 1/3's bottom-left
+    branding asset (48px). The new logo 1785506059156-4chc96.png
+    replaces 1782505047256-bpy1ln.png across the entire speaker-intro
+    mockup.
+  * Updated 4 files:
+      - sample-data.ts: brandingAsset.imageUrl → new URL
+      - event-mapper.ts: DEFAULT_BRANDING_ASSET_IMAGE → new URL
+        (so picking a new event still uses the new logo)
+      - speaker-intro-canvas.tsx: fallback URL (line ~1044) → new URL
+        (used when data.brandingAsset?.imageUrl is empty)
+      - shared/speaker-intro-form-view.tsx: placeholder URL → new URL
+  * Historical comments mentioning ...1782505047256-bpy1ln.png were
+    left intact (they refer to the 2026-07-02 spec and are documentation,
+    not functional code). New TSK-0035 comments explain the replacement.
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports
+  ZERO errors in any speaker-intro / mockup / footer file. The only
+  errors reported are pre-existing ones in unrelated files
+  (toggleable-chart-card.tsx, chart.tsx, email-campaign/sender.ts,
+  meta-capi.ts, record-conversion.ts, etc.) — none touched by TSK-0035.
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 307 redirect
+  to /login (expected — admin page requires auth).
+
+Stage Summary:
+- Task 1 DONE: Site footer copyright text now reads
+  "© {year} AI Salon Global· Empowering AI Connections" across all 9
+  admin/mockup page files.
+- Task 2 DONE: "Platform by MassaPro" is now a clickable link to
+  https://massapro.com/ (opens in new tab via target=_blank,
+  rel=noopener noreferrer) across all 9 admin/mockup page files.
+- Task 3 DONE: Style 2 speakers defaults = X=-8.53358%, Y=19.9229%,
+  W=891px, H=auto, Scale=0.746885 (74.69%), z=60 (was X=-8.7, Y=5,
+  Scale=0.76).
+- Task 4 DONE: Branding asset image URL changed from
+  1782505047256-bpy1ln.png → 1785506059156-4chc96.png in:
+    - sample-data.ts (initial load)
+    - event-mapper.ts (when picking a new event)
+    - speaker-intro-canvas.tsx (fallback)
+    - shared/speaker-intro-form-view.tsx (placeholder text)
+  Affects Style 1/3 bottom-left branding asset AND Style 2 top-left
+  AI Salon logo (both use the same brandingAsset.imageUrl data field).
+- Files changed (13 total):
+  Footer text + link (9 files):
+    - src/app/admin/event-prep/page.tsx
+    - src/app/admin/event-prep/[id]/page.tsx
+    - src/app/admin/knowledge-base/page.tsx
+    - src/app/admin/mockups/meet-the-speaker/page.tsx
+    - src/app/admin/mockups/speaker-intro/page.tsx
+    - src/app/admin/mockups/page.tsx
+    - src/app/admin/mockups/qr-salon/page.tsx
+    - src/app/admin/mockups/event-profile/page.tsx
+    - src/app/admin/mockups/agenda-profile/page.tsx
+  Style 2 speakers defaults (1 file):
+    - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+  Branding asset URL (4 files):
+    - src/app/admin/mockups/speaker-intro/sample-data.ts
+    - src/app/admin/mockups/speaker-intro/event-mapper.ts
+    - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    - src/app/admin/mockups/shared/speaker-intro-form-view.tsx
+- No git commit (user has not requested one). Suggested message:
+  "[TSK-0035] Site footer: AI Salon Global + MassaPro link; Style 2
+  speakers defaults; branding asset image URL update".
+- Next step: user previews /admin/mockups/speaker-intro.
+  (a) Footer at bottom of any admin/mockup page now reads:
+      "© 2026 AI Salon Global· Empowering AI Connections"
+      "Platform by MassaPro" (clickable, opens massapro.com in new tab)
+  (b) Switch to Style 2 → speakers section is now positioned at
+      top=19.92%, left=-8.53%, width=891px, scale=0.747 — matching the
+      user's HTML spec exactly. Click the Speakers section in Edit
+      Sections mode → Properties panel shows X=-8.53358, Y=19.9229,
+      W=891, Scale=74.69%.
+  (c) Style 2 top-left AI Salon logo (36×36) now uses the new
+      1785506059156-4chc96.png image. Style 1/3 bottom-left branding
+      asset (48px) also uses the new image.

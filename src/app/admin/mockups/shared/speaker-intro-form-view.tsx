@@ -1527,7 +1527,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           <input
             type="url"
             value={data.brandingAsset?.imageUrl ?? ""}
-            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png"
             onChange={(e) =>
               update((d) => {
                 d.brandingAsset = {
