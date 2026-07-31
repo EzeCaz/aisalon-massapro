@@ -629,39 +629,12 @@ export function SpeakerIntroEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        {/* Style switcher moved to canvas caption area per TSK-0024 — these
-            buttons are about which style the canvas renders, so they belong
-            right above the canvas, not in the global toolbar. */}
-        {/* Edit images + Edit sections — moved OUT of the canvas frame per TSK-0023 Phase 1.
-            Order (toolbar): Edit Images · Edit Sections · Form/JSON · Reset/Copy/Download/Save.
-            Style 1/2/3 segmented buttons live in the canvas caption below. */}
-        <button
-          type="button"
-          onClick={() => setEditMode((s) => !s)}
-          className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
-            editMode
-              ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-              : "border border-black/15 bg-white text-black hover:bg-black/5"
-          }`}
-          title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-        >
-          <ImageIcon className="h-3.5 w-3.5" />
-          {editMode ? "Editing images" : "Edit images"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setSectionsEditMode((s) => !s)}
-          className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
-            sectionsEditMode
-              ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-              : "border border-black/15 bg-white text-black hover:bg-black/5"
-          }`}
-          title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-        >
-          <LayoutPanelTop className="h-3.5 w-3.5" />
-          {sectionsEditMode ? "Editing sections" : "Edit sections"}
-        </button>
-        <div className="h-5 w-px bg-black/15 mx-0.5" />
+        {/* Per TSK-0025: "Edit images" + "Edit sections" buttons moved OUT
+            of the toolbar and into the canvas caption area (left of the
+            Style 1/2/3 segmented buttons). All three canvas-interaction
+            controls now live together as a single cluster right above the
+            canvas. Toolbar keeps only the data/export actions:
+            Form/JSON · Reset · Copy · Download · Save. */}
         {/* View-mode toggle: Form vs JSON */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
@@ -885,12 +858,13 @@ export function SpeakerIntroEditor({ events }: Props) {
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
           {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
-              Per TSK-0024: Style 1/2/3 segmented buttons now live here on the
+              Per TSK-0024: Style 1/2/3 segmented buttons live here on the
               RIGHT side (replacing the previous "{scale}% scale · PNG export
-              2400 × 1600" text — that text was redundant with the toolbar's
-              Download button tooltip and the canvas-size label on the left).
-              The Style buttons are about WHICH layout the canvas renders, so
-              they belong directly above the canvas, not in the global toolbar. */}
+              2400 × 1600" text).
+              Per TSK-0025: "Edit images" + "Edit sections" buttons ALSO live
+              here now, positioned to the LEFT of the Style buttons. All three
+              canvas-interaction controls (Edit images, Edit sections, Style
+              1/2/3) cluster together right above the canvas. */}
           <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <div className="text-[0.7rem] font-semibold text-black/70">
               Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
@@ -898,37 +872,67 @@ export function SpeakerIntroEditor({ events }: Props) {
                 · {Math.round(previewScale * 100)}% scale
               </span>
             </div>
-            <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden shadow-sm">
-              {([
-                { value: "style1", label: "Style 1" },
-                { value: "style2", label: "Style 2" },
-                { value: "style3", label: "Style 3" },
-              ] as const).map((opt, i) => {
-                const active = (data.style ?? "style1") === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
-                      i > 0 ? "border-l border-black/10" : ""
-                    } ${
-                      active
-                        ? "bg-[#FF005A] text-white"
-                        : "text-black hover:bg-black/5"
-                    }`}
-                    title={
-                      opt.value === "style1"
-                        ? "Style 1 — hero on right, text on left"
-                        : opt.value === "style2"
-                        ? "Style 2 — split-screen: speaker cards on left, hero on right"
-                        : "Style 3 — same as Style 2 with QR repositioned"
-                    }
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
+            <div className="inline-flex items-center gap-2 flex-wrap">
+              {/* Edit images + Edit sections — moved here from the toolbar per TSK-0025. */}
+              <button
+                type="button"
+                onClick={() => setEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  editMode
+                    ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                {editMode ? "Editing images" : "Edit images"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSectionsEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  sectionsEditMode
+                    ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+              >
+                <LayoutPanelTop className="h-3.5 w-3.5" />
+                {sectionsEditMode ? "Editing sections" : "Edit sections"}
+              </button>
+              {/* Style 1/2/3 segmented buttons (TSK-0024). */}
+              <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden shadow-sm">
+                {([
+                  { value: "style1", label: "Style 1" },
+                  { value: "style2", label: "Style 2" },
+                  { value: "style3", label: "Style 3" },
+                ] as const).map((opt, i) => {
+                  const active = (data.style ?? "style1") === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                        i > 0 ? "border-l border-black/10" : ""
+                      } ${
+                        active
+                          ? "bg-[#FF005A] text-white"
+                          : "text-black hover:bg-black/5"
+                      }`}
+                      title={
+                        opt.value === "style1"
+                          ? "Style 1 — hero on right, text on left"
+                          : opt.value === "style2"
+                          ? "Style 2 — split-screen: speaker cards on left, hero on right"
+                          : "Style 3 — same as Style 2 with QR repositioned"
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <div

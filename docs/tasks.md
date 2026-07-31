@@ -363,6 +363,19 @@
 | **Files Touched** | /home/z/my-project/docs/tasks.md (this entry), /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx (Style button relocation), /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx (full rewrite of Style 2 layout), /home/z/my-project/src/app/admin/mockups/speaker-intro/sample-data.ts (updated to AI Salon Tel Aviv Marketing event), /home/z/my-project/worklog.md (worklog entry), /home/z/my-project/scripts/append_tasks_registry_tsk0024.py (this script) |
 | **Outcome** | Follow-up to TSK-0023. User opened the speaker-intro editor and reported that (a) the Style 1/2/3 segmented buttons are in the top toolbar instead of the canvas caption area where the "62% scale · PNG export 2400 × 1600" text lives, and (b) the current Style 2/3 implementation does NOT match the uploaded reference image "Speaker Intro Style 2.png" — the reference is a split-screen 55/45 layout (left white panel with 2×2 speaker cards, right dark purple hero with mountain + 4 location pins + meerkat, top gradient header bar, bottom dark footer with sponsors + AI SALON logo + QR), but the current implementation is a hero-fill-canvas with text overlay. Vision-analyzed the reference via glm-4.6v: 55/45 split, magenta gradient header bar with title + AI SALON brand, 2×2 speaker card grid with initials-avatars (OR/EK/BM/MF), dark purple hero panel with mountain silhouette + 4 location pins (Sarona/Yafo/Dizengoff/Neve Tzedek) + yellow meerkat mascot bottom-right, dark footer with IN COLLAB WITH (Amdocs, Google) + SPONSORED BY (Alison.ai) + AI SALON logo bottom-left + QR bottom-right. Both Style 2 and Style 3 will use the new layout (they currently share SpeakerIntroStyle2Canvas). Sample data updated to the AI Salon Tel Aviv Marketing event with 4 speakers per the user's JSON example. |
 
+### TSK-0025
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0025` |
+| **Date** | 2026-07-31 |
+| **Title** | Speaker-Intro editor: move "Edit images" + "Edit sections" buttons out of the toolbar and into the canvas caption area, positioned to the LEFT of the Style 1/2/3 segmented buttons |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0025 — edit-buttons-beside-style-buttons` |
+| **Files Touched** | /home/z/my-project/docs/tasks.md (this entry), /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx (button relocation), /home/z/my-project/worklog.md (worklog entry), /home/z/my-project/scripts/append_tasks_registry_tsk0025.py (this script) |
+| **Outcome** | Follow-up to TSK-0024. User asked to move the "Edit images" and "Edit sections" buttons out of the top toolbar and into the canvas caption area, sitting to the LEFT of the Style 1/2/3 segmented buttons. Rationale: all three controls (Edit images, Edit sections, Style 1/2/3) are about WHICH canvas renders and HOW the user interacts with it — they belong together as a single cluster right above the canvas, not split across the toolbar and caption. Toolbar becomes leaner: [Form/JSON] [Reset] [Copy] [Download] [Save]. Canvas caption becomes: [Canvas info text] ... [Edit images][Edit sections] [Style 1|Style 2|Style 3]. |
+
 ## Registry — Pre-Registry History (Reference Only)
 
 > Tasks completed before 2026-07-28 are NOT back-filled with serial IDs. They are listed here for context only. For full details, see `/home/z/my-project/worklog.md` and `core/tasks/README.md`.

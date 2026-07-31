@@ -183,7 +183,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 ## Current Task
 
-> **TSK-0024 DONE** — Speaker-Intro editor: (1) Style 1/2/3 segmented buttons relocated from the top toolbar into the canvas caption area (right side, replacing the "62% scale · PNG export 2400 × 1600" text); (2) `SpeakerIntroStyle2Canvas` completely rewritten to match the uploaded "Speaker Intro Style 2.png" reference — split-screen 55/45 layout with gradient header bar, 2×2 speaker card grid on left (gradient circle avatars with initials OR/EK/BM/MF + name + title·company + pink topic pill + 2-line bio + teal time/session row), dark purple hero on right (mountain silhouette + 4 color-cycling location pins + meerkat mascot), dark footer (AI SALON logo + IN COLLAB WITH pills + SPONSORED BY pills + QR); (3) `sample-data.ts` updated to AI Salon Tel Aviv Marketing event with 4 speakers per the user's JSON example. TypeScript clean (0 errors in speaker-intro files, was 4 before). Dev server picked up changes — ready for user preview at /admin/mockups/speaker-intro → Style 2 button in canvas caption.
+> **TSK-0025 DONE** — Speaker-Intro editor: "Edit images" + "Edit sections" buttons moved from the toolbar into the canvas caption area, positioned to the LEFT of the Style 1/2/3 segmented buttons. All three canvas-interaction controls now cluster together right above the canvas. Toolbar is now leaner: [Form/JSON] [Reset] [Copy] [Download] [Save]. TypeScript clean (0 errors). Dev server picked up the change — page loads HTTP 200 at /admin/mockups/speaker-intro.
 
 When a new session starts, read this section first to know what's in flight. Update it before ending a session so the next agent can pick up seamlessly.
 
