@@ -379,6 +379,32 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /** Apply a hero gradient shape change (shape type, colors, direction,
+   *  opacity, rotation) — updates data.style2HeroGradient.
+   *  PER USER SPEC 2026-07-31 (TSK-0026). */
+  function handleHeroShapeChange(
+    patch: Partial<NonNullable<SpeakerIntroData["style2HeroGradient"]>>,
+  ) {
+    const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    if (!next.style2HeroGradient) {
+      next.style2HeroGradient = {
+        shape: "rectangle",
+        colors: ["#311B92", "#1A237E", "#0B0B2E"],
+        direction: 180,
+        opacity: 0.9,
+        rotation: 0,
+      };
+    }
+    Object.assign(next.style2HeroGradient, patch);
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   /** Apply a hero X scale change (slider). */
   function handleHeroScaleXChange(n: number) {
     const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
@@ -961,6 +987,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onSectionResize={handleSectionResize}
                   onSectionBoxResize={handleSectionBoxResize}
                   onSectionZChange={handleSectionZChange}
+                  onHeroShapeChange={handleHeroShapeChange}
                 />
               ) : (
                 <SpeakerIntroCanvas

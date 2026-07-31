@@ -128,17 +128,33 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     height: 80,
   },
   /**
-   * Style 2 default section layout. Per TSK-0024 rewrite, the Style 2
-   * canvas uses a fixed split-screen layout (header 80px + main 640px +
-   * footer 80px), so most position values are NOT used by Style 2 —
-   * they're here for backward compatibility with Style 1 and with
-   * saved JSON from before the rewrite.
+   * Style 2 default section layout. PER USER SPEC 2026-07-31 (TSK-0026):
+   * The user specified exact default positions/sizes/scales/z-indices for
+   * the speakers, sponsors (footer), and topic (hero image) sections.
+   * The "hero-shape" section is NEW — it's the editable gradient shape
+   * behind the hero image (separated from the hero image per TSK-0026).
    */
   sectionLayout: {
-    header: { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 },
-    topic: { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 50 },
-    speakers: { pos: { x: 0, y: 10 }, boxSize: { width: 660, height: 640 }, scale: 1.0, z: 60 },
-    qr: { pos: { x: 92, y: 91 }, scale: 1.0, z: 50 },
-    sponsors: { pos: { x: 0, y: 90 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 },
+    header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 },
+    "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
+    speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
+    topic:        { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
+    sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1.0, z: 50 },
+    qr:           { pos: { x: 92, y: 91 }, scale: 1.0, z: 50 },
+  },
+  /**
+   * Style 2 — Hero gradient shape config. PER USER SPEC 2026-07-31 (TSK-0026):
+   * "separate the hero image from the background colors gradient and set to
+   * shapes with gradient colors that you can edit on the form."
+   * The shape renders BEHIND the hero image (z=40 < hero image z=50).
+   * Default: rectangle with the dark-purple 3-stop gradient matching the
+   * original Style 2 reference.
+   */
+  style2HeroGradient: {
+    shape: "rectangle",
+    colors: ["#311B92", "#1A237E", "#0B0B2E"],
+    direction: 180,
+    opacity: 0.9,
+    rotation: 0,
   },
 };

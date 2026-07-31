@@ -7732,3 +7732,45 @@ Stage Summary:
 - Style 2 drag now works: dragging a section moves it on the canvas (left/top % are respected with position:absolute).
 - Bonus fix: the split-screen layout (speakers left 55% + topic right 45%) now renders correctly side-by-side instead of stacking vertically. Header (top) and footer (bottom) also position correctly.
 - Files changed: src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx (4 one-line edits).
+
+---
+Task ID: TSK-0026
+Agent: main
+Task: Style 2 — set default section properties (speakers, sponsors, topic/hero image) + rename topic to Hero Image + separate hero image from background gradient into an editable shape section.
+
+Work Log:
+- Task 1 (speakers defaults): Added STYLE2_DEFAULTS constant with speakers = { pos: {x:-8.7, y:5}, boxSize: {width:891}, scale:0.76, z:60 }. Changed speakers SectionBox style height from fixed 640px to "auto" (H=auto per user spec).
+- Task 2 (sponsors defaults): Added sponsors = { pos: {x:0.3, y:89.4}, scale:1, z:50 } (no boxSize = W/H auto). Changed sponsors SectionBox style height from fixed 80px to "auto".
+- Task 3 (topic → Hero Image): Changed label from "Hero (right panel)" to "Hero Image". Set topic defaults = { pos: {x:31.9, y:10.4}, boxSize: {width:951}, scale:1, z:50 }. Changed style height to "auto" with minHeight: 640px. Added SECTION_LABELS mapping so the Object Properties Panel header shows "Hero Image Properties" instead of the raw id "topic".
+- Task 4 (separate hero image from gradient shape):
+  * Added NEW "hero-shape" SectionBox (id="hero-shape", label="Hero Shape") that renders BEHIND the hero image at z=40 (hero image is z=50). Contains ONLY the gradient shape (SVG).
+  * Created Style2HeroShape SVG component supporting all 13 shape types:
+    - 2D: rectangle, square, circle, oval/ellipse, triangle, pentagon, hexagon, octagon
+    - 3D: sphere (radial gradient), cube (3 faces), cone (triangle + ellipse base), cylinder (rect + 2 ellipses), pyramid (2 faces)
+    Each shape uses the gradient colors with configurable direction (linear gradient) or radial gradient (sphere).
+  * Created HeroShapePanel — floating properties panel for the hero-shape section. Includes:
+    - Shape type dropdown (grouped: 2D Shapes / 3D Shapes)
+    - Gradient color pickers (color swatch + hex input per stop, add/remove stops, 2-5 stops)
+    - Gradient direction slider (0-360°)
+    - Opacity slider (0-100%)
+    - Shape rotation slider (0-360°)
+    - Standard Position (X/Y), Size (W/H), Scale %, Layer (Front/Back) controls
+  * Modified "topic" (Hero Image) SectionBox: removed the gradient background div that was previously inside it. Now contains only the hero Image overlay + location pins + mountain silhouette + meerkat mascot. The gradient background is now the separate hero-shape section.
+- Infrastructure:
+  * Added effectiveLayout(id) helper inside the component that merges STYLE2_DEFAULTS with user data (user wins). Used by all 5 SectionBoxes.
+  * Added onHeroShapeChange prop to the canvas Props type + wired it in the editor (handleHeroShapeChange function).
+  * Updated sectionPeerZs to include all default section IDs (not just user-set ones) so Front/Back buttons work correctly.
+  * Updated sample-data.ts with the new sectionLayout defaults + style2HeroGradient config.
+  * Removed unused sectionZFor function (replaced by effectiveLayout).
+- TypeScript: 0 speaker-intro errors verified.
+
+Stage Summary:
+- All 4 tasks completed. Style 2 now has:
+  * 5 editable sections: Header, Hero Shape (NEW), Hero Image (renamed from topic), Speakers, Footer
+  * Default positions/sizes/scales/z-indices per user spec
+  * The hero background gradient is now a separate editable shape section with 13 shape options (8×2D + 5×3D), editable gradient colors, direction, opacity, rotation
+  * The hero image sits on top of the shape (z=50 > z=40)
+- Files changed:
+  * speaker-intro-style2-canvas.tsx (major: +Style2HeroShape, +HeroShapePanel, +STYLE2_DEFAULTS, +SECTION_LABELS, +effectiveLayout, restructured topic→hero-shape+topic)
+  * speaker-intro-editor.tsx (+handleHeroShapeChange, +onHeroShapeChange prop)
+  * sample-data.ts (updated sectionLayout + added style2HeroGradient)

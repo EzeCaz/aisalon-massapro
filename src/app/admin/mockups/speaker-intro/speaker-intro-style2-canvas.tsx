@@ -18,6 +18,7 @@ import {
   type SectionId,
   type SectionPos,
   type SectionBoxSize,
+  type SectionLayoutEntry,
 } from "../shared/section-edit";
 
 /**
@@ -78,6 +79,48 @@ const MAIN_H = CANVAS_H - HEADER_H - FOOTER_H; // 640
 const LEFT_W = 660; // 55% of 1200
 const RIGHT_W = CANVAS_W - LEFT_W; // 540
 
+// ============================================================================
+// PER USER SPEC 2026-07-31 (TSK-0026):
+// Default section layout values for Style 2. These are used when the user's
+// data.sectionLayout doesn't have an explicit value for a given section.
+// The user can still override by dragging or typing in the properties panel.
+// ============================================================================
+const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
+  header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1, z: 50 },
+  "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 40 },
+  speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
+  topic:        { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1, z: 50 },
+  sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1, z: 50 },
+};
+
+// Human-readable labels shown in the Object Properties Panel header.
+const SECTION_LABELS: Record<string, string> = {
+  header: "Header",
+  speakers: "Speakers",
+  topic: "Hero Image",
+  "hero-shape": "Hero Shape",
+  sponsors: "Footer",
+};
+
+type HeroGradientConfig = NonNullable<SpeakerIntroData["style2HeroGradient"]>;
+type HeroShapeType = NonNullable<HeroGradientConfig["shape"]>;
+
+const ALL_SHAPES: { value: HeroShapeType; label: string; group: string }[] = [
+  { value: "rectangle", label: "Rectangle", group: "2D" },
+  { value: "square", label: "Square", group: "2D" },
+  { value: "circle", label: "Circle", group: "2D" },
+  { value: "oval", label: "Oval / Ellipse", group: "2D" },
+  { value: "triangle", label: "Triangle", group: "2D" },
+  { value: "pentagon", label: "Pentagon", group: "2D" },
+  { value: "hexagon", label: "Hexagon", group: "2D" },
+  { value: "octagon", label: "Octagon", group: "2D" },
+  { value: "sphere", label: "Sphere", group: "3D" },
+  { value: "cube", label: "Cube", group: "3D" },
+  { value: "cone", label: "Cone", group: "3D" },
+  { value: "cylinder", label: "Cylinder", group: "3D" },
+  { value: "pyramid", label: "Pyramid", group: "3D" },
+];
+
 type Props = {
   data: SpeakerIntroData;
   className?: string;
@@ -88,6 +131,8 @@ type Props = {
   onSectionResize?: (id: SectionId, scale: number) => void;
   onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
   onSectionZChange?: (id: SectionId, z: number) => void;
+  /** Called when the user edits the hero gradient shape / colors / direction / opacity / rotation. */
+  onHeroShapeChange?: (patch: Partial<HeroGradientConfig>) => void;
   previewScale?: number;
 };
 
@@ -102,11 +147,8 @@ function deriveInitials(fullName: string, fallback?: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function sectionZFor(data: SpeakerIntroData, id: SectionId): number {
-  const explicit = data.sectionLayout?.[id]?.z;
-  if (typeof explicit === "number") return explicit;
-  return 50;
-}
+// (sectionZFor removed — replaced by effectiveLayout() inside the component
+// which merges STYLE2_DEFAULTS with user data for z-index resolution.)
 
 // ============================================================================
 // Style2SpeakerCard — the per-speaker card in the 2×2 grid.
@@ -385,6 +427,573 @@ function Style2LocationPin({
 }
 
 // ============================================================================
+// Style2HeroShape — renders the gradient background shape behind the hero
+// image. Supports 13 shape types (8 × 2D + 5 × 3D) with a linear or radial
+// gradient fill, opacity, and rotation.
+//
+// PER USER SPEC 2026-07-31 (TSK-0026):
+//   "Now separate the hero image from the background colors gradient and set
+//    to shapes with gradient colors that you can edit on the form."
+//
+// The shape is rendered as an SVG that fills its parent container. 2D shapes
+// use a linear gradient; 3D shapes (sphere, cube, cone, cylinder, pyramid)
+// simulate depth with multiple faces / radial gradients.
+// ============================================================================
+function Style2HeroShape({
+  shape,
+  colors,
+  direction,
+  opacity,
+  rotation,
+}: {
+  shape: HeroShapeType;
+  colors: string[];
+  direction: number;
+  opacity: number;
+  rotation: number;
+}) {
+  const gradId = "style2-hero-grad";
+  const radialId = "style2-hero-radial";
+  const safeColors =
+    colors.length >= 2 ? colors : ["#311B92", "#0B0B2E"];
+  const stops = safeColors.map((c, i) => ({
+    offset: `${(i / Math.max(1, safeColors.length - 1)) * 100}%`,
+    color: c,
+  }));
+
+  const wrapperStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    opacity,
+    transform: `rotate(${rotation}deg)`,
+    transformOrigin: "center center",
+  };
+
+  const commonDefs = (
+    <defs>
+      <linearGradient id={gradId} gradientTransform={`rotate(${direction} 0.5 0.5)`} x1="0" y1="0" x2="1" y2="0">
+        {stops.map((s, i) => (
+          <stop key={`l${i}`} offset={s.offset} stopColor={s.color} />
+        ))}
+      </linearGradient>
+      <radialGradient id={radialId} cx="0.35" cy="0.3" r="0.75">
+        <stop offset="0%" stopColor={safeColors[0]} />
+        <stop offset="60%" stopColor={safeColors[Math.min(1, safeColors.length - 1)]} />
+        <stop offset="100%" stopColor={safeColors[safeColors.length - 1]} />
+      </radialGradient>
+    </defs>
+  );
+
+  // Helper to darken a hex color by a factor (0..1)
+  const darken = (hex: string, factor: number): string => {
+    try {
+      const h = hex.replace("#", "");
+      const r = Math.round(parseInt(h.slice(0, 2), 16) * factor);
+      const g = Math.round(parseInt(h.slice(2, 4), 16) * factor);
+      const b = Math.round(parseInt(h.slice(4, 6), 16) * factor);
+      return `rgb(${r},${g},${b})`;
+    } catch {
+      return hex;
+    }
+  };
+
+  switch (shape) {
+    // ---- 2D shapes ----
+    case "rectangle":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
+          {commonDefs}
+          <rect x="0" y="0" width="100" height="100" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "square":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <rect x="15" y="15" width="70" height="70" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "circle":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <circle cx="50" cy="50" r="50" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "oval":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
+          {commonDefs}
+          <ellipse cx="50" cy="50" rx="50" ry="35" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "triangle":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <polygon points="50,2 98,98 2,98" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "pentagon":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <polygon points="50,2 98,38 80,98 20,98 2,38" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "hexagon":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <polygon points="25,2 75,2 98,50 75,98 25,98 2,50" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    case "octagon":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <polygon points="30,2 70,2 98,30 98,70 70,98 30,98 2,70 2,30" fill={`url(#${gradId})`} />
+        </svg>
+      );
+    // ---- 3D shapes ----
+    case "sphere":
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          <circle cx="50" cy="50" r="48" fill={`url(#${radialId})`} />
+          <ellipse cx="38" cy="35" rx="12" ry="8" fill="rgba(255,255,255,0.18)" />
+        </svg>
+      );
+    case "cube": {
+      const c1 = safeColors[0];
+      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          {/* Top face */}
+          <polygon points="50,5 90,25 50,45 10,25" fill={c1} />
+          {/* Left face (darker) */}
+          <polygon points="10,25 50,45 50,95 10,75" fill={darken(c2, 0.7)} />
+          {/* Right face */}
+          <polygon points="90,25 50,45 50,95 90,75" fill={darken(c2, 0.5)} />
+        </svg>
+      );
+    }
+    case "cone": {
+      const c1 = safeColors[0];
+      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          {/* Cone body */}
+          <polygon points="50,2 90,85 10,85" fill={`url(#${gradId})`} />
+          {/* Base ellipse (darker) */}
+          <ellipse cx="50" cy="85" rx="40" ry="10" fill={darken(c2, 0.6)} />
+          {/* Shading on left side */}
+          <polygon points="50,2 10,85 30,85" fill={darken(c1, 0.6)} opacity="0.5" />
+        </svg>
+      );
+    }
+    case "cylinder": {
+      const c1 = safeColors[0];
+      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          {/* Body */}
+          <rect x="20" y="15" width="60" height="70" fill={`url(#${gradId})`} />
+          {/* Bottom ellipse (darker) */}
+          <ellipse cx="50" cy="85" rx="30" ry="8" fill={darken(c2, 0.6)} />
+          {/* Top ellipse (lighter) */}
+          <ellipse cx="50" cy="15" rx="30" ry="8" fill={c1} />
+        </svg>
+      );
+    }
+    case "pyramid": {
+      const c1 = safeColors[0];
+      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+          {commonDefs}
+          {/* Left face (lighter) */}
+          <polygon points="50,5 50,95 5,95" fill={c1} />
+          {/* Right face (darker) */}
+          <polygon points="50,5 50,95 95,95" fill={darken(c2, 0.6)} />
+        </svg>
+      );
+    }
+    default:
+      return (
+        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
+          {commonDefs}
+          <rect x="0" y="0" width="100" height="100" fill={`url(#${gradId})`} />
+        </svg>
+      );
+  }
+}
+
+// ============================================================================
+// HeroShapePanel — floating properties panel for the "hero-shape" section.
+// Shows shape type dropdown, gradient color pickers, direction, opacity,
+// rotation — PLUS the standard position / size / scale / layer controls.
+//
+// PER USER SPEC 2026-07-31 (TSK-0026): "set to shapes with gradient colors
+// that you can edit on the form".
+// ============================================================================
+function HeroShapePanel({
+  config,
+  onChange,
+  pos,
+  onPosChange,
+  boxSize,
+  onBoxSizeChange,
+  scale,
+  onScaleChange,
+  z,
+  onZChange,
+  peers,
+  onDeselect,
+}: {
+  config: HeroGradientConfig;
+  onChange: (patch: Partial<HeroGradientConfig>) => void;
+  pos?: SectionPos;
+  onPosChange?: (pos: SectionPos) => void;
+  boxSize?: SectionBoxSize;
+  onBoxSizeChange?: (size: SectionBoxSize) => void;
+  scale?: number;
+  onScaleChange?: (scale: number) => void;
+  z?: number;
+  onZChange?: (z: number) => void;
+  peers?: number[];
+  onDeselect?: () => void;
+}) {
+  const shape = config.shape ?? "rectangle";
+  const colors = config.colors ?? ["#311B92", "#0B0B2E"];
+  const direction = config.direction ?? 135;
+  const opacityVal = config.opacity ?? 0.85;
+  const rotation = config.rotation ?? 0;
+
+  const px = pos?.x ?? 0;
+  const py = pos?.y ?? 0;
+  const bw = boxSize?.width ?? 0;
+  const bh = boxSize?.height ?? 0;
+  const sc = scale ?? 1;
+
+  const updateColor = (index: number, value: string) => {
+    const next = [...colors];
+    next[index] = value;
+    onChange({ colors: next });
+  };
+  const addColor = () => onChange({ colors: [...colors, "#FFFFFF"] });
+  const removeColor = (index: number) => {
+    if (colors.length <= 2) return;
+    onChange({ colors: colors.filter((_, i) => i !== index) });
+  };
+
+  const bringToFront = () => {
+    if (!onZChange) return;
+    if (peers && peers.length > 0) {
+      const max = Math.max(...peers, 0);
+      if ((z ?? 0) <= max) onZChange(max + 1);
+    } else {
+      onZChange((z ?? 0) + 1);
+    }
+  };
+  const sendToBack = () => {
+    if (!onZChange) return;
+    if (peers && peers.length > 0) {
+      const min = Math.min(...peers, 0);
+      if ((z ?? 0) >= min) onZChange(min - 1);
+    } else {
+      onZChange((z ?? 0) - 1);
+    }
+  };
+
+  return (
+    <div
+      className="absolute rounded-md border-2 border-[#FF005A] bg-white shadow-xl"
+      style={{ right: "12px", top: "12px", zIndex: 9998, minWidth: "240px", maxHeight: "90%", overflowY: "auto" }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between bg-[#FF005A] text-white px-2 py-1 rounded-t-md sticky top-0">
+        <span className="text-[0.65rem] font-bold uppercase tracking-wider">
+          Hero Shape Properties
+        </span>
+        {onDeselect && (
+          <button
+            type="button"
+            onClick={onDeselect}
+            className="text-white/80 hover:text-white text-[0.8rem] leading-none ml-2"
+            title="Deselect"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="px-2 py-2 flex flex-col gap-2.5">
+        {/* Shape type dropdown */}
+        <div>
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+            Shape
+          </div>
+          <select
+            value={shape}
+            onChange={(e) => onChange({ shape: e.target.value as HeroShapeType })}
+            className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-1 bg-white"
+            title="Select the background shape (2D or 3D)"
+          >
+            <optgroup label="2D Shapes">
+              {ALL_SHAPES.filter((s) => s.group === "2D").map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="3D Shapes">
+              {ALL_SHAPES.filter((s) => s.group === "3D").map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        {/* Gradient colors */}
+        <div>
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+            Gradient Colors
+          </div>
+          <div className="flex flex-col gap-1">
+            {colors.map((c, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={c}
+                  onChange={(e) => updateColor(i, e.target.value)}
+                  className="w-7 h-7 rounded border border-black/15 cursor-pointer"
+                  title={`Color ${i + 1}: ${c}`}
+                />
+                <input
+                  type="text"
+                  value={c}
+                  onChange={(e) => updateColor(i, e.target.value)}
+                  className="flex-1 text-[0.6rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  title="Hex color value"
+                />
+                {colors.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeColor(i)}
+                    className="text-black/40 hover:text-[#FF005A] text-[0.8rem] leading-none px-1"
+                    title="Remove this color stop"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {colors.length < 5 && (
+            <button
+              type="button"
+              onClick={addColor}
+              className="mt-1 text-[0.55rem] font-semibold text-[#FF005A] hover:underline"
+            >
+              + Add color stop
+            </button>
+          )}
+        </div>
+
+        {/* Direction (gradient angle) */}
+        <div>
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+            Gradient Direction: {direction}°
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            step="1"
+            value={direction}
+            onChange={(e) => onChange({ direction: parseFloat(e.target.value) })}
+            className="w-full h-1 accent-[#FF005A]"
+            title="Gradient angle in degrees"
+          />
+        </div>
+
+        {/* Opacity */}
+        <div>
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+            Opacity: {Math.round(opacityVal * 100)}%
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={opacityVal}
+            onChange={(e) => onChange({ opacity: parseFloat(e.target.value) })}
+            className="w-full h-1 accent-[#FF005A]"
+            title="Shape opacity (0 = transparent, 1 = fully opaque)"
+          />
+        </div>
+
+        {/* Rotation */}
+        <div>
+          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+            Shape Rotation: {rotation}°
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            step="1"
+            value={rotation}
+            onChange={(e) => onChange({ rotation: parseFloat(e.target.value) })}
+            className="w-full h-1 accent-[#FF005A]"
+            title="Shape rotation in degrees"
+          />
+        </div>
+
+        <div className="border-t border-black/10 pt-2 flex flex-col gap-2">
+          {/* Position */}
+          {onPosChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Position (% of canvas)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">X</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Number(px.toFixed(1))}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) onPosChange({ x: n, y: py });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">Y</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Number(py.toFixed(1))}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) onPosChange({ x: px, y: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Size */}
+          {onBoxSizeChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Size (canvas px)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">W</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bw > 0 ? Math.round(bw) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) onBoxSizeChange({ ...boxSize, width: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">H</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bh > 0 ? Math.round(bh) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) onBoxSizeChange({ ...boxSize, height: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Scale */}
+          {onScaleChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Scale % (box + text together)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={Math.round(sc * 100)}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n) && n > 0) onScaleChange(n / 100);
+                  }}
+                  className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                />
+                <span className="text-[0.6rem] font-semibold text-black/80">%</span>
+                <button
+                  type="button"
+                  onClick={() => onScaleChange(1)}
+                  className="rounded border border-black/15 bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                >
+                  100%
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Layer */}
+          {onZChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Layer (z-index: {z ?? 0})
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={bringToFront}
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                >
+                  ↑ Front
+                </button>
+                <button
+                  type="button"
+                  onClick={sendToBack}
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                >
+                  ↓ Back
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Main Style 2 canvas component
 // ============================================================================
 export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
@@ -397,6 +1006,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       onSectionResize,
       onSectionBoxResize,
       onSectionZChange,
+      onHeroShapeChange,
       previewScale = 1,
     },
     ref,
@@ -424,11 +1034,47 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       if (!sectionsEditable) setSelectedId(null);
     }, [sectionsEditable]);
 
-    const sectionPeerZs: number[] = Object.keys(data.sectionLayout ?? {}).map((id) =>
-      sectionZFor(data, id as SectionId),
+    // ---- effectiveLayout: merge STYLE2_DEFAULTS with user data ----
+    // User data (data.sectionLayout[id]) takes priority; when a field is
+    // missing, we fall back to the default. This ensures new mockups
+    // start with the user-specified default positions/sizes/scales/z.
+    const effectiveLayout = (id: SectionId): SectionLayoutEntry => {
+      const user = data.sectionLayout?.[id];
+      const def = STYLE2_DEFAULTS[id];
+      if (!user && !def) return {};
+      if (!user) return def ?? {};
+      if (!def) return user;
+      return {
+        pos: user.pos ?? def.pos,
+        boxSize: user.boxSize ?? def.boxSize,
+        scale: user.scale ?? def.scale,
+        z: user.z ?? def.z,
+      };
+    };
+
+    // Build the peer z-index list from ALL known sections (defaults + user
+    // overrides + any custom sections the user added). This ensures the
+    // Front/Back buttons in the properties panel can compute correct max/min.
+    const allSectionIds = Array.from(
+      new Set([
+        ...Object.keys(STYLE2_DEFAULTS),
+        ...Object.keys(data.sectionLayout ?? {}),
+      ]),
+    );
+    const sectionPeerZs: number[] = allSectionIds.map((id) =>
+      effectiveLayout(id as SectionId).z ?? 50,
     );
 
-    const selectedLayout = selectedId ? data.sectionLayout?.[selectedId as SectionId] : undefined;
+    const selectedLayout = selectedId ? effectiveLayout(selectedId as SectionId) : undefined;
+
+    // Hero gradient config (with defaults)
+    const heroGradientConfig: HeroGradientConfig = {
+      shape: data.style2HeroGradient?.shape ?? "rectangle",
+      colors: data.style2HeroGradient?.colors ?? ["#311B92", "#1A237E", "#0B0B2E"],
+      direction: data.style2HeroGradient?.direction ?? 180,
+      opacity: data.style2HeroGradient?.opacity ?? 0.9,
+      rotation: data.style2HeroGradient?.rotation ?? 0,
+    };
 
     return (
       <GuideProvider
@@ -450,18 +1096,17 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
           <SectionBox
             active={sectionsEditable}
             selected={selectedId === "header"}
-            pos={data.sectionLayout?.header?.pos}
-            boxSize={data.sectionLayout?.header?.boxSize}
-            scale={data.sectionLayout?.header?.scale}
+            pos={effectiveLayout("header").pos}
+            boxSize={effectiveLayout("header").boxSize}
+            scale={effectiveLayout("header").scale}
             onMove={(p) => onSectionMove?.("header", p)}
             onResize={(s) => onSectionResize?.("header", s)}
             onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
             onSelect={() => setSelectedId("header")}
-            // onZChange is on ObjectPropertiesPanel, not SectionBox — see ObjectPropertiesPanel usage below.
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={sectionZFor(data, "header")}
+            zIndex={effectiveLayout("header").z ?? 50}
             anchor="top-left"
             guideId="header"
             label="Header"
@@ -532,9 +1177,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
           <SectionBox
             active={sectionsEditable}
             selected={selectedId === "speakers"}
-            pos={data.sectionLayout?.speakers?.pos}
-            boxSize={data.sectionLayout?.speakers?.boxSize}
-            scale={data.sectionLayout?.speakers?.scale}
+            pos={effectiveLayout("speakers").pos}
+            boxSize={effectiveLayout("speakers").boxSize}
+            scale={effectiveLayout("speakers").scale}
             onMove={(p) => onSectionMove?.("speakers", p)}
             onResize={(s) => onSectionResize?.("speakers", s)}
             onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
@@ -542,11 +1187,11 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={sectionZFor(data, "speakers")}
+            zIndex={effectiveLayout("speakers").z ?? 60}
             anchor="top-left"
             guideId="speakers"
             label="Speakers"
-            style={{ position: "absolute", left: 0, top: `${HEADER_H}px`, width: `${LEFT_W}px`, height: `${MAIN_H}px` }}
+            style={{ position: "absolute", left: 0, top: `${HEADER_H}px`, width: `${LEFT_W}px`, height: "auto" }}
           >
             <div
               style={{
@@ -617,15 +1262,58 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
           </SectionBox>
 
           {/* ============================================================
-              Layer 3: RIGHT PANEL — dark purple gradient hero with
-              mountain silhouette, 4 location pins, meerkat mascot
+              Layer 3a: HERO SHAPE — editable gradient shape BEHIND the
+              hero image. PER USER SPEC 2026-07-31 (TSK-0026):
+              "separate the hero image from the background colors gradient
+              and set to shapes with gradient colors that you can edit."
+              This section renders ONLY the gradient shape (SVG). The hero
+              image + pins + mountain + mascot are in the "topic" section
+              below, which sits on top (higher z-index).
+              ============================================================ */}
+          <SectionBox
+            active={sectionsEditable}
+            selected={selectedId === "hero-shape"}
+            pos={effectiveLayout("hero-shape").pos}
+            boxSize={effectiveLayout("hero-shape").boxSize}
+            scale={effectiveLayout("hero-shape").scale}
+            onMove={(p) => onSectionMove?.("hero-shape", p)}
+            onResize={(s) => onSectionResize?.("hero-shape", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("hero-shape", sz)}
+            onSelect={() => setSelectedId("hero-shape")}
+            previewScale={previewScale}
+            canvasW={CANVAS_W}
+            canvasH={CANVAS_H}
+            zIndex={effectiveLayout("hero-shape").z ?? 40}
+            anchor="top-left"
+            guideId="hero-shape"
+            label="Hero Shape"
+            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
+          >
+            <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+              <Style2HeroShape
+                shape={heroGradientConfig.shape ?? "rectangle"}
+                colors={heroGradientConfig.colors ?? ["#311B92", "#0B0B2E"]}
+                direction={heroGradientConfig.direction ?? 180}
+                opacity={heroGradientConfig.opacity ?? 0.9}
+                rotation={heroGradientConfig.rotation ?? 0}
+              />
+            </div>
+          </SectionBox>
+
+          {/* ============================================================
+              Layer 3b: HERO IMAGE — the hero image overlay + location pins
+              + mountain silhouette + meerkat mascot. Sits ON TOP of the
+              hero-shape gradient (higher z-index). PER USER SPEC 2026-07-31
+              (TSK-0026): "Change the name topic Properties to Hero Image
+              Properties" — label changed from "Hero (right panel)" to
+              "Hero Image". The gradient background is now separate (hero-shape).
               ============================================================ */}
           <SectionBox
             active={sectionsEditable}
             selected={selectedId === "topic"}
-            pos={data.sectionLayout?.topic?.pos}
-            boxSize={data.sectionLayout?.topic?.boxSize}
-            scale={data.sectionLayout?.topic?.scale}
+            pos={effectiveLayout("topic").pos}
+            boxSize={effectiveLayout("topic").boxSize}
+            scale={effectiveLayout("topic").scale}
             onMove={(p) => onSectionMove?.("topic", p)}
             onResize={(s) => onSectionResize?.("topic", s)}
             onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
@@ -633,23 +1321,23 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={sectionZFor(data, "topic")}
+            zIndex={effectiveLayout("topic").z ?? 50}
             anchor="top-left"
             guideId="topic"
-            label="Hero (right panel)"
-            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
+            label="Hero Image"
+            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: "auto" }}
           >
             <div
               style={{
                 position: "relative",
                 width: "100%",
                 height: "100%",
-                background:
-                  "linear-gradient(180deg, #311B92 0%, #1A237E 55%, #0B0B2E 100%)",
+                minHeight: `${MAIN_H}px`,
                 overflow: "hidden",
               }}
             >
-              {/* Optional hero image overlay (low opacity, blends with gradient) */}
+              {/* Hero image overlay (no gradient background — that's now
+                  in the separate hero-shape section) */}
               {data.heroOverlay?.imageUrl && (
                 <Image
                   src={data.heroOverlay.imageUrl}
@@ -713,9 +1401,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
           <SectionBox
             active={sectionsEditable}
             selected={selectedId === "sponsors"}
-            pos={data.sectionLayout?.sponsors?.pos}
-            boxSize={data.sectionLayout?.sponsors?.boxSize}
-            scale={data.sectionLayout?.sponsors?.scale}
+            pos={effectiveLayout("sponsors").pos}
+            boxSize={effectiveLayout("sponsors").boxSize}
+            scale={effectiveLayout("sponsors").scale}
             onMove={(p) => onSectionMove?.("sponsors", p)}
             onResize={(s) => onSectionResize?.("sponsors", s)}
             onBoxResize={(sz) => onSectionBoxResize?.("sponsors", sz)}
@@ -723,11 +1411,11 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={sectionZFor(data, "sponsors")}
+            zIndex={effectiveLayout("sponsors").z ?? 50}
             anchor="top-left"
             guideId="sponsors"
             label="Footer"
-            style={{ position: "absolute", left: 0, top: `${HEADER_H + MAIN_H}px`, width: `${CANVAS_W}px`, height: `${FOOTER_H}px` }}
+            style={{ position: "absolute", left: 0, top: `${HEADER_H + MAIN_H}px`, width: `${CANVAS_W}px`, height: "auto" }}
           >
             <div
               style={{
@@ -876,10 +1564,14 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
 
           {/* ============================================================
               Object Properties Panel (Edit Sections mode)
+              — Uses SECTION_LABELS for human-readable titles.
+              — When "hero-shape" is selected, renders the HeroShapePanel
+                instead (which includes shape type, gradient colors,
+                direction, opacity, rotation + standard pos/size/scale/z).
               ============================================================ */}
-          {sectionsEditable && selectedId && selectedLayout && (
+          {sectionsEditable && selectedId && selectedLayout && selectedId !== "hero-shape" && (
             <ObjectPropertiesPanel
-              label={selectedId}
+              label={SECTION_LABELS[selectedId] ?? selectedId}
               pos={selectedLayout.pos}
               onPosChange={(p) => onSectionMove?.(selectedId as SectionId, p)}
               z={selectedLayout.z}
@@ -890,6 +1582,23 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId as SectionId, sz)}
               scale={selectedLayout.scale}
               onScaleChange={(s) => onSectionResize?.(selectedId as SectionId, s)}
+            />
+          )}
+
+          {sectionsEditable && selectedId === "hero-shape" && selectedLayout && (
+            <HeroShapePanel
+              config={heroGradientConfig}
+              onChange={(patch) => onHeroShapeChange?.(patch)}
+              pos={selectedLayout.pos}
+              onPosChange={(p) => onSectionMove?.("hero-shape", p)}
+              boxSize={selectedLayout.boxSize}
+              onBoxSizeChange={(sz) => onSectionBoxResize?.("hero-shape", sz)}
+              scale={selectedLayout.scale}
+              onScaleChange={(s) => onSectionResize?.("hero-shape", s)}
+              z={selectedLayout.z}
+              onZChange={(z) => onSectionZChange?.("hero-shape", z)}
+              peers={sectionPeerZs}
+              onDeselect={() => setSelectedId(null)}
             />
           )}
 
