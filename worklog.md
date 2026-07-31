@@ -7618,3 +7618,39 @@ Stage Summary:
 - 8 risks identified; top 3: PDF gap forces Style 3 re-do, style2LayerZ rename breaks saved JSON (mitigated by backward-compat alias), topLogoUrl sync requires chapter branding lookup that may not exist (mitigated by fallback to default URL).
 - NO deploy, NO commit, NO source code changes. User reviews preview document and replies with decisions before any work begins.
 - Next step: wait for user to reply with Decision 1-7 answers (format specified in Part 9.1 of the preview document).
+
+---
+Task ID: TSK-0023 — Phase 0 (pre-flight audit)
+Agent: Super Z (main)
+Task: Read-only audit of shared form-view files + qr-salon editor + SpeakerStyle2Card to verify the spec audit in download/tsk-0023-speaker-meet-style-2-3-plan.md is accurate before any code changes. Also incorporate user decisions D1-D7 and the newly-uploaded Style 3 reference image.
+
+Work Log:
+- User replied with decisions: D1=A (with new Style 3 PNG uploaded), D2=A, D3=D, D4=A, D5=A, D6=A, D7=B.
+- Vision-analyzed upload/Variant B — Meet the Speaker Style 3.png (1400×933 PNG) via z-ai vision CLI (glm-5v-turbo). Extracted full Style 3 spec: 50/50 split, purple→magenta gradient background, beige arch with stylized 3D avatar on right, pink "🚀 MEET THE SPEAKER" pill badge top-left, single speaker (not a grid), speaker name H1 + title + company in left column, TOPIC label + topic title + description, ABOUT [firstName] with pink left-border bullet, EXPERTISE with teal left-border bullet, QR top-right, dark translucent event details card bottom-right, gold AI branding badge bottom-right corner.
+- Updated download/tsk-0023-speaker-meet-style-2-3-plan.md:
+  * Added "Part —1 — User Decisions" section at the top with the 7 decision answers + their effects on the plan.
+  * Replaced §2.3 (was "DEFERRED pending user reference") with full Style 3 spec: ASCII layout diagram, section-by-section position table (18 sections), new data model fields (8 new style3* fields + style3LayerZ), 6-layer z-order table, single-speaker focus note, backward-compat note.
+  * Updated §3.1 (QR-Salon defaults) per D3=D: qrSize stays at 360 (NOT 180), only positions matter (already correct). Marked Phase 2 as effectively a no-op.
+  * Updated Phase 8 spec: removed "CONDITIONAL" marker, replaced best-guess spec with the actual Style 3 spec from the VLM analysis. Phase 8 is now a full implementation phase (~630 lines new code estimated).
+- Read shared/speaker-intro-form-view.tsx (1596 lines) — found:
+  * Style 1/2/3 segmented buttons ALREADY EXIST at lines 62-64 (with subtitles "Hero right · text left" / "Hero fill · gradient shape" / "Style 2 · QR repositioned"). Delta vs spec: spec said MISSING — actually EXISTS.
+  * Style 2 — Hero gradient shape Section ALREADY EXISTS at line 102, with controls for: shape dropdown (13 options, line 105-108), rotation (line 142-145), direction (line 187-190), opacity (line 202-205), colors textarea (line 214-217). Delta vs spec: spec said MISSING — actually EXISTS.
+  * Layer order (Style 2 — front/back) Section ALREADY EXISTS at line 227, iterates over 4 keys (background, hero, qr, speakers) with numeric inputs. Delta vs spec: spec said MISSING — actually EXISTS (but uses numeric inputs, not Front/Back buttons — acceptable).
+  * panelBg color picker ALREADY EXISTS at line 257. Delta vs spec: spec said MISSING — actually EXISTS.
+  * Still MISSING (confirmed): topLogoUrl field, qrSize field, style2HeroGradient.heroOpacity field. These will be added in Phase 3/4.
+- Read shared/meet-the-speaker-form-view.tsx (lines 595-750) — confirmed:
+  * Style selector at lines 598-626 inside <Section title="Hero overlay (gradient)"> — only Style 1 and Style 2 buttons, no Style 3. Phase 1 will move this to the toolbar and add Style 3.
+  * Style 2 controls: heroStyle2Url field (line 633), Local Street pins editor (lines 644-731). No style2HeroGradient controls (because meet-the-speaker doesn't have this field yet — Phase 7 adds it).
+- Read qr-salon/qr-salon-editor.tsx (lines 300-400) — found:
+  * Edit buttons are ALREADY in a horizontal row ABOVE the canvas (lines 308-345), NOT floating absolute inside the canvas frame. Delta vs spec: spec said floating absolute — actually already correct. No toolbar reorder needed for qr-salon.
+  * Canvas caption at lines 378-384 is BELOW the canvas, text doesn't match user spec. Phase 1 will move it ABOVE the canvas + update text to "Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser".
+- Wrote download/tsk-0023-phase-0-audit.md (one-page reference for Phases 1-9) documenting all 6 deltas vs spec. Net result: 3 spec items were wrong (form-view controls already exist for speaker-intro; qr-salon toolbar already correct; qr-salon qrSize unchanged per D3). This REDUCES the scope of work — Phases 4 and 5 have less to do than originally estimated.
+- Did NOT modify any source code. Only created/updated docs in /home/z/my-project/download/.
+
+Stage Summary:
+- download/tsk-0023-speaker-meet-style-2-3-plan.md updated with: Part —1 (user decisions), full Style 3 spec in §2.3, simplified QR-Salon §3.1 per D3=D, updated Phase 8 spec.
+- download/tsk-0023-phase-0-audit.md created (one-page audit reference).
+- 6 deltas vs spec found — 3 of them REDUCE scope (form-view controls already exist for speaker-intro; qr-salon toolbar already correct; qr-salon qrSize unchanged).
+- Spec accuracy: 9 of 12 audit items confirmed correct, 3 found to be already done.
+- Ready to execute Phase 1 (toolbar reorder across speaker-intro + meet-the-speaker + qr-salon caption update). Phase 2 is now a no-op (qr-salon defaults already correct per D3=D).
+- No source code changes. No git commit yet (will commit Phase 0 docs + start Phase 1 in next step).
