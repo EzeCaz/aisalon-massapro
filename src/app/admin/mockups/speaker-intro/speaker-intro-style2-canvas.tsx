@@ -565,7 +565,16 @@ function HeroShapePanel({
             direction slider. */}
         <HeroShapePanelFields
           config={config as HeroShapeConfig}
-          onChange={(patch) => onChange(patch)}
+          onChange={(patch) => {
+            // PER USER SPEC 2026-07-31 (TSK-0034): HeroShapePanelFields
+            // now emits pos/boxSize/scale patches (for Style 1's standalone
+            // hero overlay shape). Style 2 manages position/size/scale via
+            // the hero-shape SectionBox separately, so we strip those keys
+            // before forwarding the patch to Style 2's onChange (which is
+            // typed as Partial<HeroGradientConfig> — no pos/boxSize/scale).
+            const { pos: _pos, boxSize: _boxSize, scale: _scale, ...rest } = patch;
+            onChange(rest);
+          }}
           compact
         />
 

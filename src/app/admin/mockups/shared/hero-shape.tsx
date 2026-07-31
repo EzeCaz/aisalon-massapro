@@ -30,6 +30,8 @@ import type { CSSProperties } from "react";
 // ---------------------------------------------------------------------------
 
 export type HeroShapeType =
+  | "none"
+  | "legacy-triangle"
   | "rectangle"
   | "circle"
   | "oval"
@@ -65,6 +67,30 @@ export type HeroShapeConfig = {
   opacity?: number;
   /** Shape rotation in degrees (0-360). Default 0. */
   rotation?: number;
+  /**
+   * PER USER SPEC 2026-07-31 (TSK-0034): Position of the shape on the
+   * canvas, as % from left/top. When undefined, the shape fills its
+   * parent container (default behavior — shape is rendered inside the
+   * hero container and inherits its position).
+   *
+   * When set, the shape is positioned ABSOLUTELY on the canvas (overriding
+   * the parent container's position) — useful for Style 3 where the hero
+   * overlay shape is a standalone rectangle that should be draggable
+   * independently of the hero image.
+   */
+  pos?: { x: number; y: number };
+  /**
+   * PER USER SPEC 2026-07-31 (TSK-0034): Size of the shape's bounding
+   * box, in canvas px. When undefined, the shape fills its parent
+   * container. When set, the shape is sized to these dimensions.
+   */
+  boxSize?: { width?: number; height?: number };
+  /**
+   * PER USER SPEC 2026-07-31 (TSK-0034): Uniform scale multiplier
+   * (1 = 100%). Applied via CSS transform on the shape wrapper, so it
+   * scales BOTH the shape AND its content. Default 1.
+   */
+  scale?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -76,11 +102,20 @@ export const ALL_HERO_SHAPES: {
   label: string;
   group: string;
 }[] = [
+  // PER USER SPEC 2026-07-31 (TSK-0034): "none" + "legacy-triangle" added
+  // to the shape selector so the user can:
+  //   - "none"             → render NO shape (clean hero image, no overlay)
+  //   - "legacy-triangle"  → render the original Style 1 right-pointing
+  //                          triangle SVG with the dual gradient layers
+  //                          (tri-grad + tri-grad-2). This is the default
+  //                          for Style 1.
+  { value: "none", label: "None (no shape)", group: "Special" },
+  { value: "legacy-triangle", label: "Triangle (default — legacy SVG)", group: "Special" },
   { value: "rectangle", label: "Rectangle", group: "2D" },
   { value: "square", label: "Square", group: "2D" },
   { value: "circle", label: "Circle", group: "2D" },
   { value: "oval", label: "Oval / Ellipse", group: "2D" },
-  { value: "triangle", label: "Triangle", group: "2D" },
+  { value: "triangle", label: "Triangle (HeroShape polygon)", group: "2D" },
   { value: "pentagon", label: "Pentagon", group: "2D" },
   { value: "hexagon", label: "Hexagon", group: "2D" },
   { value: "octagon", label: "Octagon", group: "2D" },
@@ -215,6 +250,55 @@ export function HeroShape({
   const fill = fillMode === "solid" ? solidColor : `url(#${gradId})`;
 
   switch (shape) {
+    // ---- Special shapes (PER USER SPEC 2026-07-31 TSK-0034) ----
+    case "none":
+      // Render nothing — clean hero image, no overlay shape.
+      return null;
+    case "legacy-triangle": {
+      // The original Style 1 right-pointing triangle SVG with the dual
+      // gradient layers (tri-grad main + tri-grad-2 counter-triangle).
+      // Identical to the legacy `data.heroOverlay.showTriangleOverlay`
+      // rendering that was inline in speaker-intro-canvas.tsx before
+      // TSK-0034 consolidated it into the HeroShape component.
+      const grad1Id = `${instanceId}-tri-grad`;
+      const grad2Id = `${instanceId}-tri-grad-2`;
+      return (
+        <svg
+          style={wrapperStyle}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <defs>
+            <linearGradient id={grad1Id} x1="0%" y1="0%" x2="100%" y2="100%">
+              {effectiveColors.map((c, i, arr) => (
+                <stop
+                  key={`g1-${i}`}
+                  offset={`${(i / Math.max(1, arr.length - 1)) * 100}%`}
+                  stopColor={c}
+                  stopOpacity={opacity}
+                />
+              ))}
+            </linearGradient>
+            <linearGradient id={grad2Id} x1="100%" y1="0%" x2="0%" y2="100%">
+              {effectiveColors.map((c, i, arr) => (
+                <stop
+                  key={`g2-${i}`}
+                  offset={`${(i / Math.max(1, arr.length - 1)) * 100}%`}
+                  stopColor={c}
+                  stopOpacity={opacity * 0.7}
+                />
+              ))}
+            </linearGradient>
+          </defs>
+          {/* Right-pointing large triangle covering ~60% of hero */}
+          <polygon points="0,0 100,50 0,100" fill={`url(#${grad1Id})`} />
+          {/* Smaller counter-triangle for geometric depth */}
+          <polygon points="40,15 95,35 50,75" fill={`url(#${grad2Id})`} opacity={0.6} />
+        </svg>
+      );
+    }
     // ---- 2D shapes ----
     case "rectangle":
       return (
@@ -413,8 +497,15 @@ export function HeroShapePanelFields({
           value={shape}
           onChange={(e) => onChange({ shape: e.target.value as HeroShapeType })}
           className={inputClass}
-          title="Select the background shape (2D or 3D)"
+          title="Select the background shape (Special / 2D / 3D)"
         >
+          <optgroup label="Special">
+            {ALL_HERO_SHAPES.filter((s) => s.group === "Special").map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </optgroup>
           <optgroup label="2D Shapes">
             {ALL_HERO_SHAPES.filter((s) => s.group === "2D").map((s) => (
               <option key={s.value} value={s.value}>
@@ -582,6 +673,157 @@ export function HeroShapePanelFields({
           className="w-full h-1 accent-[#FF005A]"
           title="Shape rotation in degrees"
         />
+      </div>
+
+      {/* PER USER SPEC 2026-07-31 (TSK-0034): Position / Size / Scale
+          section — appears BELOW the rotation scroller. Lets the user
+          position + size + scale the shape on the canvas independently
+          of its parent container. Particularly useful for Style 3 where
+          the hero overlay shape is a standalone rectangle that should
+          be draggable + resizable like the other sections. */}
+      <div
+        className={`mt-2 pt-2 border-t border-black/10 ${
+          compact ? "space-y-1.5" : "space-y-2"
+        }`}
+      >
+        <div className={labelClass}>Position &amp; Size</div>
+        {/* Position X / Y (% of canvas) */}
+        <div className="grid grid-cols-2 gap-2">
+          <label className="inline-flex items-center gap-1">
+            <span className={`${compact ? "text-[0.55rem]" : "text-[0.6rem]"} font-semibold text-black/70 w-3`}>
+              X
+            </span>
+            <input
+              type="number"
+              step="0.1"
+              value={config.pos?.x ?? ""}
+              placeholder="auto"
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                onChange({
+                  pos: {
+                    x: Number.isFinite(n) ? n : 0,
+                    y: config.pos?.y ?? 0,
+                  },
+                });
+              }}
+              className={inputClass}
+              title="Position X (% of canvas). Empty = inherit parent container position."
+            />
+            <span className={`${compact ? "text-[0.5rem]" : "text-[0.55rem]"} font-mono text-black/50`}>
+              %
+            </span>
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <span className={`${compact ? "text-[0.55rem]" : "text-[0.6rem]"} font-semibold text-black/70 w-3`}>
+              Y
+            </span>
+            <input
+              type="number"
+              step="0.1"
+              value={config.pos?.y ?? ""}
+              placeholder="auto"
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                onChange({
+                  pos: {
+                    x: config.pos?.x ?? 0,
+                    y: Number.isFinite(n) ? n : 0,
+                  },
+                });
+              }}
+              className={inputClass}
+              title="Position Y (% of canvas). Empty = inherit parent container position."
+            />
+            <span className={`${compact ? "text-[0.5rem]" : "text-[0.55rem]"} font-mono text-black/50`}>
+              %
+            </span>
+          </label>
+        </div>
+        {/* Size W / H (canvas px) */}
+        <div className="grid grid-cols-2 gap-2">
+          <label className="inline-flex items-center gap-1">
+            <span className={`${compact ? "text-[0.55rem]" : "text-[0.6rem]"} font-semibold text-black/70 w-3`}>
+              W
+            </span>
+            <input
+              type="number"
+              step="1"
+              value={config.boxSize?.width ?? ""}
+              placeholder="auto"
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                onChange({
+                  boxSize: {
+                    width: Number.isFinite(n) ? n : undefined,
+                    height: config.boxSize?.height,
+                  },
+                });
+              }}
+              className={inputClass}
+              title="Width in canvas px. Empty = inherit parent container width."
+            />
+            <span className={`${compact ? "text-[0.5rem]" : "text-[0.55rem]"} font-mono text-black/50`}>
+              px
+            </span>
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <span className={`${compact ? "text-[0.55rem]" : "text-[0.6rem]"} font-semibold text-black/70 w-3`}>
+              H
+            </span>
+            <input
+              type="number"
+              step="1"
+              value={config.boxSize?.height ?? ""}
+              placeholder="auto"
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                onChange({
+                  boxSize: {
+                    width: config.boxSize?.width,
+                    height: Number.isFinite(n) ? n : undefined,
+                  },
+                });
+              }}
+              className={inputClass}
+              title="Height in canvas px. Empty = inherit parent container height."
+            />
+            <span className={`${compact ? "text-[0.5rem]" : "text-[0.55rem]"} font-mono text-black/50`}>
+              px
+            </span>
+          </label>
+        </div>
+        {/* Scale % */}
+        <label className="inline-flex items-center gap-2">
+          <span className={`${compact ? "text-[0.55rem]" : "text-[0.6rem]"} font-semibold text-black/70 w-12`}>
+            Scale
+          </span>
+          <input
+            type="number"
+            step="1"
+            min="1"
+            value={config.scale ? Math.round(config.scale * 100) : ""}
+            placeholder="100"
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              onChange({ scale: Number.isFinite(n) ? n / 100 : 1 });
+            }}
+            className={inputClass}
+            title="Uniform scale % (1 = 100%). Applied via CSS transform on the shape wrapper."
+          />
+          <span className={`${compact ? "text-[0.5rem]" : "text-[0.55rem]"} font-mono text-black/50`}>
+            %
+          </span>
+        </label>
+        {/* Clear pos / boxSize / scale button */}
+        <button
+          type="button"
+          onClick={() => onChange({ pos: undefined, boxSize: undefined, scale: undefined })}
+          className={`${compact ? "text-[0.5rem]" : "text-[0.6rem]"} font-semibold text-black/50 hover:text-[#FF005A] underline mt-1`}
+          title="Clear Position/Size/Scale (shape will inherit parent container)"
+        >
+          Reset position &amp; size
+        </button>
       </div>
     </>
   );

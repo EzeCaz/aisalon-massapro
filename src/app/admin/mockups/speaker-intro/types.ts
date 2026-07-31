@@ -458,7 +458,15 @@ export type SpeakerIntroData = {
     direction?: number;
     opacity?: number;
     rotation?: number;
+    // PER USER SPEC 2026-07-31 (TSK-0034): "none" + "legacy-triangle" added
+    // to keep type compatibility with the shared HeroShapeConfig / HeroShapeType
+    // (which now includes those two values for Style 1/3). Style 2 doesn't
+    // actually render those shapes (it uses its own HeroShape component
+    // without legacy SVG), but the form view's HeroShapePanelFields emits
+    // the union type, so the Style 2 storage type must accept all values.
     shape?:
+      | "none"
+      | "legacy-triangle"
       | "rectangle"
       | "circle"
       | "oval"

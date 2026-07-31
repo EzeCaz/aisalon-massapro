@@ -155,7 +155,7 @@ export const SAMPLE_DATA: SpeakerIntroData = {
     //
     // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is ALSO no longer in
     // sample-data. Each style falls back to its own canvas-level defaults:
-    //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.8, Y=22.1, W=891, Scale=76%
+    //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-7.9, Y=17.6, W=891, Scale=76% (TSK-0034)
     //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
@@ -193,16 +193,24 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * "Then the Show triangle overlay change it to the shapes and allow to
    * change the color, from fill to gradient fill, and the direction of the
    * gradient."
-   * Default: triangle with the same magenta→purple gradient as the legacy
-   * overlay (so existing mockups look identical until the user picks a
-   * different shape).
+   * PER USER SPEC 2026-07-31 (TSK-0034): Default `heroOverlayShapeConfig`
+   * is now `shape: "legacy-triangle"` — the original Style 1 right-pointing
+   * triangle SVG with dual gradient layers (preserves the visual identity
+   * of the Style 1 mockup). The user can switch to "none" (no shape),
+   * "rectangle" (Style 3 default), or any of the 13 HeroShape polygons
+   * via the form view's "Hero Overlay Shape" panel.
+   *
+   * When the user switches to Style 3, the canvas's `heroShapeConfig`
+   * computed default falls back to `shape: "rectangle"` (see
+   * speaker-intro-canvas.tsx) — UNLESS the user has explicitly customized
+   * the shape, in which case their selection wins.
    */
   heroOverlayShapeConfig: {
-    shape: "triangle",
+    shape: "legacy-triangle",
     fillMode: "gradient",
-    colors: ["#ff0056", "#8f0080"],
+    colors: ["#8A2BE2", "#1E90FF", "#20B2AA"],
     direction: 135,
-    opacity: 0.9,
+    opacity: 0.55,
     rotation: 0,
   },
 };

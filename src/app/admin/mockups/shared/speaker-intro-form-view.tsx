@@ -98,8 +98,15 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
         </Field>
       </Section>
 
-      {/* ===== STYLE 2 — HERO GRADIENT SHAPE ===== */}
-      {(data.style === "style2" || data.style === "style3") && (
+      {/* ===== STYLE 2 — HERO GRADIENT SHAPE =====
+          PER USER SPEC 2026-07-31 (TSK-0034): This section is now Style 2
+          ONLY. Style 3 uses SpeakerIntroCanvas (Style 1's canvas), so its
+          hero overlay shape is managed via `heroOverlayShapeConfig` (the
+          "Hero Overlay Shape" panel in the Hero overlay section above),
+          NOT via `style2HeroGradient`. Previously this section was shown
+          for both Style 2 + Style 3, which was incorrect — Style 3's
+          canvas doesn't read `style2HeroGradient` at all. */}
+      {data.style === "style2" && (
         <Section title="Style 2 — Hero gradient shape">
           <Field label="Shape">
             <select
@@ -107,12 +114,17 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               onChange={(e) => update((d) => {
                 if (!d.style2HeroGradient) d.style2HeroGradient = {};
                 d.style2HeroGradient.shape = e.target.value as
+                  | "none" | "legacy-triangle"
                   | "rectangle" | "circle" | "oval" | "triangle" | "square"
                   | "pentagon" | "hexagon" | "octagon"
                   | "sphere" | "cube" | "cone" | "cylinder" | "pyramid";
               })}
               className="form-input"
             >
+              <optgroup label="Special">
+                <option value="none">None (no shape)</option>
+                <option value="legacy-triangle">Triangle (legacy SVG)</option>
+              </optgroup>
               <optgroup label="2D plane shapes">
                 <option value="rectangle">Rectangle (full panel)</option>
                 <option value="circle">Circle</option>
@@ -985,37 +997,32 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <Field label="Show triangle overlay? (legacy)">
-          <select
-            value={data.heroOverlay.showTriangleOverlay === false ? "false" : "true"}
-            onChange={(e) =>
-              update((d) => {
-                d.heroOverlay.showTriangleOverlay = e.target.value === "true";
-              })
-            }
-            className="form-input"
-          >
-            <option value="true">Yes (default — uses legacy triangle SVG)</option>
-            <option value="false">No (hidden — auto-disabled when hero image changes)</option>
-          </select>
-          <p className="mt-1 text-[0.65rem] text-black/60 leading-relaxed">
-            Legacy toggle. When the new <strong>Hero overlay shape</strong> config
-            below is set, it overrides this toggle.
-          </p>
-        </Field>
+        {/* ===== HERO OVERLAY SHAPE (replaces legacy "Show triangle overlay?") =====
+            PER USER SPEC 2026-07-31 (TSK-0034):
+              "Style 1 should have the Show triangle overlay? (legacy) as
+              default. And be able to add to the shape selector above, the
+              none to show no shape at all, and the default (Triangle) to
+              use the current legacy triangle."
 
-        {/* ===== HERO OVERLAY SHAPE (NEW — replaces legacy triangle) =====
-            PER USER SPEC 2026-07-31 (TSK-0028):
-            "Then the Show triangle overlay change it to the shapes and allow
-            to change the color, from fill to gradient fill, and the direction
-            of the gradient."
+            The shape selector now includes (in a "Special" optgroup):
+              - "None (no shape)"               → renders no shape
+              - "Triangle (default — legacy SVG)" → renders the original
+                Style 1 right-pointing triangle SVG with dual gradient
+                layers (preserves the visual identity of Style 1)
 
-            This is a unified shape system shared with Style 2's hero-shape
-            background section. Supports:
-            - 13 shapes (8×2D + 5×3D)
+            When `data.heroOverlayShapeConfig` is undefined, the canvas
+            computes a default based on `data.style`:
+              - Style 1 → "legacy-triangle"
+              - Style 3 → "rectangle"
+            The form view below mirrors that fallback so the dropdown
+            shows the actual current shape on initial load.
+
+            Supports:
+            - 15 shapes (Special: none + legacy-triangle, 8×2D, 5×3D)
             - Solid OR gradient fill mode
             - Gradient direction slider (when in gradient mode)
             - Opacity + rotation
+            - Position X/Y, Size W/H, Scale % (PER USER SPEC 2026-07-31 TSK-0034)
         */}
         <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/[0.03] p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -1023,25 +1030,44 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               Hero Overlay Shape
             </h4>
             <span className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40">
-              Replaces triangle
+              {data.style === "style3" ? "Style 3 — rectangle default" : "Style 1 — triangle default"}
             </span>
           </div>
           <p className="mb-2 text-[0.65rem] text-black/60 leading-relaxed">
-            When set, this overrides the legacy triangle overlay. Choose any
-            of 13 shapes (2D or 3D), pick solid or gradient fill, and (in
-            gradient mode) adjust the gradient direction.
+            Choose <strong>None</strong> to render no shape, <strong>Triangle (default — legacy SVG)</strong> for
+            the original Style 1 right-pointing triangle, or any of 13 other
+            shapes (2D or 3D). Pick solid or gradient fill, adjust the
+            gradient direction, rotation, and (below the rotation scroller)
+            the position + size + scale.
           </p>
           <HeroShapePanelFields
-            config={(data.heroOverlayShapeConfig ?? {}) as HeroShapeConfig}
+            config={(() => {
+              // Mirror the canvas's `heroShapeConfig` computed default so
+              // the form view's dropdown shows the actual current shape
+              // on initial load (when data.heroOverlayShapeConfig is
+              // undefined). When the user picks a shape, the onChange
+              // below writes the full config to data.heroOverlayShapeConfig.
+              if (data.heroOverlayShapeConfig) {
+                return data.heroOverlayShapeConfig as HeroShapeConfig;
+              }
+              return {
+                shape: data.style === "style3" ? "rectangle" : "legacy-triangle",
+                fillMode: "gradient",
+                colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+                direction: 135,
+                opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+                rotation: 0,
+              } as HeroShapeConfig;
+            })()}
             onChange={(patch) =>
               update((d) => {
                 if (!d.heroOverlayShapeConfig) {
                   d.heroOverlayShapeConfig = {
-                    shape: "triangle",
+                    shape: d.style === "style3" ? "rectangle" : "legacy-triangle",
                     fillMode: "gradient",
-                    colors: [...data.heroOverlay.gradientColors],
+                    colors: [...(d.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"])],
                     direction: 135,
-                    opacity: data.heroOverlay.gradientOpacity,
+                    opacity: d.heroOverlay.gradientOpacity ?? 0.55,
                     rotation: 0,
                   };
                 }
@@ -1049,7 +1075,9 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               })
             }
           />
-          {/* Reset button */}
+          {/* Reset button — clears the user's customization so the canvas
+              falls back to its style-based default (legacy-triangle for
+              Style 1, rectangle for Style 3). */}
           <button
             type="button"
             onClick={() =>
@@ -1058,9 +1086,9 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               })
             }
             className="mt-2 text-[0.6rem] font-semibold text-black/60 hover:text-[#FF005A] underline"
-            title="Clear the shape config (revert to legacy triangle toggle)"
+            title="Clear the shape config (revert to style default: legacy-triangle for Style 1, rectangle for Style 3)"
           >
-            Reset shape config
+            Reset to style default
           </button>
         </div>
 

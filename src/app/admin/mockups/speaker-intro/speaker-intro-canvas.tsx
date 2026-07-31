@@ -21,7 +21,7 @@ import {
   type SectionBoxSize,
   type SectionLayoutEntry,
 } from "../shared/section-edit";
-import { HeroShape } from "../shared/hero-shape";
+import { HeroShape, type HeroShapeConfig } from "../shared/hero-shape";
 
 /**
  * SpeakerIntroCanvas — the data-driven mockup renderer.
@@ -156,6 +156,43 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const triangleZ = data.triangleZ ?? 1;
     const TEXT_Z = 50; // base text layer z; specific sections override above this
 
+    // PER USER SPEC 2026-07-31 (TSK-0034): Default hero overlay shape config,
+    // computed based on `data.style` when `data.heroOverlayShapeConfig` is
+    // undefined. This way:
+    //   - Style 1 (default) → shape = "legacy-triangle" (the original
+    //                          Style 1 right-pointing triangle SVG with
+    //                          dual gradient layers — same visual as the
+    //                          pre-TSK-0028 legacy `showTriangleOverlay`
+    //                          rendering).
+    //   - Style 3           → shape = "rectangle" (a clean rectangle
+    //                          overlay, per user spec).
+    //   - Style 2           → not applicable (Style 2 uses its own
+    //                          `style2HeroGradient` + Style2Canvas).
+    // When the user picks a different shape in the form view, their
+    // selection is written to `data.heroOverlayShapeConfig` and overrides
+    // this default. This default only applies on initial load + when the
+    // user switches style and hasn't yet customized the shape.
+    const heroShapeConfig: HeroShapeConfig = data.heroOverlayShapeConfig ?? (
+      data.style === "style3"
+        ? {
+            shape: "rectangle",
+            fillMode: "gradient",
+            colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+            direction: 135,
+            opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+            rotation: 0,
+          }
+        : {
+            // Style 1 (default) — legacy triangle with the user's gradient.
+            shape: "legacy-triangle",
+            fillMode: "gradient",
+            colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+            direction: 135,
+            opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+            rotation: 0,
+          }
+    );
+
     // PER USER SPEC 2026-07-31 (TSK-0031): Default section layout values
     // for Style 1 (and Style 3, which is an exact duplicate of Style 1).
     // Used as fallbacks when `data.sectionLayout[id]` is missing — both
@@ -163,27 +200,35 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     // (the floating form that shows X/Y/W/H/Scale/z).
     //   - header: X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50
     //   - topic:  X=-13, Y=14.4, W=951,  H=auto, Scale=65%,  z=50
-    //   - qr:     X=91, Y=2.2, W=auto, H=auto, Scale=114%, z=50
-    //             (PER USER SPEC 2026-07-31 TSK-0032)
+    //   - qr:     X=91.6, Y=2.5, W=auto, H=auto, Scale=124%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0034 — was X=91, Y=2.2,
+    //              Scale=114% per TSK-0032)
     //   - sponsors: X=23.8, Y=82.6, W=auto, H=auto, Scale=100%, z=1
     //             (PER USER SPEC 2026-07-31 TSK-0032; z=1 also in sectionZFor)
     //   - hero-image: virtual section id for the hero overlay image —
     //             bound to data.heroOverlay.pos/imageScale/imageScaleY.
     //             Default pos used when data.heroOverlay.pos is undefined.
     //             (PER USER SPEC 2026-07-31 TSK-0032)
+    //   - speakers: X=-7.9, Y=17.6, W=891, H=auto, Scale=76%, z=60
+    //             (PER USER SPEC 2026-07-31 TSK-0034 — was X=-8.8, Y=22.1
+    //              per TSK-0033)
     const STYLE1_DEFAULTS: Record<string, SectionLayoutEntry> = {
       header:   { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 },
       topic:    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 },
-      qr:       { pos: { x: 91, y: 2.2 }, scale: 1.14, z: 50 },
+      // PER USER SPEC 2026-07-31 (TSK-0034): updated QR defaults to
+      // X=91.6, Y=2.5, Scale=124% (was X=91, Y=2.2, Scale=1.14 per
+      // TSK-0032).
+      qr:       { pos: { x: 91.6, y: 2.5 }, scale: 1.24, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      // PER USER SPEC 2026-07-31 (TSK-0033): Style 1/3 speakers Properties
-      // defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto, Scale=76%.
+      // PER USER SPEC 2026-07-31 (TSK-0034): Style 1/3 speakers Properties
+      // defaults updated to Position X=-7.9 Y=17.6, Size W=891 H=auto,
+      // Scale=76% (was X=-8.8, Y=22.1 per TSK-0033).
       // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
       // and above the branding asset (52) — same z as the previous defaults
       // in sample-data + event-mapper, so existing user drag/resize edits
       // continue to layer correctly.
-      speakers: { pos: { x: -8.8, y: 22.1 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
+      speakers: { pos: { x: -7.9, y: 17.6 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
     };
 
     // --- Section 4: Scroll Isolation ---
@@ -351,82 +396,63 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           />
           </div>
 
-          {/* 6. SHAPE OVERLAY (replaces legacy triangle) — PER USER SPEC
-              2026-07-31 (TSK-0028):
-              "Then the Show triangle overlay change it to the shapes and
-              allow to change the color, from fill to gradient fill, and
-              the direction of the gradient."
-
-              When `data.heroOverlayShapeConfig` is set, render the new
-              unified HeroShape (any of 13 shapes, solid or gradient fill,
-              configurable direction). Otherwise fall back to the legacy
-              triangle SVG using `gradientColors` / `gradientOpacity`.
+          {/* 6. SHAPE OVERLAY — PER USER SPEC 2026-07-31 (TSK-0034):
+              Unified shape system. The shape is computed in `heroShapeConfig`
+              (defined above the JSX) — falls back to:
+                - Style 1 (default) → "legacy-triangle" (the original Style 1
+                  right-pointing triangle SVG with dual gradient layers)
+                - Style 3           → "rectangle" (clean rectangle overlay)
+              The user can pick any of 15 shapes (none / legacy-triangle /
+              8×2D / 5×3D) via the form view's "Hero Overlay Shape" panel.
 
               The shape is rendered inside the hero container (sibling of
               the hero EditableImage), at zIndex = triangleZ (so the
               Front/Back layer buttons in the sidebar still control it).
               The hero image is rendered above the shape (its wrapper has
               zIndex = triangleZ + 1).
-          */}
-          {data.heroOverlayShapeConfig ? (
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{ zIndex: triangleZ }}
-            >
-              <HeroShape config={data.heroOverlayShapeConfig} />
-            </div>
-          ) : (
-            /* LEGACY TRIANGLE OVERLAY — kept for backward compat with
-               existing JSON that has gradientColors but no shapeConfig. */
-            data.heroOverlay.showTriangleOverlay !== false && (
-              <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
-                <svg
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                  aria-hidden
+
+              PER USER SPEC 2026-07-31 (TSK-0034): When the shape's config
+              has `pos` / `boxSize` / `scale` set, the shape is positioned
+              ABSOLUTELY on the canvas (overriding the parent container's
+              position). This is used by Style 3 to make the rectangle
+              overlay a standalone, draggable section. */}
+          {heroShapeConfig.shape !== "none" && (
+            (() => {
+              // Compute the shape wrapper style based on pos/boxSize/scale.
+              const shapePos = heroShapeConfig.pos;
+              const shapeBox = heroShapeConfig.boxSize;
+              const shapeScale = heroShapeConfig.scale ?? 1;
+              const hasPosOrBox = !!(shapePos || shapeBox);
+              const wrapperStyle: React.CSSProperties = {
+                zIndex: triangleZ,
+                ...(shapePos
+                  ? {
+                      left: `${shapePos.x}%`,
+                      top: `${shapePos.y}%`,
+                    }
+                  : { left: 0, top: 0 }),
+                ...(shapeBox?.width
+                  ? { width: `${shapeBox.width}px` }
+                  : { width: "100%" }),
+                ...(shapeBox?.height
+                  ? { height: `${shapeBox.height}px` }
+                  : { height: "100%" }),
+                ...(shapeScale !== 1
+                  ? {
+                      transform: `scale(${shapeScale})`,
+                      transformOrigin: "top left",
+                    }
+                  : {}),
+              };
+              return (
+                <div
+                  className={`absolute pointer-events-none ${hasPosOrBox ? "" : "inset-0"}`}
+                  style={wrapperStyle}
                 >
-                  <defs>
-                    <linearGradient
-                      id="tri-grad"
-                      x1="0%"
-                      y1="0%"
-                      x2="100%"
-                      y2="100%"
-                    >
-                      {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                        <stop
-                          key={i}
-                          offset={`${(i / (arr.length - 1)) * 100}%`}
-                          stopColor={color}
-                          stopOpacity={data.heroOverlay.gradientOpacity}
-                        />
-                      ))}
-                    </linearGradient>
-                    <linearGradient
-                      id="tri-grad-2"
-                      x1="100%"
-                      y1="0%"
-                      x2="0%"
-                      y2="100%"
-                    >
-                      {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                        <stop
-                          key={i}
-                          offset={`${(i / (arr.length - 1)) * 100}%`}
-                          stopColor={color}
-                          stopOpacity={data.heroOverlay.gradientOpacity * 0.7}
-                        />
-                      ))}
-                    </linearGradient>
-                  </defs>
-                  {/* Right-pointing large triangle covering ~60% of hero */}
-                  <polygon points="0,0 100,50 0,100" fill="url(#tri-grad)" />
-                  {/* Smaller counter-triangle for geometric depth */}
-                  <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
-                </svg>
-              </div>
-            )
+                  <HeroShape config={heroShapeConfig} />
+                </div>
+              );
+            })()
           )}
 
           {/* 7. LOCATION PINS — per-pin connector line + dot + label

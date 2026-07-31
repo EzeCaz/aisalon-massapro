@@ -105,7 +105,7 @@ const DEFAULT_SECTION_LAYOUT = {
   // PER USER SPEC 2026-07-31 (TSK-0033): `speakers` is NOT in
   // DEFAULT_SECTION_LAYOUT. When an event is picked, the speakers
   // section falls back to the canvas-level defaults:
-  //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-8.8, Y=22.1, W=891, Scale=76%, z=60
+  //   - Style 1/3 → STYLE1_DEFAULTS.speakers = X=-7.9, Y=17.6, W=891, Scale=76%, z=60 (TSK-0034)
   //   - Style 2   → STYLE2_DEFAULTS.speakers = X=-8.7, Y=5,    W=891, Scale=76%, z=60
   // This way each style uses its own speakers defaults after event-pick,
   // instead of being forced to the same layout. (Same approach TSK-0031
