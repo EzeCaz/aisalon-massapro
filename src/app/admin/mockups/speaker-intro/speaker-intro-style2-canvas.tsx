@@ -89,7 +89,12 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1, z: 50 },
   "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 40 },
   speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
-  topic:        { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1, z: 50 },
+  // PER USER SPEC 2026-07-31 (TSK-0027): renamed section id "topic" →
+  // "hero-image" so it stops colliding with Style 1's "topic" section
+  // (which is the EVENT TOPIC text, not the hero image). Both styles now
+  // use a hero-image section id to refer to the hero image element —
+  // "Style 2 use the same section for the style 1 hero image."
+  "hero-image":  { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1, z: 50 },
   sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1, z: 50 },
 };
 
@@ -97,7 +102,7 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
 const SECTION_LABELS: Record<string, string> = {
   header: "Header",
   speakers: "Speakers",
-  topic: "Hero Image",
+  "hero-image": "Hero Image",
   "hero-shape": "Hero Shape",
   sponsors: "Footer",
 };
@@ -1267,7 +1272,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               "separate the hero image from the background colors gradient
               and set to shapes with gradient colors that you can edit."
               This section renders ONLY the gradient shape (SVG). The hero
-              image + pins + mountain + mascot are in the "topic" section
+              image + pins + mountain + mascot are in the "hero-image" section
               below, which sits on top (higher z-index).
               ============================================================ */}
           <SectionBox
@@ -1307,23 +1312,27 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               (TSK-0026): "Change the name topic Properties to Hero Image
               Properties" — label changed from "Hero (right panel)" to
               "Hero Image". The gradient background is now separate (hero-shape).
+              PER USER SPEC 2026-07-31 (TSK-0027): section id renamed from
+              "topic" → "hero-image" to stop colliding with Style 1's "topic"
+              section (which is the EVENT TOPIC text). Both styles now use
+              "hero-image" as the section id for the hero image element.
               ============================================================ */}
           <SectionBox
             active={sectionsEditable}
-            selected={selectedId === "topic"}
-            pos={effectiveLayout("topic").pos}
-            boxSize={effectiveLayout("topic").boxSize}
-            scale={effectiveLayout("topic").scale}
-            onMove={(p) => onSectionMove?.("topic", p)}
-            onResize={(s) => onSectionResize?.("topic", s)}
-            onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
-            onSelect={() => setSelectedId("topic")}
+            selected={selectedId === "hero-image"}
+            pos={effectiveLayout("hero-image").pos}
+            boxSize={effectiveLayout("hero-image").boxSize}
+            scale={effectiveLayout("hero-image").scale}
+            onMove={(p) => onSectionMove?.("hero-image", p)}
+            onResize={(s) => onSectionResize?.("hero-image", s)}
+            onBoxResize={(sz) => onSectionBoxResize?.("hero-image", sz)}
+            onSelect={() => setSelectedId("hero-image")}
             previewScale={previewScale}
             canvasW={CANVAS_W}
             canvasH={CANVAS_H}
-            zIndex={effectiveLayout("topic").z ?? 50}
+            zIndex={effectiveLayout("hero-image").z ?? 50}
             anchor="top-left"
-            guideId="topic"
+            guideId="hero-image"
             label="Hero Image"
             style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: "auto" }}
           >

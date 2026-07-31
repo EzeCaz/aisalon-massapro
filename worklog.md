@@ -7774,3 +7774,97 @@ Stage Summary:
   * speaker-intro-style2-canvas.tsx (major: +Style2HeroShape, +HeroShapePanel, +STYLE2_DEFAULTS, +SECTION_LABELS, +effectiveLayout, restructured topic→hero-shape+topic)
   * speaker-intro-editor.tsx (+handleHeroShapeChange, +onHeroShapeChange prop)
   * sample-data.ts (updated sectionLayout + added style2HeroGradient)
+
+---
+Task ID: TSK-0027
+Agent: main
+Task: User spec 2026-07-31 — (1) Style 1 Sponsors Properties defaults: X=25.9%, Y=85.3%, W=auto, H=auto, Scale=100%, z-index=50. (2) "Style 2 use the same section for the style 1 hero image" — unify the hero image section identifier across Style 1 and Style 2.
+
+Work Log:
+- Task 1 (Style 1 Sponsors defaults): Modified the sponsors SectionBox in
+  speaker-intro-canvas.tsx (line ~688):
+  * pos: changed from `data.sectionLayout?.sponsors?.pos` (undefined when
+    not set, falls back to inline right/bottom) to
+    `data.sectionLayout?.sponsors?.pos ?? { x: 25.9, y: 85.3 }` so the
+    default position matches the user's spec when no drag has occurred.
+  * style: replaced `right: "48px", bottom: "100px"` with
+    `left: 0, top: 0` — the SectionBox computed style will override
+    these with `${pos.x}%` / `${pos.y}%` when pos is provided.
+  * anchor: removed `anchor="top-right"` (now defaults to "top-left"),
+    so the box's transform origin and positioning match the X/Y %
+    in the Properties form.
+  * scale: kept at `data.sectionLayout?.sponsors?.scale ?? 1` (=100%).
+  * boxSize: kept as `data.sectionLayout?.sponsors?.boxSize` (undefined
+    = W/H auto).
+  * zIndex: kept as `sectionZFor("sponsors")` — returns TEXT_Z = 50
+    (sponsors is not "footer", so no +1).
+  * Kept `className="absolute flex flex-col items-end gap-2"` so the
+    sponsor logos stay right-aligned within the box (cosmetic, doesn't
+    affect the box position).
+- Task 2 (Style 2 hero image section id): The user said "Style 2 use the
+  same section for the style 1 hero image." Interpreted as: rename the
+  Style 2 hero image section id from "topic" to "hero-image" so it stops
+  colliding with Style 1's "topic" section (which is the EVENT TOPIC
+  text — the H2 with vertical accent bar, NOT the hero image). Both
+  styles now use "hero-image" as the section id for the hero image
+  element, aligning the naming across styles.
+  * speaker-intro-style2-canvas.tsx STYLE2_DEFAULTS (line ~88):
+    renamed key `topic:` → `"hero-image":` (value unchanged).
+  * speaker-intro-style2-canvas.tsx SECTION_LABELS (line ~102):
+    renamed key `topic: "Hero Image"` → `"hero-image": "Hero Image"`.
+  * speaker-intro-style2-canvas.tsx Hero Image SectionBox (line ~1320):
+    updated every reference from "topic" to "hero-image":
+    - `selected={selectedId === "hero-image"}`
+    - `pos/boxSize/scale/zIndex = effectiveLayout("hero-image")...`
+    - `onMove/onResize/onBoxResize = onSectionMove?.("hero-image", ...)`
+    - `onSelect = () => setSelectedId("hero-image")`
+    - `guideId="hero-image"`
+    - `label="Hero Image"` (unchanged — already correct from TSK-0026)
+  * Updated two documentation comments (lines ~1275, ~1316) that
+    referenced the old "topic" section name → "hero-image".
+  * sample-data.ts (line ~146): renamed `topic:` → `"hero-image":`
+    in the sectionLayout object.
+  * Note: the `effectiveLayout(id)` helper already auto-includes all
+    STYLE2_DEFAULTS keys via `Object.keys(STYLE2_DEFAULTS)` for the
+    sectionPeerZs computation, so the rename propagates automatically
+    to the Front/Back z-index logic.
+  * Note: Style 1's "topic" section (the EVENT TOPIC text, lines ~448-
+    463 in speaker-intro-canvas.tsx) is intentionally UNCHANGED. Style
+    1 and Style 2 now have non-colliding section ids: Style 1 has
+    "topic" for the event topic text; Style 2 has "hero-image" for the
+    hero image element.
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro" (verified via `grep -cE`).
+- Dev server log confirms successful recompiles ("✓ Compiled in 219ms",
+  "✓ Compiled in 306ms", "✓ Compiled in 310ms", "✓ Compiled in 217ms",
+  "✓ Compiled in 204ms") with no errors after the edits. The route
+  /admin/mockups/speaker-intro returns 200 OK.
+
+Stage Summary:
+- Task 1 DONE: Style 1 Sponsors Properties defaults are now
+  X=25.9%, Y=85.3%, W=auto, H=auto, Scale=100%, z-index=50 — matching
+  the user's spec exactly. The box renders at left:25.9%, top:85.3%
+  when no drag has occurred; once the user drags it,
+  data.sectionLayout.sponsors.pos wins.
+- Task 2 DONE: Style 2's hero image section id renamed from "topic" →
+  "hero-image". This eliminates the naming collision with Style 1's
+  "topic" section (event topic text). Both styles now use the
+  "hero-image" section id conceptually for the hero image element —
+  addressing the user's request "Style 2 use the same section for the
+  style 1 hero image."
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (Style 1 sponsors SectionBox: pos default + anchor + style)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (STYLE2_DEFAULTS + SECTION_LABELS + Hero Image SectionBox id rename)
+  * src/app/admin/mockups/speaker-intro/sample-data.ts
+    (sectionLayout.topic → sectionLayout["hero-image"])
+- No git commit made (user has not requested one). Suggested message:
+  "[TSK-0027] Speaker-Intro: Style 1 sponsors defaults + Style 2 hero-image section id rename".
+- Next step: user previews the result at /admin/mockups/speaker-intro.
+  Toggle between Style 1 and Style 2 to verify:
+  (a) Style 1 sponsors box now defaults to X=25.9%, Y=85.3% (bottom-
+      left area instead of bottom-right corner).
+  (b) Style 2 hero image still renders correctly and is still editable
+      (drag/resize) after the id rename. The Properties panel should
+      still show "Hero Image Properties" as the header.

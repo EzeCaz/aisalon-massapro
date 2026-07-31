@@ -685,12 +685,18 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           })()}
         </SectionBox>
 
-        {/* ===== 8. SPONSORS (bottom-right) ===== */}
+        {/* ===== 8. SPONSORS (bottom-right) =====
+            PER USER SPEC 2026-07-31 (TSK-0027): Default sponsors Properties
+            to X=25.9%, Y=85.3%, W=auto, H=auto, Scale=100%, z-index=50.
+            Anchor switched from top-right (right/bottom) to top-left
+            (left/top) so the X/Y % match the Properties form. The default
+            pos applies when the user has not dragged the section yet;
+            once dragged, data.sectionLayout.sponsors.pos wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "sponsors"}
           onSelect={() => setSelectedId("sponsors")}
-          pos={data.sectionLayout?.sponsors?.pos}
+          pos={data.sectionLayout?.sponsors?.pos ?? { x: 25.9, y: 85.3 }}
           scale={data.sectionLayout?.sponsors?.scale ?? 1}
           boxSize={data.sectionLayout?.sponsors?.boxSize}
           onMove={(p) => onSectionMove?.("sponsors", p)}
@@ -700,8 +706,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col items-end gap-2"
-          style={{ right: "48px", bottom: "100px", zIndex: sectionZFor("sponsors") }}
-          anchor="top-right"
+          style={{ left: 0, top: 0, zIndex: sectionZFor("sponsors") }}
           accentColor="#FF005A"
           label="Sponsored by"
           guideId="sponsors"

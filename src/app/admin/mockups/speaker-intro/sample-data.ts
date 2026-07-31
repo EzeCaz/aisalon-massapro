@@ -133,12 +133,17 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * the speakers, sponsors (footer), and topic (hero image) sections.
    * The "hero-shape" section is NEW — it's the editable gradient shape
    * behind the hero image (separated from the hero image per TSK-0026).
+   *
+   * PER USER SPEC 2026-07-31 (TSK-0027): renamed section id "topic" →
+   * "hero-image" to stop colliding with Style 1's "topic" section (which
+   * is the EVENT TOPIC text). Both styles now use "hero-image" as the
+   * section id for the hero image element.
    */
   sectionLayout: {
     header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 },
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
-    topic:        { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
+    "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
     sponsors:     { pos: { x: 0.3, y: 89.4 }, scale: 1.0, z: 50 },
     qr:           { pos: { x: 92, y: 91 }, scale: 1.0, z: 50 },
   },
