@@ -675,6 +675,70 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
+        {/* Style switcher — Style 1 / Style 2 / Style 3.
+            Per TSK-0023 Phase 1: moved here from the form-view "Hero overlay" section. */}
+        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+          {([
+            { value: 1, label: "Style 1" },
+            { value: 2, label: "Style 2" },
+            { value: 3, label: "Style 3" },
+          ] as const).map((opt, i) => {
+            const active = (data.heroStyle ?? 1) === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setData((prev) => ({ ...prev, heroStyle: opt.value }))}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                  i > 0 ? "border-l border-black/10" : ""
+                } ${
+                  active
+                    ? "bg-[#FF005A] text-white"
+                    : "text-black hover:bg-black/5"
+                }`}
+                title={
+                  opt.value === 1
+                    ? "Style 1 — geometric gradient triangles via SVG (default)"
+                    : opt.value === 2
+                    ? "Style 2 — pre-designed low-poly network image with Local Street pins"
+                    : "Style 3 — single-speaker spotlight layout with purple→magenta gradient + beige arch"
+                }
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="h-5 w-px bg-black/15 mx-0.5" />
+        {/* Edit images + Edit sections — moved OUT of the canvas frame per TSK-0023 Phase 1.
+            Order: Style 1/2/3 · Edit Images · Edit Sections · Form/JSON · Reset/Copy/Download/Save. */}
+        <button
+          type="button"
+          onClick={() => setEditMode((s) => !s)}
+          className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+            editMode
+              ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+              : "border border-black/15 bg-white text-black hover:bg-black/5"
+          }`}
+          title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+        >
+          <ImageIcon className="h-3.5 w-3.5" />
+          {editMode ? "Editing images" : "Edit images"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSectionsEditMode((s) => !s)}
+          className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+            sectionsEditMode
+              ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+              : "border border-black/15 bg-white text-black hover:bg-black/5"
+          }`}
+          title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+        >
+          <LayoutPanelTop className="h-3.5 w-3.5" />
+          {sectionsEditMode ? "Editing sections" : "Edit sections"}
+        </button>
+        <div className="h-5 w-px bg-black/15 mx-0.5" />
         {/* View-mode toggle: Form vs JSON */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
@@ -752,9 +816,6 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           title={`${data.speaker.fullName} — ${data.speaker.topic}`}
           filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
-        <span className="ml-auto text-xs text-black/80">
-          Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
-        </span>
       </div>
 
       {/* Edit-mode hint */}
@@ -868,39 +929,14 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           ref={previewContainerRef}
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
-        {/* Edit images + Edit sections — floating at the top-right of the
-            Live Preview box, per user spec. The buttons stay visible
-            regardless of scroll position inside the preview area. */}
-        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              editMode
-                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {editMode ? "Editing images" : "Edit images"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSectionsEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              sectionsEditMode
-                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-          >
-            <LayoutPanelTop className="h-3.5 w-3.5" />
-            {sectionsEditMode ? "Editing sections" : "Edit sections"}
-          </button>
-        </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
+          {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1. */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[0.7rem] font-semibold text-black/70">
+              Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+            </div>
+            <div className="text-[0.65rem] text-black/50">
+              {Math.round(previewScale * 100)}% scale · PNG export 2400 × 1600
+            </div>
           </div>
           <div
             className="relative mx-auto"

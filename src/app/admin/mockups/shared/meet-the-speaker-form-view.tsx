@@ -597,36 +597,14 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
       {/* ===== HERO OVERLAY ===== */}
       <Section title="Hero overlay (gradient)">
         {/* ===== HERO STYLE PICKER =====
-            Per user spec 2026-07-02: "ad another hero image alternative,
-            and add it a style Number 2". Style 1 = geometric gradient
-            triangles (default). Style 2 = pre-designed low-poly network
-            graph image with 4 editable "Local Street" pins. */}
-        <Field label="Hero style">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => update((d) => { d.heroStyle = 1; })}
-              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                (data.heroStyle ?? 1) === 1
-                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
-              }`}
-            >
-              Style 1 — Gradient triangles
-            </button>
-            <button
-              type="button"
-              onClick={() => update((d) => { d.heroStyle = 2; })}
-              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                data.heroStyle === 2
-                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
-              }`}
-            >
-              Style 2 — Network image
-            </button>
-          </div>
-        </Field>
+            Per TSK-0023 Phase 1: the Style 1/2/3 selector has been MOVED
+            to the top toolbar of the editor. This section now only shows
+            the per-style controls (Style 2 image URL, Local Street pins,
+            Style 1 gradient colors, etc.). */}
+        <p className="text-[0.65rem] text-black/60 mb-2">
+          Style 1/2/3 selector is now in the toolbar at the top of the page.
+          Currently active: <strong>Style {data.heroStyle ?? 1}</strong>
+        </p>
 
         {/* Style 2 image URL — only shown when Style 2 is selected. */}
         {data.heroStyle === 2 && (

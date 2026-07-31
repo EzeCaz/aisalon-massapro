@@ -342,8 +342,11 @@ export function QrSalonEditor() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[0.7rem] text-black/60">
-              {Math.round(previewScale * 100)}%
+            <span className="text-[0.7rem] font-semibold text-black/70">
+              Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+            </span>
+            <span className="text-[0.7rem] text-black/50">
+              · {Math.round(previewScale * 100)}%
             </span>
           </div>
         </div>
@@ -376,14 +379,10 @@ export function QrSalonEditor() {
         </div>
 
         <p className="text-[0.7rem] text-black/50 leading-relaxed">
-          Canvas: 1200×800 (3:2). Default layout: <strong>caption above</strong>,{" "}
-          <strong>QR centered</strong>, <strong>brand mark below</strong> — all
-          horizontally centered. <strong>Edit images</strong> (blue) → click the
-          brand mark to swap it from the brand library.{" "}
+          <strong>Edit images</strong> (blue) → click the brand mark to swap it from the brand library.{" "}
           <strong>Edit sections</strong> (pink) → drag the QR / caption / brand
           mark to reposition; 8 handles to resize; Object Properties Panel for
-          precise position, size, and z-order. Same pattern as the other
-          mockups.
+          precise position, size, and z-order.
         </p>
       </div>
 

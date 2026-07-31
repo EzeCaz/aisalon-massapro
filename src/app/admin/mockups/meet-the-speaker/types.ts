@@ -227,7 +227,19 @@ export type MeetTheSpeakerData = {
    *       overlaid on top of the image and replace the placeholder
    *       labels visually.
    */
-  heroStyle?: 1 | 2;
+  /**
+   * Visual style preset for the hero area.
+   *   - 1 (default): Geometric gradient triangles via SVG.
+   *   - 2: Pre-designed low-poly network image (heroStyle2Url) with 4
+   *        editable "Local Street" pins.
+   *   - 3: Single-speaker spotlight layout — purple→magenta gradient
+   *        background, beige arch with speaker avatar on the right,
+   *        pink "MEET THE SPEAKER" pill badge, dark translucent event
+   *        details card bottom-right. (Per TSK-0023 Phase 8 — canvas
+   *        implementation pending; type extended in Phase 1 so the
+   *        toolbar Style 3 button can be clicked without type errors.)
+   */
+  heroStyle?: 1 | 2 | 3;
   /**
    * Image URL for hero style #2. Defaults to the AI Salon branded
    * low-poly network graph uploaded to Vercel Blob.
