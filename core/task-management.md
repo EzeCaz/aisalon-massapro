@@ -183,7 +183,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 ## Current Task
 
-> **No task in flight.** TSK-0006 (the registry + protocol itself) is now `DONE` — the registry at `docs/tasks.md` holds all 11 back-filled tasks (TSK-0001 → TSK-0011) covering the last 72 hours (2026-07-28 → 2026-07-31). The next task the user requests will be logged as `TSK-0012` BEFORE work begins, per Step 1 of the protocol.
+> **TSK-0024 DONE** — Speaker-Intro editor: (1) Style 1/2/3 segmented buttons relocated from the top toolbar into the canvas caption area (right side, replacing the "62% scale · PNG export 2400 × 1600" text); (2) `SpeakerIntroStyle2Canvas` completely rewritten to match the uploaded "Speaker Intro Style 2.png" reference — split-screen 55/45 layout with gradient header bar, 2×2 speaker card grid on left (gradient circle avatars with initials OR/EK/BM/MF + name + title·company + pink topic pill + 2-line bio + teal time/session row), dark purple hero on right (mountain silhouette + 4 color-cycling location pins + meerkat mascot), dark footer (AI SALON logo + IN COLLAB WITH pills + SPONSORED BY pills + QR); (3) `sample-data.ts` updated to AI Salon Tel Aviv Marketing event with 4 speakers per the user's JSON example. TypeScript clean (0 errors in speaker-intro files, was 4 before). Dev server picked up changes — ready for user preview at /admin/mockups/speaker-intro → Style 2 button in canvas caption.
 
 When a new session starts, read this section first to know what's in flight. Update it before ending a session so the next agent can pick up seamlessly.
 

@@ -73,6 +73,20 @@ export type Speaker = {
   /** Optional session title (e.g. " fireside chat"). */
   sessionTitle?: string;
   /**
+   * Optional talk topic (e.g. "Brand in the AI era"). Rendered as a small
+   * pink pill/tag on the speaker card in Style 2. Per user spec
+   * 2026-07-31 (TSK-0024): the AI Salon Tel Aviv Marketing event JSON
+   * includes a per-speaker topic field separate from the session type.
+   */
+  topic?: string;
+  /**
+   * Optional 1-3 character initials shown in the avatar circle when no
+   * photoUrl is set (Style 2). When undefined, the canvas derives
+   * initials from the first letters of the first and last name.
+   * Per user spec 2026-07-31 (TSK-0024).
+   */
+  initials?: string;
+  /**
    * Session start time (HH:MM 24h, e.g. "18:30"). Auto-filled from the
    * speaker's first agenda item when the event dropdown is used. Rendered
    * as a small time pill next to the speaker's name.

@@ -629,42 +629,12 @@ export function SpeakerIntroEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        {/* Style switcher — Style 1 / Style 2 / Style 3 */}
-        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
-          {([
-            { value: "style1", label: "Style 1" },
-            { value: "style2", label: "Style 2" },
-            { value: "style3", label: "Style 3" },
-          ] as const).map((opt, i) => {
-            const active = (data.style ?? "style1") === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
-                  i > 0 ? "border-l border-black/10" : ""
-                } ${
-                  active
-                    ? "bg-[#FF005A] text-white"
-                    : "text-black hover:bg-black/5"
-                }`}
-                title={
-                  opt.value === "style1"
-                    ? "Style 1 — hero on right, text on left"
-                    : opt.value === "style2"
-                    ? "Style 2 — hero fills canvas, gradient shape overlay"
-                    : "Style 3 — same as Style 2 with QR repositioned"
-                }
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="h-5 w-px bg-black/15 mx-0.5" />
+        {/* Style switcher moved to canvas caption area per TSK-0024 — these
+            buttons are about which style the canvas renders, so they belong
+            right above the canvas, not in the global toolbar. */}
         {/* Edit images + Edit sections — moved OUT of the canvas frame per TSK-0023 Phase 1.
-            Order: Style 1/2/3 · Edit Images · Edit Sections · Form/JSON · Reset/Copy/Download/Save. */}
+            Order (toolbar): Edit Images · Edit Sections · Form/JSON · Reset/Copy/Download/Save.
+            Style 1/2/3 segmented buttons live in the canvas caption below. */}
         <button
           type="button"
           onClick={() => setEditMode((s) => !s)}
@@ -915,13 +885,50 @@ export function SpeakerIntroEditor({ events }: Props) {
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
           {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
-              Replaces the previous "Live Preview · {scale}% scale · exported PNG is 2400 × 1600" caption. */}
-          <div className="flex items-center justify-between mb-3">
+              Per TSK-0024: Style 1/2/3 segmented buttons now live here on the
+              RIGHT side (replacing the previous "{scale}% scale · PNG export
+              2400 × 1600" text — that text was redundant with the toolbar's
+              Download button tooltip and the canvas-size label on the left).
+              The Style buttons are about WHICH layout the canvas renders, so
+              they belong directly above the canvas, not in the global toolbar. */}
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <div className="text-[0.7rem] font-semibold text-black/70">
               Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+              <span className="ml-2 text-black/40 font-normal">
+                · {Math.round(previewScale * 100)}% scale
+              </span>
             </div>
-            <div className="text-[0.65rem] text-black/50">
-              {Math.round(previewScale * 100)}% scale · PNG export 2400 × 1600
+            <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden shadow-sm">
+              {([
+                { value: "style1", label: "Style 1" },
+                { value: "style2", label: "Style 2" },
+                { value: "style3", label: "Style 3" },
+              ] as const).map((opt, i) => {
+                const active = (data.style ?? "style1") === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                      i > 0 ? "border-l border-black/10" : ""
+                    } ${
+                      active
+                        ? "bg-[#FF005A] text-white"
+                        : "text-black hover:bg-black/5"
+                    }`}
+                    title={
+                      opt.value === "style1"
+                        ? "Style 1 — hero on right, text on left"
+                        : opt.value === "style2"
+                        ? "Style 2 — split-screen: speaker cards on left, hero on right"
+                        : "Style 3 — same as Style 2 with QR repositioned"
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div

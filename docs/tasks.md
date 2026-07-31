@@ -350,6 +350,19 @@
 
 ---
 
+### TSK-0024
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0024` |
+| **Date** | 2026-07-31 |
+| **Title** | Speaker-Intro editor: (1) move Style 1/2/3 segmented buttons into canvas caption area replacing the "62% scale · PNG export 2400 × 1600" text; (2) rewrite SpeakerIntroStyle2Canvas to match the uploaded "Speaker Intro Style 2.png" reference (split-screen 55/45 layout: gradient header bar, 2×2 speaker card grid on left, dark purple hero with mountain + 4 location pins + meerkat on right, dark footer with IN COLLAB WITH + SPONSORED BY + AI SALON logo + QR); (3) update sample-data.ts to the AI Salon Tel Aviv Marketing event with 4 speakers from the user's JSON example |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0024 — speaker-intro-style-tab-button-and-style-2-rewrite` |
+| **Files Touched** | /home/z/my-project/docs/tasks.md (this entry), /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx (Style button relocation), /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx (full rewrite of Style 2 layout), /home/z/my-project/src/app/admin/mockups/speaker-intro/sample-data.ts (updated to AI Salon Tel Aviv Marketing event), /home/z/my-project/worklog.md (worklog entry), /home/z/my-project/scripts/append_tasks_registry_tsk0024.py (this script) |
+| **Outcome** | Follow-up to TSK-0023. User opened the speaker-intro editor and reported that (a) the Style 1/2/3 segmented buttons are in the top toolbar instead of the canvas caption area where the "62% scale · PNG export 2400 × 1600" text lives, and (b) the current Style 2/3 implementation does NOT match the uploaded reference image "Speaker Intro Style 2.png" — the reference is a split-screen 55/45 layout (left white panel with 2×2 speaker cards, right dark purple hero with mountain + 4 location pins + meerkat, top gradient header bar, bottom dark footer with sponsors + AI SALON logo + QR), but the current implementation is a hero-fill-canvas with text overlay. Vision-analyzed the reference via glm-4.6v: 55/45 split, magenta gradient header bar with title + AI SALON brand, 2×2 speaker card grid with initials-avatars (OR/EK/BM/MF), dark purple hero panel with mountain silhouette + 4 location pins (Sarona/Yafo/Dizengoff/Neve Tzedek) + yellow meerkat mascot bottom-right, dark footer with IN COLLAB WITH (Amdocs, Google) + SPONSORED BY (Alison.ai) + AI SALON logo bottom-left + QR bottom-right. Both Style 2 and Style 3 will use the new layout (they currently share SpeakerIntroStyle2Canvas). Sample data updated to the AI Salon Tel Aviv Marketing event with 4 speakers per the user's JSON example. |
+
 ## Registry — Pre-Registry History (Reference Only)
 
 > Tasks completed before 2026-07-28 are NOT back-filled with serial IDs. They are listed here for context only. For full details, see `/home/z/my-project/worklog.md` and `core/tasks/README.md`.
