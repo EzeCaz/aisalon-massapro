@@ -7868,3 +7868,182 @@ Stage Summary:
   (b) Style 2 hero image still renders correctly and is still editable
       (drag/resize) after the id rename. The Properties panel should
       still show "Hero Image Properties" as the header.
+
+---
+Task ID: TSK-0028
+Agent: main
+Task: User spec 2026-07-31 — 3 tasks:
+  (1) Style 3 must be an exact duplicate of Style 1. Replace the "Show
+      triangle overlay" with a shape selector (2D: Circle/Triangle/Square/
+      Rectangle/Oval/Pentagon/Hexagon/Octagon; 3D: Sphere/Cube/Cone/
+      Cylinder/Pyramid) + fill mode (solid/gradient) + gradient direction.
+  (2) Style 2: erase the hero-image SECTION; treat the hero image as an
+      image (not a section); copy the entire right section from Style 1;
+      keep the background as a section with fill/gradient + direction
+      selector.
+  (3) Admin/mockups page: clicking the image, top-right "Open" button, or
+      "Open editor" must ALL open the editor (not the image URL).
+
+Work Log:
+- Created NEW shared module `src/app/admin/mockups/shared/hero-shape.tsx`
+  (~440 lines) containing:
+  * `HeroShapeType` — union of 13 shape types (8×2D + 5×3D)
+  * `HeroShapeFillMode` — "solid" | "gradient"
+  * `HeroShapeConfig` — unified shape config type (shape, fillMode,
+    solidColor, colors, direction, opacity, rotation)
+  * `ALL_HERO_SHAPES` — array of {value, label, group} for dropdowns
+  * `HeroShape` component — renders any of the 13 shapes with solid OR
+    gradient fill. Generates unique gradient IDs per instance so multiple
+    HeroShape SVGs can coexist on the same canvas without ID collisions
+    (the previous local Style2HeroShape had a fixed ID "style2-hero-grad"
+    which would collide if rendered twice).
+  * `HeroShapePanelFields` component — reusable form fields for editing a
+    HeroShapeConfig. Has a `compact` prop for the floating panel use case
+    (smaller fonts). Renders: shape dropdown (grouped 2D/3D), fill mode
+    toggle (Solid | Gradient), color picker(s) — single for solid, multi-
+    stop for gradient, gradient direction slider (only in gradient mode),
+    opacity slider, rotation slider.
+
+- Task 1 (Style 3 = Style 1 duplicate + shape selector):
+  * Updated `speaker-intro-editor.tsx` Style routing (line ~984): changed
+    from `data.style === "style2" || data.style === "style3"` to just
+    `data.style === "style2"`. Style 3 now uses SpeakerIntroCanvas
+    (Style 1) — exact duplicate per user spec.
+  * Updated Style 3 tooltip: "Style 3 — exact duplicate of Style 1
+    (per user spec 2026-07-31)".
+  * Extended `SpeakerIntroData` type in `types.ts`: added new optional
+    field `heroOverlayShapeConfig?: HeroShapeConfig` (using an inline
+    import type to avoid circular dependency).
+  * Updated `speaker-intro-canvas.tsx` (Style 1 canvas):
+    - Imported `HeroShape` from `../shared/hero-shape`.
+    - Replaced the legacy hardcoded triangle SVG with conditional logic:
+      When `data.heroOverlayShapeConfig` is set → render `<HeroShape
+      config={...} />` (the new unified shape system). Otherwise fall
+      back to the legacy triangle SVG using `gradientColors` +
+      `gradientOpacity` (kept for backward compat with existing JSON
+      that has no shapeConfig).
+  * Updated `speaker-intro-form-view.tsx`: added a new "Hero Overlay
+    Shape" section in the sidebar (after the legacy "Show triangle
+    overlay?" field, which is now labeled "(legacy)"). Uses the shared
+    `HeroShapePanelFields` component. Includes a "Reset shape config"
+    button to clear the shapeConfig (revert to legacy triangle toggle).
+    On first edit, seeds the shapeConfig from the existing
+    `gradientColors` / `gradientOpacity` so the visual stays consistent.
+
+- Task 2 (Style 2 hero image as image, not section):
+  * Extended `style2HeroGradient` type in `types.ts`: added `fillMode`
+    ("solid" | "gradient") and `solidColor` fields.
+  * Added 4 new props to SpeakerIntroStyle2Canvas Props type: `editable`,
+    `onPickImage`, `onPlacementChange`, `onSizeChange`, `onHeroPosChange`.
+  * Wired the editor to pass these props to SpeakerIntroStyle2Canvas
+    (same handlers Style 1 uses).
+  * REMOVED the local `Style2HeroShape` component (~205 lines) — replaced
+    with the shared `HeroShape` component. The hero-shape SectionBox now
+    renders `<HeroShape config={heroGradientConfig as HeroShapeConfig} />`
+    instead.
+  * REMOVED the local `ALL_SHAPES` constant + `HeroShapeType` type alias
+    (no longer needed — HeroShapePanelFields has its own).
+  * REPLACED the `hero-image` SectionBox with a plain absolutely-
+    positioned div (NOT a SectionBox) that contains:
+    - The hero image (Next.js Image with object-fit cover, opacity 0.45,
+      mixBlendMode "luminosity" — slightly more visible than the
+      previous 0.35).
+    - A "⠿ Move hero" grip bar (top-center, blue) — only shown in edit
+      mode. Dragging it updates `data.heroOverlay.pos` so the user can
+      freely reposition the hero anywhere on the canvas (same UX as
+      Style 1's DraggablePhotoContainer).
+    - A "Replace" button (top-right) — only shown in edit mode. Calls
+      `onPickImage({ kind: "hero" })` to open the image picker.
+    - The 4 location pins (Style2LocationPin with white/teal/magenta
+      variants).
+    - The MountainSilhouette SVG bottom decoration.
+    - The meerkat mascot (data.branding.imageUrl) bottom-right.
+  * The hero image div is positioned using `data.heroOverlay.pos` (when
+    set) or defaults to the right panel area (LEFT_W..CANVAS_W,
+    HEADER_H..HEADER_H+MAIN_H) as % of canvas.
+  * Updated the HeroShapePanel (floating properties panel for the hero-
+    shape section) to use the shared `HeroShapePanelFields` component
+    (with `compact` mode) instead of inline shape/color/direction/opacity/
+    rotation UI. This adds the new fillMode toggle (Solid | Gradient) and
+    the gradient direction slider to the panel.
+  * Updated `sample-data.ts`: added `fillMode: "gradient"` and
+    `solidColor: "#311B92"` to the existing `style2HeroGradient` config.
+    Added a new `heroOverlayShapeConfig` for Style 1/3 (default: triangle
+    with the magenta→purple gradient, matching the legacy look).
+
+- Task 3 (admin/mockups page navigation):
+  * Updated `AssetCardItem` in `mockups-client.tsx`: when an asset has an
+    `editorHref`, the thumbnail wrapper becomes a `<Link
+    href={asset.editorHref}>` (client-side nav, no target="_blank"). The
+    top-right "Open" badge becomes "Open editor" with the Wand2 icon.
+    When no editorHref (brand assets), keeps the legacy `<a href={url}
+    target="_blank">` behavior. The bottom "Open editor" button is
+    unchanged (it already navigated to the editor). So all 3 affordances
+    (thumbnail click, top-right badge, bottom button) now open the
+    editor for templates.
+
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro", "mockups-client", or "hero-shape"
+  (verified via `grep -cE` after each major step).
+- Dev server log confirms successful recompiles after every edit (multiple
+  "✓ Compiled in ~200-425ms" events, no errors or warnings). The route
+  /admin/mockups/speaker-intro returns 200 OK.
+
+Stage Summary:
+- Task 1 DONE: Style 3 is now an exact duplicate of Style 1 (uses the
+  same SpeakerIntroCanvas). The legacy "Show triangle overlay" is
+  replaced with a unified shape system supporting 13 shapes (8×2D +
+  5×3D), solid OR gradient fill mode, and a gradient direction slider.
+  Available in the form view sidebar under "Hero Overlay Shape".
+  Backward compatible: existing JSON with only `gradientColors` keeps
+  rendering the legacy triangle.
+- Task 2 DONE: Style 2's hero image is no longer wrapped in a SectionBox.
+  It's a plain absolutely-positioned div (treated as an image) with a
+  "⠿ Move hero" grip bar + "Replace" button (both shown only in edit
+  mode). The hero-shape SectionBox (background) remains and now uses the
+  shared HeroShape component with the new fillMode (solid/gradient) +
+  direction selector.
+- Task 3 DONE: On /admin/mockups, clicking the thumbnail, the top-right
+  "Open" badge, OR the "Open editor" button of any template card now
+  navigates to the editor (not the image URL). Brand assets without an
+  editorHref keep the legacy behavior (open image URL in new tab).
+- Files changed:
+  * NEW: src/app/admin/mockups/shared/hero-shape.tsx (~440 lines)
+  * src/app/admin/mockups/speaker-intro/types.ts (added
+    heroOverlayShapeConfig field; extended style2HeroGradient with
+    fillMode + solidColor)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (imported HeroShape; replaced legacy triangle SVG with conditional
+    HeroShape rendering when shapeConfig is set)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (major: removed Style2HeroShape + ALL_SHAPES; replaced hero-image
+    SectionBox with plain positioned div with grip bar; updated
+    HeroShapePanel to use shared HeroShapePanelFields; added new props
+    editable/onPickImage/onPlacementChange/onSizeChange/onHeroPosChange)
+  * src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+    (Style 3 routing → Style 1 canvas; passes new props to Style 2
+    canvas)
+  * src/app/admin/mockups/shared/speaker-intro-form-view.tsx (added
+    HeroShapePanelFields import + "Hero Overlay Shape" form section)
+  * src/app/admin/mockups/speaker-intro/sample-data.ts (added
+    heroOverlayShapeConfig for Style 1/3; added fillMode + solidColor
+    to style2HeroGradient)
+  * src/app/admin/mockups/mockups-client.tsx (AssetCardItem: thumbnail
+    + "Open" badge navigate to editor when editorHref is set)
+- No git commit made (user has not requested one). Suggested message:
+  "[TSK-0028] Speaker-Intro: Style 3 = Style 1 duplicate + unified shape
+  overlay system; Style 2 hero image as image not section; mockups page
+  navigation fix".
+- Next step: user previews the result at /admin/mockups/speaker-intro.
+  Verify:
+  (a) Style 1 + Style 3 look identical; both show the triangle overlay
+      by default (matching the previous look). Editing the shape via the
+      new "Hero Overlay Shape" form section changes the overlay shape +
+      fill mode + gradient direction.
+  (b) Style 2 hero image now has a "⠿ Move hero" grip bar (edit mode)
+      and a "Replace" button. The hero-shape SectionBox's properties
+      panel now has a "Solid | Gradient" toggle and a gradient direction
+      slider.
+  (c) On /admin/mockups, clicking the thumbnail or the top-right "Open"
+      badge of any template card navigates to the editor (no new tab
+      with the image URL).

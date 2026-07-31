@@ -951,7 +951,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                           ? "Style 1 — hero on right, text on left"
                           : opt.value === "style2"
                           ? "Style 2 — split-screen: speaker cards on left, hero on right"
-                          : "Style 3 — same as Style 2 with QR repositioned"
+                          : "Style 3 — exact duplicate of Style 1 (per user spec 2026-07-31)"
                       }
                     >
                       {opt.label}
@@ -977,17 +977,26 @@ export function SpeakerIntroEditor({ events }: Props) {
                 height: "800px",
               }}
             >
-              {data.style === "style2" || data.style === "style3" ? (
+              {/* PER USER SPEC 2026-07-31 (TSK-0028): "Intro speaker style 3
+                  must be an exact duplicate of style one." So Style 1 AND
+                  Style 3 both use the SpeakerIntroCanvas (Style 1), not the
+                  Style 2 canvas. Only Style 2 uses SpeakerIntroStyle2Canvas. */}
+              {data.style === "style2" ? (
                 <SpeakerIntroStyle2Canvas
                   ref={canvasRef}
                   data={data}
+                  editable={editMode}
                   sectionsEditable={sectionsEditMode}
                   previewScale={previewScale}
+                  onPickImage={handlePickImage}
+                  onPlacementChange={handlePlacementChange}
+                  onSizeChange={handleSizeChange}
                   onSectionMove={handleSectionMove}
                   onSectionResize={handleSectionResize}
                   onSectionBoxResize={handleSectionBoxResize}
                   onSectionZChange={handleSectionZChange}
                   onHeroShapeChange={handleHeroShapeChange}
+                  onHeroPosChange={handleHeroPosChange}
                 />
               ) : (
                 <SpeakerIntroCanvas

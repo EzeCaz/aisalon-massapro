@@ -154,11 +154,36 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * The shape renders BEHIND the hero image (z=40 < hero image z=50).
    * Default: rectangle with the dark-purple 3-stop gradient matching the
    * original Style 2 reference.
+   *
+   * PER USER SPEC 2026-07-31 (TSK-0028): added `fillMode` ("solid" |
+   * "gradient") + `solidColor` so the user can choose between solid fill
+   * or multi-stop gradient. Default = "gradient" (preserves the original
+   * look).
    */
   style2HeroGradient: {
     shape: "rectangle",
+    fillMode: "gradient",
+    solidColor: "#311B92",
     colors: ["#311B92", "#1A237E", "#0B0B2E"],
     direction: 180,
+    opacity: 0.9,
+    rotation: 0,
+  },
+  /**
+   * Style 1 / 3 — Hero overlay SHAPE config (replaces legacy "Show triangle
+   * overlay"). PER USER SPEC 2026-07-31 (TSK-0028):
+   * "Then the Show triangle overlay change it to the shapes and allow to
+   * change the color, from fill to gradient fill, and the direction of the
+   * gradient."
+   * Default: triangle with the same magenta→purple gradient as the legacy
+   * overlay (so existing mockups look identical until the user picks a
+   * different shape).
+   */
+  heroOverlayShapeConfig: {
+    shape: "triangle",
+    fillMode: "gradient",
+    colors: ["#ff0056", "#8f0080"],
+    direction: 135,
     opacity: 0.9,
     rotation: 0,
   },

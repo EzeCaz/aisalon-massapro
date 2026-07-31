@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState, useEffect, type ReactNode } from "react";
+import { forwardRef, useState, useEffect, useRef, type ReactNode } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import type {
@@ -20,6 +20,7 @@ import {
   type SectionBoxSize,
   type SectionLayoutEntry,
 } from "../shared/section-edit";
+import { HeroShape, HeroShapePanelFields, type HeroShapeConfig } from "../shared/hero-shape";
 
 /**
  * SpeakerIntroStyle2Canvas — Style 2 layout for the Speaker Intro mockup.
@@ -108,36 +109,30 @@ const SECTION_LABELS: Record<string, string> = {
 };
 
 type HeroGradientConfig = NonNullable<SpeakerIntroData["style2HeroGradient"]>;
-type HeroShapeType = NonNullable<HeroGradientConfig["shape"]>;
-
-const ALL_SHAPES: { value: HeroShapeType; label: string; group: string }[] = [
-  { value: "rectangle", label: "Rectangle", group: "2D" },
-  { value: "square", label: "Square", group: "2D" },
-  { value: "circle", label: "Circle", group: "2D" },
-  { value: "oval", label: "Oval / Ellipse", group: "2D" },
-  { value: "triangle", label: "Triangle", group: "2D" },
-  { value: "pentagon", label: "Pentagon", group: "2D" },
-  { value: "hexagon", label: "Hexagon", group: "2D" },
-  { value: "octagon", label: "Octagon", group: "2D" },
-  { value: "sphere", label: "Sphere", group: "3D" },
-  { value: "cube", label: "Cube", group: "3D" },
-  { value: "cone", label: "Cone", group: "3D" },
-  { value: "cylinder", label: "Cylinder", group: "3D" },
-  { value: "pyramid", label: "Pyramid", group: "3D" },
-];
+// HeroShapeType + ALL_SHAPES were removed in TSK-0028 — the shape dropdown
+// now uses the shared HeroShapePanelFields component (imported above), which
+// has its own ALL_HERO_SHAPES constant.
 
 type Props = {
   data: SpeakerIntroData;
   className?: string;
   sectionsEditable?: boolean;
+  /** Whether the canvas is in image-edit mode (pan/zoom/replace images). */
+  editable?: boolean;
   onPickImage?: (slot: ImageSlot) => void;
   onPlacementChange?: (slot: ImageSlot, placement: ImagePlacement) => void;
+  onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   onSectionMove?: (id: SectionId, pos: SectionPos) => void;
   onSectionResize?: (id: SectionId, scale: number) => void;
   onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
   onSectionZChange?: (id: SectionId, z: number) => void;
-  /** Called when the user edits the hero gradient shape / colors / direction / opacity / rotation. */
+  /** Called when the user edits the hero gradient shape / colors / direction / opacity / rotation / fillMode. */
   onHeroShapeChange?: (patch: Partial<HeroGradientConfig>) => void;
+  /** Called when the user drags the hero image via its "⠿ Move hero" grip
+   *  bar. Updates `data.heroOverlay.pos` (free-form {x, y} as % of canvas).
+   *  PER USER SPEC 2026-07-31 (TSK-0028): the hero image should be treated
+   *  as an image (not a section), but still support free-form dragging. */
+  onHeroPosChange?: (pos: { x: number; y: number }) => void;
   previewScale?: number;
 };
 
@@ -432,210 +427,23 @@ function Style2LocationPin({
 }
 
 // ============================================================================
-// Style2HeroShape — renders the gradient background shape behind the hero
-// image. Supports 13 shape types (8 × 2D + 5 × 3D) with a linear or radial
-// gradient fill, opacity, and rotation.
+// Style2HeroShape — DELETED in TSK-0028.
+// The Style 2 hero-shape background now uses the shared `HeroShape` component
+// from `../shared/hero-shape` (imported above). The shared component supports
+// the same 13 shape types PLUS a new `fillMode` ("solid" | "gradient") and
+// `solidColor` field, per user spec 2026-07-31 (TSK-0028):
+//   "the background its a section with the entire section covered with a fill
+//    or gradient, also enable to select the direction of the gradient"
 //
-// PER USER SPEC 2026-07-31 (TSK-0026):
-//   "Now separate the hero image from the background colors gradient and set
-//    to shapes with gradient colors that you can edit on the form."
+// The shared component also handles unique gradient IDs per instance (so
+// multiple HeroShape SVGs on the same canvas don't collide), which the
+// previous local implementation did not.
 //
-// The shape is rendered as an SVG that fills its parent container. 2D shapes
-// use a linear gradient; 3D shapes (sphere, cube, cone, cylinder, pyramid)
-// simulate depth with multiple faces / radial gradients.
+// Call sites that previously used <Style2HeroShape ... /> now use:
+//   <HeroShape config={heroGradientConfig as HeroShapeConfig} />
+// (The style2HeroGradient type now includes fillMode + solidColor fields,
+// so the cast is safe.)
 // ============================================================================
-function Style2HeroShape({
-  shape,
-  colors,
-  direction,
-  opacity,
-  rotation,
-}: {
-  shape: HeroShapeType;
-  colors: string[];
-  direction: number;
-  opacity: number;
-  rotation: number;
-}) {
-  const gradId = "style2-hero-grad";
-  const radialId = "style2-hero-radial";
-  const safeColors =
-    colors.length >= 2 ? colors : ["#311B92", "#0B0B2E"];
-  const stops = safeColors.map((c, i) => ({
-    offset: `${(i / Math.max(1, safeColors.length - 1)) * 100}%`,
-    color: c,
-  }));
-
-  const wrapperStyle: React.CSSProperties = {
-    width: "100%",
-    height: "100%",
-    opacity,
-    transform: `rotate(${rotation}deg)`,
-    transformOrigin: "center center",
-  };
-
-  const commonDefs = (
-    <defs>
-      <linearGradient id={gradId} gradientTransform={`rotate(${direction} 0.5 0.5)`} x1="0" y1="0" x2="1" y2="0">
-        {stops.map((s, i) => (
-          <stop key={`l${i}`} offset={s.offset} stopColor={s.color} />
-        ))}
-      </linearGradient>
-      <radialGradient id={radialId} cx="0.35" cy="0.3" r="0.75">
-        <stop offset="0%" stopColor={safeColors[0]} />
-        <stop offset="60%" stopColor={safeColors[Math.min(1, safeColors.length - 1)]} />
-        <stop offset="100%" stopColor={safeColors[safeColors.length - 1]} />
-      </radialGradient>
-    </defs>
-  );
-
-  // Helper to darken a hex color by a factor (0..1)
-  const darken = (hex: string, factor: number): string => {
-    try {
-      const h = hex.replace("#", "");
-      const r = Math.round(parseInt(h.slice(0, 2), 16) * factor);
-      const g = Math.round(parseInt(h.slice(2, 4), 16) * factor);
-      const b = Math.round(parseInt(h.slice(4, 6), 16) * factor);
-      return `rgb(${r},${g},${b})`;
-    } catch {
-      return hex;
-    }
-  };
-
-  switch (shape) {
-    // ---- 2D shapes ----
-    case "rectangle":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
-          {commonDefs}
-          <rect x="0" y="0" width="100" height="100" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "square":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <rect x="15" y="15" width="70" height="70" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "circle":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <circle cx="50" cy="50" r="50" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "oval":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
-          {commonDefs}
-          <ellipse cx="50" cy="50" rx="50" ry="35" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "triangle":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <polygon points="50,2 98,98 2,98" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "pentagon":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <polygon points="50,2 98,38 80,98 20,98 2,38" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "hexagon":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <polygon points="25,2 75,2 98,50 75,98 25,98 2,50" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    case "octagon":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <polygon points="30,2 70,2 98,30 98,70 70,98 30,98 2,70 2,30" fill={`url(#${gradId})`} />
-        </svg>
-      );
-    // ---- 3D shapes ----
-    case "sphere":
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          <circle cx="50" cy="50" r="48" fill={`url(#${radialId})`} />
-          <ellipse cx="38" cy="35" rx="12" ry="8" fill="rgba(255,255,255,0.18)" />
-        </svg>
-      );
-    case "cube": {
-      const c1 = safeColors[0];
-      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          {/* Top face */}
-          <polygon points="50,5 90,25 50,45 10,25" fill={c1} />
-          {/* Left face (darker) */}
-          <polygon points="10,25 50,45 50,95 10,75" fill={darken(c2, 0.7)} />
-          {/* Right face */}
-          <polygon points="90,25 50,45 50,95 90,75" fill={darken(c2, 0.5)} />
-        </svg>
-      );
-    }
-    case "cone": {
-      const c1 = safeColors[0];
-      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          {/* Cone body */}
-          <polygon points="50,2 90,85 10,85" fill={`url(#${gradId})`} />
-          {/* Base ellipse (darker) */}
-          <ellipse cx="50" cy="85" rx="40" ry="10" fill={darken(c2, 0.6)} />
-          {/* Shading on left side */}
-          <polygon points="50,2 10,85 30,85" fill={darken(c1, 0.6)} opacity="0.5" />
-        </svg>
-      );
-    }
-    case "cylinder": {
-      const c1 = safeColors[0];
-      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          {/* Body */}
-          <rect x="20" y="15" width="60" height="70" fill={`url(#${gradId})`} />
-          {/* Bottom ellipse (darker) */}
-          <ellipse cx="50" cy="85" rx="30" ry="8" fill={darken(c2, 0.6)} />
-          {/* Top ellipse (lighter) */}
-          <ellipse cx="50" cy="15" rx="30" ry="8" fill={c1} />
-        </svg>
-      );
-    }
-    case "pyramid": {
-      const c1 = safeColors[0];
-      const c2 = safeColors[Math.min(1, safeColors.length - 1)];
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-          {commonDefs}
-          {/* Left face (lighter) */}
-          <polygon points="50,5 50,95 5,95" fill={c1} />
-          {/* Right face (darker) */}
-          <polygon points="50,5 50,95 95,95" fill={darken(c2, 0.6)} />
-        </svg>
-      );
-    }
-    default:
-      return (
-        <svg style={wrapperStyle} viewBox="0 0 100 100" preserveAspectRatio="none">
-          {commonDefs}
-          <rect x="0" y="0" width="100" height="100" fill={`url(#${gradId})`} />
-        </svg>
-      );
-  }
-}
 
 // ============================================================================
 // HeroShapePanel — floating properties panel for the "hero-shape" section.
@@ -672,28 +480,11 @@ function HeroShapePanel({
   peers?: number[];
   onDeselect?: () => void;
 }) {
-  const shape = config.shape ?? "rectangle";
-  const colors = config.colors ?? ["#311B92", "#0B0B2E"];
-  const direction = config.direction ?? 135;
-  const opacityVal = config.opacity ?? 0.85;
-  const rotation = config.rotation ?? 0;
-
   const px = pos?.x ?? 0;
   const py = pos?.y ?? 0;
   const bw = boxSize?.width ?? 0;
   const bh = boxSize?.height ?? 0;
   const sc = scale ?? 1;
-
-  const updateColor = (index: number, value: string) => {
-    const next = [...colors];
-    next[index] = value;
-    onChange({ colors: next });
-  };
-  const addColor = () => onChange({ colors: [...colors, "#FFFFFF"] });
-  const removeColor = (index: number) => {
-    if (colors.length <= 2) return;
-    onChange({ colors: colors.filter((_, i) => i !== index) });
-  };
 
   const bringToFront = () => {
     if (!onZChange) return;
@@ -738,126 +529,17 @@ function HeroShapePanel({
 
       {/* Body */}
       <div className="px-2 py-2 flex flex-col gap-2.5">
-        {/* Shape type dropdown */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Shape
-          </div>
-          <select
-            value={shape}
-            onChange={(e) => onChange({ shape: e.target.value as HeroShapeType })}
-            className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-1 bg-white"
-            title="Select the background shape (2D or 3D)"
-          >
-            <optgroup label="2D Shapes">
-              {ALL_SHAPES.filter((s) => s.group === "2D").map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </optgroup>
-            <optgroup label="3D Shapes">
-              {ALL_SHAPES.filter((s) => s.group === "3D").map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </optgroup>
-          </select>
-        </div>
-
-        {/* Gradient colors */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Gradient Colors
-          </div>
-          <div className="flex flex-col gap-1">
-            {colors.map((c, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <input
-                  type="color"
-                  value={c}
-                  onChange={(e) => updateColor(i, e.target.value)}
-                  className="w-7 h-7 rounded border border-black/15 cursor-pointer"
-                  title={`Color ${i + 1}: ${c}`}
-                />
-                <input
-                  type="text"
-                  value={c}
-                  onChange={(e) => updateColor(i, e.target.value)}
-                  className="flex-1 text-[0.6rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                  title="Hex color value"
-                />
-                {colors.length > 2 && (
-                  <button
-                    type="button"
-                    onClick={() => removeColor(i)}
-                    className="text-black/40 hover:text-[#FF005A] text-[0.8rem] leading-none px-1"
-                    title="Remove this color stop"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {colors.length < 5 && (
-            <button
-              type="button"
-              onClick={addColor}
-              className="mt-1 text-[0.55rem] font-semibold text-[#FF005A] hover:underline"
-            >
-              + Add color stop
-            </button>
-          )}
-        </div>
-
-        {/* Direction (gradient angle) */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Gradient Direction: {direction}°
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="360"
-            step="1"
-            value={direction}
-            onChange={(e) => onChange({ direction: parseFloat(e.target.value) })}
-            className="w-full h-1 accent-[#FF005A]"
-            title="Gradient angle in degrees"
-          />
-        </div>
-
-        {/* Opacity */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Opacity: {Math.round(opacityVal * 100)}%
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={opacityVal}
-            onChange={(e) => onChange({ opacity: parseFloat(e.target.value) })}
-            className="w-full h-1 accent-[#FF005A]"
-            title="Shape opacity (0 = transparent, 1 = fully opaque)"
-          />
-        </div>
-
-        {/* Rotation */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Shape Rotation: {rotation}°
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="360"
-            step="1"
-            value={rotation}
-            onChange={(e) => onChange({ rotation: parseFloat(e.target.value) })}
-            className="w-full h-1 accent-[#FF005A]"
-            title="Shape rotation in degrees"
-          />
-        </div>
+        {/* Shape + fill mode + colors + direction + opacity + rotation —
+            PER USER SPEC 2026-07-31 (TSK-0028): unified with the Style 1
+            hero overlay shape system. The shared HeroShapePanelFields
+            component renders all of these in compact mode, including the
+            new fillMode (solid | gradient) toggle and the gradient
+            direction slider. */}
+        <HeroShapePanelFields
+          config={config as HeroShapeConfig}
+          onChange={(patch) => onChange(patch)}
+          compact
+        />
 
         <div className="border-t border-black/10 pt-2 flex flex-col gap-2">
           {/* Position */}
@@ -1007,11 +689,16 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       data,
       className,
       sectionsEditable = false,
+      editable = false,
+      onPickImage,
+      onPlacementChange,
+      onSizeChange,
       onSectionMove,
       onSectionResize,
       onSectionBoxResize,
       onSectionZChange,
       onHeroShapeChange,
+      onHeroPosChange,
       previewScale = 1,
     },
     ref,
@@ -1272,8 +959,13 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               "separate the hero image from the background colors gradient
               and set to shapes with gradient colors that you can edit."
               This section renders ONLY the gradient shape (SVG). The hero
-              image + pins + mountain + mascot are in the "hero-image" section
-              below, which sits on top (higher z-index).
+              image + pins + mountain + mascot are in the hero image
+              element below, which sits on top (higher z-index).
+
+              PER USER SPEC 2026-07-31 (TSK-0028): the shape now uses the
+              shared `HeroShape` component (supports fillMode solid |
+              gradient, direction, opacity, rotation) instead of the old
+              local Style2HeroShape.
               ============================================================ */}
           <SectionBox
             active={sectionsEditable}
@@ -1295,111 +987,175 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: `${MAIN_H}px` }}
           >
             <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
-              <Style2HeroShape
-                shape={heroGradientConfig.shape ?? "rectangle"}
-                colors={heroGradientConfig.colors ?? ["#311B92", "#0B0B2E"]}
-                direction={heroGradientConfig.direction ?? 180}
-                opacity={heroGradientConfig.opacity ?? 0.9}
-                rotation={heroGradientConfig.rotation ?? 0}
-              />
+              <HeroShape config={heroGradientConfig as HeroShapeConfig} />
             </div>
           </SectionBox>
 
           {/* ============================================================
-              Layer 3b: HERO IMAGE — the hero image overlay + location pins
-              + mountain silhouette + meerkat mascot. Sits ON TOP of the
-              hero-shape gradient (higher z-index). PER USER SPEC 2026-07-31
-              (TSK-0026): "Change the name topic Properties to Hero Image
-              Properties" — label changed from "Hero (right panel)" to
-              "Hero Image". The gradient background is now separate (hero-shape).
-              PER USER SPEC 2026-07-31 (TSK-0027): section id renamed from
-              "topic" → "hero-image" to stop colliding with Style 1's "topic"
-              section (which is the EVENT TOPIC text). Both styles now use
-              "hero-image" as the section id for the hero image element.
+              Layer 3b: HERO IMAGE — PER USER SPEC 2026-07-31 (TSK-0028):
+              "The intro speaker style 2 the hero image is now a section,
+              but should be treated as an image, so erase that section,
+              copy the entire right section from the style 1, but instead
+              of triangle, separate the image from the background."
+
+              This is NO LONGER a SectionBox — it's a plain absolutely-
+              positioned div containing the hero image + location pins +
+              mountain silhouette + meerkat mascot. It sits on top of
+              the hero-shape SectionBox (higher z-index: 50 > 40).
+
+              The image is pannable (drag) + zoomable (wheel) + replaceable
+              (Replace button) when `editable` is true, just like Style 1.
+              A "⠿ Move hero" grip bar at the top lets the user drag the
+              hero position freely across the canvas (same UX as Style 1).
               ============================================================ */}
-          <SectionBox
-            active={sectionsEditable}
-            selected={selectedId === "hero-image"}
-            pos={effectiveLayout("hero-image").pos}
-            boxSize={effectiveLayout("hero-image").boxSize}
-            scale={effectiveLayout("hero-image").scale}
-            onMove={(p) => onSectionMove?.("hero-image", p)}
-            onResize={(s) => onSectionResize?.("hero-image", s)}
-            onBoxResize={(sz) => onSectionBoxResize?.("hero-image", sz)}
-            onSelect={() => setSelectedId("hero-image")}
-            previewScale={previewScale}
-            canvasW={CANVAS_W}
-            canvasH={CANVAS_H}
-            zIndex={effectiveLayout("hero-image").z ?? 50}
-            anchor="top-left"
-            guideId="hero-image"
-            label="Hero Image"
-            style={{ position: "absolute", left: `${LEFT_W}px`, top: `${HEADER_H}px`, width: `${RIGHT_W}px`, height: "auto" }}
-          >
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                minHeight: `${MAIN_H}px`,
-                overflow: "hidden",
-              }}
-            >
-              {/* Hero image overlay (no gradient background — that's now
-                  in the separate hero-shape section) */}
-              {data.heroOverlay?.imageUrl && (
-                <Image
-                  src={data.heroOverlay.imageUrl}
-                  alt="Hero"
-                  fill
-                  style={{
-                    objectFit: "cover",
-                    objectPosition: `${resolvePlacement(data.heroOverlay.imagePlacement).focusX}% ${resolvePlacement(data.heroOverlay.imagePlacement).focusY}%`,
-                    transform: `scale(${resolvePlacement(data.heroOverlay.imagePlacement).zoom})`,
-                    opacity: 0.35,
-                    mixBlendMode: "luminosity",
-                  }}
-                />
-              )}
+          {(() => {
+            // Compute hero image position + size as % of canvas.
+            // Default: anchored to the right panel (LEFT_W..CANVAS_W,
+            // HEADER_H..HEADER_H+MAIN_H). The user can drag it elsewhere
+            // via the grip bar — `data.heroOverlay.pos` overrides.
+            const heroZ = effectiveLayout("hero-image").z ?? 50;
+            const defaultLeftPct = (LEFT_W / CANVAS_W) * 100;
+            const defaultTopPct = (HEADER_H / CANVAS_H) * 100;
+            const defaultWidthPct = (RIGHT_W / CANVAS_W) * 100;
+            const defaultHeightPct = (MAIN_H / CANVAS_H) * 100;
+            const pos = data.heroOverlay?.pos;
+            const heroLeftPct = pos?.x ?? defaultLeftPct;
+            const heroTopPct = pos?.y ?? defaultTopPct;
+            const heroWidthPct = defaultWidthPct;
+            const heroHeightPct = defaultHeightPct;
+            const placement = resolvePlacement(data.heroOverlay?.imagePlacement);
 
-              {/* Location pins (4 — cycled through white/teal/magenta variants) */}
-              {locationPins.slice(0, 4).map((pin, i) => (
-                <Style2LocationPin
-                  key={`pin-${i}-${pin.label}`}
-                  label={pin.label}
-                  x={pin.x}
-                  y={pin.y}
-                  variant={pinVariants[i % pinVariants.length]}
-                />
-              ))}
-
-              {/* Mountain silhouette bottom decoration */}
-              <MountainSilhouette />
-
-              {/* Meerkat / mascot bottom-right */}
-              {data.branding?.imageUrl && (
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: "12px",
-                    right: "16px",
-                    height: `${data.branding?.height ?? 80}px`,
-                    width: "auto",
-                    pointerEvents: "none",
-                    filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
-                  }}
-                >
+            return (
+              <div
+                className="absolute overflow-hidden"
+                style={{
+                  left: `${heroLeftPct}%`,
+                  top: `${heroTopPct}%`,
+                  width: `${heroWidthPct}%`,
+                  height: `${heroHeightPct}%`,
+                  zIndex: heroZ,
+                }}
+              >
+                {/* Hero image — pannable + zoomable when in edit mode.
+                    Rendered as a Next.js Image with object-fit cover.
+                    The image is the BACKGROUND of the right panel —
+                    the gradient shape (hero-shape section) sits BEHIND
+                    it, and location pins + mountain + mascot sit ON TOP
+                    of it. */}
+                {data.heroOverlay?.imageUrl ? (
                   <Image
-                    src={data.branding.imageUrl}
-                    alt="Mascot"
-                    width={data.branding?.height ?? 80}
-                    height={data.branding?.height ?? 80}
-                    style={{ height: "100%", width: "auto", objectFit: "contain" }}
+                    src={data.heroOverlay.imageUrl}
+                    alt="Hero"
+                    fill
+                    style={{
+                      objectFit: data.heroOverlay?.fit === "contain" ? "contain" : "cover",
+                      objectPosition: `${placement.focusX}% ${placement.focusY}%`,
+                      transform: `scale(${placement.zoom})`,
+                      opacity: 0.45,
+                      mixBlendMode: "luminosity",
+                    }}
                   />
-                </div>
-              )}
-            </div>
-          </SectionBox>
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "rgba(255,255,255,0.04)",
+                    }}
+                  />
+                )}
+
+                {/* "⠿ Move hero" grip bar — only shown in edit mode.
+                    Dragging it updates `data.heroOverlay.pos`, which
+                    overrides the default right-panel anchor. */}
+                {editable && onHeroPosChange && (
+                  <div
+                    onMouseDown={(e) => {
+                      if (!editable || !onHeroPosChange) return;
+                      if (e.button !== 0) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      const startLeftPct = heroLeftPct;
+                      const startTopPct = heroTopPct;
+                      const onMove = (ev: MouseEvent) => {
+                        const dx = ev.clientX - startX;
+                        const dy = ev.clientY - startY;
+                        const pctX = (dx / (CANVAS_W * previewScale)) * 100;
+                        const pctY = (dy / (CANVAS_H * previewScale)) * 100;
+                        onHeroPosChange({
+                          x: startLeftPct + pctX,
+                          y: startTopPct + pctY,
+                        });
+                      };
+                      const onUp = () => {
+                        window.removeEventListener("mousemove", onMove);
+                        window.removeEventListener("mouseup", onUp);
+                      };
+                      window.addEventListener("mousemove", onMove);
+                      window.addEventListener("mouseup", onUp);
+                    }}
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 z-40 inline-flex items-center gap-1 rounded bg-[#0066FF] text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-md cursor-move hover:bg-[#0052CC] opacity-100 transition"
+                    style={{ pointerEvents: "auto" }}
+                    title="Drag to move the hero image — can be placed anywhere on the canvas"
+                  >
+                    ⠿ Move hero
+                  </div>
+                )}
+
+                {/* Replace image button — only shown in edit mode */}
+                {editable && onPickImage && (
+                  <button
+                    type="button"
+                    onClick={() => onPickImage({ kind: "hero" })}
+                    className="absolute top-2 right-2 z-40 inline-flex items-center gap-1 rounded bg-white text-black px-2 py-1 text-[10px] font-bold shadow-md hover:bg-black/10"
+                    style={{ pointerEvents: "auto" }}
+                    title="Replace the hero image"
+                  >
+                    Replace
+                  </button>
+                )}
+
+                {/* Location pins (4 — cycled through white/teal/magenta variants) */}
+                {locationPins.slice(0, 4).map((pin, i) => (
+                  <Style2LocationPin
+                    key={`pin-${i}-${pin.label}`}
+                    label={pin.label}
+                    x={pin.x}
+                    y={pin.y}
+                    variant={pinVariants[i % pinVariants.length]}
+                  />
+                ))}
+
+                {/* Mountain silhouette bottom decoration */}
+                <MountainSilhouette />
+
+                {/* Meerkat / mascot bottom-right */}
+                {data.branding?.imageUrl && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: "12px",
+                      right: "16px",
+                      height: `${data.branding?.height ?? 80}px`,
+                      width: "auto",
+                      pointerEvents: "none",
+                      filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))",
+                    }}
+                  >
+                    <Image
+                      src={data.branding.imageUrl}
+                      alt="Mascot"
+                      width={data.branding?.height ?? 80}
+                      height={data.branding?.height ?? 80}
+                      style={{ height: "100%", width: "auto", objectFit: "contain" }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ============================================================
               Layer 4: FOOTER BAR — dark charcoal, full-width, 80px tall

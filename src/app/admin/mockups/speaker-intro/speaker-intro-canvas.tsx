@@ -20,6 +20,7 @@ import {
   type SectionPos,
   type SectionBoxSize,
 } from "../shared/section-edit";
+import { HeroShape } from "../shared/hero-shape";
 
 /**
  * SpeakerIntroCanvas — the data-driven mockup renderer.
@@ -258,55 +259,82 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           />
           </div>
 
-          {/* 6. TRIANGLE GRADIENT OVERLAY — hidden when user picks a new hero image */}
-          {data.heroOverlay.showTriangleOverlay !== false && (
-            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden
+          {/* 6. SHAPE OVERLAY (replaces legacy triangle) — PER USER SPEC
+              2026-07-31 (TSK-0028):
+              "Then the Show triangle overlay change it to the shapes and
+              allow to change the color, from fill to gradient fill, and
+              the direction of the gradient."
+
+              When `data.heroOverlayShapeConfig` is set, render the new
+              unified HeroShape (any of 13 shapes, solid or gradient fill,
+              configurable direction). Otherwise fall back to the legacy
+              triangle SVG using `gradientColors` / `gradientOpacity`.
+
+              The shape is rendered inside the hero container (sibling of
+              the hero EditableImage), at zIndex = triangleZ (so the
+              Front/Back layer buttons in the sidebar still control it).
+              The hero image is rendered above the shape (its wrapper has
+              zIndex = triangleZ + 1).
+          */}
+          {data.heroOverlayShapeConfig ? (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ zIndex: triangleZ }}
             >
-              <defs>
-                <linearGradient
-                  id="tri-grad"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="100%"
-                >
-                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                    <stop
-                      key={i}
-                      offset={`${(i / (arr.length - 1)) * 100}%`}
-                      stopColor={color}
-                      stopOpacity={data.heroOverlay.gradientOpacity}
-                    />
-                  ))}
-                </linearGradient>
-                <linearGradient
-                  id="tri-grad-2"
-                  x1="100%"
-                  y1="0%"
-                  x2="0%"
-                  y2="100%"
-                >
-                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                    <stop
-                      key={i}
-                      offset={`${(i / (arr.length - 1)) * 100}%`}
-                      stopColor={color}
-                      stopOpacity={data.heroOverlay.gradientOpacity * 0.7}
-                    />
-                  ))}
-                </linearGradient>
-              </defs>
-              {/* Right-pointing large triangle covering ~60% of hero */}
-              <polygon points="0,0 100,50 0,100" fill="url(#tri-grad)" />
-              {/* Smaller counter-triangle for geometric depth */}
-              <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
-            </svg>
+              <HeroShape config={data.heroOverlayShapeConfig} />
             </div>
+          ) : (
+            /* LEGACY TRIANGLE OVERLAY — kept for backward compat with
+               existing JSON that has gradientColors but no shapeConfig. */
+            data.heroOverlay.showTriangleOverlay !== false && (
+              <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <defs>
+                    <linearGradient
+                      id="tri-grad"
+                      x1="0%"
+                      y1="0%"
+                      x2="100%"
+                      y2="100%"
+                    >
+                      {data.heroOverlay.gradientColors.map((color, i, arr) => (
+                        <stop
+                          key={i}
+                          offset={`${(i / (arr.length - 1)) * 100}%`}
+                          stopColor={color}
+                          stopOpacity={data.heroOverlay.gradientOpacity}
+                        />
+                      ))}
+                    </linearGradient>
+                    <linearGradient
+                      id="tri-grad-2"
+                      x1="100%"
+                      y1="0%"
+                      x2="0%"
+                      y2="100%"
+                    >
+                      {data.heroOverlay.gradientColors.map((color, i, arr) => (
+                        <stop
+                          key={i}
+                          offset={`${(i / (arr.length - 1)) * 100}%`}
+                          stopColor={color}
+                          stopOpacity={data.heroOverlay.gradientOpacity * 0.7}
+                        />
+                      ))}
+                    </linearGradient>
+                  </defs>
+                  {/* Right-pointing large triangle covering ~60% of hero */}
+                  <polygon points="0,0 100,50 0,100" fill="url(#tri-grad)" />
+                  {/* Smaller counter-triangle for geometric depth */}
+                  <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
+                </svg>
+              </div>
+            )
           )}
 
           {/* 7. LOCATION PINS — per-pin connector line + dot + label

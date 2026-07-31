@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { SpeakerIntroData } from "../speaker-intro/types";
 import { GradientColorPicker } from "./gradient-color-picker";
 import { TextStyleRow } from "./text-style-row";
+import { HeroShapePanelFields, type HeroShapeConfig } from "./hero-shape";
 
 /**
  * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
@@ -962,7 +963,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <Field label="Show triangle overlay?">
+        <Field label="Show triangle overlay? (legacy)">
           <select
             value={data.heroOverlay.showTriangleOverlay === false ? "false" : "true"}
             onChange={(e) =>
@@ -972,10 +973,74 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             }
             className="form-input"
           >
-            <option value="true">Yes (default)</option>
+            <option value="true">Yes (default — uses legacy triangle SVG)</option>
             <option value="false">No (hidden — auto-disabled when hero image changes)</option>
           </select>
+          <p className="mt-1 text-[0.65rem] text-black/60 leading-relaxed">
+            Legacy toggle. When the new <strong>Hero overlay shape</strong> config
+            below is set, it overrides this toggle.
+          </p>
         </Field>
+
+        {/* ===== HERO OVERLAY SHAPE (NEW — replaces legacy triangle) =====
+            PER USER SPEC 2026-07-31 (TSK-0028):
+            "Then the Show triangle overlay change it to the shapes and allow
+            to change the color, from fill to gradient fill, and the direction
+            of the gradient."
+
+            This is a unified shape system shared with Style 2's hero-shape
+            background section. Supports:
+            - 13 shapes (8×2D + 5×3D)
+            - Solid OR gradient fill mode
+            - Gradient direction slider (when in gradient mode)
+            - Opacity + rotation
+        */}
+        <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/[0.03] p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#FF005A]">
+              Hero Overlay Shape
+            </h4>
+            <span className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40">
+              Replaces triangle
+            </span>
+          </div>
+          <p className="mb-2 text-[0.65rem] text-black/60 leading-relaxed">
+            When set, this overrides the legacy triangle overlay. Choose any
+            of 13 shapes (2D or 3D), pick solid or gradient fill, and (in
+            gradient mode) adjust the gradient direction.
+          </p>
+          <HeroShapePanelFields
+            config={(data.heroOverlayShapeConfig ?? {}) as HeroShapeConfig}
+            onChange={(patch) =>
+              update((d) => {
+                if (!d.heroOverlayShapeConfig) {
+                  d.heroOverlayShapeConfig = {
+                    shape: "triangle",
+                    fillMode: "gradient",
+                    colors: [...data.heroOverlay.gradientColors],
+                    direction: 135,
+                    opacity: data.heroOverlay.gradientOpacity,
+                    rotation: 0,
+                  };
+                }
+                Object.assign(d.heroOverlayShapeConfig, patch);
+              })
+            }
+          />
+          {/* Reset button */}
+          <button
+            type="button"
+            onClick={() =>
+              update((d) => {
+                d.heroOverlayShapeConfig = undefined;
+              })
+            }
+            className="mt-2 text-[0.6rem] font-semibold text-black/60 hover:text-[#FF005A] underline"
+            title="Clear the shape config (revert to legacy triangle toggle)"
+          >
+            Reset shape config
+          </button>
+        </div>
 
         {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
             Per user spec 2026-06-28: "Move all 'Capabilities' controls

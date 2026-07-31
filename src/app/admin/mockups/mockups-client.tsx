@@ -202,26 +202,53 @@ const MOCKUP_TEMPLATES: AssetCard[] = [
 
 function AssetCardItem({ asset }: { asset: AssetCard }) {
   const [expanded, setExpanded] = useState(false);
+
+  // PER USER SPEC 2026-07-31 (TSK-0028): "on the admin/mockups page when
+  // clicking on the image or the open top right button or the open editor,
+  // all must open the editor, not the image url." When an asset has an
+  // `editorHref`, ALL three affordances (thumbnail click, top-right "Open"
+  // badge, bottom "Open editor" button) navigate to the editor. Brand
+  // assets without an editorHref keep the legacy behavior (open image URL).
+  const hasEditor = !!asset.editorHref;
+
   return (
     <div className="group flex flex-col rounded-lg border border-black/10 bg-white overflow-hidden transition-colors hover:border-black/30">
-      {/* Thumbnail */}
-      <a
-        href={asset.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={asset.url}
-          alt={asset.title}
-          loading="lazy"
-          className="absolute inset-0 w-full h-full object-contain transition-transform group-hover:scale-[1.02]"
-        />
-        <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/70 text-white text-[0.65rem] font-semibold px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <ExternalLink className="h-3 w-3" /> Open
-        </span>
-      </a>
+      {/* Thumbnail — opens editor when available, otherwise opens image URL */}
+      {hasEditor ? (
+        <Link
+          href={asset.editorHref!}
+          className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={asset.url}
+            alt={asset.title}
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-contain transition-transform group-hover:scale-[1.02]"
+          />
+          <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/70 text-white text-[0.65rem] font-semibold px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Wand2 className="h-3 w-3" /> Open editor
+          </span>
+        </Link>
+      ) : (
+        <a
+          href={asset.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={asset.url}
+            alt={asset.title}
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-contain transition-transform group-hover:scale-[1.02]"
+          />
+          <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/70 text-white text-[0.65rem] font-semibold px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <ExternalLink className="h-3 w-3" /> Open
+          </span>
+        </a>
+      )}
 
       {/* Meta */}
       <div className="p-4 flex flex-col flex-1">
