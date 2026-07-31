@@ -8047,3 +8047,37 @@ Stage Summary:
   (c) On /admin/mockups, clicking the thumbnail or the top-right "Open"
       badge of any template card navigates to the editor (no new tab
       with the image URL).
+
+---
+Task ID: TSK-0029
+Agent: main
+Task: User follow-up 2026-07-31 — Style 2 hero image is appearing
+transparent; should display the image without transparency.
+
+Work Log:
+- Investigated speaker-intro-style2-canvas.tsx — located the hero image
+  rendering block around line 1045.
+- Found the cause: the Next.js <Image> for the hero was rendered with
+  `opacity: 0.45` AND `mixBlendMode: "luminosity"`. Together these
+  caused the image to appear as a faded, washed-out overlay rather than
+  the actual hero photo.
+- Fix: removed BOTH `opacity: 0.45` and `mixBlendMode: "luminosity"`
+  from the image's inline style. Kept `objectFit`, `objectPosition`, and
+  `transform: scale(...)` (zoom) intact so the user can still pan/zoom
+  the hero image via the existing imagePlacement controls.
+- Verified: `npx tsc --noEmit` reports 0 errors in
+  speaker-intro-style2-canvas.tsx.
+- Dev server will hot-reload the change automatically.
+
+Stage Summary:
+- DONE: Style 2 hero image now renders at full opacity (no transparency,
+  no blend mode). The hero photo will appear as the actual image, with
+  the gradient shape (hero-shape section) still sitting behind it (it
+  will be hidden where the hero image covers it, which matches the
+  user's spec "the background its a section covered with fill/gradient"
+  — the background section is still editable; it just shows around the
+  hero image if the image doesn't fill the entire right panel).
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (removed opacity: 0.45 + mixBlendMode: "luminosity" from hero image)
+- No git commit (user has not requested one).

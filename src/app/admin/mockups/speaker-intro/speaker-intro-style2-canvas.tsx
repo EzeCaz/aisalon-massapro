@@ -1051,8 +1051,6 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                       objectFit: data.heroOverlay?.fit === "contain" ? "contain" : "cover",
                       objectPosition: `${placement.focusX}% ${placement.focusY}%`,
                       transform: `scale(${placement.zoom})`,
-                      opacity: 0.45,
-                      mixBlendMode: "luminosity",
                     }}
                   />
                 ) : (
