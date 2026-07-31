@@ -19,6 +19,7 @@ import {
   type SectionId,
   type SectionPos,
   type SectionBoxSize,
+  type SectionLayoutEntry,
 } from "../shared/section-edit";
 import { HeroShape } from "../shared/hero-shape";
 
@@ -147,6 +148,21 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const heroZ = data.heroZ ?? 2;
     const triangleZ = data.triangleZ ?? 1;
     const TEXT_Z = 50; // base text layer z; specific sections override above this
+
+    // PER USER SPEC 2026-07-31 (TSK-0031): Default section layout values
+    // for Style 1 (and Style 3, which is an exact duplicate of Style 1).
+    // Used as fallbacks when `data.sectionLayout[id]` is missing — both
+    // for the SectionBox (rendering position) and the ObjectPropertiesPanel
+    // (the floating form that shows X/Y/W/H/Scale/z).
+    //   - header: X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50
+    //   - topic:  X=-13, Y=14.4, W=951,  H=auto, Scale=65%,  z=50
+    //   - sponsors: X=37.9, Y=85.5, W=auto, H=auto, Scale=100%, z=1
+    //              (z=1 set in sectionZFor() below)
+    const STYLE1_DEFAULTS: Record<string, SectionLayoutEntry> = {
+      header:   { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 },
+      topic:    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 },
+      sponsors: { pos: { x: 37.9, y: 85.5 }, scale: 1, z: 1 },
+    };
 
     // --- Section 4: Scroll Isolation ---
     // Disable parent/window scrolling when the user hovers over the canvas
@@ -416,14 +432,19 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           );
         })()}
 
-        {/* ===== 1. EVENT HEADER (top-left) ===== */}
+        {/* ===== 1. EVENT HEADER (top-left) =====
+            PER USER SPEC 2026-07-31 (TSK-0031): Default header Properties
+            to X=1.5%, Y=0.2%, W=1200px, H=auto, Scale=100%, z=50.
+            The default pos/boxSize/scale apply when the user has not
+            dragged the section yet; once dragged, data.sectionLayout.header
+            wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "header"}
           onSelect={() => setSelectedId("header")}
-          pos={data.sectionLayout?.header?.pos}
-          scale={data.sectionLayout?.header?.scale ?? 1}
-          boxSize={data.sectionLayout?.header?.boxSize}
+          pos={data.sectionLayout?.header?.pos ?? STYLE1_DEFAULTS.header.pos}
+          scale={data.sectionLayout?.header?.scale ?? STYLE1_DEFAULTS.header.scale}
+          boxSize={data.sectionLayout?.header?.boxSize ?? STYLE1_DEFAULTS.header.boxSize}
           onMove={(p) => onSectionMove?.("header", p)}
           onResize={(s) => onSectionResize?.("header", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
@@ -431,7 +452,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute"
-          style={{ left: "48px", top: "40px", maxWidth: "640px", zIndex: sectionZFor("header") }}
+          style={{ left: 0, top: 0, zIndex: sectionZFor("header") }}
           accentColor="#FF005A"
           label="Header"
           guideId="header"
@@ -474,14 +495,19 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </p>
         </SectionBox>
 
-        {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) ===== */}
+        {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) =====
+            PER USER SPEC 2026-07-31 (TSK-0031): Default topic Properties
+            to X=-13%, Y=14.4%, W=951px, H=auto, Scale=65%, z=50.
+            The default pos/boxSize/scale apply when the user has not
+            dragged the section yet; once dragged, data.sectionLayout.topic
+            wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "topic"}
           onSelect={() => setSelectedId("topic")}
-          pos={data.sectionLayout?.topic?.pos}
-          scale={data.sectionLayout?.topic?.scale ?? 1}
-          boxSize={data.sectionLayout?.topic?.boxSize}
+          pos={data.sectionLayout?.topic?.pos ?? STYLE1_DEFAULTS.topic.pos}
+          scale={data.sectionLayout?.topic?.scale ?? STYLE1_DEFAULTS.topic.scale}
+          boxSize={data.sectionLayout?.topic?.boxSize ?? STYLE1_DEFAULTS.topic.boxSize}
           onMove={(p) => onSectionMove?.("topic", p)}
           onResize={(s) => onSectionResize?.("topic", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
@@ -489,7 +515,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex items-start gap-3"
-          style={{ left: "48px", top: "160px", maxWidth: "440px", zIndex: sectionZFor("topic") }}
+          style={{ left: 0, top: 0, zIndex: sectionZFor("topic") }}
           accentColor="#FF005A"
           label="Topic"
           guideId="topic"
@@ -733,8 +759,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "sponsors"}
           onSelect={() => setSelectedId("sponsors")}
-          pos={data.sectionLayout?.sponsors?.pos ?? { x: 37.9, y: 85.5 }}
-          scale={data.sectionLayout?.sponsors?.scale ?? 1}
+          pos={data.sectionLayout?.sponsors?.pos ?? STYLE1_DEFAULTS.sponsors.pos}
+          scale={data.sectionLayout?.sponsors?.scale ?? STYLE1_DEFAULTS.sponsors.scale}
           boxSize={data.sectionLayout?.sponsors?.boxSize}
           onMove={(p) => onSectionMove?.("sponsors", p)}
           onResize={(s) => onSectionResize?.("sponsors", s)}
@@ -916,16 +942,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         {sectionsEditable && selectedId && (
           <ObjectPropertiesPanel
             label={selectedId}
-            pos={data.sectionLayout?.[selectedId]?.pos}
+            pos={data.sectionLayout?.[selectedId]?.pos ?? STYLE1_DEFAULTS[selectedId]?.pos}
             onPosChange={(p) => onSectionMove?.(selectedId, p)}
             z={sectionZFor(selectedId)}
             onZChange={(z) => onSectionZChange?.(selectedId, z)}
             peers={sectionPeerZs}
             onDeselect={() => setSelectedId(null)}
             showBoxSize
-            boxSize={data.sectionLayout?.[selectedId]?.boxSize}
+            boxSize={data.sectionLayout?.[selectedId]?.boxSize ?? STYLE1_DEFAULTS[selectedId]?.boxSize}
             onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
-            scale={data.sectionLayout?.[selectedId]?.scale ?? 1}
+            scale={data.sectionLayout?.[selectedId]?.scale ?? STYLE1_DEFAULTS[selectedId]?.scale ?? 1}
             onScaleChange={(s) => onSectionResize?.(selectedId, s)}
           />
         )}

@@ -8189,3 +8189,94 @@ Stage Summary:
   (d) Style 2 hero image now has corner resize handles, wheel zoom,
       drag pan, Replace button (top-left), placement + size readouts,
       and the "⠿ Move hero" grip bar — same UX as Style 1's hero.
+
+---
+Task ID: TSK-0031
+Agent: main
+Task: User spec 2026-07-31 — Style 1 (and Style 3, which is a Style 1
+duplicate) needs new default properties because "Style 1 is very off":
+  (2) Topic Properties defaults: X=-13, Y=14.4, W=951, H=auto, Scale=65%.
+  (3) Header Properties defaults: X=1.5, Y=0.2, W=1200, H=auto, Scale=100%.
+
+Work Log:
+- Added new `STYLE1_DEFAULTS` constant inside SpeakerIntroCanvas
+  (speaker-intro-canvas.tsx) — analogous to Style 2's STYLE2_DEFAULTS.
+  Contains the per-section fallback pos/boxSize/scale/z that apply when
+  data.sectionLayout[id] is missing. Entries:
+    header:   { pos: { x: 1.5, y: 0.2 }, boxSize: { width: 1200 }, scale: 1, z: 50 }
+    topic:    { pos: { x: -13, y: 14.4 }, boxSize: { width: 951 }, scale: 0.65, z: 50 }
+    sponsors: { pos: { x: 37.9, y: 85.5 }, scale: 1, z: 1 }
+  (sponsors entry was already set in TSK-0030; consolidated into
+  STYLE1_DEFAULTS for consistency.)
+- Imported `SectionLayoutEntry` type from shared/section-edit.tsx (was
+  not previously imported by Style 1 canvas).
+- Updated Header SectionBox:
+  * pos:   data.sectionLayout?.header?.pos ?? STYLE1_DEFAULTS.header.pos
+  * scale: data.sectionLayout?.header?.scale ?? STYLE1_DEFAULTS.header.scale
+  * boxSize: data.sectionLayout?.header?.boxSize ?? STYLE1_DEFAULTS.header.boxSize
+  * Inline style changed from { left: "48px", top: "40px", maxWidth: "640px" }
+    to { left: 0, top: 0 } so the pos% fallback applies cleanly (the
+    SectionBox's pos override takes precedence anyway, but removing the
+    48px/40px hard offset and the 640px maxWidth avoids any visual
+    surprise if pos is missing).
+- Updated Topic SectionBox:
+  * pos:   data.sectionLayout?.topic?.pos ?? STYLE1_DEFAULTS.topic.pos
+  * scale: data.sectionLayout?.topic?.scale ?? STYLE1_DEFAULTS.topic.scale
+  * boxSize: data.sectionLayout?.topic?.boxSize ?? STYLE1_DEFAULTS.topic.boxSize
+  * Inline style changed from { left: "48px", top: "160px", maxWidth: "440px" }
+    to { left: 0, top: 0 } for the same reason.
+- Updated Sponsors SectionBox to read from STYLE1_DEFAULTS.sponsors
+  (consolidates the inline { x: 37.9, y: 85.5 } literal that TSK-0030
+  added — same values, just centralized).
+- Updated the Style 1 ObjectPropertiesPanel call to use STYLE1_DEFAULTS
+  fallbacks:
+    pos={data.sectionLayout?.[selectedId]?.pos ?? STYLE1_DEFAULTS[selectedId]?.pos}
+    boxSize={data.sectionLayout?.[selectedId]?.boxSize ?? STYLE1_DEFAULTS[selectedId]?.boxSize}
+    scale={data.sectionLayout?.[selectedId]?.scale ?? STYLE1_DEFAULTS[selectedId]?.scale ?? 1}
+  This means when the user selects Header or Topic in Edit Sections
+  mode WITHOUT having dragged it yet, the Properties panel shows the
+  spec values (X=1.5, Y=0.2 for header; X=-13, Y=14.4, Scale=65% for
+  topic) instead of blank/zero.
+- Updated sample-data.ts: removed the `header` entry from sectionLayout.
+  This was the key fix — previously the sample data had
+  `header: { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 }`
+  which matched STYLE2_DEFAULTS.header and OVERRIDDEN the Style 1 canvas
+  fallback. Now each style uses its own canvas-level defaults:
+    - Style 1/3 → STYLE1_DEFAULTS.header = { x: 1.5, y: 0.2, width: 1200 } ✓
+    - Style 2 → STYLE2_DEFAULTS.header = { x: 0, y: 0, width: 1200, height: 80 } ✓
+  The `topic` entry was never in sample-data (Style 2 has no topic
+  section), so the Style 1 canvas fallback applies directly.
+- TypeScript verification: `npx tsc --noEmit --pretty false` reports 0
+  errors containing "speaker-intro", "mockups-client", or "hero-shape".
+- Dev server confirmed: GET /admin/mockups/speaker-intro → 200 OK.
+
+Stage Summary:
+- DONE: Style 1 (and Style 3) now have the user-spec'd defaults:
+  - Header Properties: X=1.5%, Y=0.2%, W=1200px, H=auto, Scale=100%, z=50
+  - Topic Properties:  X=-13%, Y=14.4%, W=951px, H=auto, Scale=65%, z=50
+- The Properties panel will show these values on initial load (when
+  the user selects Header or Topic in Edit Sections mode) — even
+  before the user drags anything — because the ObjectPropertiesPanel
+  now reads from STYLE1_DEFAULTS as a fallback.
+- Style 2 is unaffected — it keeps its own STYLE2_DEFAULTS.header
+  (X=0, Y=0, W=1200, H=80) because the `header` entry was removed
+  from sample-data.ts, letting each style fall back to its own canvas
+  defaults independently.
+- Files changed:
+  * src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (added STYLE1_DEFAULTS constant + SectionLayoutEntry import;
+     updated header/topic/sponsors SectionBoxes to use STYLE1_DEFAULTS
+     fallback; updated ObjectPropertiesPanel to use STYLE1_DEFAULTS
+     fallback; removed inline left/top/maxWidth from header+topic
+     style props)
+  * src/app/admin/mockups/speaker-intro/sample-data.ts
+    (removed `header` entry from sectionLayout — each style now uses
+     its own canvas-level defaults)
+- No git commit (user has not requested one). Suggested message:
+  "[TSK-0031] Speaker-Intro: Style 1/3 header + topic defaults (1.5/0.2
+  and -13/14.4/65%) via STYLE1_DEFAULTS".
+- Next step: user previews /admin/mockups/speaker-intro. With Edit
+  Sections mode ON, click on the Header section → Properties panel
+  should show X=1.5, Y=0.2, W=1200, H=auto, Scale=100%, z=50. Click on
+  Topic → X=-13, Y=14.4, W=951, H=auto, Scale=65%, z=50. Style 2's
+  header should remain at X=0, Y=0 with H=80 (dark header bar).

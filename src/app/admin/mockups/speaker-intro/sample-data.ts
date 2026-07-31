@@ -140,7 +140,13 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * section id for the hero image element.
    */
   sectionLayout: {
-    header:       { pos: { x: 0, y: 0 }, boxSize: { width: 1200, height: 80 }, scale: 1.0, z: 50 },
+    // PER USER SPEC 2026-07-31 (TSK-0031): `header` and `topic` are NOT
+    // in sample-data. Each style falls back to its own canvas-level
+    // defaults — Style 1/3 uses STYLE1_DEFAULTS (header: X=1.5, Y=0.2,
+    // W=1200, H=auto, Scale=100%; topic: X=-13, Y=14.4, W=951, H=auto,
+    // Scale=65%); Style 2 uses STYLE2_DEFAULTS (header: X=0, Y=0, W=1200,
+    // H=80). This way the two styles don't share the same header layout
+    // entry — they look and behave differently as the user spec requires.
     "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.0, z: 40 },
     speakers:     { pos: { x: -8.7, y: 5 }, boxSize: { width: 891 }, scale: 0.76, z: 60 },
     "hero-image": { pos: { x: 31.9, y: 10.4 }, boxSize: { width: 951 }, scale: 1.0, z: 50 },
