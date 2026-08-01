@@ -9198,3 +9198,86 @@ Stage Summary:
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (EditableImage onSizeChange: onSectionResize → standard onSizeChange;
      sizeMultiplier + sizeLabel updated to reflect imageScale readout)
+
+---
+Task ID: TSK-0043
+Agent: main
+Task: Fix Style 2 hero image "cut on all sides" bug when scrolling to zoom. User reported: when scrolling with mouse to zoom in/out, the image is cut on all sides much more than the section border size — the image doesn't fill the section. The deployed version (origin/main) doesn't have this bug. User wants Style 2 to imitate Style 1's scroll effect.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0042 work).
+- Inspected user's pasted HTML: the hero <img> had `transform: scale(0.7035)`
+  with `transform-origin: center center`. This is from EditableImage's
+  `transform: scale(zoom * 1.005)` where zoom = 0.7 (saved from a previous
+  scroll-down). With scale 0.7035, the image shrinks to 70% of the 540×640
+  section, leaving ~15% empty space on each side — the user perceives this
+  as "the image is cut on all sides, much more than the section border size".
+- Root cause: the EditableImage (shared between Style 1 and Style 2) allows
+  zoom < 1, which shrinks the image below the container size. In Style 2,
+  the hero section is 540×640 (smaller than Style 1's full-canvas hero), so
+  the empty space is much more visible. Additionally, the local Style 2
+  (after TSK-0042) has NO overflow-hidden wrapper around the EditableImage,
+  so zoom > 1 bleeds beyond the section border and is only clipped by the
+  canvas border (1200×800) — way beyond the section.
+- Compared with deployed version (origin/main): uses DraggablePhotoContainer
+  > div.overflow-hidden > EditableImage. The overflow-hidden wrapper clips
+  zoom > 1 at the section border. But zoom < 1 still shrinks (same code).
+  The deployed version's users likely never scroll below 1, so the bug
+  isn't visible.
+
+Fix applied (2 files):
+
+1. /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+   (EditableImage component, shared):
+   - Added new optional prop `minZoom?: number` (default 0.01, preserves
+     Style 1's existing behavior — zoom can go down to 0.01).
+   - Added `const effectiveZoom = Math.max(minZoom, zoom);` — clamps the
+     raw placement zoom to the floor for ALL rendering purposes.
+   - Updated the image's `transform: scale(...)` to use `effectiveZoom`
+     instead of raw `zoom` (so the image never shrinks below minZoom).
+   - Updated the `handleWheel` function to compute `nextZoom` from
+     `effectiveZoom` (not raw `zoom`) and clamp to `minZoom` — scrolling
+     down below minZoom does nothing (no shrinking below the floor).
+   - Updated the placement readout to show `effectiveZoom.toFixed(1)×`
+     (matches the rendered scale, not the raw saved value).
+   - Updated the pan handler to persist `effectiveZoom` (not raw `zoom`)
+     so panning doesn't save a sub-minZoom value that would render clamped.
+   - Style 1 doesn't pass `minZoom`, so it uses the default 0.01 —
+     zero behavior change for Style 1 (the user's "dont change that").
+
+2. /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+   (Style 2 hero image SectionBox):
+   - Wrapped the EditableImage (and the empty-state div) in
+     `<div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>`.
+     This clips zoom > 1 at the SECTION border (540×640), matching the
+     deployed version's `div.overflow-hidden` wrapper. Previously, zoom > 1
+     bled beyond the section and was only clipped by the canvas border.
+   - Passed `minZoom={1}` to the EditableImage. With minZoom=1:
+     * The rendered scale is always >= 1.005, so the image ALWAYS fills
+       the section (object-fit: cover + scale >= 1 → no empty space).
+     * Scrolling down below 1× does nothing visually (no shrinking).
+     * Scrolling up above 1× zooms in normally (image grows, clipped at
+       the section border by the overflow-hidden wrapper).
+     * Double-click resets to zoom=1 (image fills section).
+   - The location pins + mountain silhouette stay OUTSIDE the overflow-hidden
+     wrapper (direct children of the SectionBox) so they aren't clipped.
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors (exit 0).
+- Style 1 behavior preserved (minZoom defaults to 0.01, no change).
+- Style 2 hero image now always fills the section, and zoom > 1 is clipped
+  at the section border (not the canvas border).
+
+Stage Summary:
+- Bug FIXED: Style 2 hero image always fills the section (no empty space on
+  any side). Scroll-zoom in (>1) grows the image beyond the section,
+  clipped at the section border. Scroll-zoom out (<1) does nothing visually
+  (clamped to 1×). Matches the deployed version's behavior.
+- Style 1 UNCHANGED (minZoom defaults to 0.01, preserves existing zoom
+  behavior — the user explicitly said "dont change that").
+- Files modified (2):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (EditableImage: added minZoom prop + effectiveZoom clamping for
+     transform, wheel handler, readout, and pan persistence)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (hero image: wrapped in overflow-hidden div + passed minZoom={1})

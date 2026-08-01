@@ -1189,61 +1189,52 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 zoom > 1, it overflows and is clipped by the CANVAS border
                 (since this SectionBox has no overflow-hidden), exactly
                 like Style 1's DraggablePhotoContainer. */}
-            {data.heroOverlay?.imageUrl ? (
-              // PER USER SPEC 2026-08-01 (TSK-0042): revert the hero image
-              // corner resize to the STANDARD `onSizeChange` handler (which
-              // updates `data.heroOverlay.imageScale`, used for the on-screen
-              // readout only). This matches the deployed version's behavior.
-              //
-              // BACKGROUND: TSK-0041 wired the corner handles to
-              // `onSectionResize("hero-image", N)`, which updated
-              // `data.sectionLayout["hero-image"].scale` and caused the
-              // SectionBox to apply `transform: scale(N)` with
-              // `transformOrigin: top-left`. Because the hero-image SectionBox
-              // sits at the canvas's top-right corner (left=660, top=80,
-              // width=540, height=640 — its right edge already touches the
-              // canvas right border at x=1200), scaling UP visually grew the
-              // box rightward and downward BEYOND the canvas border. The
-              // canvas's `overflow-hidden` then CLIPPED the image at the
-              // right/bottom edges — the user perceived this as "the image
-              // is being cut when I enlarge it".
-              //
-              // The deployed version (origin/main) uses
-              // `DraggablePhotoContainer` (no `transform: scale`) with a
-              // constant container size + an inner `overflow-hidden` wrapper.
-              // The corner handles update `imageScale` (readout only) — the
-              // container size never changes, so nothing gets cut.
-              //
-              // This fix keeps the SectionBox wrapper (so Edit Sections mode
-              // drag/select/properties-panel still work) but reverts the
-              // `onSizeChange` wiring to the standard handler. The SectionBox
-              // scale stays at 1 (default) → no `transform: scale` → no
-              // cutting. The scroll-wheel zoom still works independently via
-              // `onPlacementChange` → `imagePlacement.zoom` (unchanged).
-              <EditableImage
-                slot={{ kind: "hero" }}
-                src={data.heroOverlay.imageUrl}
-                alt="Hero"
-                placement={data.heroOverlay.imagePlacement}
-                editable={editable}
-                previewScale={previewScale}
-                onPickImage={onPickImage}
-                onPlacementChange={onPlacementChange}
-                onSizeChange={onSizeChange}
-                sizeMultiplier={data.heroOverlay.imageScale ?? 1}
-                sizeLabel="hero scale"
-                containerClass="absolute inset-0"
-                objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
-              />
-            ) : (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background: "rgba(255,255,255,0.04)",
-                }}
-              />
-            )}
+            {/* PER USER SPEC 2026-08-02 (TSK-0043): wrap the EditableImage
+                in an `overflow-hidden` div so that when zoom > 1 (scroll to
+                zoom in), the image bleeds BEYOND the section border and is
+                clipped AT the section border (not the canvas border). This
+                matches the deployed version (origin/main) which uses
+                `DraggablePhotoContainer > div.overflow-hidden > EditableImage`.
+
+                PER USER SPEC 2026-08-02 (TSK-0043): also pass `minZoom={1}`
+                so the image ALWAYS fills the section — scrolling down below
+                1× does nothing visually (no shrinking, no empty space on
+                any side). The user complained that with zoom < 1 the image
+                was "cut on all sides, much more than the section border
+                size" — that was the image shrinking to e.g. 70% of the
+                section, leaving 15% empty space on each side. With minZoom=1,
+                the rendered scale is always >= 1.005, so the image always
+                covers the full section (object-fit: cover + scale >= 1).
+
+                Style 1 keeps the default minZoom=0.01 (unchanged behavior). */}
+            <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+              {data.heroOverlay?.imageUrl ? (
+                <EditableImage
+                  slot={{ kind: "hero" }}
+                  src={data.heroOverlay.imageUrl}
+                  alt="Hero"
+                  placement={data.heroOverlay.imagePlacement}
+                  editable={editable}
+                  previewScale={previewScale}
+                  onPickImage={onPickImage}
+                  onPlacementChange={onPlacementChange}
+                  onSizeChange={onSizeChange}
+                  sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+                  sizeLabel="hero scale"
+                  containerClass="absolute inset-0"
+                  objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+                  minZoom={1}
+                />
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(255,255,255,0.04)",
+                  }}
+                />
+              )}
+            </div>
 
             {/* Location pins (4 — cycled through white/teal/magenta variants) */}
             {locationPins.slice(0, 4).map((pin, i) => (

@@ -1154,6 +1154,7 @@ export function EditableImage({
   sizeLabel,
   containerClass,
   objectFit,
+  minZoom = 0.01,
 }: {
   slot: ImageSlot;
   src: string;
@@ -1173,8 +1174,22 @@ export function EditableImage({
   sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
+  /** PER USER SPEC 2026-08-02 (TSK-0043): minimum zoom floor for rendering
+   *  AND the wheel handler. Default 0.01 preserves Style 1's behavior
+   *  (zoom < 1 shrinks the image, showing empty space inside the container).
+   *  Style 2 sets minZoom=1 so the image ALWAYS fills the container —
+   *  scrolling down below 1× does nothing visually (no shrinking, no empty
+   *  space), matching the deployed version's behavior. */
+  minZoom?: number;
 }) {
   const { focusX, focusY, zoom } = resolvePlacement(placement);
+  // PER USER SPEC 2026-08-02 (TSK-0043): clamp the rendered zoom to
+  // minZoom so the image never shrinks below this floor. With minZoom=1
+  // (Style 2), the image always fills the container (object-fit: cover +
+  // scale >= 1.005). The raw `zoom` from placement may still be < 1 (from
+  // a previous session), but effectiveZoom clamps it for rendering, wheel
+  // computation, and the on-screen readout so they all stay consistent.
+  const effectiveZoom = Math.max(minZoom, zoom);
   // We track drag state on a ref so we don't re-render on every mousemove.
   const dragRef = useRef<{
     startX: number;
@@ -1229,7 +1244,10 @@ export function EditableImage({
       onPlacementChange(slot, {
         focusX: nextFocusX,
         focusY: nextFocusY,
-        zoom,
+        // PER USER SPEC 2026-08-02 (TSK-0043): persist effectiveZoom (not
+        // raw zoom) so panning doesn't accidentally save a sub-minZoom
+        // value that would render as clamped on next load.
+        zoom: effectiveZoom,
       });
     };
     const onUp = () => {
@@ -1258,7 +1276,10 @@ export function EditableImage({
     // the parent workspace does not scroll while the user spins
     // the wheel over a hovered image.
 const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(0.01, zoom + step);
+    // PER USER SPEC 2026-08-02 (TSK-0043): use effectiveZoom (clamped to
+    // minZoom) as the base so scrolling down below minZoom does nothing
+    // (no shrinking below the floor). Scrolling up still zooms in normally.
+    const nextZoom = Math.max(minZoom, effectiveZoom + step);
     onPlacementChange(slot, {
       focusX,
       focusY,
@@ -1351,7 +1372,12 @@ const step = e.deltaY < 0 ? 0.1 : -0.1;
           // "CSS transform scale(1) shows hairline gap" bug — adding a
           // 0.5% overscan forces the image to spill 1-2px past each
           // edge, which the parent's overflow:hidden then clips cleanly.
-          transform: `scale(${zoom * 1.005})`,
+          //
+          // PER USER SPEC 2026-08-02 (TSK-0043): use effectiveZoom
+          // (clamped to minZoom) so the image never shrinks below the
+          // floor. With minZoom=1 (Style 2), scale is always >= 1.005,
+          // so the image always fills the container — no empty space.
+          transform: `scale(${effectiveZoom * 1.005})`,
           transformOrigin: "center center",
           // Force GPU compositing so the transform is applied on a
           // separate layer — eliminates the闪烁 / shimmer that can
@@ -1379,7 +1405,7 @@ const step = e.deltaY < 0 ? 0.1 : -0.1;
       {/* Placement readout (only in edit mode) */}
       {editable && (
         <div className="absolute bottom-1 right-1 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none">
-          {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
+          {Math.round(focusX)}/{Math.round(focusY)} · {effectiveZoom.toFixed(1)}×
         </div>
       )}
       {/* Resize corner handles (only when size-control is enabled) */}
