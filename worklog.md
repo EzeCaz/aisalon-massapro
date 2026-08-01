@@ -9685,3 +9685,54 @@ Stage Summary:
      onSetAsDefault passed to both canvases)
 Backup tag: backup/pre-compressed-form-20260801-192913
 
+
+---
+Task ID: TSK-0050
+Agent: main (claude)
+Task: Compress all mockup form editors + sleek left-side floating edit tab
+
+Work Log:
+- Created git backup tag `backup/pre-compressed-form-20260801-192913`
+- Modified `ObjectPropertiesPanel` in `shared/section-edit.tsx`:
+  - Added `side?: "left" | "right"` prop (default = "left")
+  - Added collapsible body via chevron toggle in header
+  - Sleek "edit tab" styling: gradient header (#FF005A → #CC0048), ring
+    shadow, rounded right + bottom-left corners, animated slide-in
+  - LIVE badge with pulsing green dot in header
+  - Improved input/button styling for left-anchored mode (larger touch
+    targets, focus rings, hover states)
+- Added new `CollapsibleFormPanel` shared component in `section-edit.tsx`:
+  - Wraps form-view + JSON editor with clickable header
+  - Collapsed by default (defaultCollapsed=true)
+  - Chevron rotates 0°/-90° to indicate state
+  - LIVE/ERROR badge in top-right
+  - Supports `dark` mode for JSON editor
+- Updated `HeroShapePanel` in `speaker-intro-style2-canvas.tsx` to use
+  the same sleek left-anchored styling as the new ObjectPropertiesPanel
+- Wrapped form-view + JSON editor in `CollapsibleFormPanel` in all 5
+  mockup editors:
+  - `speaker-intro/speaker-intro-editor.tsx`
+  - `meet-the-speaker/meet-the-speaker-editor.tsx`
+  - `event-profile/event-profile-editor.tsx`
+  - `agenda-profile/agenda-profile-editor.tsx`
+  - `qr-salon/qr-salon-editor.tsx` (with padding wrappers around inline
+    FormView/JsonView)
+- All 6 canvases (speaker-intro style1+style2, meet-the-speaker,
+  event-profile, agenda-profile, qr-salon) automatically pick up the
+  new `side="left"` default for ObjectPropertiesPanel — no per-canvas
+  change needed.
+- TypeScript check: 0 new errors in modified files (pre-existing
+  errors in legacy `agenda-profile/event-profile-canvas.tsx` and
+  unrelated files remain).
+- `next build` compiled successfully (37.1s).
+- Committed as `05366ce` and pushed to remote.
+
+Stage Summary:
+- All 5 mockup editors now have a COMPRESSED form panel by default.
+- Clicking an asset in section-edit mode now spawns a sleek floating
+  "edit tab" anchored to the top-LEFT of the canvas (above the
+  compressed form editor in the visual hierarchy).
+- The tab is collapsible (click the gradient header to shrink it to
+  just the header bar) and animated.
+- Same design language across all 5 mockups for consistency.
+- Backup tag: `backup/pre-compressed-form-20260801-192913`
