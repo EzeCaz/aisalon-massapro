@@ -21,6 +21,15 @@ import {
   type SectionPos,
   type SectionBoxSize,
 } from "../shared/section-edit";
+// PER USER SPEC 2026-08-02 (TSK-0053): Style 3 hero shape uses the shared
+// HeroShape system — same component + panel fields as speaker-intro Style 2.
+import {
+  HeroShape,
+  HeroShapePanelFields,
+  type HeroShapeConfig,
+  type HeroShapeType,
+  type HeroShapeFillMode,
+} from "../shared/hero-shape";
 
 /**
  * MeetTheSpeakerCanvas — the data-driven mockup renderer.
@@ -90,6 +99,18 @@ type Props = {
   onGraphicPosChange?: (pos: { x: number; y: number }) => void;
   /** Called when the bottom-left branding asset is dragged. */
   onBrandingAssetPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0053): Called when the Style 3 hero
+   *  shape config changes (shape type / fill mode / colors / direction /
+   *  opacity / rotation). Patch is partial — only the changed fields. */
+  onHeroShapeChange?: (patch: Partial<{
+    shape: HeroShapeType;
+    fillMode: HeroShapeFillMode;
+    solidColor: string;
+    colors: string[];
+    direction: number;
+    opacity: number;
+    rotation: number;
+  }>) => void;
   previewScale?: number;
 };
 
@@ -115,6 +136,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroStyle2PosChange,
       onGraphicPosChange,
       onBrandingAssetPosChange,
+      onHeroShapeChange,
       previewScale = 1,
     },
     ref,
@@ -205,9 +227,96 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 editable={editable}
                 previewScale={previewScale}
                 onMove={onLocalStreetPinMove}
+                textStyles={data.textStyles}
               />
             ))}
           </>
+        ) : data.heroStyle === 3 ? (
+          // ====================================================================
+          // PER USER SPEC 2026-08-02 (TSK-0053): Style 3 hero shape —
+          // uses the shared `HeroShape` component (rectangle / circle /
+          // triangle / etc.) with solid or gradient fill, direction,
+          // opacity, rotation. Same editing model as speaker-intro
+          // Style 2's hero-shape section.
+          //
+          // The shape is wrapped in a SectionBox so it gets:
+          //   - Click-to-select (selects "hero-shape" in the properties
+          //     panel)
+          //   - 8-direction resize arrows (updates boxSize)
+          //   - Drag to move (updates pos)
+          //   - Object Properties Panel for precise X/Y/W/H/Scale/z
+          // When selected, the floating HeroShapePanel renders the
+          // shape-type dropdown, fill-mode toggle, color pickers,
+          // direction slider, opacity + rotation — same panel as
+          // speaker-intro Style 2.
+          // ====================================================================
+          (() => {
+            const heroShapeConfig: HeroShapeConfig = {
+              shape: data.style3HeroShape?.shape ?? "rectangle",
+              fillMode: data.style3HeroShape?.fillMode ?? "gradient",
+              solidColor: data.style3HeroShape?.solidColor ?? "#311B92",
+              colors: data.style3HeroShape?.colors ?? ["#311B92", "#1A237E", "#0B0B2E"],
+              direction: data.style3HeroShape?.direction ?? 180,
+              opacity: data.style3HeroShape?.opacity ?? 0.9,
+              rotation: data.style3HeroShape?.rotation ?? 0,
+            };
+            const heroShapeLayout = data.sectionLayout?.["hero-shape"];
+            const heroShapeZ = heroShapeLayout?.z ?? heroZ;
+            return (
+              <>
+                <SectionBox
+                  active={sectionsEditable}
+                  selected={selectedId === "hero-shape"}
+                  onSelect={() => setSelectedId("hero-shape")}
+                  pos={heroShapeLayout?.pos}
+                  boxSize={heroShapeLayout?.boxSize}
+                  scale={heroShapeLayout?.scale ?? 1}
+                  onMove={(p) => onSectionMove?.("hero-shape", p)}
+                  onResize={(s) => onSectionResize?.("hero-shape", s)}
+                  onBoxResize={(sz) => onSectionBoxResize?.("hero-shape", sz)}
+                  previewScale={previewScale}
+                  canvasW={CANVAS_W}
+                  canvasH={CANVAS_H}
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: "45%",
+                    top: "0",
+                    width: "55%",
+                    height: "85%",
+                    zIndex: heroShapeZ,
+                  }}
+                  anchor="top-left"
+                  accentColor="#FF005A"
+                  label="Hero Shape"
+                  guideId="hero-shape"
+                >
+                  <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
+                    <HeroShape config={heroShapeConfig} />
+                  </div>
+                </SectionBox>
+
+                {/* Floating properties panel — visible when sections-edit
+                    mode is ON and the hero-shape section is selected.
+                    Same look + feel as speaker-intro Style 2's HeroShapePanel. */}
+                {sectionsEditable && selectedId === "hero-shape" && (
+                  <MeetTheSpeakerHeroShapePanel
+                    config={heroShapeConfig}
+                    onChange={(patch) => onHeroShapeChange?.(patch)}
+                    pos={heroShapeLayout?.pos}
+                    onPosChange={(p) => onSectionMove?.("hero-shape", p)}
+                    boxSize={heroShapeLayout?.boxSize}
+                    onBoxSizeChange={(sz) => onSectionBoxResize?.("hero-shape", sz)}
+                    scale={heroShapeLayout?.scale ?? 1}
+                    onScaleChange={(s) => onSectionResize?.("hero-shape", s)}
+                    z={heroShapeZ}
+                    onZChange={(z) => onSectionZChange?.("hero-shape", z)}
+                    peers={sectionPeerZs}
+                    onDeselect={() => setSelectedId(null)}
+                  />
+                )}
+              </>
+            );
+          })()
         ) : (
           (() => {
             const sx = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
@@ -508,9 +617,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
                 <span
                   className="font-bold uppercase tracking-wider"
                   style={{
-                    fontSize: "11px",
+                    fontSize: `${data.textStyles?.topicLabel?.fontSize ?? 11}px`,
+                    color: data.textStyles?.topicLabel?.color ?? data.header.color,
                     letterSpacing: "0.18em",
-                    color: data.header.color,
+                    textAlign: data.textStyles?.topicLabel?.align,
                   }}
                 >
                   Topic:
@@ -599,7 +709,12 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           </div>
           <span
             className="text-black font-semibold uppercase tracking-wider"
-            style={{ fontSize: "9px", letterSpacing: "0.15em" }}
+            style={{
+              fontSize: `${data.textStyles?.registerHere?.fontSize ?? 9}px`,
+              color: data.textStyles?.registerHere?.color,
+              letterSpacing: "0.15em",
+              textAlign: data.textStyles?.registerHere?.align,
+            }}
           >
             Register here
           </span>
@@ -705,7 +820,12 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             <div className="flex flex-col items-start gap-1.5">
               <span
                 className="text-black/80 font-semibold uppercase tracking-wider"
-                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                style={{
+                  fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 10}px`,
+                  color: data.textStyles?.collaboratorsLabel?.color,
+                  letterSpacing: "0.18em",
+                  textAlign: data.textStyles?.collaboratorsLabel?.align,
+                }}
               >
                 In collaboration with
               </span>
@@ -728,7 +848,12 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
             <div className="flex flex-col items-start gap-1.5">
               <span
                 className="text-black/80 font-semibold uppercase tracking-wider"
-                style={{ fontSize: "10px", letterSpacing: "0.18em" }}
+                style={{
+                  fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 10}px`,
+                  color: data.textStyles?.sponsorsLabel?.color,
+                  letterSpacing: "0.18em",
+                  textAlign: data.textStyles?.sponsorsLabel?.align,
+                }}
               >
                 Sponsored by
               </span>
@@ -1082,6 +1207,7 @@ function DraggableLocalStreetPin({
   editable,
   previewScale,
   onMove,
+  textStyles,
 }: {
   pin: { x: number; y: number; label: string };
   index: number;
@@ -1090,6 +1216,10 @@ function DraggableLocalStreetPin({
   editable?: boolean;
   previewScale: number;
   onMove?: (index: number, pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0053): per-text-section overrides for
+   *  the pin index number (localStreetPinIndex) and pin label
+   *  (localStreetPinLabel). */
+  textStyles?: MeetTheSpeakerData["textStyles"];
 }) {
   const dragRef = useRef<{
     startX: number;
@@ -1146,8 +1276,8 @@ function DraggableLocalStreetPin({
           width: "28px",
           height: "28px",
           borderColor: brandColor,
-          color: brandColor,
-          fontSize: "13px",
+          color: textStyles?.localStreetPinIndex?.color ?? brandColor,
+          fontSize: `${textStyles?.localStreetPinIndex?.fontSize ?? 13}px`,
           fontWeight: 800,
         }}
       >
@@ -1156,7 +1286,13 @@ function DraggableLocalStreetPin({
       {/* Pin label — user-editable text under the dot. */}
       <div
         className="mt-1 px-2 py-0.5 rounded bg-white/90 shadow-sm text-black"
-        style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em" }}
+        style={{
+          fontSize: `${textStyles?.localStreetPinLabel?.fontSize ?? 11}px`,
+          color: textStyles?.localStreetPinLabel?.color ?? "#000000",
+          textAlign: textStyles?.localStreetPinLabel?.align,
+          fontWeight: 600,
+          letterSpacing: "0.02em",
+        }}
       >
         {pin.label}
       </div>
@@ -1568,5 +1704,264 @@ function QrCode({ url, size }: { url: string; size: number }) {
       height={size}
       className="block"
     />
+  );
+}
+
+// ============================================================================
+// MeetTheSpeakerHeroShapePanel — floating properties panel for the Style 3
+// "hero-shape" section. Mirrors speaker-intro Style 2's HeroShapePanel
+// exactly: shape-type dropdown, fill-mode toggle, color pickers, direction
+// slider, opacity + rotation, PLUS the standard position / size / scale /
+// layer controls. PER USER SPEC 2026-08-02 (TSK-0053).
+// ============================================================================
+function MeetTheSpeakerHeroShapePanel({
+  config,
+  onChange,
+  pos,
+  onPosChange,
+  boxSize,
+  onBoxSizeChange,
+  scale,
+  onScaleChange,
+  z,
+  onZChange,
+  peers,
+  onDeselect,
+}: {
+  config: HeroShapeConfig;
+  onChange: (patch: Partial<{
+    shape: HeroShapeType;
+    fillMode: HeroShapeFillMode;
+    solidColor: string;
+    colors: string[];
+    direction: number;
+    opacity: number;
+    rotation: number;
+  }>) => void;
+  pos?: SectionPos;
+  onPosChange?: (pos: SectionPos) => void;
+  boxSize?: SectionBoxSize;
+  onBoxSizeChange?: (size: SectionBoxSize) => void;
+  scale?: number;
+  onScaleChange?: (scale: number) => void;
+  z?: number;
+  onZChange?: (z: number) => void;
+  peers?: number[];
+  onDeselect?: () => void;
+}) {
+  const px = pos?.x ?? 0;
+  const py = pos?.y ?? 0;
+  const bw = boxSize?.width ?? 0;
+  const bh = boxSize?.height ?? 0;
+  const sc = scale ?? 1;
+
+  const bringToFront = () => {
+    if (!onZChange) return;
+    if (peers && peers.length > 0) {
+      const max = Math.max(...peers, 0);
+      if ((z ?? 0) <= max) onZChange(max + 1);
+    } else {
+      onZChange((z ?? 0) + 1);
+    }
+  };
+  const sendToBack = () => {
+    if (!onZChange) return;
+    if (peers && peers.length > 0) {
+      const min = Math.min(...peers, 0);
+      if ((z ?? 0) >= min) onZChange(min - 1);
+    } else {
+      onZChange((z ?? 0) - 1);
+    }
+  };
+
+  return (
+    <div
+      className="absolute rounded-r-lg rounded-bl-lg bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden animate-[mtsPanelSlideIn_180ms_ease-out]"
+      style={{ left: "12px", top: "12px", zIndex: 9998, minWidth: "240px", maxHeight: "90%", overflowY: "auto" }}
+    >
+      <style>{`
+        @keyframes mtsPanelSlideIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+      {/* Header — sleek gradient style matching ObjectPropertiesPanel */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-[#FF005A] to-[#CC0048] text-white sticky top-0 z-10">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[0.65rem] font-bold uppercase tracking-wider truncate">
+            Hero Shape Properties
+          </span>
+          <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider">
+            <span className="h-1 w-1 rounded-full bg-[#27C93F] animate-pulse" />
+            LIVE
+          </span>
+        </div>
+        {onDeselect && (
+          <button
+            type="button"
+            onClick={onDeselect}
+            className="text-white/80 hover:text-white hover:bg-white/15 rounded p-0.5 ml-2 transition"
+            title="Deselect"
+            aria-label="Deselect"
+          >
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="px-3 py-2.5 flex flex-col gap-2.5">
+        {/* Shape + fill mode + colors + direction + opacity + rotation.
+            The shared HeroShapePanelFields renders all of these in
+            compact mode (same as speaker-intro Style 2). */}
+        <HeroShapePanelFields
+          config={config}
+          onChange={(patch) => {
+            // HeroShapePanelFields may emit pos/boxSize/scale patches
+            // (for standalone hero overlays). Meet-the-speaker manages
+            // position/size/scale via the hero-shape SectionBox, so we
+            // strip those keys before forwarding.
+            const { pos: _pos, boxSize: _boxSize, scale: _scale, ...rest } = patch;
+            onChange(rest);
+          }}
+          compact
+        />
+
+        <div className="border-t border-black/10 pt-2 flex flex-col gap-2">
+          {/* Position */}
+          {onPosChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Position (% of canvas)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">X</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Number(px.toFixed(1))}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) onPosChange({ x: n, y: py });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">Y</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Number(py.toFixed(1))}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n)) onPosChange({ x: px, y: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Size */}
+          {onBoxSizeChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Size (canvas px)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">W</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bw > 0 ? Math.round(bw) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) onBoxSizeChange({ ...boxSize, width: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">H</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bh > 0 ? Math.round(bh) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0) onBoxSizeChange({ ...boxSize, height: n });
+                    }}
+                    className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Scale */}
+          {onScaleChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Scale % (box + text together)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={Math.round(sc * 100)}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n) && n > 0) onScaleChange(n / 100);
+                  }}
+                  className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                />
+                <span className="text-[0.6rem] font-semibold text-black/80">%</span>
+                <button
+                  type="button"
+                  onClick={() => onScaleChange(1)}
+                  className="rounded border border-black/15 bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                >
+                  100%
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Layer */}
+          {onZChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Layer (z-index: {z ?? 0})
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={bringToFront}
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                >
+                  ↑ Front
+                </button>
+                <button
+                  type="button"
+                  onClick={sendToBack}
+                  className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                >
+                  ↓ Back
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

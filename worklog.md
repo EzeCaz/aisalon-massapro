@@ -9899,3 +9899,93 @@ Stage Summary:
 - Style 2 form → mockup wiring is now complete. Changing any text-style
   font size / color / align in the form will now live-update Style 2.
 - Commit: 97a0f2a "TSK-0052: Wire Style 2 canvas to data.textStyles"
+
+---
+Task ID: TSK-0053-subagent-A
+Agent: full-stack subagent
+Task: Add "Set as default" button + relocate Edit images / Edit sections to canvas caption row in event-profile, agenda-profile, qr-salon editors
+
+Work Log:
+- Read speaker-intro-editor.tsx (lines 50-160, 530-610, 970-1099) to learn the
+  target pattern: STYLE_DEFAULTS_KEY_PREFIX const, savedDefaultFeedback state,
+  handleSetAsDefault callback, modified handleReset that consults the saved
+  default, and the canvas caption row `<div className="flex items-center
+  justify-between mb-3 gap-3 flex-wrap">` placed ABOVE the canvas with text on
+  left + [Edit images][Edit sections][Set as default] clustered on right.
+- Read worklog tail (TSK-0051 / TSK-0052) to confirm dev server is up on port
+  3000 and meet-the-speaker is being handled by a parallel agent — left those
+  files untouched.
+- event-profile-editor.tsx (4 MultiEdit operations):
+  * Added `STYLE_DEFAULTS_KEY_PREFIX = "event-profile-style-defaults-"` below
+    STORAGE_KEY with explanatory comment.
+  * Added `savedDefaultFeedback` useState(false) next to other state.
+  * Inserted `handleSetAsDefault` useCallback (saves JSON.stringify(data) under
+    `${prefix}current`, flips feedback true then false after 2000ms, try/catch
+    around localStorage).
+  * Rewrote `handleReset` to consult the saved default first; if it exists the
+    confirm message says "Reset to the saved default? Any local edits you've
+    made will be lost." and the saved default is loaded instead of SAMPLE_DATA.
+    setSelectedEventSlug("") is only called when falling back to SAMPLE_DATA,
+    mirroring speaker-intro's behavior.
+  * Replaced the floating `<div className="flex items-center gap-1.5 absolute
+    top-2 right-2 z-10">` overlay (which lived INSIDE the preview container)
+    plus the old "Live Preview · ... scale · exported PNG is 2400 × 2400"
+    caption with a single new canvas caption row ABOVE the canvas. Left text:
+    "Canvas: 1200 × 1200 (1:1 square) · Edits auto-saved to this browser · X%
+    scale". Right cluster: [Edit images][Edit sections][Set as default] using
+    speaker-intro's exact button classes (Check + Save icons, pink/green
+    states, etc.). Check and Save were already imported from lucide-react.
+- agenda-profile-editor.tsx (4 MultiEdit operations): identical pattern to
+  event-profile. Prefix `"agenda-profile-style-defaults-"`, type cast
+  `EventProfileData`. Canvas dimensions text reads "Canvas: 1200 × 1500 (4:5
+  portrait) · Edits auto-saved to this browser". Check + Save already imported.
+- qr-salon-editor.tsx (5 MultiEdit operations):
+  * Added `Save` to the lucide-react import block (Check was already there).
+  * Added `STYLE_DEFAULTS_KEY_PREFIX = "qr-salon-style-defaults-"`.
+  * Added `savedDefaultFeedback` state.
+  * Added `handleSetAsDefault` + rewrote `handleReset` (type cast QrSalonData).
+    Kept qr-salon's shorter original confirm wording ("Reset to sample data?
+    Your current edits will be lost.") for the no-saved-default branch.
+  * Restructured the top-of-left-column layout: the previous single flex row
+    that held [Edit images][Edit sections][Reset] + canvas dimensions text was
+    split into TWO rows. The original top row now contains ONLY the Reset
+    button (kept where it was, per task spec). The new canvas caption row
+    directly above the canvas holds the dimensions text on the left and
+    [Edit images][Edit sections][Set as default] on the right. Kept qr-salon's
+    existing variable names (editImages / setEditImages) and reused
+    speaker-intro's exact button class strings.
+- Verified the dev server compiles all three pages: HTTP 200 returned for
+  /admin/mockups/event-profile, /admin/mockups/agenda-profile, and
+  /admin/mockups/qr-salon.
+- TypeScript check (`npx tsc --noEmit`) on the three edited files shows ZERO
+  new errors. Pre-existing errors in
+  `src/app/admin/mockups/agenda-profile/event-profile-editor.tsx` (a stale
+  unrelated file inside the agenda-profile folder that I did NOT touch) were
+  confirmed present both before and after my changes via `git stash` +
+  re-check.
+- Did NOT touch any meet-the-speaker files (a parallel agent is handling
+  those); their modified status in `git status` belongs to that other agent.
+
+Stage Summary:
+- All three editors (event-profile, agenda-profile, qr-salon) now match the
+  speaker-intro button-placement pattern:
+  1. A `STYLE_DEFAULTS_KEY_PREFIX` const + `savedDefaultFeedback` state.
+  2. A `handleSetAsDefault` callback that persists the entire current `data`
+     to `localStorage` under `${prefix}current` and shows a 2-second
+     "Saved!" confirmation on the button.
+  3. A modified `handleReset` that consults the saved default first — if one
+     exists, the user is asked "Reset to the saved default?" and the saved
+     default is loaded instead of SAMPLE_DATA. Falls back to SAMPLE_DATA
+     otherwise.
+  4. A canvas caption row directly above the canvas containing the canvas
+     dimensions text on the left and a clustered `[Edit images][Edit sections]
+     [Set as default]` group on the right, using speaker-intro's exact button
+     classes. The previous floating-overlay button placement (event-profile +
+     agenda-profile) and the top-row button placement (qr-salon) are gone.
+  5. qr-salon's Reset button stays in the original top row per spec.
+- All three pages compile cleanly (HTTP 200 on the dev server) with no new
+  TypeScript errors.
+- Files modified (3):
+  - src/app/admin/mockups/event-profile/event-profile-editor.tsx
+  - src/app/admin/mockups/agenda-profile/agenda-profile-editor.tsx
+  - src/app/admin/mockups/qr-salon/qr-salon-editor.tsx

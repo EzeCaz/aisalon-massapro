@@ -37,6 +37,11 @@ import {
  */
 
 const STORAGE_KEY = "agenda-profile-data-v1";
+// PER TSK-0053: Local "Set as default" storage. The ENTIRE current `data`
+// is saved under `agenda-profile-style-defaults-current`. When the user
+// clicks "Reset", if a saved default exists it is loaded instead of
+// SAMPLE_DATA.
+const STYLE_DEFAULTS_KEY_PREFIX = "agenda-profile-style-defaults-";
 
 type Props = {
   events: EventPickListItem[];
@@ -53,6 +58,9 @@ export function AgendaProfileEditor({ events }: Props) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PER TSK-0053: brief "Saved!" feedback shown on the "Set as default"
+  // button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.32);
   const [editMode, setEditMode] = useState<boolean>(false);
   /** Sections edit mode = text sections are draggable + resizeable. */
@@ -387,10 +395,49 @@ export function AgendaProfileEditor({ events }: Props) {
     applyData(next);
   }
 
+  // --- toolbar actions ------------------------------------------------
+
+  /**
+   * PER TSK-0053: Save the ENTIRE current mockup state (all section
+   * properties + image placements + hero gradient config + etc.) as the
+   * default. Stored in localStorage under
+   * `agenda-profile-style-defaults-current`. When the user later clicks
+   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   *
+   * This is LOCAL default (browser-only). It is separate from the
+   * per-event server-side default saved by `handleSaveAsDefault`
+   * (which uploads a PNG snapshot + dataJson to the API).
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   function handleReset() {
-    if (!confirm("Reset to the sample data? Any local edits you've made will be lost.")) return;
-    applyData(SAMPLE_DATA);
-    setSelectedEventSlug("");
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    let savedDefault: EventProfileData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as EventProfileData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? "Reset to the saved default? Any local edits you've made will be lost."
+      : "Reset to the sample data? Any local edits you've made will be lost.";
+    if (!confirm(msg)) return;
+    applyData(savedDefault ?? SAMPLE_DATA);
+    if (!savedDefault) {
+      setSelectedEventSlug("");
+    }
   }
   async function handleCopyJson() {
     try {
@@ -759,40 +806,68 @@ export function AgendaProfileEditor({ events }: Props) {
           ref={previewContainerRef}
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
-        {/* Edit images + Edit sections — floating at the top-right of the
-            Live Preview box, per user spec. The buttons stay visible
-            regardless of scroll position inside the preview area. */}
-        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              editMode
-                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {editMode ? "Editing images" : "Edit images"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSectionsEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              sectionsEditMode
-                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-          >
-            <LayoutPanelTop className="h-3.5 w-3.5" />
-            {sectionsEditMode ? "Editing sections" : "Edit sections"}
-          </button>
-        </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 3000 (2× DPR)
+        {/* Canvas caption — moved ABOVE the canvas per TSK-0053.
+            Edit images + Edit sections + Set as default cluster together
+            right above the canvas (mirrors speaker-intro pattern). */}
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div className="text-[0.7rem] font-semibold text-black/70">
+            Canvas: 1200 × 1500 (4:5 portrait) · Edits auto-saved to this browser
+            <span className="ml-2 text-black/40 font-normal">
+              · {Math.round(previewScale * 100)}% scale
+            </span>
           </div>
+          <div className="inline-flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setEditMode((s) => !s)}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                editMode
+                  ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
+              }`}
+              title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              {editMode ? "Editing images" : "Edit images"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSectionsEditMode((s) => !s)}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                sectionsEditMode
+                  ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
+              }`}
+              title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+            >
+              <LayoutPanelTop className="h-3.5 w-3.5" />
+              {sectionsEditMode ? "Editing sections" : "Edit sections"}
+            </button>
+            {/* PER TSK-0053: "Set as default" button — saves the ENTIRE
+                current mockup state as the default. Click "Reset" to
+                restore. */}
+            <button
+              type="button"
+              onClick={handleSetAsDefault}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                savedDefaultFeedback
+                  ? "bg-[#27C93F] text-white"
+                  : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+              }`}
+              title="Save the entire current mockup state as the default. Click Reset to restore."
+            >
+              {savedDefaultFeedback ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Saved!
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" /> Set as default
+                </>
+              )}
+            </button>
+          </div>
+        </div>
           <div
             className="relative mx-auto"
             style={{

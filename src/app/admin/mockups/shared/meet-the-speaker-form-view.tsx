@@ -215,6 +215,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             })
           }
         />
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Topic:" label that prefixes the topic title. */}
+        <TextStyleRow
+          label="Topic: label — font size + color + align"
+          fontSize={data.textStyles?.topicLabel?.fontSize}
+          fontColor={data.textStyles?.topicLabel?.color}
+          align={data.textStyles?.topicLabel?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.topicLabel = {
+                ...(d.textStyles.topicLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Topic description">
           <input
             type="text"
@@ -494,6 +513,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Register here" caption next to the QR. */}
+        <TextStyleRow
+          label="Register here — font size + color + align"
+          fontSize={data.textStyles?.registerHere?.fontSize}
+          fontColor={data.textStyles?.registerHere?.color}
+          align={data.textStyles?.registerHere?.align}
+          defaultFontSize={9}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.registerHere = {
+                ...(d.textStyles.registerHere ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Footer credit">
           <input
             type="text"
@@ -1047,6 +1085,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
 
       {/* ===== SPONSORS ===== */}
       <Section title={`Collaborators (${data.collaborators.length})`}>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "In collaboration with" label. */}
+        <TextStyleRow
+          label="In collaboration with — font size + color + align"
+          fontSize={data.textStyles?.collaboratorsLabel?.fontSize}
+          fontColor={data.textStyles?.collaboratorsLabel?.color}
+          align={data.textStyles?.collaboratorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.collaboratorsLabel = {
+                ...(d.textStyles.collaboratorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.collaborators.map((s, idx) => (
           <SubCard
             key={`coll-${idx}`}
@@ -1128,6 +1185,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
       </Section>
 
       <Section title={`Sponsors (${data.sponsors.length})`}>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Sponsored by" label. */}
+        <TextStyleRow
+          label="Sponsored by — font size + color + align"
+          fontSize={data.textStyles?.sponsorsLabel?.fontSize}
+          fontColor={data.textStyles?.sponsorsLabel?.color}
+          align={data.textStyles?.sponsorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.sponsorsLabel = {
+                ...(d.textStyles.sponsorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.sponsors.map((s, idx) => (
           <SubCard
             key={`spo-${idx}`}
