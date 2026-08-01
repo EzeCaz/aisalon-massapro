@@ -191,16 +191,26 @@ function deriveInitials(fullName: string, fallback?: string): string {
 
 // ============================================================================
 // Style2SpeakerCard — the per-speaker card in the 2×2 grid.
+//
+// PER USER SPEC 2026-08-02 (TSK-0052): speaker card text fields (name,
+// title+company, bio, session-time row) now read from `textStyles` so the
+// form's "Text styles" controls actually drive the canvas. Previously all
+// font sizes were hardcoded and the form controls had NO effect on Style 2.
 // ============================================================================
 function Style2SpeakerCard({
   speaker,
   showSessionTime = true,
+  textStyles,
 }: {
   speaker: Speaker;
   /** PER USER SPEC 2026-07-31 (TSK-0033): global toggle for the
    *  session-time pill on Style 2 speaker cards. When `false`, the
    *  time/session-title row is hidden entirely. Default `true`. */
   showSessionTime?: boolean;
+  /** PER USER SPEC 2026-08-02 (TSK-0052): per-text-section font size /
+   *  color / align overrides. Reads the speakerName / speakerTitle /
+   *  speakerBio / speakerSessionTime keys (same as Style 1). */
+  textStyles?: SpeakerIntroData["textStyles"];
 }) {
   const initials = deriveInitials(speaker.fullName, speaker.initials);
   const placement = resolvePlacement(speaker.photoPlacement);
@@ -258,9 +268,10 @@ function Style2SpeakerCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontSize: "16px",
+              fontSize: `${textStyles?.speakerName?.fontSize ?? 16}px`,
+              color: textStyles?.speakerName?.color ?? "#0F172A",
+              textAlign: textStyles?.speakerName?.align,
               fontWeight: 700,
-              color: "#0F172A",
               lineHeight: 1.15,
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -272,8 +283,9 @@ function Style2SpeakerCard({
           {titleCompany && (
             <div
               style={{
-                fontSize: "11.5px",
-                color: "#64748B",
+                fontSize: `${textStyles?.speakerTitle?.fontSize ?? 11.5}px`,
+                color: textStyles?.speakerTitle?.color ?? "#64748B",
+                textAlign: textStyles?.speakerTitle?.align,
                 marginTop: "2px",
                 lineHeight: 1.3,
                 overflow: "hidden",
@@ -311,8 +323,9 @@ function Style2SpeakerCard({
       {speaker.bio && (
         <div
           style={{
-            fontSize: "11.5px",
-            color: "#64748B",
+            fontSize: `${textStyles?.speakerBio?.fontSize ?? 11.5}px`,
+            color: textStyles?.speakerBio?.color ?? "#64748B",
+            textAlign: textStyles?.speakerBio?.align,
             lineHeight: 1.45,
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -336,9 +349,9 @@ function Style2SpeakerCard({
             display: "flex",
             alignItems: "center",
             gap: "6px",
-            fontSize: "11.5px",
+            fontSize: `${textStyles?.speakerSessionTime?.fontSize ?? 11.5}px`,
+            color: textStyles?.speakerSessionTime?.color ?? "#0D9488",
             fontWeight: 600,
-            color: "#0D9488",
           }}
         >
           {speaker.sessionTime && (
@@ -431,11 +444,19 @@ function Style2LocationPin({
   x,
   y,
   variant,
+  fontSize,
+  color,
 }: {
   label: string;
   x: number;
   y: number;
   variant: "white" | "teal" | "magenta";
+  /** PER USER SPEC 2026-08-02 (TSK-0052): when provided, overrides the
+   *  default 11px font size (driven by data.textStyles.locationPinLabel). */
+  fontSize?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0052): when provided, overrides the
+   *  palette color for the label text (driven by data.textStyles.locationPinLabel.color). */
+  color?: string;
 }) {
   const palette = {
     white: { bg: "#FFFFFF", color: "#FF0056", icon: "#FF0056" },
@@ -451,10 +472,10 @@ function Style2LocationPin({
         top: `${y}%`,
         transform: "translate(-50%, -50%)",
         background: palette.bg,
-        color: palette.color,
+        color: color ?? palette.color,
         padding: "5px 11px 5px 9px",
         borderRadius: "999px",
-        fontSize: "11px",
+        fontSize: `${fontSize ?? 11}px`,
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
@@ -922,7 +943,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               <div style={{ flex: 1, minWidth: 0, color: "#FFFFFF" }}>
                 <div
                   style={{
-                    fontSize: "22px",
+                    fontSize: `${data.textStyles?.eventName?.fontSize ?? 22}px`,
+                    color: data.textStyles?.eventName?.color,
+                    textAlign: data.textStyles?.eventName?.align,
                     fontWeight: 800,
                     lineHeight: 1.15,
                     letterSpacing: "-0.01em",
@@ -937,7 +960,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 {eventSubtitle && (
                   <div
                     style={{
-                      fontSize: "13px",
+                      fontSize: `${data.textStyles?.eventDate?.fontSize ?? 13}px`,
+                      color: data.textStyles?.eventDate?.color,
+                      textAlign: data.textStyles?.eventDate?.align,
                       fontWeight: 500,
                       opacity: 0.92,
                       marginTop: "3px",
@@ -1008,9 +1033,10 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span
                   style={{
-                    fontSize: "11px",
+                    fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 11}px`,
+                    color: data.textStyles?.speakersLabel?.color ?? "#FF0056",
+                    textAlign: data.textStyles?.speakersLabel?.align,
                     fontWeight: 700,
-                    color: "#FF0056",
                     letterSpacing: "0.18em",
                     textTransform: "uppercase",
                   }}
@@ -1139,6 +1165,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                           <Style2SpeakerCard
                             speaker={s}
                             showSessionTime={data.speakersLayout?.showSessionTime !== false}
+                            textStyles={data.textStyles}
                           />
                         </div>
                       );
@@ -1307,6 +1334,8 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 x={pin.x}
                 y={pin.y}
                 variant={pinVariants[i % pinVariants.length]}
+                fontSize={data.textStyles?.locationPinLabel?.fontSize}
+                color={data.textStyles?.locationPinLabel?.color}
               />
             ))}
 
@@ -1406,11 +1435,12 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span
                       style={{
-                        fontSize: "9px",
+                        fontSize: `${data.textStyles?.collaboratorsLabel?.fontSize ?? 9}px`,
+                        color: data.textStyles?.collaboratorsLabel?.color ?? "rgba(255,255,255,0.5)",
+                        textAlign: data.textStyles?.collaboratorsLabel?.align,
                         fontWeight: 700,
                         letterSpacing: "0.14em",
                         textTransform: "uppercase",
-                        color: "rgba(255,255,255,0.5)",
                       }}
                     >
                       In collab with
@@ -1471,11 +1501,12 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span
                       style={{
-                        fontSize: "9px",
+                        fontSize: `${data.textStyles?.sponsorsLabel?.fontSize ?? 9}px`,
+                        color: data.textStyles?.sponsorsLabel?.color ?? "#0D9488",
+                        textAlign: data.textStyles?.sponsorsLabel?.align,
                         fontWeight: 700,
                         letterSpacing: "0.14em",
                         textTransform: "uppercase",
-                        color: "#0D9488",
                       }}
                     >
                       Sponsored by
