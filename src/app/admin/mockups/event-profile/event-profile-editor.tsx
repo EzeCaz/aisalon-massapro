@@ -19,6 +19,7 @@ import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
 import { EventProfileFormView } from "../shared/event-profile-form-view";
+import { EventProfileSelectedPanel } from "../shared/event-profile-selected-panel";
 import {
   mapEventToEventProfileData,
   type DbEventForMapping,
@@ -68,6 +69,10 @@ export function EventProfileEditor({ events }: Props) {
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +88,12 @@ export function EventProfileEditor({ events }: Props) {
       });
     }
   }, []);
+
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  useEffect(() => {
+    if (!sectionsEditMode) setSelectedId(null);
+  }, [sectionsEditMode]);
 
   function applyImagePick(slot: ImageSlot, url: string): EventProfileData {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
@@ -776,6 +787,22 @@ export function EventProfileEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
+         *  canvas, a compact "Selected Element" panel appears at the TOP
+         *  of this column showing ONLY the content-specific fields for
+         *  that element. The full form stays below (collapsed by default). */}
+        <div className="flex flex-col gap-3">
+          {sectionsEditMode && selectedId && (
+            <EventProfileSelectedPanel
+              selectedId={selectedId}
+              data={data}
+              onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
+            />
+          )}
+
         {/* Left: Form view OR JSON editor (toggled by viewMode).
          *  PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
          *  COMPRESSED (collapsed) by default. Click the header to expand. */}
@@ -822,6 +849,7 @@ export function EventProfileEditor({ events }: Props) {
             )}
           </CollapsibleFormPanel>
         )}
+        </div>
 
         {/* Right: live preview */}
         <div
@@ -925,6 +953,8 @@ export function EventProfileEditor({ events }: Props) {
                 onSectionZChange={handleSectionZChange}
                 onBrandingAssetPosChange={handleBrandingAssetPosChange}
                 onHeroPosChange={handleHeroPosChange}
+                selectedId={selectedId}
+                onSelectChange={setSelectedId}
               />
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, useEffect } from "react";
+import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import type {
@@ -111,6 +111,14 @@ type Props = {
     opacity: number;
     rotation: number;
   }>) => void;
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED to the editor so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. When the prop is provided, it
+   *  overrides the canvas's internal selection state. */
+  selectedId?: string | null;
+  /** Called when the user clicks an element on the canvas (or deselects).
+   *  The editor sets its `selectedId` state from this. */
+  onSelectChange?: (id: string | null) => void;
   previewScale?: number;
 };
 
@@ -137,6 +145,8 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
       onGraphicPosChange,
       onBrandingAssetPosChange,
       onHeroShapeChange,
+      selectedId: selectedIdProp,
+      onSelectChange,
       previewScale = 1,
     },
     ref,
@@ -156,10 +166,15 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
     );
 
     // --- Section 1: ObjectPropertiesPanel selection state ---
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    useEffect(() => {
-      if (!sectionsEditable) setSelectedId(null);
-    }, [sectionsEditable]);
+    // PER USER SPEC 2026-08-02: selectedId is now LIFTED to the editor.
+    // We accept it as `selectedIdProp` and notify the parent via
+    // `onSelectChange`. This lets the new "Selected Element" panel
+    // (rendered above the form) read/write the selection.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     function sectionZFor(id: SectionId): number {
       const explicit = data.sectionLayout?.[id]?.z;

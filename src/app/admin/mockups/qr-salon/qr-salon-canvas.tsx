@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useState, useCallback } from "react";
 import QRCode from "qrcode";
 import type { QrSalonData } from "./types";
 import { DEFAULT_BRANDING_ASSET_URL } from "./types";
@@ -55,6 +55,12 @@ type Props = {
   onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
   /** SectionBox z-index change (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED to the editor so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  selectedId?: string | null;
+  /** Called when the user clicks an element on the canvas (or deselects). */
+  onSelectChange?: (id: string | null) => void;
   /** Render scale of the canvas in the editor (1 = full size). */
   previewScale?: number;
 };
@@ -71,6 +77,8 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
       onSectionResize,
       onSectionBoxResize,
       onSectionZChange,
+      selectedId: selectedIdProp,
+      onSelectChange,
       previewScale = 1,
     },
     ref,
@@ -157,7 +165,12 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
 
     // ─── SectionBox state ──────────────────────────────────────────
     const sectionLayout = data.sectionLayout ?? {};
-    const [selectedId, setSelectedId] = useState<SectionId | null>(null);
+    // PER USER SPEC 2026-08-02: selectedId is now LIFTED to the editor.
+    const selectedId = (selectedIdProp ?? null) as SectionId | null;
+    const setSelectedId = useCallback(
+      (id: SectionId | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     // Per-section z-index resolution: explicit > default by section order.
     // Branding on top of caption on top of QR (so the brand mark never

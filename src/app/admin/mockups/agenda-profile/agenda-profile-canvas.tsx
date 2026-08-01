@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, useEffect } from "react";
+import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import type {
   EventProfileData,
@@ -80,6 +80,12 @@ type Props = {
    * Photo position (X%, Y%)".
    */
   onHeroPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED to the editor so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  selectedId?: string | null;
+  /** Called when the user clicks an element on the canvas (or deselects). */
+  onSelectChange?: (id: string | null) => void;
   previewScale?: number;
 };
 
@@ -102,6 +108,8 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
       onSectionZChange,
       onBrandingAssetPosChange,
       onHeroPosChange,
+      selectedId: selectedIdProp,
+      onSelectChange,
       previewScale = 1,
     },
     ref,
@@ -120,10 +128,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
     );
 
     // --- Section 1: ObjectPropertiesPanel selection state ---
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    useEffect(() => {
-      if (!sectionsEditable) setSelectedId(null);
-    }, [sectionsEditable]);
+    // PER USER SPEC 2026-08-02: selectedId is now LIFTED to the editor.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     function sectionZFor(id: SectionId): number {
       const explicit = data.sectionLayout?.[id]?.z;

@@ -28,6 +28,7 @@ import type {
   SectionBoxSize,
 } from "../shared/section-edit";
 import { CollapsibleFormPanel } from "../shared/section-edit";
+import { QrSalonSelectedPanel } from "../shared/qr-salon-selected-panel";
 
 /**
  * QrSalonEditor — the editor + live preview surface for the QR-only
@@ -62,6 +63,10 @@ export function QrSalonEditor() {
   const [editImages, setEditImages] = useState(false);
   const [sectionsEditMode, setSectionsEditMode] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
   // PER TSK-0053: brief "Saved!" feedback shown on the "Set as default"
   // button after the user clicks it.
@@ -72,6 +77,12 @@ export function QrSalonEditor() {
   const rafRef = useRef<number | null>(null);
 
   // ─── localStorage hydration ─────────────────────────────────────
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  useEffect(() => {
+    if (!sectionsEditMode) setSelectedId(null);
+  }, [sectionsEditMode]);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -446,6 +457,8 @@ export function QrSalonEditor() {
               onSectionResize={handleSectionResize}
               onSectionBoxResize={handleSectionBoxResize}
               onSectionZChange={handleSectionZChange}
+              selectedId={selectedId}
+              onSelectChange={setSelectedId}
             />
           </div>
         </div>
@@ -487,6 +500,19 @@ export function QrSalonEditor() {
             JSON
           </button>
         </div>
+
+        {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Sits ABOVE the form editor in the right column. Only renders
+           *  when an element is selected AND we're in section edit mode. */}
+        {sectionsEditMode && selectedId && (
+          <QrSalonSelectedPanel
+            selectedId={selectedId}
+            data={data}
+            onChange={(next) => applyData(next)}
+            onPickBranding={() => setPickerOpen(true)}
+            onDeselect={() => setSelectedId(null)}
+          />
+        )}
 
         {viewMode === "form" ? (
           /* PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now

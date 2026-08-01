@@ -10057,3 +10057,106 @@ Stage Summary:
     HeroShapePanel
 - Commit: fc583e2 "TSK-0053: Wire all mockups to textStyles + add HeroShape
   to meet-the-speaker Style 3". Pushed to origin/main.
+
+---
+Task ID: TSK-0054 (main agent)
+Task: Add the "Selected Element" panel (the per-asset form that appears at the
+top of the form column when clicking a specific asset/object on the canvas)
+to ALL other mockups — meet-the-speaker, event-profile, agenda-profile,
+qr-salon — matching the existing speaker-intro pattern.
+
+User's exact spec:
+  "Add to all mockups the selected form when clicking the specific asset/object
+   just like in the intro speaker mockup, now make the same change to all
+   mockups> make sure the entire form is compressed, and when clicking the
+   specific asset we want to edit, generate a new tab on the left of the
+   mockup, above the entire form editor, only the specific edit details of
+   the object/asset i am editing, make it interactive, fast, and looking
+   wint a sleak design but on the same style as the current editor"
+
+Work Log:
+- Read speaker-intro's `shared/selected-element-panel.tsx` to learn the
+  pattern: pink-gradient header bar + LIVE indicator + collapse/expand +
+  X-to-deselect + max-h-480 body with vertical scroll. Per-asset body
+  content is dispatched via a switch on selectedId.
+- Confirmed via grep that all 4 secondary canvases already use internal
+  `selectedId` state with `setSelectedId(id)` calls wired to SectionBox
+  `onSelect`. None of them had lifted the state to the editor (the panel
+  didn't exist).
+- Created `shared/selected-element-shell.tsx` (NEW) — exports:
+    * SelectedElementShell — the sleek chrome (header bar + LIVE badge +
+      collapse + close + slide-down animation)
+    * MiniField / MiniInput / MiniSelect / MiniTextarea / ReplaceButton /
+      ImagePreview — compact field primitives (denser than the form-view's
+      helpers) so they fit in the 420px left column
+    * useUpdate hook — stable update helper (clone data, apply recipe,
+      call onChange)
+    * NoFieldsHint — generic "no fields for this selection" placeholder
+- Created 4 NEW per-mockup panel files (each imports the shared shell):
+    * shared/meet-the-speaker-selected-panel.tsx
+      selectedId keys: speaker-info, hero-shape (Style 3), qr, event-meta,
+      sponsors, footer.
+    * shared/event-profile-selected-panel.tsx
+      selectedId keys: header, sponsors, footer.
+    * shared/agenda-profile-selected-panel.tsx
+      selectedId keys: header, topic, agenda, speakers, sponsors,
+      qr-branding, footer.
+    * shared/qr-salon-selected-panel.tsx
+      selectedId keys: qr, caption, branding.
+- For EACH of the 4 canvases, lifted `selectedId` state to the editor:
+    * Added `selectedId?: string | null` + `onSelectChange?: (id: string | null) => void` props to the Props type.
+    * Replaced the internal `useState<string | null>(null)` + `useEffect`
+      with the lifted pattern:
+        `const selectedId = selectedIdProp ?? null;`
+        `const setSelectedId = useCallback((id) => onSelectChange?.(id), [onSelectChange]);`
+    * Added `useCallback` to the React import where missing.
+- For EACH of the 4 editors:
+    * Added `selectedId` state via `useState<string | null>(null)`.
+    * Added a `useEffect` that clears `selectedId` when `sectionsEditMode`
+      turns off (so the panel disappears when leaving section edit mode).
+    * Wrapped the existing CollapsibleFormPanel in `<div className="flex flex-col gap-3">` so the panel sits at the top of the column.
+    * Rendered the new per-mockup `<XxxSelectedPanel>` (only when
+      `sectionsEditMode && selectedId` are both truthy) ABOVE the
+      CollapsibleFormPanel.
+    * Passed `selectedId` + `onSelectChange={setSelectedId}` to the
+      canvas.
+- qr-salon layout note: this editor has the canvas on the LEFT and the
+  form on the RIGHT (reversed from the other mockups). The Selected
+  Element panel was therefore placed at the TOP of the right column
+  (above the view-mode toggle + form), still satisfying "above the entire
+  form editor".
+- Verified all 5 mockup pages compile cleanly (HTTP 200 on each route).
+- TypeScript check: zero new errors in any file I touched. Pre-existing
+  errors in the stale `agenda-profile/event-profile-canvas.tsx` /
+  `event-profile-editor.tsx` (duplicate files I did NOT touch) and
+  `shared/agenda-profile-form-view.tsx` (pre-existing) remain unchanged.
+
+Stage Summary:
+- All 5 mockup editors (speaker-intro + 4 new ones) now have the
+  "Selected Element" panel that appears at the top of the form column
+  when the user clicks a specific asset/object on the canvas.
+- The panel uses the same sleek pink-gradient design + LIVE indicator +
+  collapse + close pattern across all mockups (matches the existing
+  speaker-intro panel exactly).
+- Each panel shows ONLY the content-specific fields for the selected
+  element (e.g. clicking the speakers section shows just the speakers
+  list with per-speaker name/title/company/photo/role/bio/session-time;
+  clicking the QR code shows just the URL + size + colors + margin).
+- The full form stays BELOW the panel, collapsed by default per TSK-0050.
+- Image-replace buttons inside the panels reuse the same picker flow as
+  the canvas (Replace → opens ImagePickerModal).
+- Files modified (8):
+  - meet-the-speaker/meet-the-speaker-canvas.tsx
+  - meet-the-speaker/meet-the-speaker-editor.tsx
+  - event-profile/event-profile-canvas.tsx
+  - event-profile/event-profile-editor.tsx
+  - agenda-profile/agenda-profile-canvas.tsx
+  - agenda-profile/agenda-profile-editor.tsx
+  - qr-salon/qr-salon-canvas.tsx
+  - qr-salon/qr-salon-editor.tsx
+- Files added (5):
+  - shared/selected-element-shell.tsx
+  - shared/meet-the-speaker-selected-panel.tsx
+  - shared/event-profile-selected-panel.tsx
+  - shared/agenda-profile-selected-panel.tsx
+  - shared/qr-salon-selected-panel.tsx

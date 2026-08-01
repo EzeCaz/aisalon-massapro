@@ -31,6 +31,7 @@ import { MeetTheSpeakerCanvas } from "./meet-the-speaker-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
 import { MeetTheSpeakerFormView } from "../shared/meet-the-speaker-form-view";
+import { MeetTheSpeakerSelectedPanel } from "../shared/meet-the-speaker-selected-panel";
 import {
   mapEventToMeetTheSpeakerData,
   type DbEventForMapping,
@@ -99,12 +100,24 @@ export function MeetTheSpeakerEditor({ events }: Props) {
    *  that specific speaker's data instead of the default first-by-order). */
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>("");
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. The canvas calls onSelectChange
+   *  when the user clicks a section; we clear it when sectionsEditMode
+   *  turns off so the panel disappears. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
   // --- helpers ---------------------------------------------------------
+
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  useEffect(() => {
+    if (!sectionsEditMode) setSelectedId(null);
+  }, [sectionsEditMode]);
 
   const applyData = useCallback((next: MeetTheSpeakerData) => {
     setData(next);
@@ -894,10 +907,27 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode).
-         *  PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
-         *  COMPRESSED (collapsed) by default. Click the header to expand. */}
-        {viewMode === "form" ? (
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
+         *  canvas, a compact "Selected Element" panel appears at the TOP
+         *  of this column showing ONLY the content-specific fields for
+         *  that element. The full form stays below (collapsed by default). */}
+        <div className="flex flex-col gap-3">
+          {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Only renders when an element is selected AND we're in section
+           *  edit mode (the canvas only sets selectedId in section edit mode). */}
+          {sectionsEditMode && selectedId && (
+            <MeetTheSpeakerSelectedPanel
+              selectedId={selectedId}
+              data={data}
+              onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
+            />
+          )}
+
+          {/* Full form (or JSON editor) — collapsed by default per TSK-0050 */}
+          {viewMode === "form" ? (
           <CollapsibleFormPanel
             title="meet-the-speaker.form"
             icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
@@ -943,6 +973,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
             )}
           </CollapsibleFormPanel>
         )}
+        </div>
 
         {/* Right: live preview */}
         <div
@@ -1050,6 +1081,8 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 onGraphicPosChange={handleGraphicPosChange}
                 onBrandingAssetPosChange={handleBrandingAssetPosChange}
                 onHeroShapeChange={handleHeroShapeChange}
+                selectedId={selectedId}
+                onSelectChange={setSelectedId}
               />
             </div>
           </div>
