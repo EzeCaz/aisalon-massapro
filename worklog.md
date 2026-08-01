@@ -9854,3 +9854,48 @@ Stage Summary:
      + pass selectedId/onSelectChange to both canvases)
   - src/app/admin/mockups/shared/selected-element-panel.tsx (NEW, ~870 lines)
 - Backup tag: `backup/pre-selected-element-panel-*` (created before changes).
+
+---
+Task ID: TSK-0052
+Agent: main
+Task: Two issues from user:
+  1. "sandbox is inactive" — dev server was not running.
+  2. Style 2: changing all font sizes of the text panels in the form had NO
+     effect — the form was not connected to the mockup.
+
+Work Log:
+- Confirmed dev server was dead; restarted `npm run dev` (PID 16342, port 3000).
+  Page compiles cleanly (HTTP 200 on /admin/mockups/speaker-intro).
+- Root cause for issue 2: `speaker-intro-style2-canvas.tsx` hardcoded ALL font
+  sizes and never read from `data.textStyles`. Style 1 (the default canvas)
+  was already fully wired. So all "Text styles" controls in
+  `speaker-intro-form-view.tsx` were a no-op for Style 2.
+- Wired Style 2 to `data.textStyles` using the same `?? DEFAULT` pattern as
+  Style 1, covering every text element that has a matching textStyles key:
+
+  * Header:
+      - Event title (eventTitle)    → eventName   (default 22px)
+      - Event subtitle              → eventDate   (default 13px)
+  * Speakers section:
+      - "SPEAKERS" label            → speakersLabel (default 11px)
+  * Style2SpeakerCard (now accepts textStyles prop):
+      - speaker.fullName            → speakerName        (default 16px)
+      - titleCompany                → speakerTitle       (default 11.5px)
+      - speaker.bio                 → speakerBio         (default 11.5px)
+      - session-time row            → speakerSessionTime (default 11.5px)
+  * Style2LocationPin (now accepts fontSize + color props):
+      - pin label                   → locationPinLabel   (default 11px)
+  * Footer:
+      - "In collab with"            → collaboratorsLabel (default 9px)
+      - "Sponsored by"              → sponsorsLabel      (default 9px)
+
+  Each textStyles entry supports fontSize + color + align (same as Style 1).
+  Defaults preserve the original Style 2 visual baseline, so the change is
+  invisible until the user actually sets a value in the form.
+- Verified: page compiles with no errors; committed as 97a0f2a and pushed.
+
+Stage Summary:
+- Dev server is back up on port 3000.
+- Style 2 form → mockup wiring is now complete. Changing any text-style
+  font size / color / align in the form will now live-update Style 2.
+- Commit: 97a0f2a "TSK-0052: Wire Style 2 canvas to data.textStyles"
