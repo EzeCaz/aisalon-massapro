@@ -9736,3 +9736,121 @@ Stage Summary:
   just the header bar) and animated.
 - Same design language across all 5 mockups for consistency.
 - Backup tag: `backup/pre-compressed-form-20260801-192913`
+
+---
+Task ID: TSK-0051
+Agent: main (claude)
+Task: When user clicks an element (speakers section, image, logo, etc.) on the
+canvas, open a NEW compact section AT THE TOP of the form that shows ONLY the
+specific settings for the selected element. The full form stays below.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0050 work).
+- Read speaker-intro-form-view.tsx (1718 lines) to map all content fields
+  per section (event / speakers / hero / location-pins / sponsors /
+  collaborators / branding).
+- Read speaker-intro-canvas.tsx + speaker-intro-style2-canvas.tsx to find
+  where selectedId state lived (in each canvas — local useState, not
+  lifted to the editor).
+- Used Explore agent to map the full selection flow: SectionBox.handleMouseDown
+  → onSelect → canvas.setSelectedId → ObjectPropertiesPanel rendered as
+  floating overlay on the canvas (NOT in the form column).
+- Created backup tag `backup/pre-selected-element-panel-20260802-2025-something`.
+
+Changes applied (4 files):
+
+1. src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+   - Added `selectedId?: string | null` + `onSelectChange?: (id: string | null) => void` to Props.
+   - Destructured `selectedId: selectedIdProp` + `onSelectChange` in component.
+   - Replaced local `useState<string | null>(null)` with:
+     `const selectedId = selectedIdProp ?? null;`
+     `const setSelectedId = useCallback((id) => onSelectChange?.(id), [onSelectChange]);`
+   - Added `useCallback` to React import.
+
+2. src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+   - Same changes as above (Props + destructure + replace local state + useCallback import).
+
+3. src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+   - Added `const [selectedId, setSelectedId] = useState<string | null>(null);` (lifted state).
+   - Added useEffect to reset selectedId when sectionsEditMode turns off.
+   - Imported `SelectedElementPanel` from `../shared/selected-element-panel`.
+   - Wrapped the left column in a `<div className="flex flex-col gap-3">` so
+     we can stack the new panel above the existing CollapsibleFormPanel.
+   - Renders `<SelectedElementPanel>` at the top of the column, only when
+     `sectionsEditMode && selectedId` are both truthy.
+   - Passed `selectedId={selectedId}` + `onSelectChange={setSelectedId}` to
+     BOTH canvases (Style 1/3 and Style 2).
+
+4. NEW FILE: src/app/admin/mockups/shared/selected-element-panel.tsx (~870 lines)
+   - Main `SelectedElementPanel` component:
+     * Pink gradient header bar with "Selected: {label}" + LIVE badge +
+       collapse chevron + close (X) button.
+     * Body scrolls (max-h 480px), pink border + shadow.
+     * Animation: slide-in on mount.
+   - `renderBody(selectedId, ...)` switch dispatches to per-element field blocks:
+     * "header"          → HeaderFields (event name/date/time/venue/topic + brand colors)
+     * "topic"           → TopicFields (event topic + font scale)
+     * "speakers"        → SpeakersFields (grid controls + per-speaker cards)
+     * "hero-image"      → HeroImageFields (URL + Replace + fit + gradient + scale)
+     * "hero-shape"      → HeroShapeFields (Style 2 gradient config)
+     * "qr"              → QrFields (QR code URL)
+     * "sponsors"        → SponsorsFields (list with logo Replace buttons)
+     * "collaborators"   → SponsorsFields (same component, group="collaborators")
+     * "footer"          → FooterFields (footer credit text)
+     * "style2-footer"   → FooterFields (same)
+     * "branding-asset"  → BrandingAssetFields (URL + Replace + height + reset pos)
+   - Per-speaker card: collapsible (chevron + name), shows order/role/name/
+     title/company/bio/session title+time/photo URL+Replace+preview/photo
+     size/visible toggle. Uses original array index for stable identity
+     (same pattern as the main form-view).
+   - Per-sponsor card: name + logo URL + Replace + preview + logo size + theme.
+   - Compact mini field primitives (MiniField / MiniInput / MiniSelect /
+     MiniTextarea / ReplaceButton / ImagePreview) for tight typography.
+   - All image Replace buttons reuse the existing `onPickImage(slot)` flow
+     from the editor — same modal, same brand library, no new wiring needed.
+   - Element labels map (ELEMENT_LABELS) for human-readable header text.
+
+Behavior:
+- When the user enters "Edit sections" mode and clicks an element on the
+  canvas (header, speakers, hero-image, hero-shape, qr, sponsors, footer,
+  branding-asset, etc.), the canvas calls onSelectChange(id) → editor's
+  selectedId state updates → the new SelectedElementPanel appears at the
+  TOP of the left form column with the content-specific fields for that
+  element.
+- The full form (CollapsibleFormPanel wrapping SpeakerIntroFormView) stays
+  BELOW the new panel, unchanged.
+- Clicking the X or turning off "Edit sections" hides the panel.
+- Image Replace buttons open the same image picker modal the canvas uses
+  (no duplicate modal logic).
+- Per-speaker cards are collapsible (click name to expand) to keep the
+  panel compact even with many speakers.
+- Clicking a different element on the canvas instantly swaps the panel's
+  contents (live, no full re-render of the form).
+
+Verification:
+- TypeScript check: ZERO new errors in modified files (pre-existing errors
+  in unrelated chart.tsx / email-campaign / referral / relay-recipients /
+  v7-scope.ts remain unchanged).
+- `next build`: ✓ Compiled successfully in 38.8s, 136/136 static pages
+  generated.
+- Committed as `20a3fc2` and pushed to remote.
+
+Stage Summary:
+- "Selected Element" panel now appears at the top of the form column when
+  the user clicks any element on the canvas in section-edit mode.
+- The panel shows ONLY the content-specific fields for the selected
+  element (text fields, image URL + Replace buttons, gradient config, etc.).
+- The full form (collapsed by default per TSK-0050) remains below.
+- selectedId state is now LIFTED from each canvas to the editor — both
+  canvases write via onSelectChange, the editor reads + passes to the new
+  panel.
+- Files modified (3) + new file (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (Props + destructure + replace local state with prop-derived)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (same)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+    (lifted state + useEffect reset + import + render above CollapsibleFormPanel
+     + pass selectedId/onSelectChange to both canvases)
+  - src/app/admin/mockups/shared/selected-element-panel.tsx (NEW, ~870 lines)
+- Backup tag: `backup/pre-selected-element-panel-*` (created before changes).
