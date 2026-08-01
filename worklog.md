@@ -9334,3 +9334,50 @@ Stage Summary:
   - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
     (added STYLE3_DEFAULTS + SECTION_DEFAULTS selector; replaced 18
      STYLE1_DEFAULTS references with SECTION_DEFAULTS)
+
+---
+Task ID: TSK-0045
+Agent: main
+Task: Update Style 2 speaker-intro defaults for 3 sections: speakers, hero-image, hero-shape. User specified exact values from the Properties panels.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0044 work).
+- Read speaker-intro-style2-canvas.tsx — found STYLE2_DEFAULTS (lines 97-125)
+  with 5 sections (header, hero-shape, hero-image, speakers, style2-footer).
+- Verified heroGradientConfig defaults (line 812-818) already match the
+  user's Hero Shape Properties spec exactly:
+    shape=rectangle, colors=["#311B92","#1A237E","#0B0B2E"],
+    direction=180, opacity=0.9, rotation=0
+  fillMode defaults to "gradient" (verified in hero-shape.tsx line 190)
+  — no change needed for the gradient config.
+
+User-specified Style 2 defaults (parsed from the Properties panel pastes):
+  - speakers:   X=-7.7,  Y=-2.8,  W=658, H=auto, Scale=67%,  z=60
+  - hero-image: X=40.7,  Y=10.9,  W=690, H=auto, Scale=105%, z=50
+  - hero-shape: X=42.3,  Y=12.8,  W=632, H=663,  Scale=121%, z=40
+
+Comparison with previous Style 2 defaults:
+  - speakers:   was X=-8.53358, Y=19.9229, W=891, Scale=74.69%, z=60
+  - hero-image: was X=55, Y=10, W=540, H=640, Scale=100%, z=50
+  - hero-shape: was X=55, Y=10, W=540, H=640, Scale=110%, z=40
+
+Fix applied:
+- /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx:
+  Updated 3 entries in STYLE2_DEFAULTS (lines 102-119):
+    * "hero-shape": pos {x:42.3, y:12.8}, boxSize {width:632, height:663}, scale:1.21, z:40
+    * "hero-image": pos {x:40.7, y:10.9}, boxSize {width:690} (H=auto), scale:1.05, z:50
+    * speakers:    pos {x:-7.7, y:-2.8}, boxSize {width:658} (H=auto), scale:0.67, z:60
+  header + style2-footer unchanged.
+- No changes to heroGradientConfig (already matches the user's spec).
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors (exit 0).
+- Header + style2-footer unchanged.
+
+Stage Summary:
+- Style 2 defaults updated for speakers / hero-image / hero-shape.
+- Gradient config (shape/colors/direction/opacity/rotation) already matched
+  the user's spec — no change needed.
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (3 entries in STYLE2_DEFAULTS updated)

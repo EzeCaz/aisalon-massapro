@@ -99,22 +99,24 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   // updated to X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50 (was
   // X=0, Y=0, W=1200, H=80, Scale=100% per TSK-0031).
   header:       { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 50 },
-  // PER USER SPEC 2026-08-01 (TSK-0037): hero-shape defaults updated
-  // to Scale=110% (was 100%). Position/Size already match the spec
-  // (X=55, Y=10, W=540, H=640, z=40).
-  "hero-shape": { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1.10, z: 40 },
-  // PER USER SPEC 2026-08-01 (TSK-0037): hero-image is now a full
-  // SectionBox (independent of hero-shape) so the user gets 8-direction
-  // resize arrows on the hero image that DON'T affect the hero shape.
-  // Default pos/size matches the right panel area (LEFT_W..CANVAS_W,
-  // HEADER_H..HEADER_H+MAIN_H) so the image starts where the user
-  // expects, but can be freely moved/resized independently of the
-  // gradient shape behind it.
-  "hero-image":  { pos: { x: 55, y: 10 }, boxSize: { width: 540, height: 640 }, scale: 1, z: 50 },
-  // PER USER SPEC 2026-07-31 (TSK-0035): updated speakers defaults to
-  // match the desired rendered HTML spec — top=19.9229%, left=-8.53358%,
-  // width=891px, height=auto, transform=scale(0.746885), z-index=60.
-  speakers:     { pos: { x: -8.53358, y: 19.9229 }, boxSize: { width: 891 }, scale: 0.746885, z: 60 },
+  // PER USER SPEC 2026-08-02 (TSK-0045): hero-shape defaults updated to
+  // X=42.3, Y=12.8, W=632, H=663, Scale=121%, z=40 (was X=55, Y=10,
+  // W=540, H=640, Scale=110% per TSK-0037). The user-specified gradient
+  // config (rectangle / solid→gradient / colors #311B92 #1A237E #0B0B2E
+  // / direction 180° / opacity 90% / rotation 0°) is handled separately
+  // by `heroGradientConfig` below — these are the section layout values
+  // from the Position & Size block of the Hero Shape Properties panel.
+  "hero-shape": { pos: { x: 42.3, y: 12.8 }, boxSize: { width: 632, height: 663 }, scale: 1.21, z: 40 },
+  // PER USER SPEC 2026-08-02 (TSK-0045): hero-image defaults updated to
+  // X=40.7, Y=10.9, W=690, H=auto, Scale=105%, z=50 (was X=55, Y=10,
+  // W=540, H=640, Scale=100% per TSK-0037). Note H=auto (the user left
+  // the H field empty in the Properties panel — the box auto-sizes to
+  // the image aspect ratio, like Style 1's hero).
+  "hero-image":  { pos: { x: 40.7, y: 10.9 }, boxSize: { width: 690 }, scale: 1.05, z: 50 },
+  // PER USER SPEC 2026-08-02 (TSK-0045): speakers defaults updated to
+  // X=-7.7, Y=-2.8, W=658, H=auto, Scale=67%, z=60 (was X=-8.53358,
+  // Y=19.9229, W=891, Scale=74.69% per TSK-0035).
+  speakers:     { pos: { x: -7.7, y: -2.8 }, boxSize: { width: 658 }, scale: 0.67, z: 60 },
   // PER USER SPEC 2026-07-31 (TSK-0030): renamed section id "sponsors" →
   // "style2-footer" to UNLINK it from Style 1/3's "sponsors" section.
   // Style 1/3's sponsors section is the SPONSORS list (bottom-right);
