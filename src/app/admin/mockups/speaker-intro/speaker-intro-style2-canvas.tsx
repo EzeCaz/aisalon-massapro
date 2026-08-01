@@ -164,6 +164,11 @@ type Props = {
    *  PER USER SPEC 2026-07-31 (TSK-0028): the hero image should be treated
    *  as an image (not a section), but still support free-form dragging. */
   onHeroPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0049): Called when the user clicks the
+   *  "Set as default" button (in the Object Properties Panel, the
+   *  HeroShapePanel, or the toolbar next to Style 3). Saves the ENTIRE
+   *  current mockup state as the default for the current style. */
+  onSetAsDefault?: () => void;
   previewScale?: number;
 };
 
@@ -510,6 +515,7 @@ function HeroShapePanel({
   onZChange,
   peers,
   onDeselect,
+  onSetAsDefault,
 }: {
   config: HeroGradientConfig;
   onChange: (patch: Partial<HeroGradientConfig>) => void;
@@ -523,6 +529,9 @@ function HeroShapePanel({
   onZChange?: (z: number) => void;
   peers?: number[];
   onDeselect?: () => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0049): saves the entire current style
+   *  + all properties as the default for the current style. */
+  onSetAsDefault?: () => void;
 }) {
   const px = pos?.x ?? 0;
   const py = pos?.y ?? 0;
@@ -727,6 +736,20 @@ function HeroShapePanel({
               </div>
             </div>
           )}
+
+          {/* PER USER SPEC 2026-08-02 (TSK-0049): "Set as default" button —
+              same as the one in ObjectPropertiesPanel. Saves the ENTIRE
+              current mockup state as the default for the current style. */}
+          {onSetAsDefault && (
+            <button
+              type="button"
+              onClick={onSetAsDefault}
+              title="Save the entire current style + all section properties as the default for this style. Click Reset to restore."
+              className="w-full rounded border border-[#FF005A] bg-[#FF005A]/5 px-2 py-1.5 text-[0.6rem] font-bold text-[#FF005A] hover:bg-[#FF005A]/10"
+            >
+              ★ Set as default
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -752,6 +775,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       onSectionZChange,
       onHeroShapeChange,
       onHeroPosChange,
+      onSetAsDefault,
       previewScale = 1,
     },
     ref,
@@ -1520,6 +1544,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId as SectionId, sz)}
               scale={selectedLayout.scale}
               onScaleChange={(s) => onSectionResize?.(selectedId as SectionId, s)}
+              onSetAsDefault={onSetAsDefault}
             />
           )}
 
@@ -1537,6 +1562,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               onZChange={(z) => onSectionZChange?.("hero-shape", z)}
               peers={sectionPeerZs}
               onDeselect={() => setSelectedId(null)}
+              onSetAsDefault={onSetAsDefault}
             />
           )}
 

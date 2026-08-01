@@ -53,6 +53,13 @@ import {
  */
 
 const STORAGE_KEY = "speaker-intro-data-v4";
+// PER USER SPEC 2026-08-02 (TSK-0049): Per-style default storage keys.
+// When the user clicks "Set as default" (in the properties panel or the
+// toolbar next to Style 3), the ENTIRE current `data` is saved under
+// `speaker-intro-style-defaults-{style}`. When the user clicks "Reset",
+// if a saved default exists for the current style, it is loaded instead
+// of SAMPLE_DATA.
+const STYLE_DEFAULTS_KEY_PREFIX = "speaker-intro-style-defaults-";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */
@@ -70,6 +77,9 @@ export function SpeakerIntroEditor({ events }: Props) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PER USER SPEC 2026-08-02 (TSK-0049): brief "Saved!" feedback shown on
+  // the "Set as default" button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.5);
   /** Edit mode = image areas are interactive (drag/wheel/click). */
   const [editMode, setEditMode] = useState<boolean>(false);
@@ -521,16 +531,52 @@ export function SpeakerIntroEditor({ events }: Props) {
 
   // --- toolbar actions ------------------------------------------------
 
+  /**
+   * PER USER SPEC 2026-08-02 (TSK-0049):
+   * Save the ENTIRE current mockup state (style + all section properties +
+   * image placements + hero gradient config + etc.) as the default for the
+   * CURRENT style. Stored in localStorage under
+   * `speaker-intro-style-defaults-{style}`. When the user later clicks
+   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   *
+   * This is LOCAL per-style default (browser-only). It is separate from
+   * the per-event server-side default saved by `handleSaveAsDefault`
+   * (which uploads a PNG snapshot + dataJson to the API).
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const style = data.style ?? "style1";
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   function handleReset() {
-    if (
-      !confirm(
-        "Reset to the sample data? Any local edits you've made will be lost.",
-      )
-    ) {
+    const style = data.style ?? "style1";
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    let savedDefault: SpeakerIntroData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as SpeakerIntroData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? `Reset to the saved default for "${style}"? Any local edits you've made will be lost.`
+      : "Reset to the sample data? Any local edits you've made will be lost.";
+    if (!confirm(msg)) {
       return;
     }
-    applyData(SAMPLE_DATA);
-    setSelectedEventSlug("");
+    applyData(savedDefault ?? SAMPLE_DATA);
+    if (!savedDefault) {
+      setSelectedEventSlug("");
+    }
   }
 
   async function handleCopyJson() {
@@ -987,6 +1033,31 @@ export function SpeakerIntroEditor({ events }: Props) {
                   );
                 })}
               </div>
+              {/* PER USER SPEC 2026-08-02 (TSK-0049): "Set as default"
+                  button next to the Style 3 button. Saves the ENTIRE
+                  current mockup state (style + all section properties +
+                  image placements) as the default for the current style.
+                  Click "Reset" to restore. */}
+              <button
+                type="button"
+                onClick={handleSetAsDefault}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                  savedDefaultFeedback
+                    ? "bg-[#27C93F] text-white"
+                    : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+                }`}
+                title={`Save the entire current style (${data.style ?? "style1"}) + all section properties as the default. Click Reset to restore.`}
+              >
+                {savedDefaultFeedback ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Saved!
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5" /> Set as default
+                  </>
+                )}
+              </button>
             </div>
           </div>
           <div
@@ -1025,6 +1096,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onSectionZChange={handleSectionZChange}
                   onHeroShapeChange={handleHeroShapeChange}
                   onHeroPosChange={handleHeroPosChange}
+                  onSetAsDefault={handleSetAsDefault}
                 />
               ) : (
                 <SpeakerIntroCanvas
@@ -1047,6 +1119,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onSectionZChange={handleSectionZChange}
                   onBrandingAssetPosChange={handleBrandingAssetPosChange}
                   onHeroPosChange={handleHeroPosChange}
+                  onSetAsDefault={handleSetAsDefault}
                 />
               )}
             </div>

@@ -9576,3 +9576,110 @@ Stage Summary:
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (STYLE2_DEFAULTS: 5 entries updated + EditableImage placement
      fallback updated + comment updates)
+
+---
+Task ID: TSK-0049
+Agent: main
+Task: Add "Set as default" button to (1) the properties panel and (2) the
+toolbar next to the Style 3 button. When clicked, the ENTIRE current style
++ exact properties are saved as the default for the current style. The
+existing "Reset" button loads the saved default if it exists.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0048 work).
+- Read speaker-intro-editor.tsx, speaker-intro-style2-canvas.tsx,
+  speaker-intro-canvas.tsx, shared/section-edit.tsx, shared/hero-shape.tsx
+  to understand the properties panel structure, the toolbar layout, and
+  the existing handleReset/handleSaveAsDefault functions.
+- Found existing `handleSaveAsDefault` (line 585) — this is a SEPARATE
+  per-event server-side save (uploads PNG + dataJson to the API). The new
+  "Set as default" is a LOCAL per-style default (localStorage only), so
+  no conflict.
+
+Changes applied (4 files):
+
+1. src/app/admin/mockups/shared/section-edit.tsx
+   - ObjectPropertiesPanel: added `onSetAsDefault?: () => void` prop.
+   - Renders a "★ Set as default" button at the bottom of the panel
+     (after the Layer Front/Back section) when `onSetAsDefault` is
+     provided. Pink border + pink text on white-pink tinted background.
+
+2. src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+   - Props: added `onSetAsDefault?: () => void`.
+   - Destructured `onSetAsDefault` in the component.
+   - HeroShapePanel: added `onSetAsDefault?: () => void` prop + renders
+     the same "★ Set as default" button at the bottom.
+   - Wired `onSetAsDefault={onSetAsDefault}` to both the
+     ObjectPropertiesPanel (for non-hero-shape sections) and the
+     HeroShapePanel (for the hero-shape section).
+
+3. src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx (Style 1/3)
+   - Props: added `onSetAsDefault?: () => void`.
+   - Destructured `onSetAsDefault` in the component.
+   - Wired `onSetAsDefault={onSetAsDefault}` to both ObjectPropertiesPanel
+     instances (the hero-image panel + the standard section panel).
+
+4. src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+   - Added `STYLE_DEFAULTS_KEY_PREFIX = "speaker-intro-style-defaults-"`
+     constant.
+   - Added `savedDefaultFeedback` state (boolean, 2-second timeout).
+   - Added `handleSetAsDefault` callback:
+     - Saves the ENTIRE current `data` to
+       `localStorage.setItem("speaker-intro-style-defaults-" + style,
+       JSON.stringify(data))`.
+     - Sets `savedDefaultFeedback=true` for 2 seconds (button shows
+       "✓ Saved!" in green).
+   - Modified `handleReset`:
+     - Checks `localStorage.getItem("speaker-intro-style-defaults-" +
+       style)` for a saved default.
+     - If found: confirm dialog says "Reset to the saved default for
+       '{style}'?" and loads the saved default.
+     - If not found: confirm dialog says "Reset to the sample data?"
+       (existing behavior) and loads SAMPLE_DATA.
+   - Added "Set as default" button in the toolbar, immediately after
+     the Style 1/2/3 segmented control (next to Style 3). Pink border
+     + pink text; shows "✓ Saved!" in green for 2 seconds after click.
+   - Passed `onSetAsDefault={handleSetAsDefault}` to both
+     SpeakerIntroStyle2Canvas and SpeakerIntroCanvas.
+
+Behavior:
+- "Set as default" (properties panel button): saves the ENTIRE current
+  mockup state (style + all section positions/sizes/scales/z + hero
+  gradient config + image placements + etc.) as the default for the
+  current style.
+- "Set as default" (toolbar button next to Style 3): same action.
+- "Reset" (existing toolbar button): if a saved default exists for the
+  current style, loads it; otherwise loads SAMPLE_DATA (existing
+  behavior).
+- The saved default is LOCAL (browser localStorage), per-style, and
+  separate from the existing per-event server-side save
+  (`handleSaveAsDefault`).
+
+Verification:
+- TypeScript check: `npx tsc --noEmit` reports ZERO errors in any
+  speaker-intro / section-edit / hero-shape file (pre-existing unrelated
+  errors in chart.tsx / email-campaign / referral / relay-recipients /
+  v7-scope.ts remain unchanged).
+
+Stage Summary:
+- Two "Set as default" entry points added:
+  1. In the Object Properties Panel (and HeroShapePanel) — "★ Set as
+     default" button at the bottom of the panel.
+  2. In the toolbar, next to the Style 3 button — "Set as default"
+     button with Save icon.
+- Both buttons save the ENTIRE current mockup state as the default for
+  the current style (localStorage, per-style key).
+- The existing "Reset" button now loads the saved default if it exists
+  (otherwise falls back to SAMPLE_DATA).
+- 2-second "✓ Saved!" feedback on the toolbar button.
+- Files modified (4):
+  - src/app/admin/mockups/shared/section-edit.tsx
+    (ObjectPropertiesPanel: + onSetAsDefault prop + button)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (Props + HeroShapePanel + wire to both panels)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (Props + wire to both ObjectPropertiesPanel instances)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-editor.tsx
+    (STYLE_DEFAULTS_KEY_PREFIX + savedDefaultFeedback state +
+     handleSetAsDefault + modified handleReset + toolbar button +
+     onSetAsDefault passed to both canvases)

@@ -1198,6 +1198,7 @@ export function ObjectPropertiesPanel({
   onBoxSizeChange,
   scale,
   onScaleChange,
+  onSetAsDefault,
 }: {
   label?: string;
   pos?: SectionPos;
@@ -1223,6 +1224,14 @@ export function ObjectPropertiesPanel({
   scale?: number;
   /** Called when the user types a new scale percentage (e.g. 150 = 150%). */
   onScaleChange?: (scale: number) => void;
+  /**
+   *  PER USER SPEC 2026-08-02 (TSK-0049): Called when the user clicks the
+   *  "Set as default" button at the bottom of the panel. Saves the ENTIRE
+   *  current mockup state (all sections + style + image placements) as the
+   *  default for the current style. The parent editor handles the actual
+   *  localStorage save + feedback.
+   */
+  onSetAsDefault?: () => void;
 }) {
   const px = pos?.x ?? 0;
   const py = pos?.y ?? 0;
@@ -1422,6 +1431,22 @@ export function ObjectPropertiesPanel({
               </button>
             </div>
           </div>
+        )}
+
+        {/* PER USER SPEC 2026-08-02 (TSK-0049): "Set as default" button —
+            saves the ENTIRE current mockup state (all sections + style +
+            image placements) as the default for the current style. The
+            parent editor handles the actual localStorage save + feedback.
+            Shown only when onSetAsDefault is provided. */}
+        {onSetAsDefault && (
+          <button
+            type="button"
+            onClick={onSetAsDefault}
+            title="Save the entire current style + all section properties as the default for this style. Click Reset to restore."
+            className="w-full rounded border border-[#FF005A] bg-[#FF005A]/5 px-2 py-1.5 text-[0.6rem] font-bold text-[#FF005A] hover:bg-[#FF005A]/10"
+          >
+            ★ Set as default
+          </button>
         )}
       </div>
     </div>

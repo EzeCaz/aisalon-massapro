@@ -107,6 +107,11 @@ type Props = {
    * Photo position (X%, Y%)".
    */
   onHeroPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0049): Called when the user clicks the
+   *  "Set as default" button (in the Object Properties Panel or the
+   *  toolbar next to Style 3). Saves the ENTIRE current mockup state
+   *  as the default for the current style. */
+  onSetAsDefault?: () => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
 };
@@ -132,6 +137,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       onSectionZChange,
       onBrandingAssetPosChange,
       onHeroPosChange,
+      onSetAsDefault,
       previewScale = 1,
     },
     ref,
@@ -1133,6 +1139,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             onBoxSizeChange={(sz) => onHeroBoxResize?.(sz)}
             scale={data.heroOverlay.imageScale ?? SECTION_DEFAULTS["hero-image"].scale ?? 1}
             onScaleChange={(s) => onHeroScaleXChange?.(s)}
+            onSetAsDefault={onSetAsDefault}
           />
         )}
         {sectionsEditable && selectedId && selectedId !== "hero-image" && (
@@ -1149,6 +1156,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
             scale={data.sectionLayout?.[selectedId]?.scale ?? SECTION_DEFAULTS[selectedId]?.scale ?? 1}
             onScaleChange={(s) => onSectionResize?.(selectedId, s)}
+            onSetAsDefault={onSetAsDefault}
           />
         )}
 
