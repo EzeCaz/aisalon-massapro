@@ -980,32 +980,116 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 </span>
               </div>
 
-              {/* Speaker card grid — auto columns based on count */}
-              <div
-                style={{
-                  flex: 1,
-                  display: "grid",
-                  gap: "14px",
-                  gridTemplateColumns:
-                    visibleSpeakers.length <= 1
-                      ? "1fr"
-                      : visibleSpeakers.length <= 4
-                      ? "1fr 1fr"
-                      : visibleSpeakers.length <= 9
-                      ? "1fr 1fr 1fr"
-                      : "1fr 1fr 1fr 1fr",
-                  gridAutoRows: "1fr",
-                  alignContent: "stretch",
-                }}
-              >
-                {visibleSpeakers.map((s) => (
-                  <Style2SpeakerCard
-                    key={`${s.order}-${s.fullName}`}
-                    speaker={s}
-                    showSessionTime={data.speakersLayout?.showSessionTime !== false}
-                  />
-                ))}
-              </div>
+              {/* Speaker card grid — PER USER SPEC 2026-08-01 (TSK-0039):
+                  Connect the "Speaker grid layout" form control to the
+                  real speakers section. Previously this grid hard-coded
+                  the column count from `visibleSpeakers.length` and
+                  IGNORED `data.speakersLayout.columns` — so changing the
+                  "Columns" dropdown in the form had no effect on Style 2.
+                  Now we mirror Style 1's logic: explicit `columns` wins,
+                  otherwise auto-compute from visible speaker count
+                  (1-4 → 1 col, 5-8 → 2 cols, 9-12 → 3 cols, ...).
+                  Also respects `flowDirection` (row/col) and
+                  `lastRowAlign` (left/center/spread) for incomplete rows. */}
+              {(() => {
+                const layout = data.speakersLayout ?? {};
+                const autoColumns = Math.min(
+                  6,
+                  Math.max(1, Math.ceil(visibleSpeakers.length / 4)),
+                ) as 1 | 2 | 3 | 4 | 5 | 6;
+                const columns = layout.columns ?? autoColumns;
+                const flow = layout.flowDirection ?? "row";
+                const lastRowAlign = layout.lastRowAlign ?? "spread";
+                const rowsPerColumn = layout.rowsPerColumn ?? [];
+
+                // Sort speakers by order for consistent placement.
+                const sortedSpeakers = [...visibleSpeakers]
+                  .sort((a, b) => a.order - b.order);
+
+                // Build the (row, col) position for each speaker.
+                let positions: Array<{ row: number; col: number }> = [];
+                if (flow === "row") {
+                  positions = sortedSpeakers.map((_, i) => ({
+                    row: Math.floor(i / columns),
+                    col: i % columns,
+                  }));
+                } else {
+                  if (rowsPerColumn.length >= columns) {
+                    const colOffsets: number[] = [0];
+                    for (let c = 1; c < columns; c++) {
+                      colOffsets.push(colOffsets[c - 1] + rowsPerColumn[c - 1]);
+                    }
+                    positions = sortedSpeakers.map((_, i) => {
+                      let col = 0;
+                      let row = i;
+                      for (let c = 0; c < columns; c++) {
+                        if (i < colOffsets[c] + rowsPerColumn[c]) {
+                          col = c;
+                          row = i - colOffsets[c];
+                          break;
+                        }
+                      }
+                      return { row, col };
+                    });
+                  } else {
+                    const rowsPerCol = Math.ceil(sortedSpeakers.length / columns);
+                    positions = sortedSpeakers.map((_, i) => ({
+                      col: Math.floor(i / rowsPerCol),
+                      row: i % rowsPerCol,
+                    }));
+                  }
+                }
+
+                const maxRow = positions.reduce((m, p) => Math.max(m, p.row), 0);
+                const lastRowCount = positions.filter((p) => p.row === maxRow).length;
+                const isLastRowIncomplete = lastRowCount < columns;
+
+                return (
+                  <div
+                    style={{
+                      flex: 1,
+                      display: "grid",
+                      gap: "14px",
+                      gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                      gridAutoRows: "1fr",
+                      alignContent: "stretch",
+                    }}
+                  >
+                    {sortedSpeakers.map((s, i) => {
+                      const pos = positions[i];
+                      let gridColumnStart = pos.col + 1;
+                      if (isLastRowIncomplete && pos.row === maxRow) {
+                        if (lastRowAlign === "spread") {
+                          const lastRowSpeakersBefore = positions.filter(
+                            (p) => p.row === maxRow && p.col < pos.col,
+                          ).length;
+                          gridColumnStart =
+                            Math.round(
+                              (lastRowSpeakersBefore * columns) / lastRowCount,
+                            ) + 1;
+                        } else if (lastRowAlign === "center") {
+                          const empty = columns - lastRowCount;
+                          gridColumnStart = pos.col + Math.floor(empty / 2) + 1;
+                        }
+                      }
+                      return (
+                        <div
+                          key={`${s.order}-${s.fullName}`}
+                          style={{
+                            gridColumnStart,
+                            gridRowStart: pos.row + 1,
+                          }}
+                        >
+                          <Style2SpeakerCard
+                            speaker={s}
+                            showSessionTime={data.speakersLayout?.showSessionTime !== false}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </SectionBox>
 
@@ -1106,6 +1190,22 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 (since this SectionBox has no overflow-hidden), exactly
                 like Style 1's DraggablePhotoContainer. */}
             {data.heroOverlay?.imageUrl ? (
+              // PER USER SPEC 2026-08-01 (TSK-0040): Style 2 hero image
+              // corner resize handles were not working because the default
+              // `onSizeChange` updates `data.heroOverlay.imageScale` which
+              // is NOT used by Style 2's SectionBox-based hero (Style 2
+              // uses `data.sectionLayout["hero-image"].boxSize/scale` for
+              // the container, and `data.heroOverlay.imagePlacement.zoom`
+              // for the image transform). So dragging the corner handles
+              // updated a field that had no visual effect.
+              //
+              // FIX: pass a custom `onSizeChange` that updates the image
+              // PLACEMENT zoom (`data.heroOverlay.imagePlacement.zoom`)
+              // via `onPlacementChange`. This makes the corner handles
+              // zoom the image in/out — the same effect as scroll-wheel
+              // zoom, but via corner drag. The `sizeMultiplier` prop is
+              // set from `imagePlacement.zoom` so the on-screen readout
+              // reflects the actual current zoom.
               <EditableImage
                 slot={{ kind: "hero" }}
                 src={data.heroOverlay.imageUrl}
@@ -1115,9 +1215,20 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
-                onSizeChange={onSizeChange}
-                sizeMultiplier={data.heroOverlay.imageScale ?? 1}
-                sizeLabel="hero scale"
+                onSizeChange={(slot, newMultiplier) => {
+                  if (slot.kind !== "hero") {
+                    onSizeChange?.(slot, newMultiplier);
+                    return;
+                  }
+                  const currentPlacement = data.heroOverlay.imagePlacement;
+                  onPlacementChange?.(slot, {
+                    focusX: currentPlacement?.focusX ?? 50,
+                    focusY: currentPlacement?.focusY ?? 50,
+                    zoom: Math.max(0.01, newMultiplier),
+                  });
+                }}
+                sizeMultiplier={data.heroOverlay.imagePlacement?.zoom ?? 1}
+                sizeLabel="hero zoom"
                 containerClass="absolute inset-0"
                 objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
               />
