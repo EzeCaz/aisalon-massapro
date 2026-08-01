@@ -9438,3 +9438,34 @@ Stage Summary:
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (STYLE2_DEFAULTS hero-image entry + EditableImage placement fallback
      + removed minZoom={1})
+
+---
+Task ID: TSK-0047
+Agent: main
+Task: Update Style 1 and Style 3 QR section defaults to X=91.6, Y=84.9, W=auto, H=auto, Scale=100%, z=50. The QR code moves from the top-right (Y=2.5) to the BOTTOM-right (Y=84.9) of the canvas, and the scale resets to 100% (was 124% for Style 1).
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0046 work).
+- Read speaker-intro-canvas.tsx — found STYLE1_DEFAULTS (qr at line 231)
+  and STYLE3_DEFAULTS (qr at line 258).
+
+Fix applied (1 file: src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx):
+- Updated STYLE1_DEFAULTS.qr (line 233):
+  - OLD: pos {x:91.6, y:2.5}, scale:1.24, z:50
+  - NEW: pos {x:91.6, y:84.9}, scale:1, z:50
+- Updated STYLE3_DEFAULTS.qr (line 260):
+  - OLD: pos {x:90.1, y:80.2}, scale:1, z:50
+  - NEW: pos {x:91.6, y:84.9}, scale:1, z:50
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors (exit 0).
+- Style 2 has its own canvas and doesn't have a "qr" section (it has a
+  "style2-footer" section instead), so no Style 2 change needed.
+
+Stage Summary:
+- Style 1 + Style 3 QR section defaults both updated to user spec:
+  X=91.6, Y=84.9, W=auto, H=auto, Scale=100%, z=50.
+- The QR code now appears at the bottom-right of the canvas (was top-right).
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (2 qr entries: STYLE1_DEFAULTS + STYLE3_DEFAULTS)

@@ -225,10 +225,12 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       // updated to X=-12.8, Y=21.9, W=864, H=45, Scale=65% (was
       // X=-13, Y=14.4, W=951, H=auto, Scale=65% per TSK-0031).
       topic:    { pos: { x: -12.8, y: 21.9 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
-      // PER USER SPEC 2026-07-31 (TSK-0034): updated QR defaults to
-      // X=91.6, Y=2.5, Scale=124% (was X=91, Y=2.2, Scale=1.14 per
-      // TSK-0032).
-      qr:       { pos: { x: 91.6, y: 2.5 }, scale: 1.24, z: 50 },
+      // PER USER SPEC 2026-08-02 (TSK-0047): Style 1/3 QR defaults
+      // updated to X=91.6, Y=84.9, Scale=100% (was X=91.6, Y=2.5,
+      // Scale=124% per TSK-0034). The QR code moves from the top-right
+      // to the BOTTOM-right of the canvas, and the scale resets to 100%
+      // (was 124% which made it overflow the canvas top edge).
+      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
       // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
@@ -255,7 +257,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const STYLE3_DEFAULTS: Record<string, SectionLayoutEntry> = {
       header:   { pos: { x: -0.6, y: 1.2 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
       topic:    { pos: { x: -12.7, y: 15.7 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
-      qr:       { pos: { x: 90.1, y: 80.2 }, scale: 1, z: 50 },
+      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
       speakers: { pos: { x: -6.1, y: 26.2 }, boxSize: { width: 653 }, scale: 0.76, z: 50 },
