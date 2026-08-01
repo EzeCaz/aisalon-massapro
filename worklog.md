@@ -9049,3 +9049,85 @@ Stage Summary:
 - Files modified: src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
 - Hero image still supports pan/zoom/replace via EditableImage (when `editable` mode is on). When `sectionsEditable` mode is on, the SectionBox drag/resize takes precedence (EditableImage pan is gated on `editable`).
 - Backward compat note: existing mockups that saved `data.heroOverlay.pos` will no longer use that value for positioning (position is now read from `data.sectionLayout["hero-image"].pos` with the right-panel default as fallback). If a user had a custom hero position saved via the old grip-bar drag, they may need to re-position once.
+
+---
+Task ID: TSK-0041
+Agent: main
+Task: Style 2 speaker-intro fixes — (1) Speaker grid columns dropdown only had 1/2/3 options (user wanted 4+ for 4 speakers); (2) Hero image corner resize handles in Edit Images mode were zooming the image content instead of resizing the container
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0037 work).
+- Read speaker-intro-style2-canvas.tsx (1546 lines) — found the hero-image
+  SectionBox (lines 1155-1258) with EditableImage inside. The EditableImage's
+  onSizeChange callback (lines 1218-1229) was wired to update
+  data.heroOverlay.imagePlacement.zoom via onPlacementChange — this ZOOMED
+  the image content but left the SectionBox container unchanged.
+- Read speaker-intro-form-view.tsx — found the Columns dropdown (lines 514-528)
+  only had options 1, 2, 3. The underlying type (types.ts lines 207) allows
+  1-6, but the dropdown was missing 4, 5, 6.
+- Read section-edit.tsx SectionBox + ResizeHandle8 — confirmed the SectionBox
+  has its OWN 8-direction resize handles (corner = scale, mid-edge = boxSize)
+  that work independently. These appear in Edit Sections mode.
+- Read speaker-intro-canvas.tsx EditableImage (lines 1143-1406) — confirmed
+  the EditableImage has its OWN 4 corner resize handles (NW/NE/SE/SW) that
+  appear in Edit Images mode. These call onSizeChange(slot, newMultiplier).
+
+Issue 1 fix (columns dropdown):
+- Updated /home/z/my-project/src/app/admin/mockups/shared/speaker-intro-form-view.tsx
+  lines 514-536: expanded the Columns <select> from 3 options (1/2/3) to 6
+  options (1/2/3/4/5/6). Updated the TypeScript cast from `as 1 | 2 | 3` to
+  `as 1 | 2 | 3 | 4 | 5 | 6` to match the underlying SpeakersLayout type.
+- Rationale: with 4 speakers, the user can now select "4 columns" to put all
+  4 speakers in a single row. Previously they could only choose 1/2/3, which
+  made it seem like the dropdown "didn't change the mockup" when they wanted
+  4 columns but couldn't select it.
+
+Issue 2 fix (hero image corner resize):
+- Updated /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+  lines 1192-1245: changed the EditableImage's onSizeChange callback from
+  updating imagePlacement.zoom (zoom) to calling onSectionResize("hero-image",
+  newMultiplier) (container scale).
+- Changed sizeMultiplier prop from data.heroOverlay.imagePlacement?.zoom ?? 1
+  to effectiveLayout("hero-image").scale ?? 1 so the on-screen readout shows
+  the container scale (not the image zoom).
+- Changed sizeLabel from "hero zoom" to "hero size".
+- Rationale: the user said "enlarge or reduce (not zoom in or out), using the
+  image resize corner arrow, does not do anything". The corner handles WERE
+  doing something (zooming the image), but the container stayed the same size,
+  so the user perceived it as "not doing anything". Now the corner handles
+  resize the entire hero-image SectionBox container via CSS transform: scale(),
+  which is exactly "enlarge or reduce". The scroll-wheel zoom still works
+  independently via onPlacementChange → imagePlacement.zoom.
+
+Verification (browser testing via agent-browser):
+- Logged in to /admin/mockups/speaker-intro, switched to Style 2.
+- Issue 1: opened the Columns dropdown — confirmed 6 options (1-6 columns).
+  Selected "4 columns" → VLM confirmed all 4 speaker cards in a single row.
+- Issue 2: enabled Edit Images mode, found the NW corner handle of the hero
+  image at (727, 452). Dragged it up-left to (700, 425). Confirmed
+  data.sectionLayout["hero-image"].scale changed from 1 to 1.87 (container
+  enlarged ~87%). VLM confirmed the hero image got visibly LARGER in the
+  screenshot. The imagePlacement.zoom stayed undefined (not affected).
+- Verified scroll-wheel zoom still works: dispatched a wheel event on the
+  hero image → imagePlacement.zoom changed from undefined to 1.1 (image
+  content zoomed in 10%). The heroScale stayed at 1.87 (container unchanged).
+  This confirms the two operations are independent: corner drag = container
+  resize, scroll = image zoom.
+- TypeScript check: npx tsc --noEmit reports ZERO errors in speaker-intro
+  files. (Pre-existing errors in agenda-profile/event-profile-canvas.tsx are
+  unrelated.)
+
+Stage Summary:
+- Issue 1 DONE: Columns dropdown expanded from 1-3 to 1-6 options. With 4
+  speakers, the user can now select "4 columns" to put all speakers in one row.
+- Issue 2 DONE: Hero image corner resize handles now resize the SectionBox
+  container (via onSectionResize → sectionLayout["hero-image"].scale) instead
+  of zooming the image content. The scroll-wheel zoom still works independently
+  (via onPlacementChange → imagePlacement.zoom). The two operations are fully
+  independent: corner drag = container scale, scroll = image zoom.
+- Files modified (2):
+  - src/app/admin/mockups/shared/speaker-intro-form-view.tsx
+    (Columns dropdown: 3 options → 6 options; TypeScript cast updated)
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (EditableImage onSizeChange: zoom → container scale; sizeMultiplier +
+     sizeLabel updated to reflect container scale)

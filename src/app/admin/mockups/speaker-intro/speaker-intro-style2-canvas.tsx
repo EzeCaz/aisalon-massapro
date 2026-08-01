@@ -1190,22 +1190,32 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 (since this SectionBox has no overflow-hidden), exactly
                 like Style 1's DraggablePhotoContainer. */}
             {data.heroOverlay?.imageUrl ? (
-              // PER USER SPEC 2026-08-01 (TSK-0040): Style 2 hero image
-              // corner resize handles were not working because the default
-              // `onSizeChange` updates `data.heroOverlay.imageScale` which
-              // is NOT used by Style 2's SectionBox-based hero (Style 2
-              // uses `data.sectionLayout["hero-image"].boxSize/scale` for
-              // the container, and `data.heroOverlay.imagePlacement.zoom`
-              // for the image transform). So dragging the corner handles
-              // updated a field that had no visual effect.
+              // PER USER SPEC 2026-08-01 (TSK-0041): the hero image corner
+              // resize handles (the 4 pink squares at NW/NE/SE/SW corners
+              // shown in Edit Images mode) must ENLARGE/REDUCE the hero
+              // image CONTAINER — NOT zoom the image content.
               //
-              // FIX: pass a custom `onSizeChange` that updates the image
-              // PLACEMENT zoom (`data.heroOverlay.imagePlacement.zoom`)
-              // via `onPlacementChange`. This makes the corner handles
-              // zoom the image in/out — the same effect as scroll-wheel
-              // zoom, but via corner drag. The `sizeMultiplier` prop is
-              // set from `imagePlacement.zoom` so the on-screen readout
-              // reflects the actual current zoom.
+              // Previous behavior (TSK-0040): the corner handles updated
+              // `data.heroOverlay.imagePlacement.zoom`, which zoomed the
+              // image inside the container but left the container itself
+              // unchanged. The user perceived this as "the corner arrow
+              // does not do anything" because the container (the visible
+              // bounding box of the hero image) stayed the same size.
+              //
+              // FIX: the corner handles now call `onSectionResize` which
+              // updates `data.sectionLayout["hero-image"].scale`. This
+              // scales the entire SectionBox (container + image together)
+              // via CSS `transform: scale(...)`, which is exactly what the
+              // user wants — "enlarge or reduce (not zoom in or out)".
+              //
+              // The image zoom (scroll-wheel) still works independently via
+              // `onPlacementChange` → updates `imagePlacement.zoom`. Only
+              // the CORNER DRAG behavior changed: it now resizes the box
+              // instead of zooming the image.
+              //
+              // The `sizeMultiplier` prop is set from the SectionBox scale
+              // (not image zoom) so the on-screen readout reflects the
+              // actual container scale.
               <EditableImage
                 slot={{ kind: "hero" }}
                 src={data.heroOverlay.imageUrl}
@@ -1220,15 +1230,16 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                     onSizeChange?.(slot, newMultiplier);
                     return;
                   }
-                  const currentPlacement = data.heroOverlay.imagePlacement;
-                  onPlacementChange?.(slot, {
-                    focusX: currentPlacement?.focusX ?? 50,
-                    focusY: currentPlacement?.focusY ?? 50,
-                    zoom: Math.max(0.01, newMultiplier),
-                  });
+                  // PER USER SPEC 2026-08-01 (TSK-0041): corner drag →
+                  // resize the hero-image SectionBox container (scale),
+                  // NOT zoom the image content. This calls onSectionResize
+                  // which updates data.sectionLayout["hero-image"].scale.
+                  // The SectionBox re-renders with the new scale, growing/
+                  // shrinking the entire hero image container.
+                  onSectionResize?.("hero-image", Math.max(0.01, newMultiplier));
                 }}
-                sizeMultiplier={data.heroOverlay.imagePlacement?.zoom ?? 1}
-                sizeLabel="hero zoom"
+                sizeMultiplier={effectiveLayout("hero-image").scale ?? 1}
+                sizeLabel="hero size"
                 containerClass="absolute inset-0"
                 objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
               />

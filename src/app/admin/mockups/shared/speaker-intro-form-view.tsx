@@ -517,7 +517,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 onChange={(e) =>
                   update((d) => {
                     if (!d.speakersLayout) d.speakersLayout = {};
-                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
+                    // PER USER SPEC 2026-08-01 (TSK-0041): expanded dropdown
+                    // from 1-3 to 1-6 so the user can match any speaker count
+                    // (4 speakers → 4 columns, etc). The underlying type already
+                    // allowed 1-6; the dropdown was just missing the options.
+                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3 | 4 | 5 | 6;
                   })
                 }
                 className="form-input"
@@ -525,6 +529,9 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 <option value="1">1 column</option>
                 <option value="2">2 columns</option>
                 <option value="3">3 columns</option>
+                <option value="4">4 columns</option>
+                <option value="5">5 columns</option>
+                <option value="6">6 columns</option>
               </select>
             </Field>
             <Field label="Flow direction">
