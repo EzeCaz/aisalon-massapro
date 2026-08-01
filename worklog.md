@@ -9281,3 +9281,56 @@ Stage Summary:
      transform, wheel handler, readout, and pan persistence)
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (hero image: wrapped in overflow-hidden div + passed minZoom={1})
+
+---
+Task ID: TSK-0044
+Agent: main
+Task: Set Style 3 speaker-intro defaults (different from Style 1) for 4 sections: speakers, qr, topic, header. Previously Style 3 was "an exact duplicate of Style 1" and shared STYLE1_DEFAULTS.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0043 work).
+- Read speaker-intro-canvas.tsx — found STYLE1_DEFAULTS (lines 219-242)
+  with all 6 sections (header, topic, qr, sponsors, hero-image, speakers).
+- Read speaker-intro-editor.tsx — confirmed Style 1 AND Style 3 both render
+  via SpeakerIntroCanvas (line 1030); only Style 2 uses the separate
+  SpeakerIntroStyle2Canvas. So Style 3's defaults must live in
+  speaker-intro-canvas.tsx alongside Style 1's.
+
+User-specified Style 3 defaults (parsed from the Properties panel pastes):
+  - speakers: X=-6.1, Y=26.2, W=653, H=auto, Scale=76%, z=50
+  - qr:       X=90.1, Y=80.2, W=auto, H=auto, Scale=100%, z=50
+  - topic:    X=-12.7, Y=15.7, W=864, H=45, Scale=65%, z=50
+  - header:   X=-0.6, Y=1.2, W=1100, H=auto, Scale=97%, z=50
+
+Comparison with Style 1 defaults (to confirm they're different):
+  - speakers: Style 1 X=-8.5/Y=23.7/W=891/H=381/z=60  vs  Style 3 X=-6.1/Y=26.2/W=653/H=auto/z=50
+  - qr:       Style 1 X=91.6/Y=2.5/Scale=124%          vs  Style 3 X=90.1/Y=80.2/Scale=100%
+  - topic:    Style 1 X=-12.8/Y=21.9                    vs  Style 3 X=-12.7/Y=15.7
+  - header:   Style 1 X=-1.1/Y=0.3                       vs  Style 3 X=-0.6/Y=1.2
+
+Fix applied:
+- /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx:
+  * Added STYLE3_DEFAULTS constant (after STYLE1_DEFAULTS) with the 4
+    user-specified values + sponsors/hero-image copied from Style 1 (user
+    didn't specify new values for those).
+  * Added `const SECTION_DEFAULTS = data.style === "style3" ? STYLE3_DEFAULTS : STYLE1_DEFAULTS;`
+  * Replaced ALL 18 references to `STYLE1_DEFAULTS.<section>` and
+    `STYLE1_DEFAULTS[<section>]` (in SectionBox pos/scale/boxSize props +
+    ObjectPropertiesPanel + hero-image fallback) with `SECTION_DEFAULTS`
+    so the correct defaults are used based on the active style.
+  * The STYLE1_DEFAULTS + STYLE3_DEFAULTS constant DEFINITIONS are unchanged
+    (only the consumer references were swapped to SECTION_DEFAULTS).
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors (exit 0).
+- Style 1 behavior UNCHANGED (data.style !== "style3" → STYLE1_DEFAULTS).
+- Style 3 now uses the new user-specified defaults for speakers/qr/topic/header.
+- sponsors + hero-image sections in Style 3 keep the same defaults as Style 1.
+
+Stage Summary:
+- Style 3 now has its OWN defaults (different from Style 1) for 4 sections.
+- Style 1 defaults UNCHANGED — only Style 3 gets the new values.
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
+    (added STYLE3_DEFAULTS + SECTION_DEFAULTS selector; replaced 18
+     STYLE1_DEFAULTS references with SECTION_DEFAULTS)

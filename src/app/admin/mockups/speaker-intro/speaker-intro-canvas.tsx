@@ -241,6 +241,32 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       speakers: { pos: { x: -8.5, y: 23.7 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
     };
 
+    // PER USER SPEC 2026-08-02 (TSK-0044): Style 3 now has its OWN defaults
+    // (different from Style 1). Previously Style 3 was "an exact duplicate
+    // of Style 1" and shared SECTION_DEFAULTS. The user has now specified
+    // distinct values for 4 sections (speakers / qr / topic / header).
+    // Style 1's defaults are UNCHANGED — only Style 3 gets new values.
+    //   - header:  X=-0.6, Y=1.2,  W=1100, H=auto, Scale=97%,  z=50
+    //   - topic:   X=-12.7, Y=15.7, W=864, H=45,   Scale=65%,  z=50
+    //   - qr:      X=90.1, Y=80.2, W=auto, H=auto, Scale=100%, z=50
+    //   - speakers: X=-6.1, Y=26.2, W=653, H=auto, Scale=76%,  z=50
+    // (sponsors + hero-image keep the same defaults as Style 1 — the user
+    //  didn't specify new values for those sections.)
+    const STYLE3_DEFAULTS: Record<string, SectionLayoutEntry> = {
+      header:   { pos: { x: -0.6, y: 1.2 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
+      topic:    { pos: { x: -12.7, y: 15.7 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
+      qr:       { pos: { x: 90.1, y: 80.2 }, scale: 1, z: 50 },
+      sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
+      "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
+      speakers: { pos: { x: -6.1, y: 26.2 }, boxSize: { width: 653 }, scale: 0.76, z: 50 },
+    };
+
+    // PER USER SPEC 2026-08-02 (TSK-0044): select defaults based on the
+    // active style. Style 1 → STYLE1_DEFAULTS; Style 3 → STYLE3_DEFAULTS.
+    // Style 2 has its own canvas (SpeakerIntroStyle2Canvas) and doesn't
+    // use this code path, so we don't need a Style 2 case here.
+    const SECTION_DEFAULTS = data.style === "style3" ? STYLE3_DEFAULTS : STYLE1_DEFAULTS;
+
     // --- Section 4: Scroll Isolation ---
     // Disable parent/window scrolling when the user hovers over the canvas
     // or actively edits a component. The canvas itself doesn't scroll (it's
@@ -329,7 +355,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           // has dragged the hero via the "⠿ Move hero" grip bar,
           // `data.heroOverlay.pos` overrides this default.
           const defaultHeroLeft = Math.max(0, 100 - heroWidth);
-          const pos = data.heroOverlay.pos ?? STYLE1_DEFAULTS["hero-image"].pos ?? { x: defaultHeroLeft, y: 0 };
+          const pos = data.heroOverlay.pos ?? SECTION_DEFAULTS["hero-image"].pos ?? { x: defaultHeroLeft, y: 0 };
           const heroLeft = pos.x ?? defaultHeroLeft;
           // imageScaleY: 1 = full canvas height. scale < 1 shrinks
           // vertically; scale > 1 bleeds off the bottom (clipped).
@@ -550,9 +576,9 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "header"}
           onSelect={() => setSelectedId("header")}
-          pos={data.sectionLayout?.header?.pos ?? STYLE1_DEFAULTS.header.pos}
-          scale={data.sectionLayout?.header?.scale ?? STYLE1_DEFAULTS.header.scale}
-          boxSize={data.sectionLayout?.header?.boxSize ?? STYLE1_DEFAULTS.header.boxSize}
+          pos={data.sectionLayout?.header?.pos ?? SECTION_DEFAULTS.header.pos}
+          scale={data.sectionLayout?.header?.scale ?? SECTION_DEFAULTS.header.scale}
+          boxSize={data.sectionLayout?.header?.boxSize ?? SECTION_DEFAULTS.header.boxSize}
           onMove={(p) => onSectionMove?.("header", p)}
           onResize={(s) => onSectionResize?.("header", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
@@ -613,9 +639,9 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "topic"}
           onSelect={() => setSelectedId("topic")}
-          pos={data.sectionLayout?.topic?.pos ?? STYLE1_DEFAULTS.topic.pos}
-          scale={data.sectionLayout?.topic?.scale ?? STYLE1_DEFAULTS.topic.scale}
-          boxSize={data.sectionLayout?.topic?.boxSize ?? STYLE1_DEFAULTS.topic.boxSize}
+          pos={data.sectionLayout?.topic?.pos ?? SECTION_DEFAULTS.topic.pos}
+          scale={data.sectionLayout?.topic?.scale ?? SECTION_DEFAULTS.topic.scale}
+          boxSize={data.sectionLayout?.topic?.boxSize ?? SECTION_DEFAULTS.topic.boxSize}
           onMove={(p) => onSectionMove?.("topic", p)}
           onResize={(s) => onSectionResize?.("topic", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
@@ -657,8 +683,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "qr"}
           onSelect={() => setSelectedId("qr")}
-          pos={data.sectionLayout?.qr?.pos ?? STYLE1_DEFAULTS.qr.pos}
-          scale={data.sectionLayout?.qr?.scale ?? STYLE1_DEFAULTS.qr.scale}
+          pos={data.sectionLayout?.qr?.pos ?? SECTION_DEFAULTS.qr.pos}
+          scale={data.sectionLayout?.qr?.scale ?? SECTION_DEFAULTS.qr.scale}
           boxSize={data.sectionLayout?.qr?.boxSize}
           onMove={(p) => onSectionMove?.("qr", p)}
           onResize={(s) => onSectionResize?.("qr", s)}
@@ -696,16 +722,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             Properties defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto,
             Scale=76%, z=60. When the user has not dragged the speakers
             section yet, data.sectionLayout.speakers is undefined and the
-            STYLE1_DEFAULTS.speakers fallback below applies — the Properties
+            SECTION_DEFAULTS.speakers fallback below applies — the Properties
             panel shows the spec values on initial load. Once dragged, the
             user's data.sectionLayout.speakers.pos/scale/boxSize overrides. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "speakers"}
           onSelect={() => setSelectedId("speakers")}
-          pos={data.sectionLayout?.speakers?.pos ?? STYLE1_DEFAULTS.speakers.pos}
-          scale={data.sectionLayout?.speakers?.scale ?? STYLE1_DEFAULTS.speakers.scale}
-          boxSize={data.sectionLayout?.speakers?.boxSize ?? STYLE1_DEFAULTS.speakers.boxSize}
+          pos={data.sectionLayout?.speakers?.pos ?? SECTION_DEFAULTS.speakers.pos}
+          scale={data.sectionLayout?.speakers?.scale ?? SECTION_DEFAULTS.speakers.scale}
+          boxSize={data.sectionLayout?.speakers?.boxSize ?? SECTION_DEFAULTS.speakers.boxSize}
           onMove={(p) => onSectionMove?.("speakers", p)}
           onResize={(s) => onSectionResize?.("speakers", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
@@ -905,8 +931,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           active={sectionsEditable}
           selected={selectedId === "sponsors"}
           onSelect={() => setSelectedId("sponsors")}
-          pos={data.sectionLayout?.sponsors?.pos ?? STYLE1_DEFAULTS.sponsors.pos}
-          scale={data.sectionLayout?.sponsors?.scale ?? STYLE1_DEFAULTS.sponsors.scale}
+          pos={data.sectionLayout?.sponsors?.pos ?? SECTION_DEFAULTS.sponsors.pos}
+          scale={data.sectionLayout?.sponsors?.scale ?? SECTION_DEFAULTS.sponsors.scale}
           boxSize={data.sectionLayout?.sponsors?.boxSize}
           onMove={(p) => onSectionMove?.("sponsors", p)}
           onResize={(s) => onSectionResize?.("sponsors", s)}
@@ -1094,7 +1120,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
         {sectionsEditable && selectedId && selectedId === "hero-image" && (
           <ObjectPropertiesPanel
             label="Hero Image"
-            pos={data.heroOverlay.pos ?? STYLE1_DEFAULTS["hero-image"].pos}
+            pos={data.heroOverlay.pos ?? SECTION_DEFAULTS["hero-image"].pos}
             onPosChange={(p) => onHeroPosChange?.(p)}
             z={heroZ}
             onZChange={(z) => onHeroZChange?.(z)}
@@ -1103,23 +1129,23 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             showBoxSize
             boxSize={data.heroOverlay.boxSize}
             onBoxSizeChange={(sz) => onHeroBoxResize?.(sz)}
-            scale={data.heroOverlay.imageScale ?? STYLE1_DEFAULTS["hero-image"].scale ?? 1}
+            scale={data.heroOverlay.imageScale ?? SECTION_DEFAULTS["hero-image"].scale ?? 1}
             onScaleChange={(s) => onHeroScaleXChange?.(s)}
           />
         )}
         {sectionsEditable && selectedId && selectedId !== "hero-image" && (
           <ObjectPropertiesPanel
             label={selectedId}
-            pos={data.sectionLayout?.[selectedId]?.pos ?? STYLE1_DEFAULTS[selectedId]?.pos}
+            pos={data.sectionLayout?.[selectedId]?.pos ?? SECTION_DEFAULTS[selectedId]?.pos}
             onPosChange={(p) => onSectionMove?.(selectedId, p)}
             z={sectionZFor(selectedId)}
             onZChange={(z) => onSectionZChange?.(selectedId, z)}
             peers={sectionPeerZs}
             onDeselect={() => setSelectedId(null)}
             showBoxSize
-            boxSize={data.sectionLayout?.[selectedId]?.boxSize ?? STYLE1_DEFAULTS[selectedId]?.boxSize}
+            boxSize={data.sectionLayout?.[selectedId]?.boxSize ?? SECTION_DEFAULTS[selectedId]?.boxSize}
             onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
-            scale={data.sectionLayout?.[selectedId]?.scale ?? STYLE1_DEFAULTS[selectedId]?.scale ?? 1}
+            scale={data.sectionLayout?.[selectedId]?.scale ?? SECTION_DEFAULTS[selectedId]?.scale ?? 1}
             onScaleChange={(s) => onSectionResize?.(selectedId, s)}
           />
         )}
