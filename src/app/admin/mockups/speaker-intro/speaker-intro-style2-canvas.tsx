@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState, useEffect, useRef, type ReactNode } from "react";
+import { forwardRef, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import type {
@@ -170,6 +170,9 @@ type Props = {
    *  current mockup state as the default for the current style. */
   onSetAsDefault?: () => void;
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0051): selectedId LIFTED to the editor. */
+  selectedId?: string | null;
+  onSelectChange?: (id: string | null) => void;
 };
 
 // ============================================================================
@@ -790,6 +793,8 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       onHeroPosChange,
       onSetAsDefault,
       previewScale = 1,
+      selectedId: selectedIdProp,
+      onSelectChange,
     },
     ref,
   ) {
@@ -810,7 +815,15 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
       .filter(Boolean)
       .join(" · ");
 
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    // PER USER SPEC 2026-08-02 (TSK-0051): selectedId LIFTED to editor.
+    // The editor owns the state; this canvas reads from prop + writes via
+    // onSelectChange. The new "Selected Element" panel at the top of the
+    // form column reads the same state to render content-specific fields.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     useEffect(() => {
       if (!sectionsEditable) setSelectedId(null);

@@ -25,6 +25,7 @@ import type {
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
 import { CollapsibleFormPanel } from "../shared/section-edit";
+import { SelectedElementPanel } from "../shared/selected-element-panel";
 import { SAMPLE_DATA } from "./sample-data";
 import { SpeakerIntroCanvas } from "./speaker-intro-canvas";
 import { SpeakerIntroStyle2Canvas } from "./speaker-intro-style2-canvas";
@@ -86,6 +87,12 @@ export function SpeakerIntroEditor({ events }: Props) {
   const [editMode, setEditMode] = useState<boolean>(false);
   /** Sections edit mode = text sections are draggable + resizeable. */
   const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
+  /** PER USER SPEC 2026-08-02 (TSK-0051): currently-selected element on the
+   *  canvas. LIFTED from the canvases so the new "Selected Element" panel
+   *  (top of the form column) can render content-specific fields for it.
+   *  Both canvases write to this via onSelectChange. Reset to null when
+   *  sectionsEditMode turns off (mirrors the old in-canvas behavior). */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Currently selected event slug in the dropdown. */
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   /** Loading state when fetching event data. */
@@ -221,6 +228,14 @@ export function SpeakerIntroEditor({ events }: Props) {
       // ignore quota errors
     }
   }, [data]);
+
+  // PER USER SPEC 2026-08-02 (TSK-0051): reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears
+  // when the user exits section-edit mode. (Mirrors the old in-canvas
+  // useEffect that did the same thing locally.)
+  useEffect(() => {
+    if (!sectionsEditMode) setSelectedId(null);
+  }, [sectionsEditMode]);
 
   // --- JSON textarea → data ------------------------------------------
 
@@ -891,57 +906,74 @@ export function SpeakerIntroEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode).
-         *  PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
-         *  COMPRESSED (collapsed) by default. Click the header to expand.
-         *  This frees up the left column for the floating ObjectPropertiesPanel
-         *  that anchors to the top-LEFT of the canvas (above this form). */}
-        {viewMode === "form" ? (
-          <CollapsibleFormPanel
-            title="speaker-intro.form"
-            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
-          >
-            <SpeakerIntroFormView
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02 (TSK-0051): when the user clicks an
+         *  element on the canvas (header, speakers, hero-image, logo, etc.),
+         *  a compact "Selected Element" panel appears at the TOP of this
+         *  column showing ONLY the content-specific fields for that element.
+         *  The full form stays below (unchanged). */}
+        <div className="flex flex-col gap-3">
+          {/* PER USER SPEC 2026-08-02 (TSK-0051): Selected Element panel.
+           *  Only renders when an element is selected AND we're in section
+           *  edit mode (the canvas only sets selectedId in section edit mode). */}
+          {sectionsEditMode && selectedId && (
+            <SelectedElementPanel
+              selectedId={selectedId}
               data={data}
               onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
             />
-          </CollapsibleFormPanel>
-        ) : (
-          <CollapsibleFormPanel
-            title="speaker-intro.data.json"
-            icon={
-              <div className="flex items-center gap-1">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
-              </div>
-            }
-            dark
-            error={parseError}
-          >
-            <textarea
-              value={jsonText}
-              onChange={(e) => handleJsonChange(e.target.value)}
-              spellCheck={false}
-              className="flex-1 min-h-[640px] w-full resize-none bg-[#0a0a0a] text-white/85 font-mono text-[0.72rem] leading-relaxed p-4 outline-none"
-              style={{ tabSize: 2 }}
-            />
-            {parseError && (
-              <div className="border-t border-[#FF5F56]/40 bg-[#FF5F56]/10 px-4 py-2.5 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-[#FF5F56] mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[0.7rem] font-mono text-[#FF5F56] break-words">
-                    {parseError}
-                  </p>
-                  <p className="text-[0.65rem] text-white/40 mt-1">
-                    The canvas still shows the last valid state — fix the JSON
-                    to live-update.
-                  </p>
+          )}
+
+          {/* Full form (or JSON editor) — collapsed by default per TSK-0050 */}
+          {viewMode === "form" ? (
+            <CollapsibleFormPanel
+              title="speaker-intro.form"
+              icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+            >
+              <SpeakerIntroFormView
+                data={data}
+                onChange={(next) => applyData(next)}
+              />
+            </CollapsibleFormPanel>
+          ) : (
+            <CollapsibleFormPanel
+              title="speaker-intro.data.json"
+              icon={
+                <div className="flex items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
                 </div>
-              </div>
-            )}
-          </CollapsibleFormPanel>
-        )}
+              }
+              dark
+              error={parseError}
+            >
+              <textarea
+                value={jsonText}
+                onChange={(e) => handleJsonChange(e.target.value)}
+                spellCheck={false}
+                className="flex-1 min-h-[640px] w-full resize-none bg-[#0a0a0a] text-white/85 font-mono text-[0.72rem] leading-relaxed p-4 outline-none"
+                style={{ tabSize: 2 }}
+              />
+              {parseError && (
+                <div className="border-t border-[#FF5F56]/40 bg-[#FF5F56]/10 px-4 py-2.5 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-[#FF5F56] mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[0.7rem] font-mono text-[#FF5F56] break-words">
+                      {parseError}
+                    </p>
+                    <p className="text-[0.65rem] text-white/40 mt-1">
+                      The canvas still shows the last valid state — fix the JSON
+                      to live-update.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CollapsibleFormPanel>
+          )}
+        </div>
 
         {/* Right: live preview */}
         <div
@@ -1088,6 +1120,8 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onHeroShapeChange={handleHeroShapeChange}
                   onHeroPosChange={handleHeroPosChange}
                   onSetAsDefault={handleSetAsDefault}
+                  selectedId={selectedId}
+                  onSelectChange={setSelectedId}
                 />
               ) : (
                 <SpeakerIntroCanvas
@@ -1111,6 +1145,8 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onBrandingAssetPosChange={handleBrandingAssetPosChange}
                   onHeroPosChange={handleHeroPosChange}
                   onSetAsDefault={handleSetAsDefault}
+                  selectedId={selectedId}
+                  onSelectChange={setSelectedId}
                 />
               )}
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, useEffect, type ReactNode } from "react";
+import { forwardRef, useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import type {
   SpeakerIntroData,
@@ -114,6 +114,13 @@ type Props = {
   onSetAsDefault?: () => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0051): selectedId is now LIFTED to the
+   *  editor so the new "Selected Element" panel (top of the form column)
+   *  can render the content-specific fields for the selected element.
+   *  Both canvases write to this via onSelectChange; the editor owns the
+   *  state. */
+  selectedId?: string | null;
+  onSelectChange?: (id: string | null) => void;
 };
 
 export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
@@ -139,6 +146,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       onHeroPosChange,
       onSetAsDefault,
       previewScale = 1,
+      selectedId: selectedIdProp,
+      onSelectChange,
     },
     ref,
   ) {
@@ -289,7 +298,17 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     // Tracks which SectionBox is currently selected. When set, the
     // ObjectPropertiesPanel is rendered at the top-right of the canvas
     // with X/Y coordinate inputs + Front/Back layer toggles.
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    //
+    // PER USER SPEC 2026-08-02 (TSK-0051): selectedId is now LIFTED to
+    // the editor. We accept it as `selectedIdProp` and notify the parent
+    // via `onSelectChange`. This lets the new "Selected Element" panel
+    // (top of the form column) render content-specific fields for the
+    // selected element.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     // Reset selection when sections-edit mode is turned off.
     useEffect(() => {
