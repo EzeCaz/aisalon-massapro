@@ -9131,3 +9131,70 @@ Stage Summary:
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (EditableImage onSizeChange: zoom → container scale; sizeMultiplier +
      sizeLabel updated to reflect container scale)
+
+---
+Task ID: TSK-0042
+Agent: main
+Task: Fix Style 2 hero image cutting bug — when enlarging/shrinking the hero image via the corner resize handle (pink squares in Edit Images mode), the image gets CUT at the canvas border. The deployed version (origin/main) doesn't have this bug. User explicitly referenced the deployed version as the reference for the fix.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0041 work that introduced the bug).
+- Read speaker-intro-style2-canvas.tsx (1549 lines) — found the hero-image
+  SectionBox (lines 1155-1269) with EditableImage inside. The EditableImage's
+  onSizeChange callback (lines 1228-1240) was wired to call
+  onSectionResize("hero-image", newMultiplier) — this updated
+  data.sectionLayout["hero-image"].scale, causing the SectionBox to apply
+  CSS transform: scale(N) with transformOrigin: top-left.
+- Root cause analysis: the hero-image SectionBox sits at the canvas's
+  top-right corner (pos x=55% y=10% → 660,80; boxSize 540×640 → right edge
+  at x=1200, the canvas right border). When transform: scale(N>1) is applied
+  with top-left origin, the box visually grows rightward + downward BEYOND
+  the canvas border (1200×800). The canvas's overflow-hidden then CLIPS the
+  image at the right/bottom edges — the user perceives this as "the image
+  is being cut when I enlarge it".
+- Compared with deployed version (origin/main):
+  * Deployed uses DraggablePhotoContainer (NOT SectionBox) — no transform: scale
+  * Container widthPct/heightPct are CONSTANT (don't change with imageScale)
+  * Inner <div className="absolute inset-0 overflow-hidden"> contains the image
+  * onSizeChange={onSizeChange} — standard handler updates imageScale (readout only)
+  * Container size never changes → nothing gets cut
+- The TSK-0041 "fix" (wiring corner handles to onSectionResize) introduced
+  this cutting bug. The deployed version never had it because it uses
+  DraggablePhotoContainer (constant size, no transform).
+
+Fix applied:
+- Updated /home/z/my-project/src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+  lines 1192-1237: reverted the EditableImage's onSizeChange from the custom
+  override (which called onSectionResize) to the standard onSizeChange handler
+  (which updates data.heroOverlay.imageScale — readout only, container size
+  stays constant). Changed sizeMultiplier from effectiveLayout("hero-image").scale
+  to data.heroOverlay.imageScale (matches the readout source). Changed sizeLabel
+  from "hero size" to "hero scale".
+- Rationale: this matches the deployed version's behavior exactly. The SectionBox
+  scale stays at 1 (default) → no transform: scale → no cutting. The scroll-wheel
+  zoom still works independently via onPlacementChange → imagePlacement.zoom
+  (unchanged — the user explicitly said "dont change that"). The SectionBox
+  wrapper is preserved so Edit Sections mode drag/select/properties-panel still work.
+- The SectionBox's own corner handles (in Edit Sections mode) still call
+  onSectionResize (transform: scale). If the user reports cutting from THAT
+  mode, a follow-up fix would convert onResize to update boxSize instead of
+  scale. For now, leaving as-is since the user's complaint was about "the image
+  resize corner arrow" (Edit Images mode pink squares, not Edit Sections mode).
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors in speaker-intro
+  files (exit 0).
+- Dev server is running on port 3000; the change will hot-reload.
+
+Stage Summary:
+- Bug FIXED: hero image corner resize (Edit Images mode) no longer applies
+  transform: scale on the SectionBox, so the image doesn't get cut at the
+  canvas border when enlarged. Matches the deployed version's behavior.
+- Scroll-wheel zoom PRESERVED (untouched) — still works via onPlacementChange
+  → imagePlacement.zoom, as the user required.
+- SectionBox wrapper PRESERVED — Edit Sections mode drag/select/properties-panel
+  still work for the hero image.
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (EditableImage onSizeChange: onSectionResize → standard onSizeChange;
+     sizeMultiplier + sizeLabel updated to reflect imageScale readout)

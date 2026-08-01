@@ -1190,32 +1190,36 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 (since this SectionBox has no overflow-hidden), exactly
                 like Style 1's DraggablePhotoContainer. */}
             {data.heroOverlay?.imageUrl ? (
-              // PER USER SPEC 2026-08-01 (TSK-0041): the hero image corner
-              // resize handles (the 4 pink squares at NW/NE/SE/SW corners
-              // shown in Edit Images mode) must ENLARGE/REDUCE the hero
-              // image CONTAINER — NOT zoom the image content.
+              // PER USER SPEC 2026-08-01 (TSK-0042): revert the hero image
+              // corner resize to the STANDARD `onSizeChange` handler (which
+              // updates `data.heroOverlay.imageScale`, used for the on-screen
+              // readout only). This matches the deployed version's behavior.
               //
-              // Previous behavior (TSK-0040): the corner handles updated
-              // `data.heroOverlay.imagePlacement.zoom`, which zoomed the
-              // image inside the container but left the container itself
-              // unchanged. The user perceived this as "the corner arrow
-              // does not do anything" because the container (the visible
-              // bounding box of the hero image) stayed the same size.
+              // BACKGROUND: TSK-0041 wired the corner handles to
+              // `onSectionResize("hero-image", N)`, which updated
+              // `data.sectionLayout["hero-image"].scale` and caused the
+              // SectionBox to apply `transform: scale(N)` with
+              // `transformOrigin: top-left`. Because the hero-image SectionBox
+              // sits at the canvas's top-right corner (left=660, top=80,
+              // width=540, height=640 — its right edge already touches the
+              // canvas right border at x=1200), scaling UP visually grew the
+              // box rightward and downward BEYOND the canvas border. The
+              // canvas's `overflow-hidden` then CLIPPED the image at the
+              // right/bottom edges — the user perceived this as "the image
+              // is being cut when I enlarge it".
               //
-              // FIX: the corner handles now call `onSectionResize` which
-              // updates `data.sectionLayout["hero-image"].scale`. This
-              // scales the entire SectionBox (container + image together)
-              // via CSS `transform: scale(...)`, which is exactly what the
-              // user wants — "enlarge or reduce (not zoom in or out)".
+              // The deployed version (origin/main) uses
+              // `DraggablePhotoContainer` (no `transform: scale`) with a
+              // constant container size + an inner `overflow-hidden` wrapper.
+              // The corner handles update `imageScale` (readout only) — the
+              // container size never changes, so nothing gets cut.
               //
-              // The image zoom (scroll-wheel) still works independently via
-              // `onPlacementChange` → updates `imagePlacement.zoom`. Only
-              // the CORNER DRAG behavior changed: it now resizes the box
-              // instead of zooming the image.
-              //
-              // The `sizeMultiplier` prop is set from the SectionBox scale
-              // (not image zoom) so the on-screen readout reflects the
-              // actual container scale.
+              // This fix keeps the SectionBox wrapper (so Edit Sections mode
+              // drag/select/properties-panel still work) but reverts the
+              // `onSizeChange` wiring to the standard handler. The SectionBox
+              // scale stays at 1 (default) → no `transform: scale` → no
+              // cutting. The scroll-wheel zoom still works independently via
+              // `onPlacementChange` → `imagePlacement.zoom` (unchanged).
               <EditableImage
                 slot={{ kind: "hero" }}
                 src={data.heroOverlay.imageUrl}
@@ -1225,21 +1229,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 previewScale={previewScale}
                 onPickImage={onPickImage}
                 onPlacementChange={onPlacementChange}
-                onSizeChange={(slot, newMultiplier) => {
-                  if (slot.kind !== "hero") {
-                    onSizeChange?.(slot, newMultiplier);
-                    return;
-                  }
-                  // PER USER SPEC 2026-08-01 (TSK-0041): corner drag →
-                  // resize the hero-image SectionBox container (scale),
-                  // NOT zoom the image content. This calls onSectionResize
-                  // which updates data.sectionLayout["hero-image"].scale.
-                  // The SectionBox re-renders with the new scale, growing/
-                  // shrinking the entire hero image container.
-                  onSectionResize?.("hero-image", Math.max(0.01, newMultiplier));
-                }}
-                sizeMultiplier={effectiveLayout("hero-image").scale ?? 1}
-                sizeLabel="hero size"
+                onSizeChange={onSizeChange}
+                sizeMultiplier={data.heroOverlay.imageScale ?? 1}
+                sizeLabel="hero scale"
                 containerClass="absolute inset-0"
                 objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
               />
