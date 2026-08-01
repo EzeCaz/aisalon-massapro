@@ -9989,3 +9989,71 @@ Stage Summary:
   - src/app/admin/mockups/event-profile/event-profile-editor.tsx
   - src/app/admin/mockups/agenda-profile/agenda-profile-editor.tsx
   - src/app/admin/mockups/qr-salon/qr-salon-editor.tsx
+
+---
+Task ID: TSK-0053 (main agent)
+Task: Make all other mockups have the same textStyles feature as speaker-intro,
+  align Edit images / Edit sections / Set as default button placement across
+  all mockups, and add HeroShape editing to meet-the-speaker Style 3.
+
+Work Log:
+- Launched an Explore agent to audit all 4 secondary mockups (meet-the-speaker,
+  event-profile, agenda-profile, qr-salon) vs speaker-intro across 3 areas:
+  textStyles wiring, button placement, Style 3 / HeroShape.
+- Audit found:
+  * meet-the-speaker: 6 hardcoded text labels not wired; Style 3 was a stub
+    (rendered Style 1's SVG triangles as fallback); buttons in top toolbar;
+    no "Set as default" button.
+  * event-profile, agenda-profile: fully wired (no gaps); Edit buttons floated
+    as absolute overlay inside the preview box; no "Set as default" button.
+  * qr-salon: architecturally different (caption.style nested vs flat
+    textStyles) — appropriate for single-text-element scope; no "Set as
+    default" button, no server-side default save at all.
+- meet-the-speaker changes (main agent):
+  * types.ts: added 6 new textStyles keys (topicLabel, registerHere,
+    collaboratorsLabel, sponsorsLabel, localStreetPinIndex,
+    localStreetPinLabel). Added style3HeroShape field + re-exported
+    HeroShapeType / HeroShapeFillMode from shared/hero-shape.
+  * meet-the-speaker-canvas.tsx: imported HeroShape + HeroShapePanelFields.
+    Wired the 6 hardcoded text labels to data.textStyles. Added a new
+    `data.heroStyle === 3` conditional branch that renders <HeroShape>
+    inside a SectionBox (click-to-select, 8-direction resize, drag-to-move).
+    Added the MeetTheSpeakerHeroShapePanel floating component (mirrors
+    speaker-intro Style 2's HeroShapePanel exactly). Added onHeroShapeChange
+    canvas prop. DraggableLocalStreetPin now accepts a textStyles prop.
+  * meet-the-speaker-editor.tsx: added STYLE_DEFAULTS_KEY_PREFIX const +
+    savedDefaultFeedback state + handleSetAsDefault callback. Modified
+    handleReset to consult the saved default first. Removed Edit images /
+    Edit sections buttons from the top toolbar. Added them + a new "Set as
+    default" button to the canvas caption row above the canvas (matching
+    speaker-intro's placement). Added handleHeroShapeChange + passed
+    onHeroShapeChange to the canvas. Updated Style 3 tooltip.
+  * shared/meet-the-speaker-form-view.tsx: added 4 new TextStyleRow controls
+    (topicLabel after topic, registerHere after QR URL, collaboratorsLabel
+    at top of Collaborators section, sponsorsLabel at top of Sponsors
+    section).
+- event-profile, agenda-profile, qr-salon changes (subagent
+  TSK-0053-subagent-A): added "Set as default" button + localStorage flow
+  to each editor; relocated Edit images / Edit sections buttons to a canvas
+  caption row above the canvas in each editor (matching speaker-intro's
+  placement).
+- Verified all 4 mockup pages compile cleanly (HTTP 200 on each
+  /admin/mockups/X route). No TypeScript errors.
+
+Stage Summary:
+- All 4 secondary mockups now have:
+  1. Full textStyles wiring (meet-the-speaker had 6 gaps, now closed).
+  2. Edit images / Edit sections / Set as default buttons clustered in a
+     canvas caption row above the canvas (matching speaker-intro).
+  3. A working "Set as default" localStorage flow (savedDefaultFeedback
+     state + handleSetAsDefault + modified handleReset).
+- meet-the-speaker Style 3 is now a real, editable hero shape using the
+  shared HeroShape system — same as speaker-intro Style 2. The user can:
+  - Pick from 13 shape types (rectangle, circle, triangle, sphere, cube,
+    cone, cylinder, pyramid, etc.)
+  - Toggle solid vs gradient fill
+  - Edit gradient colors + direction + opacity + rotation
+  - Drag/resize/scale/layer the shape via the SectionBox + floating
+    HeroShapePanel
+- Commit: fc583e2 "TSK-0053: Wire all mockups to textStyles + add HeroShape
+  to meet-the-speaker Style 3". Pushed to origin/main.
