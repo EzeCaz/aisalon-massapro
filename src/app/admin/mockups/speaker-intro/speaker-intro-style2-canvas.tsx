@@ -107,12 +107,11 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   // by `heroGradientConfig` below — these are the section layout values
   // from the Position & Size block of the Hero Shape Properties panel.
   "hero-shape": { pos: { x: 42.3, y: 12.8 }, boxSize: { width: 632, height: 663 }, scale: 1.21, z: 40 },
-  // PER USER SPEC 2026-08-02 (TSK-0045): hero-image defaults updated to
-  // X=40.7, Y=10.9, W=690, H=auto, Scale=105%, z=50 (was X=55, Y=10,
-  // W=540, H=640, Scale=100% per TSK-0037). Note H=auto (the user left
-  // the H field empty in the Properties panel — the box auto-sizes to
-  // the image aspect ratio, like Style 1's hero).
-  "hero-image":  { pos: { x: 40.7, y: 10.9 }, boxSize: { width: 690 }, scale: 1.05, z: 50 },
+  // PER USER SPEC 2026-08-02 (TSK-0046): hero-image defaults updated to
+  // X=39.5, Y=8.9, W=697, H=auto, Scale=108%, z=50 (was X=40.7, Y=10.9,
+  // W=690, H=auto, Scale=105% per TSK-0045). H=auto (the box auto-sizes
+  // to the image aspect ratio, like Style 1's hero).
+  "hero-image":  { pos: { x: 39.5, y: 8.9 }, boxSize: { width: 697 }, scale: 1.08, z: 50 },
   // PER USER SPEC 2026-08-02 (TSK-0045): speakers defaults updated to
   // X=-7.7, Y=-2.8, W=658, H=auto, Scale=67%, z=60 (was X=-8.53358,
   // Y=19.9229, W=891, Scale=74.69% per TSK-0035).
@@ -1198,24 +1197,28 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 matches the deployed version (origin/main) which uses
                 `DraggablePhotoContainer > div.overflow-hidden > EditableImage`.
 
-                PER USER SPEC 2026-08-02 (TSK-0043): also pass `minZoom={1}`
-                so the image ALWAYS fills the section — scrolling down below
-                1× does nothing visually (no shrinking, no empty space on
-                any side). The user complained that with zoom < 1 the image
-                was "cut on all sides, much more than the section border
-                size" — that was the image shrinking to e.g. 70% of the
-                section, leaving 15% empty space on each side. With minZoom=1,
-                the rendered scale is always >= 1.005, so the image always
-                covers the full section (object-fit: cover + scale >= 1).
+                PER USER SPEC 2026-08-02 (TSK-0046): REVERTED the
+                `minZoom={1}` constraint that TSK-0043 added. The user now
+                wants Style 2's hero image to have the SAME scroll
+                capabilities as Style 1 — including the ability to scroll
+                BELOW 1× to shrink the image without any limit. With the
+                default minZoom=0.01 (same as Style 1), scrolling down
+                shrinks the image; the overflow-hidden wrapper above
+                clips the resulting empty space at the section border.
 
-                Style 1 keeps the default minZoom=0.01 (unchanged behavior). */}
+                PER USER SPEC 2026-08-02 (TSK-0046): default imagePlacement
+                is { focusX: 51, focusY: 34, zoom: 1 } (matches the
+                "51/34-1.0x" readout the user specified). When the user
+                hasn't panned/zoomed yet, this default is used. After
+                the user pans/zooms, data.heroOverlay.imagePlacement is
+                set and overrides this fallback. */}
             <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
               {data.heroOverlay?.imageUrl ? (
                 <EditableImage
                   slot={{ kind: "hero" }}
                   src={data.heroOverlay.imageUrl}
                   alt="Hero"
-                  placement={data.heroOverlay.imagePlacement}
+                  placement={data.heroOverlay.imagePlacement ?? { focusX: 51, focusY: 34, zoom: 1 }}
                   editable={editable}
                   previewScale={previewScale}
                   onPickImage={onPickImage}
@@ -1225,7 +1228,6 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                   sizeLabel="hero scale"
                   containerClass="absolute inset-0"
                   objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
-                  minZoom={1}
                 />
               ) : (
                 <div

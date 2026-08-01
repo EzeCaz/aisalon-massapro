@@ -9381,3 +9381,60 @@ Stage Summary:
 - Files modified (1):
   - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
     (3 entries in STYLE2_DEFAULTS updated)
+
+---
+Task ID: TSK-0046
+Agent: main
+Task: Update Style 2 hero image: (1) new section defaults X=39.5/Y=8.9/W=697/H=auto/Scale=108%/z=50; (2) default image placement readout 51/34-1.0x; (3) enable unlimited scroll zoom out (remove minZoom=1 constraint from TSK-0043, imitate Style 1's hero capabilities).
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0045 work).
+- Read speaker-intro-style2-canvas.tsx — found STYLE2_DEFAULTS (lines 97-127)
+  and the hero-image EditableImage block (lines 1192-1241).
+
+Fix applied (1 file: src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx):
+
+1. Updated "hero-image" entry in STYLE2_DEFAULTS (line 114):
+   - OLD (TSK-0045): pos {x:40.7, y:10.9}, boxSize {width:690}, scale:1.05, z:50
+   - NEW (TSK-0046): pos {x:39.5, y:8.9},  boxSize {width:697}, scale:1.08, z:50
+
+2. Default imagePlacement (line 1221):
+   - OLD: placement={data.heroOverlay.imagePlacement}
+   - NEW: placement={data.heroOverlay.imagePlacement ?? { focusX: 51, focusY: 34, zoom: 1 }}
+   - Rationale: when the user hasn't panned/zoomed yet, the EditableImage
+     now falls back to {focusX:51, focusY:34,zoom:1} — matches the
+     "51/34-1.0x" readout the user specified. resolvePlacement's built-in
+     default is {50,50,1}, but the user wants 51/34 for Style 2's hero.
+     Once the user pans/zooms, data.heroOverlay.imagePlacement is set and
+     overrides this fallback.
+
+3. Removed `minZoom={1}` from the EditableImage (was line 1228):
+   - OLD: <EditableImage ... minZoom={1} />
+   - NEW: <EditableImage ... /> (no minZoom prop → uses default 0.01)
+   - Rationale: TSK-0043 added minZoom={1} to prevent the image from
+     shrinking below 1× (which was causing the "cut on all sides" bug
+     when zoom was 0.7). The user now wants Style 2 to have the SAME
+     scroll capabilities as Style 1 — including unlimited scroll zoom
+     out below 1×. The overflow-hidden wrapper (added in TSK-0043) is
+     KEPT — it clips the empty space at the section border when zoom < 1,
+     so the image stays visually contained within the section.
+   - Style 1 already uses minZoom=0.01 (default) — now Style 2 matches.
+
+Verification:
+- TypeScript check: npx tsc --noEmit reports ZERO errors (exit 0).
+- Style 1 UNCHANGED (no minZoom prop, default 0.01 — same as before).
+- Style 2 hero now: default placement 51/34/1.0×, scroll zoom out
+  unlimited (down to 0.01×), scroll zoom in unlimited (up to 10× from
+  resolvePlacement's clamp), image clipped at section border.
+
+Stage Summary:
+- Style 2 hero image defaults updated to user spec (X=39.5, Y=8.9, W=697,
+  H=auto, Scale=108%, z=50).
+- Default image placement readout is 51/34-1.0x.
+- Scroll zoom out is now unlimited (matches Style 1) — the image can
+  shrink below 1× without any floor, and the overflow-hidden wrapper
+  clips the empty space at the section border.
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (STYLE2_DEFAULTS hero-image entry + EditableImage placement fallback
+     + removed minZoom={1})
