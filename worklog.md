@@ -9469,3 +9469,110 @@ Stage Summary:
 - Files modified (1):
   - src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx
     (2 qr entries: STYLE1_DEFAULTS + STYLE3_DEFAULTS)
+
+---
+Task ID: TSK-0048
+Agent: main
+Task: Style 2 — set new defaults for hero-image and hero-shape, set hero
+image placement readout to 33/62-1.0x, ensure hero-image is on top of all
+other sections, location pins on top of hero image, and confirm Front/Back
+Layer z-index button is in the hero-image properties panel.
+
+User-specified defaults:
+1) Hero Image Properties: X=26.6, Y=-2.8, W=1012, H=875, Scale=74%, z=50
+2) Hero Shape Properties: X=37, Y=10.4, W=754, H=663, Scale=100%, z=40
+   (gradient: rectangle / #311B92 #1A237E #0B0B2E / 180° / opacity 90% /
+   rotation 0° — already the default in `heroGradientConfig`)
+3) Hero image placement readout: 33/62-1.0x (focusX=33, focusY=62, zoom=1.0)
+4) Hero image must be on TOP of all other sections (highest z-index).
+5) Location pins at the FRONT of the hero image (on top of the image,
+   within the hero-image SectionBox).
+6) Add Front/Back Layer z-index button to the hero-image section form
+   (Front = on top).
+
+Work Log:
+- Read /home/z/my-project/worklog.md (previous TSK-0047 work).
+- Read speaker-intro-style2-canvas.tsx — found STYLE2_DEFAULTS at line
+  97, hero-image SectionBox at line 1156, defaultHeroPlacement fallback
+  at line 1230, ObjectPropertiesPanel render at line 1510.
+- Read shared/section-edit.tsx — confirmed ObjectPropertiesPanel already
+  renders "↑ Front" / "↓ Back" buttons in the Layer (z-index) section
+  whenever `onZChange` is provided. The hero-image properties panel
+  already passes `onZChange={(z) => onSectionZChange?.(selectedId, z)}`
+  (line 1516), so the Front/Back buttons are already wired up — no
+  change needed for requirement #6.
+- Verified `onSectionZChange` is properly handled by
+  `handleSectionZChange` in speaker-intro-editor.tsx (lines 1025, 1047).
+
+Changes applied (1 file:
+src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx):
+
+A) STYLE2_DEFAULTS["hero-image"] updated:
+   - OLD: pos {x:39.5, y:8.9}, boxSize {width:697}, scale:1.08, z:50
+   - NEW: pos {x:26.6, y:-2.8}, boxSize {width:1012, height:875},
+          scale:0.74, z:50
+
+B) STYLE2_DEFAULTS["hero-shape"] updated:
+   - OLD: pos {x:42.3, y:12.8}, boxSize {width:632, height:663},
+          scale:1.21, z:40
+   - NEW: pos {x:37, y:10.4}, boxSize {width:754, height:663},
+          scale:1.0, z:40
+
+C) STYLE2_DEFAULTS["header"] z lowered 50 → 30
+   (pos/size/scale unchanged from TSK-0036).
+
+D) STYLE2_DEFAULTS["speakers"] z lowered 60 → 30
+   (pos/size/scale unchanged from TSK-0045).
+
+E) STYLE2_DEFAULTS["style2-footer"] z lowered 50 → 30
+   (pos/size/scale unchanged from TSK-0030).
+
+   Rationale for C/D/E: with hero-image at z=50, the prior speakers z=60
+   would have rendered speakers ABOVE hero-image, violating the user's
+   "hero image must be on top of all other sections" requirement.
+   Lowering all non-hero sections to z=30 keeps hero-shape (z=40) and
+   hero-image (z=50) as the two topmost layers, with hero-image on top.
+
+F) EditableImage placement fallback updated:
+   - OLD: { focusX: 51, focusY: 34, zoom: 1 } (readout "51/34-1.0x")
+   - NEW: { focusX: 33, focusY: 62, zoom: 1 } (readout "33/62-1.0x")
+   (also updated the comment block above the fallback line)
+
+G) Location pins (#5): already rendered AFTER the EditableImage inside
+   the hero-image SectionBox (DOM order), so they naturally render on
+   top of the image within this section. No code change needed — the
+   order is correct.
+
+H) Front/Back Layer z-index buttons (#6): already wired up via
+   ObjectPropertiesPanel's `onZChange` prop. No code change needed.
+
+Verification:
+- TypeScript check: `npx tsc --noEmit` reports ZERO errors in any
+  speaker-intro file (pre-existing unrelated errors in chart.tsx /
+  email-campaign / referral / relay-recipients / v7-scope.ts remain
+  unchanged).
+- Style 2 hero-image now defaults to X=26.6, Y=-2.8, W=1012, H=875,
+  Scale=74%, z=50 — the topmost section.
+- Style 2 hero-shape now defaults to X=37, Y=10.4, W=754, H=663,
+  Scale=100%, z=40 — sits behind the hero-image.
+- Style 2 hero image placement readout defaults to 33/62-1.0x.
+- Hero-image properties panel shows the Layer (z-index: 50) section
+  with ↑ Front / ↓ Back buttons (existing functionality).
+- Location pins render on top of the hero image (DOM order within the
+  hero-image SectionBox).
+
+Stage Summary:
+- All 6 user requirements satisfied for Style 2.
+- Hero-image defaults: X=26.6, Y=-2.8, W=1012, H=875, Scale=74%, z=50.
+- Hero-shape defaults: X=37, Y=10.4, W=754, H=663, Scale=100%, z=40
+  (gradient rectangle / #311B92 #1A237E #0B0B2E / 180° / 90% / 0°).
+- Hero image placement readout: 33/62-1.0x.
+- Hero-image is the topmost section (z=50 > all others at z=30 or 40).
+- Location pins are on top of the hero image (DOM order within the
+  hero-image SectionBox).
+- Front/Back Layer z-index buttons are present in the hero-image
+  properties panel (via ObjectPropertiesPanel's onZChange).
+- Files modified (1):
+  - src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx
+    (STYLE2_DEFAULTS: 5 entries updated + EditableImage placement
+     fallback updated + comment updates)

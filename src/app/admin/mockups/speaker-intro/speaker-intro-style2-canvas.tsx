@@ -95,34 +95,39 @@ const RIGHT_W = CANVAS_W - LEFT_W; // 540
 // The user can still override by dragging or typing in the properties panel.
 // ============================================================================
 const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
-  // PER USER SPEC 2026-07-31 (TSK-0036): Style 2 header defaults
-  // updated to X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%, z=50 (was
-  // X=0, Y=0, W=1200, H=80, Scale=100% per TSK-0031).
-  header:       { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 50 },
-  // PER USER SPEC 2026-08-02 (TSK-0045): hero-shape defaults updated to
-  // X=42.3, Y=12.8, W=632, H=663, Scale=121%, z=40 (was X=55, Y=10,
-  // W=540, H=640, Scale=110% per TSK-0037). The user-specified gradient
-  // config (rectangle / solid→gradient / colors #311B92 #1A237E #0B0B2E
-  // / direction 180° / opacity 90% / rotation 0°) is handled separately
-  // by `heroGradientConfig` below — these are the section layout values
-  // from the Position & Size block of the Hero Shape Properties panel.
-  "hero-shape": { pos: { x: 42.3, y: 12.8 }, boxSize: { width: 632, height: 663 }, scale: 1.21, z: 40 },
-  // PER USER SPEC 2026-08-02 (TSK-0046): hero-image defaults updated to
-  // X=39.5, Y=8.9, W=697, H=auto, Scale=108%, z=50 (was X=40.7, Y=10.9,
-  // W=690, H=auto, Scale=105% per TSK-0045). H=auto (the box auto-sizes
-  // to the image aspect ratio, like Style 1's hero).
-  "hero-image":  { pos: { x: 39.5, y: 8.9 }, boxSize: { width: 697 }, scale: 1.08, z: 50 },
-  // PER USER SPEC 2026-08-02 (TSK-0045): speakers defaults updated to
-  // X=-7.7, Y=-2.8, W=658, H=auto, Scale=67%, z=60 (was X=-8.53358,
-  // Y=19.9229, W=891, Scale=74.69% per TSK-0035).
-  speakers:     { pos: { x: -7.7, y: -2.8 }, boxSize: { width: 658 }, scale: 0.67, z: 60 },
-  // PER USER SPEC 2026-07-31 (TSK-0030): renamed section id "sponsors" →
-  // "style2-footer" to UNLINK it from Style 1/3's "sponsors" section.
-  // Style 1/3's sponsors section is the SPONSORS list (bottom-right);
-  // Style 2's footer is the dark FOOTER BAR (bottom). They are two
-  // different sections and must not share the same sectionLayout key.
-  // Updated defaults: X=-0.1, Y=92.5, W=auto, H=auto, Scale=100%, z=50.
-  "style2-footer": { pos: { x: -0.1, y: 92.5 }, scale: 1, z: 50 },
+  // PER USER SPEC 2026-08-02 (TSK-0048): header z lowered from 50 → 30 so
+  // the hero-image (z=50) is on top of ALL other sections. Position/size
+  // values (X=-1.5, Y=0.3, W=1247, H=auto, Scale=97%) unchanged from
+  // TSK-0036.
+  header:       { pos: { x: -1.5, y: 0.3 }, boxSize: { width: 1247 }, scale: 0.97, z: 30 },
+  // PER USER SPEC 2026-08-02 (TSK-0048): hero-shape defaults updated to
+  // X=37, Y=10.4, W=754, H=663, Scale=100%, z=40 (was X=42.3, Y=12.8,
+  // W=632, H=663, Scale=121%, z=40 per TSK-0045). The user-specified
+  // gradient config (rectangle / gradient / colors #311B92 #1A237E
+  // #0B0B2E / direction 180° / opacity 90% / rotation 0°) is handled
+  // separately by `heroGradientConfig` below — these are the section
+  // layout values from the Position & Size block of the Hero Shape
+  // Properties panel. z=40 keeps the hero-shape BEHIND the hero-image
+  // (z=50).
+  "hero-shape": { pos: { x: 37, y: 10.4 }, boxSize: { width: 754, height: 663 }, scale: 1.0, z: 40 },
+  // PER USER SPEC 2026-08-02 (TSK-0048): hero-image defaults updated to
+  // X=26.6, Y=-2.8, W=1012, H=875, Scale=74%, z=50 (was X=39.5, Y=8.9,
+  // W=697, H=auto, Scale=108%, z=50 per TSK-0046). The hero image is
+  // explicitly the TOPMOST section (z=50 > header 30 / speakers 30 /
+  // style2-footer 30 / hero-shape 40). Location pins are rendered AFTER
+  // the image inside the hero-image SectionBox (DOM order), so they
+  // naturally render on top of the image within this section.
+  "hero-image":  { pos: { x: 26.6, y: -2.8 }, boxSize: { width: 1012, height: 875 }, scale: 0.74, z: 50 },
+  // PER USER SPEC 2026-08-02 (TSK-0048): speakers z lowered from 60 → 30
+  // so the hero-image (z=50) is on top of ALL other sections.
+  // Position/size values (X=-7.7, Y=-2.8, W=658, H=auto, Scale=67%)
+  // unchanged from TSK-0045.
+  speakers:     { pos: { x: -7.7, y: -2.8 }, boxSize: { width: 658 }, scale: 0.67, z: 30 },
+  // PER USER SPEC 2026-08-02 (TSK-0048): style2-footer z lowered from
+  // 50 → 30 so the hero-image (z=50) is on top of ALL other sections.
+  // Position/size values (X=-0.1, Y=92.5, W=auto, H=auto, Scale=100%)
+  // unchanged from TSK-0030.
+  "style2-footer": { pos: { x: -0.1, y: 92.5 }, scale: 1, z: 30 },
 };
 
 // Human-readable labels shown in the Object Properties Panel header.
@@ -1211,14 +1216,18 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                 "51/34-1.0x" readout the user specified). When the user
                 hasn't panned/zoomed yet, this default is used. After
                 the user pans/zooms, data.heroOverlay.imagePlacement is
-                set and overrides this fallback. */}
+                set and overrides this fallback.
+
+                PER USER SPEC 2026-08-02 (TSK-0048): default imagePlacement
+                updated to { focusX: 33, focusY: 62, zoom: 1 } (matches
+                the "33/62-1.0x" readout the user specified). */}
             <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
               {data.heroOverlay?.imageUrl ? (
                 <EditableImage
                   slot={{ kind: "hero" }}
                   src={data.heroOverlay.imageUrl}
                   alt="Hero"
-                  placement={data.heroOverlay.imagePlacement ?? { focusX: 51, focusY: 34, zoom: 1 }}
+                  placement={data.heroOverlay.imagePlacement ?? { focusX: 33, focusY: 62, zoom: 1 }}
                   editable={editable}
                   previewScale={previewScale}
                   onPickImage={onPickImage}
