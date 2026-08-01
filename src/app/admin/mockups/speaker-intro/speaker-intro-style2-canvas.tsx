@@ -560,28 +560,41 @@ function HeroShapePanel({
 
   return (
     <div
-      className="absolute rounded-md border-2 border-[#FF005A] bg-white shadow-xl"
-      style={{ right: "12px", top: "12px", zIndex: 9998, minWidth: "240px", maxHeight: "90%", overflowY: "auto" }}
+      className="absolute rounded-r-lg rounded-bl-lg bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden animate-[panelSlideIn_180ms_ease-out]"
+      style={{ left: "12px", top: "12px", zIndex: 9998, minWidth: "240px", maxHeight: "90%", overflowY: "auto" }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between bg-[#FF005A] text-white px-2 py-1 rounded-t-md sticky top-0">
-        <span className="text-[0.65rem] font-bold uppercase tracking-wider">
-          Hero Shape Properties
-        </span>
+      <style>{`
+        @keyframes panelSlideIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+      {/* Header — sleek gradient style matching ObjectPropertiesPanel (TSK-0050) */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-[#FF005A] to-[#CC0048] text-white sticky top-0 z-10">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[0.65rem] font-bold uppercase tracking-wider truncate">
+            Hero Shape Properties
+          </span>
+          <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider">
+            <span className="h-1 w-1 rounded-full bg-[#27C93F] animate-pulse" />
+            LIVE
+          </span>
+        </div>
         {onDeselect && (
           <button
             type="button"
             onClick={onDeselect}
-            className="text-white/80 hover:text-white text-[0.8rem] leading-none ml-2"
+            className="text-white/80 hover:text-white hover:bg-white/15 rounded p-0.5 ml-2 transition"
             title="Deselect"
+            aria-label="Deselect"
           >
-            ×
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         )}
       </div>
 
       {/* Body */}
-      <div className="px-2 py-2 flex flex-col gap-2.5">
+      <div className="px-3 py-2.5 flex flex-col gap-2.5">
         {/* Shape + fill mode + colors + direction + opacity + rotation —
             PER USER SPEC 2026-07-31 (TSK-0028): unified with the Style 1
             hero overlay shape system. The shared HeroShapePanelFields

@@ -26,6 +26,7 @@ import type {
   SectionPos,
   SectionBoxSize,
 } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
 
 /**
  * QrSalonEditor — the editor + live preview surface for the QR-only
@@ -417,23 +418,48 @@ export function QrSalonEditor() {
         </div>
 
         {viewMode === "form" ? (
-          <FormView
-            data={data}
-            onPatch={patch}
-            onPatchCaption={patchCaption}
-            onPatchCaptionStyle={patchCaptionStyle}
-            onPatchBranding={patchBranding}
-            onPatchWithSectionClear={patchWithSectionClear}
-            onPickBranding={() => setPickerOpen(true)}
-          />
+          /* PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
+             COMPRESSED (collapsed) by default. Click the header to expand.
+             The floating ObjectPropertiesPanel anchors top-LEFT of the
+             canvas (the left column) so it doesn't overlap this editor. */
+          <CollapsibleFormPanel
+            title="qr-salon.form"
+            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+          >
+            <div className="p-4">
+              <FormView
+                data={data}
+                onPatch={patch}
+                onPatchCaption={patchCaption}
+                onPatchCaptionStyle={patchCaptionStyle}
+                onPatchBranding={patchBranding}
+                onPatchWithSectionClear={patchWithSectionClear}
+                onPickBranding={() => setPickerOpen(true)}
+              />
+            </div>
+          </CollapsibleFormPanel>
         ) : (
-          <JsonView
-            jsonText={jsonText}
-            parseError={parseError}
-            onJsonChange={handleJsonChange}
-            onCopy={handleCopyJson}
-            copied={copied}
-          />
+          <CollapsibleFormPanel
+            title="qr-salon.data.json"
+            icon={
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
+              </div>
+            }
+            error={parseError}
+          >
+            <div className="p-4">
+              <JsonView
+                jsonText={jsonText}
+                parseError={parseError}
+                onJsonChange={handleJsonChange}
+                onCopy={handleCopyJson}
+                copied={copied}
+              />
+            </div>
+          </CollapsibleFormPanel>
         )}
 
         {/* Export buttons */}

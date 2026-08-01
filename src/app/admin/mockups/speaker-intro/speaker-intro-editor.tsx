@@ -24,6 +24,7 @@ import type {
   EventPickListItem,
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
 import { SAMPLE_DATA } from "./sample-data";
 import { SpeakerIntroCanvas } from "./speaker-intro-canvas";
 import { SpeakerIntroStyle2Canvas } from "./speaker-intro-style2-canvas";
@@ -890,44 +891,34 @@ export function SpeakerIntroEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
+        {/* Left: Form view OR JSON editor (toggled by viewMode).
+         *  PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
+         *  COMPRESSED (collapsed) by default. Click the header to expand.
+         *  This frees up the left column for the floating ObjectPropertiesPanel
+         *  that anchors to the top-LEFT of the canvas (above this form). */}
         {viewMode === "form" ? (
-          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
-              <div className="flex items-center gap-2">
-                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/80">
-                  speaker-intro.form
-                </span>
-              </div>
-              <span className="text-[0.65rem] font-mono text-[#27C93F]">
-                LIVE
-              </span>
-            </div>
+          <CollapsibleFormPanel
+            title="speaker-intro.form"
+            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+          >
             <SpeakerIntroFormView
               data={data}
               onChange={(next) => applyData(next)}
             />
-          </div>
+          </CollapsibleFormPanel>
         ) : (
-          <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
-              <div className="flex items-center gap-2">
+          <CollapsibleFormPanel
+            title="speaker-intro.data.json"
+            icon={
+              <div className="flex items-center gap-1">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
-                <span className="ml-3 text-[0.7rem] font-mono text-white/40">
-                  speaker-intro.data.json
-                </span>
               </div>
-              <span
-                className={`text-[0.65rem] font-mono ${
-                  parseError ? "text-[#FF5F56]" : "text-[#27C93F]"
-                }`}
-              >
-                {parseError ? "ERROR" : "VALID"}
-              </span>
-            </div>
+            }
+            dark
+            error={parseError}
+          >
             <textarea
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
@@ -949,7 +940,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 </div>
               </div>
             )}
-          </div>
+          </CollapsibleFormPanel>
         )}
 
         {/* Right: live preview */}

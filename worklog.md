@@ -9683,3 +9683,5 @@ Stage Summary:
     (STYLE_DEFAULTS_KEY_PREFIX + savedDefaultFeedback state +
      handleSetAsDefault + modified handleReset + toolbar button +
      onSetAsDefault passed to both canvases)
+Backup tag: backup/pre-compressed-form-20260801-192913
+
