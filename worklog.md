@@ -10896,3 +10896,75 @@ Stage Summary:
   the curated defaults), matching the real Chapter Organizer's
   experience.
 - Ready to push to origin/main for Vercel auto-deploy.
+
+---
+Task ID: TSK-0060 — global-brand-library + dynamic chapter text on /events
+Agent: main
+Task: Two user requests:
+  1. Add the 13 brand-assets Vercel Blob URLs as a "global library"
+     that chapter admins (ADMIN / CHAPTER_ORGANIZER / CO_HOST) can
+     see in the /admin/images gallery — not just the 3 currently-
+     selected defaults. The previous TSK-0059 filter was too
+     restrictive: chapter admins had no way to PICK a new image for
+     their chapter override because they couldn't see the options.
+  2. Replace hardcoded "AI Salon Tel Aviv" + "Google for Startups
+     Campus TLV and partner venues" strings on /events with dynamic
+     chapter name from the signed-in user's chapter.
+
+Work Log:
+- Step 1 — Created /src/lib/global-brand-library.ts:
+  * Exports GLOBAL_BRAND_LIBRARY_URLS — a curated list of the 13
+    canonical AI Salon brand-image URLs (logos, mascots, banners)
+    that every chapter admin should be able to pick from.
+  * Exports isGlobalBrandLibraryUrl(url) helper for membership check.
+  * Curated in code (not DB) because the curation is a one-time
+    decision per brand cycle. The Super Admin can add/remove URLs
+    here as the brand evolves.
+  * The URLs themselves are public Vercel Blob URLs — accessible
+    to anyone with the URL. This constant only controls gallery
+    visibility, not access control on the bytes.
+
+- Step 2 — Updated /api/admin/brand-images/route.ts GET to include
+  the global library URLs in the allowed set for non-global callers:
+  * Real SUPER_ADMIN (scope.kind === "global") → full library
+    (unchanged — sees every Vercel Blob brand-assets/ object).
+  * Non-global callers → see:
+      - 3 globally-selected defaults (favicon, loginHero, loginBanner)
+      - 13 curated global brand library images (NEW)
+      - Their own chapter's override images (if scope is "chapter")
+  * The 13 library URLs are now visible to chapter admins so they
+    can pick from them for their chapter overrides.
+
+- Step 3 — Updated /admin/images/page.tsx notice for non-super-admins:
+  * Now says "the global brand library (curated logos, mascots, and
+    banners) plus the 3 globally-selected defaults" — reflecting
+    the new behavior.
+
+- Step 4 — Updated /events/page.tsx to use dynamic chapter name:
+  * Extended the `me` query to include `chapter: { select: { name: true } }`.
+  * Added `chapterName: meRow.chapter?.name ?? null` to the `me` object.
+  * Text A (line 228): "AI Salon Tel Aviv" → `AI Salon {me?.chapterName ?? "Tel Aviv"}`.
+  * Text B (line 234): "Events at Google for Startups Campus TLV and partner venues."
+    → `Events at the leading {me?.chapterName ?? "Tel Aviv"} venues.`
+  * Text C (line 278): "© 2026 AI Salon Tel Aviv · Empowering AI Connections"
+    → `© 2026 AI Salon {me?.chapterName ?? "Tel Aviv"} · Empowering AI Connections`
+  * Anonymous visitors (no `me`) see "Tel Aviv" as the fallback,
+    preserving the existing behavior for the public list.
+  * Signed-in members see their own chapter's name — e.g. a Montreal
+    chapter admin sees "AI Salon Montreal", "Events at the leading
+    Montreal venues", "© 2026 AI Salon Montreal · Empowering AI
+    Connections".
+
+- Verification:
+  * `npx tsc --noEmit` — no new errors in modified files.
+  * `npx next build` — succeeded with "✓ Compiled successfully in 40s".
+
+Stage Summary:
+- Chapter admins now see the 13 canonical brand images in the
+  /admin/images gallery, plus the 3 globally-selected defaults and
+  their own chapter's override images. They can pick from any of
+  these for their chapter overrides.
+- The /events page now shows the signed-in user's chapter name in
+  the page header (A), events subtitle (B), and footer copyright (C).
+  Anonymous visitors see "Tel Aviv" as the fallback.
+- Ready to push to origin/main for Vercel auto-deploy.

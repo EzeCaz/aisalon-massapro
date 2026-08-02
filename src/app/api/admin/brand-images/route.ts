@@ -7,6 +7,7 @@ import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings } from "@/lib/site-settings";
 import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
+import { GLOBAL_BRAND_LIBRARY_URLS } from "@/lib/global-brand-library";
 
 /**
  * GET /api/admin/brand-images
@@ -177,22 +178,26 @@ export async function GET() {
   // 3. Current selections for each role.
   const settings = await getPublicSettings();
 
-  // TSK-0059: Filter the image list for non-global callers.
+  // TSK-0059 + TSK-0060: Filter the image list for non-global callers.
   //
   // Real SUPER_ADMIN (or SUPER_ADMIN viewing-as SUPER_ADMIN with no
   // chapter) sees the full library — both stock images and every
   // uploaded brand asset in Vercel Blob.
   //
   // Non-global callers (ADMIN, CHAPTER_ORGANIZER, CO_HOST, or a
-  // SUPER_ADMIN viewing-as one of those) see ONLY:
+  // SUPER_ADMIN viewing-as one of those) see:
   //   - The 3 globally-selected images (favicon, loginHero, loginBanner)
+  //   - The curated global brand library (GLOBAL_BRAND_LIBRARY_URLS —
+  //     the canonical AI Salon logos/mascots/banners that every chapter
+  //     can pick from for their chapter overrides)
   //   - Their own chapter's override images (if scope is "chapter")
   //
-  // Rationale: the brand-assets library is curated by the Super Admin.
-  // Chapter admins should pick from the curated defaults for their
-  // chapter overrides — they should NOT see every image ever uploaded
-  // to the brand-assets/ folder (which may include test uploads,
-  // alternate variants, deprecated logos, etc.).
+  // Rationale: the brand-assets/ Vercel Blob folder may contain test
+  // uploads, alternate variants, and deprecated logos that chapter
+  // admins shouldn't have to wade through. The Super Admin curates
+  // GLOBAL_BRAND_LIBRARY_URLS in code (src/lib/global-brand-library.ts)
+  // to expose only the canonical brand images chapter admins should
+  // pick from.
   //
   // Stock images are always hidden for non-global callers — their URLs
   // (/api/admin/hidden-images/[name]) never match a selection URL
@@ -203,6 +208,12 @@ export async function GET() {
     if (settings.favicon) allowedUrls.add(settings.favicon);
     if (settings.loginHero) allowedUrls.add(settings.loginHero);
     if (settings.loginBanner) allowedUrls.add(settings.loginBanner);
+
+    // TSK-0060: Always include the curated global brand library so
+    // chapter admins can pick from these images for their overrides.
+    for (const url of GLOBAL_BRAND_LIBRARY_URLS) {
+      allowedUrls.add(url);
+    }
 
     // For chapter scope, also include the chapter's current overrides
     // so the chapter admin can see + manage the images they've already

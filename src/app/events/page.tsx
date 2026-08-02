@@ -31,11 +31,14 @@ export const metadata = { title: "Events — AI Salon Tel Aviv" };
  */
 export default async function EventsPage() {
   const session = await getServerSession(authOptions);
-  let me: { id: string; email: string; name: string | null; utmUid: string | null } | null = null;
+  let me: { id: string; email: string; name: string | null; utmUid: string | null; chapterName: string | null } | null = null;
   if (session?.user?.email) {
     const meRow = await db.user.findUnique({
       where: { email: session.user.email },
-      include: { tags: true },
+      include: {
+        tags: true,
+        chapter: { select: { name: true } },
+      },
     });
     if (meRow) {
       me = {
@@ -43,6 +46,7 @@ export default async function EventsPage() {
         email: meRow.email,
         name: meRow.name,
         utmUid: meRow.utmUid,
+        chapterName: meRow.chapter?.name ?? null,
       };
     }
     // Signed-in users must complete onboarding before browsing the
@@ -222,13 +226,13 @@ export default async function EventsPage() {
         {/* Page header */}
         <div className="mb-10">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            AI Salon Tel Aviv
+            AI Salon {me?.chapterName ?? "Tel Aviv"}
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
             Upcoming & past <span className="ais-gradient-text">gatherings</span>
           </h1>
           <p className="mt-3 text-base text-black/80 max-w-2xl">
-            Events at Google for Startups Campus TLV and partner venues.
+            Events at the leading {me?.chapterName ?? "Tel Aviv"} venues.
             Click any event to view the agenda, speakers, and shared photo gallery.
           </p>
         </div>
@@ -271,7 +275,7 @@ export default async function EventsPage() {
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+          <span>© {new Date().getFullYear()} AI Salon {me?.chapterName ?? "Tel Aviv"} · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a

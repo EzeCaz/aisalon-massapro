@@ -141,9 +141,9 @@ export default async function AdminImagesPage() {
           {!isSuper && (
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
               You are signed in as <strong>{me.role === ROLES.ADMIN ? "Admin" : "Chapter Organizer"}</strong>.
-              The gallery below shows only the <strong>global brand defaults</strong>{" "}
-              (favicon, login hero, login banner) curated by the Super Admin.
-              Pick from these defaults to set the favicon, login hero, and{" "}
+              The gallery below shows the <strong>global brand library</strong>{" "}
+              (curated logos, mascots, and banners) plus the 3 globally-selected
+              defaults. Pick from these to set the favicon, login hero, and{" "}
               login banner for{" "}
               {me.role === ROLES.ADMIN
                 ? "chapters in your country"
