@@ -31,9 +31,11 @@ import ZAI from "z-ai-web-dev-sdk";
  * still review and edit everything before saving.
  *
  * LLM provider selection:
- *   - If OPENAI_API_KEY is set (recommended for Vercel), uses the
- *     OpenAI-compatible path. Also supports any OpenAI-compatible
- *     provider by setting OPENAI_BASE_URL (Together, Groq, OpenRouter…).
+ *   - If KIMI_API_KEY is set (recommended for Vercel), uses Moonshot
+ *     Kimi's OpenAI-compatible API at https://api.moonshot.cn/v1.
+ *   - Else if OPENAI_API_KEY is set, uses the OpenAI-compatible path.
+ *     Also supports any OpenAI-compatible provider by setting
+ *     OPENAI_BASE_URL (Together, Groq, OpenRouter…).
  *   - Else if ZAI_BASE_URL + ZAI_API_KEY are set, uses the ZAI internal
  *     API. NOTE: `internal-api.z.ai` resolves to private IPs (172.25.x.x)
  *     that are NOT reachable from Vercel's public network — this path
@@ -251,10 +253,10 @@ Rules:
             "AI service is not reachable from this server. " +
             "On Vercel production, the ZAI internal API " +
             "(internal-api.z.ai) is on a private network and cannot be " +
-            "reached. Set OPENAI_API_KEY in Vercel Project Settings → " +
-            "Environment Variables (Optionally OPENAI_BASE_URL and " +
-            "OPENAI_MODEL to use a different OpenAI-compatible provider), " +
-            "then redeploy. See src/lib/zai-client.ts for details.",
+            "reached. Set KIMI_API_KEY (recommended — free tier at " +
+            "platform.moonshot.cn) or OPENAI_API_KEY in Vercel Project " +
+            "Settings → Environment Variables, then redeploy. " +
+            "See src/lib/zai-client.ts for details.",
         },
         { status: 500 }
       );

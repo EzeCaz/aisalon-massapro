@@ -18,18 +18,26 @@
  *   chat-completions endpoint. Set the env vars for whichever provider
  *   you have access to:
  *
- *   Option A — OpenAI (works everywhere, public API):
+ *   Option A — Kimi / Moonshot AI (RECOMMENDED — works on Vercel):
+ *     Get a key at https://platform.moonshot.cn/console/api-keys
+ *     KIMI_API_KEY  = sk-...
+ *     KIMI_BASE_URL = https://api.moonshot.cn/v1   (optional — this is default)
+ *     KIMI_MODEL    = moonshot-v1-8k               (optional — this is default)
+ *                  other options: moonshot-v1-32k, moonshot-v1-128k,
+ *                  moonshot-v1-auto, kimi-k2-0711 (long-context, free tier OK)
+ *
+ *   Option B — OpenAI (works everywhere, public API):
  *     OPENAI_API_KEY  = sk-...
  *     OPENAI_BASE_URL = https://api.openai.com/v1   (optional, this is the default)
  *     OPENAI_MODEL    = gpt-4o-mini                 (optional, default)
  *
- *   Option B — Any OpenAI-compatible provider (Together, Groq, OpenRouter,
+ *   Option C — Any OpenAI-compatible provider (Together, Groq, OpenRouter,
  *   Fireworks, Anyscale, local Ollama, etc.):
  *     OPENAI_API_KEY  = <provider key>
  *     OPENAI_BASE_URL = https://api.together.xyz/v1   (or similar)
  *     OPENAI_MODEL    = meta-llama/Llama-3.1-70B-Instruct-Turbo
  *
- *   Option C — ZAI internal API (DEV ONLY — not reachable from Vercel):
+ *   Option D — ZAI internal API (DEV ONLY — not reachable from Vercel):
  *     ZAI_BASE_URL = https://internal-api.z.ai/v1
  *     ZAI_API_KEY  = Z.ai
  *     ZAI_CHAT_ID  = chat-...   (optional)
@@ -37,16 +45,29 @@
  *     ZAI_TOKEN    = ...        (optional)
  *
  *   Selection order:
- *     1. If OPENAI_API_KEY is set → use OpenAI-compatible path (Option A/B).
- *     2. Else if ZAI_BASE_URL + ZAI_API_KEY are set → use ZAI internal path (Option C, dev only).
- *     3. Else hasLlm() returns false → caller falls back to the SDK.
+ *     1. If KIMI_API_KEY is set            → Moonshot Kimi path (Option A).
+ *     2. Else if OPENAI_API_KEY is set     → OpenAI-compatible path (Option B/C).
+ *     3. Else if ZAI_BASE_URL+ZAI_API_KEY  → ZAI internal path (Option D, dev only).
+ *     4. Else hasLlm() returns false       → caller falls back to the SDK.
  */
 
 export function hasLlm(): boolean {
   return !!(
+    process.env.KIMI_API_KEY ||
     process.env.OPENAI_API_KEY ||
     (process.env.ZAI_BASE_URL && process.env.ZAI_API_KEY)
   );
+}
+
+/**
+ * Returns a short label describing the active LLM provider, for logs/UI.
+ * Returns null if no provider is configured.
+ */
+export function getActiveProvider(): "kimi" | "openai" | "zai" | null {
+  if (process.env.KIMI_API_KEY) return "kimi";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.ZAI_BASE_URL && process.env.ZAI_API_KEY) return "zai";
+  return null;
 }
 
 /** @deprecated use hasLlm() — kept for backward compat with existing callers. */
@@ -91,7 +112,36 @@ export async function createChatCompletion(
     model?: string;
   }
 ): Promise<ChatCompletionResponse> {
-  // ---- Option A/B: OpenAI-compatible (preferred — works on Vercel) ----
+  // ---- Option A: Kimi / Moonshot AI (RECOMMENDED for Vercel) ----
+  if (process.env.KIMI_API_KEY) {
+    const baseUrl = (
+      process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1"
+    ).replace(/\/$/, "");
+    const url = `${baseUrl}/chat/completions`;
+    const model = body.model || process.env.KIMI_MODEL || "moonshot-v1-8k";
+
+    // Strip the ZAI-specific `thinking` field — Kimi doesn't know it.
+    const { thinking: _thinking, ...kimiBody } = body;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.KIMI_API_KEY}`,
+      },
+      body: JSON.stringify({ ...kimiBody, model }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(
+        `Kimi chat completions failed (${res.status} ${res.statusText}): ${errText.slice(0, 500)}`
+      );
+    }
+    return (await res.json()) as ChatCompletionResponse;
+  }
+
+  // ---- Option B/C: OpenAI-compatible (preferred — works on Vercel) ----
   if (process.env.OPENAI_API_KEY) {
     const baseUrl = (
       process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"
@@ -122,14 +172,14 @@ export async function createChatCompletion(
     return (await res.json()) as ChatCompletionResponse;
   }
 
-  // ---- Option C: ZAI internal API (dev only — not reachable from Vercel) ----
+  // ---- Option D: ZAI internal API (dev only — not reachable from Vercel) ----
   const baseUrl = process.env.ZAI_BASE_URL;
   const apiKey = process.env.ZAI_API_KEY;
   if (!baseUrl || !apiKey) {
     throw new Error(
-      "No LLM provider configured. Set either OPENAI_API_KEY " +
-        "(recommended — works on Vercel) or ZAI_BASE_URL + ZAI_API_KEY " +
-        "(dev only). See src/lib/zai-client.ts for details."
+      "No LLM provider configured. Set one of: KIMI_API_KEY (recommended), " +
+        "OPENAI_API_KEY, or ZAI_BASE_URL + ZAI_API_KEY (dev only). " +
+        "See src/lib/zai-client.ts for details."
     );
   }
 
