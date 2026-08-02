@@ -413,7 +413,12 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
             </p>
           </SectionBox>
 
-          {/* ===== SPONSORS + COLLABORATORS (bottom-right) ===== */}
+          {/* ===== SPONSORS + COLLABORATORS (bottom-right corner) =====
+              PER USER SPEC 2026-08-02: Section moved from bottom:120px to
+              bottom:32px so it sits flush in the bottom-right corner of the
+              canvas (mirrors the footer-credit's bottom offset on the left).
+              Layout: "In collaboration with" row on top, "Sponsored by"
+              row below, both right-aligned. */}
           {(data.collaborators.length > 0 || data.sponsors.length > 0) && (
             <SectionBox
               active={sectionsEditable}
@@ -429,8 +434,8 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               canvasW={CANVAS_W}
               canvasH={CANVAS_H}
               className="absolute flex flex-col items-end gap-2"
-              style={{ right: "56px", bottom: "120px", zIndex: sectionZFor("sponsors") }}
-              anchor="top-right"
+              style={{ right: "56px", bottom: "32px", zIndex: sectionZFor("sponsors") }}
+              anchor="bottom-right"
               accentColor="#FF005A"
               label="Sponsored by"
               guideId="sponsors"

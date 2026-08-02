@@ -145,8 +145,17 @@ export const SAMPLE_DATA: EventProfileData = {
       visible: true,
     },
   ],
-  sponsors: [],
-  collaborators: [],
+  // PER USER SPEC 2026-08-02: Populate sponsors + collaborators to match
+  // the speaker-intro Style 1 sample data (Amdocs, Google as collaborators,
+  // Alison.ai as sponsor). Renders at the bottom-right corner of the canvas
+  // (see event-profile-canvas.tsx sponsors SectionBox).
+  collaborators: [
+    { name: "Amdocs", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+    { name: "Google", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+  ],
+  sponsors: [
+    { name: "Alison.ai", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+  ],
   // Bottom-LEFT branding asset (per user spec 2026-07-02): defaults to
   // the AI Salon brand image hosted on Vercel Blob. Replaceable via the
   // canvas Replace button or the form view URL input.

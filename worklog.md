@@ -10327,3 +10327,20 @@ Stage Summary:
     served both modes).
   - agenda-profile/event-profile-canvas.tsx + event-profile-editor.tsx
     (stale duplicate files per the constraints).
+
+---
+Task ID: event-profile-sponsors
+Agent: main
+Task: Add the sponsor + "In collaboration with" section to the event-profile mockup, matching the speaker-intro Style 1 design, positioned at the bottom-right corner of the canvas.
+
+Work Log:
+- Read event-profile types.ts — confirmed Sponsor type and sponsors/collaborators fields already exist.
+- Read event-profile-canvas.tsx — confirmed the sponsors SectionBox already renders when arrays are non-empty; was positioned at right:56px, bottom:120px (above the corner).
+- Read speaker-intro sample-data.ts — confirmed canonical collaborator/sponsor data (Amdocs, Google as collaborators; Alison.ai as sponsor; all using https://aisalon.massapro.com/images/falafel-meerkat.png placeholder).
+- Updated event-profile/sample-data.ts — populated collaborators + sponsors arrays to mirror speaker-intro Style 1.
+- Updated event-profile-canvas.tsx — moved sponsors SectionBox from bottom:120px → bottom:32px and switched anchor from "top-right" → "bottom-right" so it sits flush in the bottom-right corner (mirrors the footer-credit's bottom offset on the left side).
+- Verified compilation: HTTP 200, no compile errors in dev.log.
+
+Stage Summary:
+- Event Profile mockup now renders the same sponsor/collaborator block as speaker-intro Style 1 (Amdocs + Google as collaborators, Alison.ai as sponsor), anchored to the bottom-right corner.
+- No other mockup behavior changed.
