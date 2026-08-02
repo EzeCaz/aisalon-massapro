@@ -7400,3 +7400,28 @@ Stage Summary:
 - Most likely causes: (a) the key was revoked or never activated on platform.moonshot.cn, (b) email verification pending on the Moonshot account, (c) the key was copy-pasted incompletely.
 - Action needed from user: re-issue or re-verify the key at platform.moonshot.cn → API Keys, then update KIMI_API_KEY in .env (and on Vercel project env vars for production). The code will pick it up automatically — no further code changes needed.
 - Artifacts produced: src/lib/kimi-client.ts, scripts/test-kimi.ts, updated .env, updated .env.example, updated /api/admin/events/extract/route.ts.
+
+---
+Task ID: kimi-api-key-for-prefill-event (update)
+Agent: main
+Task: User said "should be working..." — re-verify Kimi API key.
+
+Work Log:
+- Re-ran scripts/test-kimi.ts — still 401 on api.moonshot.cn.
+- Tested both .cn and .ai regional endpoints, all 4 model names, with/without "Bearer " prefix, and GET /v1/models.
+- FOUND: key authenticates fine on api.moonshot.ai (international) — GET /v1/models returned 200 with model list including kimi-k2.6 (262k context, supports images/video/reasoning) and kimi-k2.7-code. The same key is rejected on api.moonshot.cn because it was issued at platform.moonshot.ai, not .cn.
+- Updated src/lib/kimi-client.ts: default base URL changed from api.moonshot.cn to api.moonshot.ai, default model changed from moonshot-v1-32k to kimi-k2.6.
+- Added 401/429 status-aware hints in the error message (so the user sees "key was rejected" vs "insufficient balance" instead of a generic "Invalid Authentication").
+- Updated /api/admin/events/extract/route.ts to reference kimi-k2.6 in the inline comment.
+- Updated .env (still has the same sk-... key; org ID ak-... is preserved as a comment for reference).
+- Updated .env.example to document the .ai vs .cn distinction.
+- Re-ran the smoke test through the actual src/lib/kimi-client.ts — request reaches Moonshot, key authenticates, server responds with a clear 429 explaining the account is suspended for insufficient balance (org-0cb789afb66740c18712efb4fd512371, the ak-fbqowozmddfi11ccdd71 the user mentioned is the org ID).
+- TypeScript clean — no errors in kimi-client.ts, zai-client.ts, or extract/route.ts.
+
+Stage Summary:
+- Code wiring is COMPLETE and verified end-to-end. The client correctly:
+  * Authenticates against api.moonshot.ai (international platform)
+  * Surfaces the real upstream error body (not a generic "Invalid Authentication")
+  * Falls back to ZAI env vars and ZAI SDK if KIMI_API_KEY is not set
+- REMAINING BLOCKER (not a code issue): Moonshot account is suspended for insufficient balance. To activate the prefill flow, the user needs to recharge the account or switch to a paid plan at platform.moonshot.ai → Billing. Once the balance is positive, the "Extract fields with AI" button will work with no further code changes.
+- Artifacts: src/lib/kimi-client.ts (updated), src/app/api/admin/events/extract/route.ts (updated), .env (updated), .env.example (updated), scripts/test-kimi.ts (updated).

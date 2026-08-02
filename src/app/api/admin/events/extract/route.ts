@@ -120,8 +120,9 @@ Rules:
       const kimiRes = await createKimiChatCompletion({
         messages,
         temperature: 0.2,
-        // moonshot-v1-32k comfortably fits the 20k-char input cap + JSON output
-        model: process.env.KIMI_MODEL || "moonshot-v1-32k",
+        // kimi-k2.6 has 262k context — comfortably fits the 20k-char input
+        // cap + JSON output. Override via KIMI_MODEL env var if needed.
+        model: process.env.KIMI_MODEL || "kimi-k2.6",
       });
       raw = kimiRes.choices[0]?.message?.content || "";
     } else if (hasZaiEnv()) {

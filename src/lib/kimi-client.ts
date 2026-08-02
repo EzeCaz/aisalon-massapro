@@ -1,14 +1,20 @@
 /**
  * Kimi (Moonshot AI) HTTP client.
  *
- * Moonshot provides an OpenAI-compatible Chat Completions API at
- * https://api.moonshot.cn/v1/chat/completions. The free tier at
- * platform.moonshot.cn issues an API key starting with `sk-...`.
+ * Moonshot provides an OpenAI-compatible Chat Completions API. There are
+ * two regional endpoints — the same API key works on whichever endpoint
+ * matches the platform that issued it:
+ *
+ *   - https://api.moonshot.cn/v1  — for keys issued at platform.moonshot.cn
+ *   - https://api.moonshot.ai/v1  — for keys issued at platform.moonshot.ai
+ *                                   (international; this is the default here)
  *
  * Env vars:
- *   KIMI_API_KEY  (required) — sk-... from platform.moonshot.cn
- *   KIMI_BASE_URL (optional) — defaults to https://api.moonshot.cn/v1
- *   KIMI_MODEL    (optional) — defaults to "moonshot-v1-32k"
+ *   KIMI_API_KEY  (required) — sk-... from platform.moonshot.{ai|cn}
+ *   KIMI_BASE_URL (optional) — defaults to https://api.moonshot.ai/v1
+ *   KIMI_MODEL    (optional) — defaults to "kimi-k2.6" (262k context,
+ *                              supports images/video/reasoning; available
+ *                              on the international platform)
  *
  * The shape of createChatCompletion() matches zai-client.ts so callers
  * can use either provider interchangeably.
@@ -64,9 +70,9 @@ export async function createKimiChatCompletion(
   }
 
   const baseUrl = (
-    process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1"
+    process.env.KIMI_BASE_URL || "https://api.moonshot.ai/v1"
   ).replace(/\/$/, "");
-  const model = body.model || process.env.KIMI_MODEL || "moonshot-v1-32k";
+  const model = body.model || process.env.KIMI_MODEL || "kimi-k2.6";
   const url = `${baseUrl}/chat/completions`;
 
   const res = await fetch(url, {
@@ -88,8 +94,21 @@ export async function createKimiChatCompletion(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    let hint = "";
+    if (res.status === 401) {
+      hint =
+        " — KIMI_API_KEY was rejected. If your key was issued at " +
+        "platform.moonshot.ai, the default base URL (api.moonshot.ai) " +
+        "is correct. If it was issued at platform.moonshot.cn, set " +
+        "KIMI_BASE_URL=https://api.moonshot.cn/v1 in your env.";
+    } else if (res.status === 429) {
+      hint =
+        " — Moonshot quota/balance issue. The error body usually says " +
+        "either 'insufficient balance' (recharge at platform.moonshot.ai) " +
+        "or 'rate limit' (wait and retry).";
+    }
     throw new Error(
-      `Kimi chat completions failed (${res.status} ${res.statusText}): ${errText.slice(0, 500)}`
+      `Kimi chat completions failed (${res.status} ${res.statusText})${hint}: ${errText.slice(0, 500)}`
     );
   }
 
