@@ -25,7 +25,12 @@ import {
  *   event: { title, subtitle, description, venue, address, city, mapUrl,
  *            startsAt, endsAt, takeaways, intendedFor, rsvpUrl },
  *   speakers: Array<{ name, company, position, bio, topic, abstract, startTime, endTime }>,
- *   warnings: string[]
+ *   suggestions: { subtitle?: string[], takeaways?: string[],
+ *                  intendedFor?: string[], description?: string[] },
+ *   bilingual: { detected: boolean, primaryLanguage: string,
+ *                secondaryLanguage: string | null, languages: string[] },
+ *   warnings: string[],
+ *   provider: string
  * }
  *
  * Admin-only (any role with members.view).
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const systemPrompt = `You are an event extraction assistant for AI Salon Tel Aviv, a community of AI founders, builders, and investors in Tel Aviv.
+  const systemPrompt = `You are an event extraction assistant for AI Salon, a global community of AI founders, builders, and investors.
 
 Given raw event content (LinkedIn posts, marketing copy, emails, speaker bios), extract a structured event object. Output STRICT JSON only — no markdown fences, no commentary.
 
@@ -91,9 +96,9 @@ The JSON shape:
     "venue": "string | null — e.g. 'Google For Startups Campus TLV' or 'The Stage'",
     "address": "string | null — street address if mentioned",
     "city": "string | null — default 'Tel Aviv' if event is in Israel and no other city given",
-    "country": "string | null — ISO 3-letter code, e.g. 'ISR', 'USA'",
+    "country": "string | null — ISO 3-letter code, e.g. 'ISR', 'USA', 'CAN'",
     "mapUrl": "string | null — Google Maps URL if mentioned",
-    "startsAt": "ISO 8601 string | null — e.g. '2026-06-18T18:00:00'. If the text says 'June 18, 2026 | 18:00 – 21:15', startsAt = '2026-06-18T18:00:00'. Assume local Tel Aviv time (Asia/Jerusalem, UTC+3) unless a timezone is specified. If year is missing, assume the next occurrence of that date.",
+    "startsAt": "ISO 8601 string | null — e.g. '2026-06-18T18:00:00'. If the text says 'June 18, 2026 | 18:00 – 21:15', startsAt = '2026-06-18T18:00:00'. Use the timezone specified in the text (e.g. 'EDT' → America/New_York, 'IST' → Asia/Jerusalem). If no timezone is specified, assume Asia/Jerusalem (UTC+3). If year is missing, assume the next occurrence of that date.",
     "endsAt": "ISO 8601 string | null — e.g. '2026-06-18T21:15:00'",
     "takeaways": "string | null — what attendees will take home, comma-separated or bullet-style. e.g. 'Fast Forward OS Blueprint & Architecture, Agent Role Cheatsheet, 4-Step Implementation Roadmap'",
     "intendedFor": "string | null — who the event is built for, e.g. 'Founders, CMOs, Product Leaders, Growth Marketers, and AI builders'",
@@ -111,16 +116,48 @@ The JSON shape:
       "endTime": "ISO 8601 string | null — when this speaker's slot ends"
     }
   ],
+  "suggestions": {
+    "subtitle": ["string — suggested option 1", "string — suggested option 2"],
+    "takeaways": ["string — suggested option 1", "string — suggested option 2"],
+    "intendedFor": ["string — suggested option 1", "string — suggested option 2"],
+    "description": ["string — suggested option 1", "string — suggested option 2"]
+  },
+  "bilingual": {
+    "detected": false,
+    "primaryLanguage": "en",
+    "secondaryLanguage": null,
+    "languages": ["en"]
+  },
   "warnings": ["string — any field you couldn't extract confidently, e.g. 'Year not specified in text — assumed 2026'"]
 }
 
 Rules:
 1. Output ONLY the JSON object. No prose, no \`\`\`json fences.
-2. Use null for any field that can't be confidently extracted.
+2. Use null for any field that can't be confidently extracted FROM THE TEXT DIRECTLY.
 3. Plain text everywhere — strip emojis, markdown asterisks, bullets, and HTML.
-4. For dates without a year, assume the next upcoming occurrence (today is 2026-06-23).
+4. For dates without a year, assume the next upcoming occurrence (today is 2026-08-03).
 5. Speakers: include ANY person mentioned with a speaking role. If you can't tell if someone is speaking vs. just mentioned, include them with a warning.
-6. Don't invent data — if a field isn't in the text, use null.`;
+6. Don't invent data for the \`event\` fields — if a field isn't in the text, use null.
+
+SUGGESTIONS — generate for any field that came back null:
+- For each null field in \`event\` (subtitle, takeaways, intendedFor, description), generate EXACTLY TWO suggested options based on the rest of the extracted info (title, venue, speakers, agenda, host, chapter).
+- The suggestions key MUST exist in the output. For fields that were successfully extracted (not null), set the value to an empty array [].
+- For null fields, provide 2 distinct, concrete, ready-to-use options. Don't be vague.
+- Example: if subtitle is null but title='AI Salon Montreal — September' and description mentions founders/investors/networking, suggest: ["Founders, investors, and builders sharing hard-earned AI scaling lessons", "An evening of AI startup insights, pitches, and Montreal ecosystem networking"].
+- Example: if takeaways is null, suggest 2 concrete lists based on the agenda (e.g. ["Keynote insights on scaling AI startups, Live startup demos and pitches, Networking with Montreal AI ecosystem leaders", "Practical AI scaling playbook, Pitch feedback from active investors, Connections with Montreal's AI research community"]).
+- Omit a field from \`suggestions\` entirely ONLY if it doesn't make sense to suggest (e.g. startsAt, endsAt, mapUrl, rsvpUrl, venue, address, city, country — these are factual, not generative).
+
+BILINGUAL DETECTION — detect if the input contains the same content in 2+ languages:
+- Common case: French + English, Spanish + English, Hebrew + English, etc.
+- Set \`bilingual.detected\` to true if the text contains the SAME event info repeated in 2+ languages.
+- Set \`bilingual.primaryLanguage\` to the ISO 639-1 code of the PRIMARY language (usually English — "en").
+- Set \`bilingual.secondaryLanguage\` to the ISO 639-1 code of the SECONDARY language (e.g. "fr", "es", "he").
+- Set \`bilingual.languages\` to the array of all detected languages, primary first.
+- When bilingual is detected, for each text field (title, subtitle, description, takeaways, intendedFor), CONCATENATE both versions with a blank line, a horizontal rule of dashes, and another blank line between them. PRIMARY language FIRST, then secondary. Format:
+    "English version of the text.\n\n---\n\nVersion française du texte."
+- For title: keep it as a single line if both languages use the same title; only split if there are distinct titles per language.
+- If only one language is present, set \`bilingual.detected\` to false, \`secondaryLanguage\` to null, and \`languages\` to ["en"] (or whichever single language was detected).
+- If you're unsure whether something is bilingual (e.g. a few foreign words in an otherwise English post), treat it as monolingual.`;
 
   // Provider priority: Gemini → Kimi → OpenAI → ZAI env → ZAI SDK (dev only).
   // Gemini is the recommended provider for this prefill flow — free tier
@@ -249,6 +286,8 @@ Rules:
       event?: Record<string, unknown>;
       speakers?: unknown[];
       warnings?: unknown[];
+      suggestions?: Record<string, unknown>;
+      bilingual?: Record<string, unknown>;
     };
     if (!result || typeof result !== "object" || !result.event) {
       return NextResponse.json(
@@ -301,10 +340,63 @@ Rules:
       ? result.warnings.filter((w): w is string => typeof w === "string")
       : [];
 
+    // ---- Sanitize suggestions (per-field array of 2 options for null fields) ----
+    // The LLM is instructed to generate suggestions for: subtitle, takeaways,
+    // intendedFor, description. We accept any subset and clamp each list to 4
+    // options max for safety.
+    const SUGGESTIBLE_FIELDS = [
+      "subtitle",
+      "takeaways",
+      "intendedFor",
+      "description",
+    ] as const;
+    type Suggestions = Partial<Record<(typeof SUGGESTIBLE_FIELDS)[number], string[]>>;
+    const suggestionsRaw = (result.suggestions && typeof result.suggestions === "object"
+      ? result.suggestions
+      : {}) as Record<string, unknown>;
+    const sanitizedSuggestions: Suggestions = {};
+    for (const field of SUGGESTIBLE_FIELDS) {
+      const list = suggestionsRaw[field];
+      if (Array.isArray(list)) {
+        const opts = list
+          .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+          .map((v) => v.trim().slice(0, 2000))
+          .slice(0, 4);
+        if (opts.length > 0) sanitizedSuggestions[field] = opts;
+      }
+    }
+
+    // ---- Sanitize bilingual metadata ----
+    // The LLM tells us whether the input was bilingual + which languages.
+    // The actual bilingual CONTENT is already inside `event.description` etc.
+    // (concatenated EN + secondary with a "---" separator), so we just pass
+    // the metadata through for the frontend to show a banner.
+    const bilingualRaw = (result.bilingual && typeof result.bilingual === "object"
+      ? result.bilingual
+      : {}) as Record<string, unknown>;
+    const langStr = (v: unknown): string | null => {
+      if (typeof v !== "string") return null;
+      const s = v.trim().toLowerCase().slice(0, 5);
+      return s || null;
+    };
+    const sanitizedBilingual = {
+      detected: bilingualRaw.detected === true,
+      primaryLanguage: langStr(bilingualRaw.primaryLanguage) || "en",
+      secondaryLanguage: langStr(bilingualRaw.secondaryLanguage),
+      languages: Array.isArray(bilingualRaw.languages)
+        ? (bilingualRaw.languages as unknown[])
+            .map((v) => langStr(v))
+            .filter((v): v is string => !!v)
+            .slice(0, 4)
+        : ["en"],
+    };
+
     return NextResponse.json({
       event: sanitizedEvent,
       speakers: sanitizedSpeakers,
       warnings,
+      suggestions: sanitizedSuggestions,
+      bilingual: sanitizedBilingual,
       provider: providerUsed,
     });
   } catch (err) {

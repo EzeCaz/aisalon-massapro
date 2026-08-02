@@ -110,6 +110,22 @@ export function NewEventForm({
   >([]);
   const [extractionWarnings, setExtractionWarnings] = React.useState<string[]>([]);
   const [showExtractPanel, setShowExtractPanel] = React.useState(false);
+  // Suggestions for empty fields (LLM-generated, 2 options each).
+  // Shape: { subtitle?: string[], takeaways?: string[], intendedFor?: string[], description?: string[] }
+  const [suggestions, setSuggestions] = React.useState<{
+    subtitle?: string[];
+    takeaways?: string[];
+    intendedFor?: string[];
+    description?: string[];
+  }>({});
+  // Bilingual metadata — when LLM detects the input had 2 languages,
+  // text fields already contain both versions separated by "\n\n---\n\n".
+  const [bilingual, setBilingual] = React.useState<{
+    detected: boolean;
+    primaryLanguage: string;
+    secondaryLanguage: string | null;
+    languages: string[];
+  }>({ detected: false, primaryLanguage: "en", secondaryLanguage: null, languages: ["en"] });
 
   // ---- Auto-fill Venue country/city when chapter changes ----
   // Per spec: "country and city is automatically selected when the Chapter
@@ -258,9 +274,29 @@ export function NewEventForm({
 
       setExtractedSpeakers(data.speakers || []);
       setExtractionWarnings(data.warnings || []);
+      setSuggestions(data.suggestions || {});
+      setBilingual(
+        data.bilingual || {
+          detected: false,
+          primaryLanguage: "en",
+          secondaryLanguage: null,
+          languages: ["en"],
+        }
+      );
+      const nullFields = ["subtitle", "takeaways", "intendedFor", "description"].filter(
+        (k) => !e[k]
+      );
+      const suggCount = Object.values(data.suggestions || {}).reduce(
+        (n: number, list: unknown) => n + (Array.isArray(list) ? list.length : 0),
+        0
+      );
+      const bilingualNote =
+        data.bilingual?.detected ? ` · bilingual (${data.bilingual.languages?.join(" + ")})` : "";
       toast.success(
-        `Extracted ${Object.keys(e).filter((k) => e[k]).length} fields${data.speakers?.length ? ` + ${data.speakers.length} speakers` : ""}. Review and edit before saving.`,
-        { id: t, duration: 6000 }
+        `Extracted ${Object.keys(e).filter((k) => e[k]).length} fields${
+          data.speakers?.length ? ` + ${data.speakers.length} speakers` : ""
+        }${suggCount > 0 ? ` · ${suggCount} suggestions for ${nullFields.length} empty field${nullFields.length === 1 ? "" : "s"}` : ""}${bilingualNote}. Review and edit before saving.`,
+        { id: t, duration: 7000 }
       );
     } catch (e) {
       toast.error((e as Error).message, { id: t, duration: 8000 });
@@ -399,6 +435,13 @@ export function NewEventForm({
                   setRawText("");
                   setExtractedSpeakers([]);
                   setExtractionWarnings([]);
+                  setSuggestions({});
+                  setBilingual({
+                    detected: false,
+                    primaryLanguage: "en",
+                    secondaryLanguage: null,
+                    languages: ["en"],
+                  });
                 }}
                 className="text-xs text-black/50 hover:text-black/70 underline"
               >
@@ -444,6 +487,8 @@ export function NewEventForm({
                 </p>
               </div>
             )}
+
+            <BilingualBanner bilingual={bilingual} />
           </div>
         )}
       </fieldset>
@@ -466,6 +511,12 @@ export function NewEventForm({
             onChange={(e) => setSubtitle(e.target.value)}
             placeholder="One-line hook shown under the title"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          />
+          <SuggestionChips
+            label="subtitle"
+            options={suggestions.subtitle}
+            currentValue={subtitle}
+            onPick={(v) => setSubtitle(v)}
           />
         </Field>
         <Field
@@ -615,6 +666,12 @@ export function NewEventForm({
             placeholder="Long-form description of the event"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
+          <SuggestionChips
+            label="description"
+            options={suggestions.description}
+            currentValue={description}
+            onPick={(v) => setDescription(v)}
+          />
         </Field>
         <Field label="What you'll take home" full>
           <textarea
@@ -622,6 +679,12 @@ export function NewEventForm({
             onChange={(e) => setTakeaways(e.target.value)}
             rows={3}
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          />
+          <SuggestionChips
+            label="takeaways"
+            options={suggestions.takeaways}
+            currentValue={takeaways}
+            onPick={(v) => setTakeaways(v)}
           />
         </Field>
         <Field label="This event is built for" full>
@@ -631,6 +694,12 @@ export function NewEventForm({
             rows={2}
             placeholder="e.g. AI engineers, founders, product builders"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          />
+          <SuggestionChips
+            label="intendedFor"
+            options={suggestions.intendedFor}
+            currentValue={intendedFor}
+            onPick={(v) => setIntendedFor(v)}
           />
         </Field>
         <Field label="External RSVP URL" full>
@@ -702,5 +771,101 @@ function Field({
       {children}
       {hint && <span className="block text-[0.65rem] text-black/80 mt-1">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * SuggestionChips — shows clickable AI-generated suggestions for an empty
+ * field. Clicking a chip fills the field with that value (via `onPick`)
+ * and removes the suggestion list. Only renders when there are suggestions
+ * AND the field is empty (so it doesn't clutter the UI once the user has
+ * filled the field, whether by picking a suggestion or typing their own).
+ */
+function SuggestionChips({
+  label,
+  options,
+  currentValue,
+  onPick,
+}: {
+  label: string;
+  options: string[] | undefined;
+  currentValue: string;
+  onPick: (value: string) => void;
+}) {
+  if (!options || options.length === 0) return null;
+  if (currentValue.trim().length > 0) return null;
+  return (
+    <div className="mt-1.5 rounded-md border border-[#820A7D]/30 bg-[#820A7D]/5 p-2">
+      <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-[#820A7D] mb-1 flex items-center gap-1">
+        <Sparkles className="h-3 w-3" />
+        AI suggestions for {label}
+      </div>
+      <div className="flex flex-col gap-1">
+        {options.map((opt, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onPick(opt)}
+            className="text-left text-xs rounded border border-black/10 bg-white px-2 py-1.5 hover:border-[#820A7D] hover:bg-[#820A7D]/5 transition-colors"
+          >
+            <span className="text-[0.6rem] text-[#820A7D] font-bold mr-1.5">
+              {String.fromCharCode(65 + i)}.
+            </span>
+            <span className="text-black/80">{opt}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * BilingualBanner — shows when the LLM detected the input had 2 languages.
+ * The bilingual CONTENT is already in each text field (concatenated EN +
+ * secondary with "---" separator); this banner just tells the admin what
+ * happened so they know why fields look long.
+ */
+function BilingualBanner({
+  bilingual,
+}: {
+  bilingual: {
+    detected: boolean;
+    primaryLanguage: string;
+    secondaryLanguage: string | null;
+    languages: string[];
+  };
+}) {
+  if (!bilingual.detected) return null;
+  const LANG_NAMES: Record<string, string> = {
+    en: "English",
+    fr: "French",
+    es: "Spanish",
+    he: "Hebrew",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    ar: "Arabic",
+    ja: "Japanese",
+    zh: "Chinese",
+    ru: "Russian",
+  };
+  const nameOf = (code: string) => LANG_NAMES[code] || code.toUpperCase();
+  const langs = bilingual.languages.length > 0
+    ? bilingual.languages.map(nameOf).join(" + ")
+    : `${nameOf(bilingual.primaryLanguage)} + ${nameOf(bilingual.secondaryLanguage || "?")}`;
+  return (
+    <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-xs text-blue-900">
+      <div className="font-bold flex items-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5" />
+        Bilingual event detected: {langs}
+      </div>
+      <p className="mt-1 leading-relaxed">
+        Each text field contains both language versions, separated by{" "}
+        <code className="bg-blue-100 px-1 py-0.5 rounded font-mono">---</code>
+        . The {nameOf(bilingual.primaryLanguage)} version appears first, then
+        the {nameOf(bilingual.secondaryLanguage || "secondary")} version. Edit
+        freely if you want to keep only one language or change the separator.
+      </p>
+    </div>
   );
 }
