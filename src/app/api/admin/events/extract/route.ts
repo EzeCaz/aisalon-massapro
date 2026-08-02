@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import {
-  hasZaiEnv,
+  hasLlm,
   createChatCompletion,
 } from "@/lib/zai-client";
 import ZAI from "z-ai-web-dev-sdk";
@@ -30,11 +30,14 @@ import ZAI from "z-ai-web-dev-sdk";
  * uses the response to pre-fill the New Event form, but the user can
  * still review and edit everything before saving.
  *
- * ZAI client selection:
- *   - If ZAI_BASE_URL + ZAI_API_KEY env vars are set (Vercel production),
- *     use the env-var-based HTTP client in @/lib/zai-client. This avoids
- *     the SDK's hard requirement on a `.z-ai-config` file, which can't
- *     exist on Vercel's read-only filesystem.
+ * LLM provider selection:
+ *   - If OPENAI_API_KEY is set (recommended for Vercel), uses the
+ *     OpenAI-compatible path. Also supports any OpenAI-compatible
+ *     provider by setting OPENAI_BASE_URL (Together, Groq, OpenRouter…).
+ *   - Else if ZAI_BASE_URL + ZAI_API_KEY are set, uses the ZAI internal
+ *     API. NOTE: `internal-api.z.ai` resolves to private IPs (172.25.x.x)
+ *     that are NOT reachable from Vercel's public network — this path
+ *     only works in the Super Z dev runtime.
  *   - Otherwise (local dev, where /etc/.z-ai-config is installed by the
  *     Super Z runtime), fall back to the official SDK's ZAI.create().
  */
@@ -110,8 +113,9 @@ Rules:
   try {
     let raw: string;
 
-    if (hasZaiEnv()) {
-      // Production path: env-var-based HTTP client (no .z-ai-config needed).
+    if (hasLlm()) {
+      // Env-var-based HTTP client — supports OpenAI-compatible providers
+      // (works on Vercel) and ZAI internal API (dev only).
       const completion = await createChatCompletion({
         messages: [
           { role: "system", content: systemPrompt },
@@ -219,19 +223,38 @@ Rules:
   } catch (err) {
     console.error("[events/extract] LLM call failed:", err);
     const msg = (err as Error).message || String(err);
-    // Surface a more actionable error when env vars are missing on Vercel.
+
+    // Surface actionable errors for the common failure modes:
+    //
+    // 1. "fetch failed" — Node.js fetch threw at the network level. On
+    //    Vercel this happens because `internal-api.z.ai` resolves to
+    //    private IPs (172.25.x.x) that aren't routable from Vercel's
+    //    public network. Fix: switch to a public OpenAI-compatible
+    //    provider by setting OPENAI_API_KEY.
+    //
+    // 2. "Configuration file not found" / ".z-ai-config" — SDK fallback
+    //    failed because no /etc/.z-ai-config exists (Vercel's read-only
+    //    filesystem). Same fix: set OPENAI_API_KEY.
+    //
+    // 3. "No LLM provider configured" — neither OPENAI_API_KEY nor
+    //    ZAI_BASE_URL+ZAI_API_KEY are set. Same fix.
     if (
+      msg.includes("fetch failed") ||
       msg.includes("Configuration file not found") ||
       msg.includes(".z-ai-config") ||
-      msg.includes("ZAI env vars not set")
+      msg.includes("ZAI env vars not set") ||
+      msg.includes("No LLM provider configured")
     ) {
       return NextResponse.json(
         {
           error:
-            "AI service is not configured on the server. " +
-            "Set ZAI_BASE_URL, ZAI_API_KEY (and optionally ZAI_CHAT_ID, " +
-            "ZAI_USER_ID, ZAI_TOKEN) in Vercel Project Settings → Environment Variables, " +
-            "then redeploy.",
+            "AI service is not reachable from this server. " +
+            "On Vercel production, the ZAI internal API " +
+            "(internal-api.z.ai) is on a private network and cannot be " +
+            "reached. Set OPENAI_API_KEY in Vercel Project Settings → " +
+            "Environment Variables (Optionally OPENAI_BASE_URL and " +
+            "OPENAI_MODEL to use a different OpenAI-compatible provider), " +
+            "then redeploy. See src/lib/zai-client.ts for details.",
         },
         { status: 500 }
       );

@@ -1,29 +1,57 @@
 /**
- * ZAI-compatible HTTP client.
+ * LLM HTTP client (OpenAI-compatible).
  *
- * The official z-ai-web-dev-sdk reads config from a `.z-ai-config` JSON
- * file in process.cwd(), os.homedir(), or /etc/. This works in local
- * dev (where /etc/.z-ai-config is installed by the Super Z runtime),
- * but FAILS on Vercel production (read-only filesystem, no config file).
+ * Background:
+ *   The original implementation used the `z-ai-web-dev-sdk` which reads a
+ *   `.z-ai-config` file from `process.cwd()`, `os.homedir()`, or `/etc/`.
+ *   That works in the Super Z dev runtime (which installs `/etc/.z-ai-config`)
+ *   but FAILS on Vercel production (read-only filesystem, no config file).
  *
- * This module reads the same config fields from env vars, and exposes
- * the same `chat.completions.create` interface as the SDK. The extract
- * route uses this directly instead of `ZAI.create()` so it works in
- * both environments.
+ *   We then switched to env-var-based config pointing at
+ *   `https://internal-api.z.ai/v1`. That works in dev (inside the z.ai
+ *   infrastructure) BUT `internal-api.z.ai` resolves to RFC 1918 private
+ *   IPs (172.25.x.x) which are NOT routable from Vercel's public network.
+ *   Result: `fetch failed` on every call.
  *
- * Env vars (set these in Vercel project settings → Environment Variables):
- *   ZAI_BASE_URL  e.g. https://internal-api.z.ai/v1
- *   ZAI_API_KEY   e.g. Z.ai
- *   ZAI_CHAT_ID   optional — X-Chat-Id header
- *   ZAI_USER_ID   optional — X-User-Id header
- *   ZAI_TOKEN     optional — X-Token header
+ * Solution:
+ *   This module is now provider-agnostic. It accepts any OpenAI-compatible
+ *   chat-completions endpoint. Set the env vars for whichever provider
+ *   you have access to:
  *
- * If ZAI_BASE_URL + ZAI_API_KEY are not set, hasZaiEnv() returns false
- * and callers can fall back to the SDK (which only works in dev).
+ *   Option A — OpenAI (works everywhere, public API):
+ *     OPENAI_API_KEY  = sk-...
+ *     OPENAI_BASE_URL = https://api.openai.com/v1   (optional, this is the default)
+ *     OPENAI_MODEL    = gpt-4o-mini                 (optional, default)
+ *
+ *   Option B — Any OpenAI-compatible provider (Together, Groq, OpenRouter,
+ *   Fireworks, Anyscale, local Ollama, etc.):
+ *     OPENAI_API_KEY  = <provider key>
+ *     OPENAI_BASE_URL = https://api.together.xyz/v1   (or similar)
+ *     OPENAI_MODEL    = meta-llama/Llama-3.1-70B-Instruct-Turbo
+ *
+ *   Option C — ZAI internal API (DEV ONLY — not reachable from Vercel):
+ *     ZAI_BASE_URL = https://internal-api.z.ai/v1
+ *     ZAI_API_KEY  = Z.ai
+ *     ZAI_CHAT_ID  = chat-...   (optional)
+ *     ZAI_USER_ID  = ...        (optional)
+ *     ZAI_TOKEN    = ...        (optional)
+ *
+ *   Selection order:
+ *     1. If OPENAI_API_KEY is set → use OpenAI-compatible path (Option A/B).
+ *     2. Else if ZAI_BASE_URL + ZAI_API_KEY are set → use ZAI internal path (Option C, dev only).
+ *     3. Else hasLlm() returns false → caller falls back to the SDK.
  */
 
+export function hasLlm(): boolean {
+  return !!(
+    process.env.OPENAI_API_KEY ||
+    (process.env.ZAI_BASE_URL && process.env.ZAI_API_KEY)
+  );
+}
+
+/** @deprecated use hasLlm() — kept for backward compat with existing callers. */
 export function hasZaiEnv(): boolean {
-  return !!(process.env.ZAI_BASE_URL && process.env.ZAI_API_KEY);
+  return hasLlm();
 }
 
 export type ChatCompletionMessage = {
@@ -47,11 +75,12 @@ export type ChatCompletionResponse = {
 };
 
 /**
- * Send a chat completion request to the ZAI internal API. Mirrors the
- * SDK's `zai.chat.completions.create()` shape — same request body,
- * same response shape. Only depends on env vars (no .z-ai-config file).
+ * Send a chat completion request. Mirrors the OpenAI (and z-ai-web-dev-sdk)
+ * `chat.completions.create()` shape — same request body, same response shape.
  *
- * @throws Error if env vars are missing or the request fails.
+ * Provider is auto-selected from env vars (see module docstring).
+ *
+ * @throws Error if no provider is configured or the request fails.
  */
 export async function createChatCompletion(
   body: {
@@ -62,13 +91,45 @@ export async function createChatCompletion(
     model?: string;
   }
 ): Promise<ChatCompletionResponse> {
+  // ---- Option A/B: OpenAI-compatible (preferred — works on Vercel) ----
+  if (process.env.OPENAI_API_KEY) {
+    const baseUrl = (
+      process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"
+    ).replace(/\/$/, "");
+    const url = `${baseUrl}/chat/completions`;
+    const model = body.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+    // Strip the ZAI-specific `thinking` field — OpenAI doesn't know it.
+    // (OpenAI uses `reasoning_effort` for o-series models, but for the
+    // extract use case we don't need extended reasoning.)
+    const { thinking: _thinking, ...openAiBody } = body;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({ ...openAiBody, model }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(
+        `OpenAI chat completions failed (${res.status} ${res.statusText}): ${errText.slice(0, 500)}`
+      );
+    }
+    return (await res.json()) as ChatCompletionResponse;
+  }
+
+  // ---- Option C: ZAI internal API (dev only — not reachable from Vercel) ----
   const baseUrl = process.env.ZAI_BASE_URL;
   const apiKey = process.env.ZAI_API_KEY;
   if (!baseUrl || !apiKey) {
     throw new Error(
-      "ZAI env vars not set. Set ZAI_BASE_URL and ZAI_API_KEY " +
-      "(and optionally ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN) " +
-      "in your Vercel project environment variables."
+      "No LLM provider configured. Set either OPENAI_API_KEY " +
+        "(recommended — works on Vercel) or ZAI_BASE_URL + ZAI_API_KEY " +
+        "(dev only). See src/lib/zai-client.ts for details."
     );
   }
 
