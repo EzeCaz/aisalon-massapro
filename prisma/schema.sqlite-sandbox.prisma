@@ -229,6 +229,9 @@ model User {
   // ----------------------------------------------------------------
   // Email orchestrator + flows — back-relations
   emailQueueItems    EmailQueue[]          @relation("EmailQueueUser")
+  // Chapter lead onboarding invites this user has received / sent
+  chapterOnboardingInvites     ChapterOnboardingInvite[]
+  chapterOnboardingInvitedBy   ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
   // ----------------------------------------------------------------
   // Flourishing Quiz — sessions this user is hosting + participation records
   hostedQuizSessions QuizSession[]         @relation("QuizHost")
@@ -1559,4 +1562,33 @@ model ChatMessage {
   @@index([roomId, createdAt])
   @@index([senderId, createdAt])
   @@index([replyToId])
+}
+
+/// Token-based invite for a chapter lead to fill out the onboarding form.
+/// Mirrors the production model in schema.prisma — see that file for docs.
+model ChapterOnboardingInvite {
+  id              String    @id @default(cuid())
+  token           String    @unique
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedById     String?
+  invitedBy       User?      @relation("ChapterOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  prefillChapterName String?
+  prefillChapterSlug String?
+  inviteeEmail    String
+  status          String    @default("PENDING")
+  sentAt          DateTime  @default(now())
+  openedAt        DateTime?
+  submittedAt     DateTime?
+  expiresAt       DateTime
+  submissionJson  String?
+  adminNotes      String?
+  appliedChapterId String?
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([invitedById])
 }

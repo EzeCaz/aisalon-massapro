@@ -178,6 +178,10 @@ model User {
   archivedBy         String?
   archiver           User?                 @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
   archivedUsers      User[]                @relation("UserArchiver")
+  // Chapter lead onboarding invites this user has received
+  chapterOnboardingInvites ChapterOnboardingInvite[]
+  // Chapter lead onboarding invites this user (as admin) has sent
+  chapterOnboardingInvitedBy ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
   // ----------------------------------------------------------------
   // V7 hierarchy scoping fields. Nullable for backwards compatibility
   // with V6 rows (backfilled to Israel/Tel-Aviv on migration).
@@ -1643,4 +1647,62 @@ model TestimonialLike {
 
   @@unique([userId, testimonialId])
   @@index([testimonialId])
+}
+
+/// Token-based invite for a chapter lead to fill out the onboarding form.
+/// Created by an admin from the EditMemberDialog ("Send chapter onboarding
+/// form" button). Emailed to the chapter lead as a tokenized URL.
+/// The lead clicks → fills out the public form at /chapter-onboarding/[token]
+/// → submits → submissionJson is populated + status flips to SUBMITTED.
+/// The admin can then review the submission at /admin/chapter-onboarding
+/// and one-click apply it (create the chapter + update the user's chapterId).
+model ChapterOnboardingInvite {
+  id              String    @id @default(cuid())
+  /// Unguessable token used in the public URL. CUID-based, 32+ chars.
+  token           String    @unique
+  /// The user (chapter lead) who received the invite. Optional — an admin
+  /// can send an invite to an email that doesn't yet have a user account;
+  /// in that case we link the user once they sign up. For now we require
+  /// a user record (the button is on the EditMemberDialog, so the user
+  /// already exists).
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The admin who sent the invite.
+  invitedById     String?
+  invitedBy       User?      @relation("ChapterOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  /// Optional pre-filled chapter name (e.g. when admin already knows the
+  /// chapter name and wants to pre-fill it on the form).
+  prefillChapterName String?
+  /// Optional pre-filled chapter slug.
+  prefillChapterSlug String?
+  /// The chapter lead's email at the time the invite was sent. Captured
+  /// in case the user's email changes later.
+  inviteeEmail    String
+  /// Status: PENDING (sent, not yet submitted) | SUBMITTED (form filled)
+  /// | EXPIRED (past expiresAt) | REVOKED (admin manually revoked).
+  status          String    @default("PENDING")
+  /// When the invite email was sent.
+  sentAt          DateTime  @default(now())
+  /// When the lead opened the form (first GET of /chapter-onboarding/[token]).
+  openedAt        DateTime?
+  /// When the lead submitted the form.
+  submittedAt     DateTime?
+  /// Auto-expire after 30 days. The form page shows "expired" if past this.
+  expiresAt       DateTime
+  /// The full form submission as a JSON blob. Structure mirrors the
+  /// ChapterOnboardingFormData type in src/lib/chapter-onboarding-types.ts.
+  /// Null until the form is submitted.
+  submissionJson  String?
+  /// Optional admin notes (visible only on /admin/chapter-onboarding).
+  adminNotes      String?
+  /// After the admin applies the submission (creates the chapter +
+  /// updates the user), we record the resulting chapterId here.
+  appliedChapterId String?
+  appliedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([invitedById])
 }

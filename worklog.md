@@ -11416,3 +11416,106 @@ Stage Summary:
 - User action required: trigger the seed endpoint once via the admin UI
   button or via curl with CRON_SECRET. The migration is idempotent —
   running it multiple times is safe.
+
+---
+Task ID: chapter-onboarding-form-functional
+Agent: main
+Task: Two-part request:
+  1. Update the AI-Salon-Chapter-Onboarding-Form.docx to ensure WhatsApp
+     group URL, LinkedIn page URL, and chapter name are prominently
+     placed at the top.
+  2. Build a real functional form on the platform — a URL admins can
+     send to chapter leads when creating a new chapter. Add a "Send
+     chapter form" button to the admin member edit dialog.
+
+Work Log:
+- DOCX update: extended scripts/generate-chapter-onboarding-form.ts to
+  add a "QUICK REFERENCE — TOP 3 FIELDS" box at the top of the
+  instructions section, containing chapter name, WhatsApp group URL,
+  and LinkedIn page URL with prominent fillable lines. Regenerated the
+  DOCX (19.8 KB).
+- Codebase exploration (subagent): discovered that the admin member
+  edit page is actually a Dialog (EditMemberDialog inside
+  admin-members-table.tsx), not a dedicated route. The DialogFooter
+  holds Cancel / Archive / Save — that's where the new "Send chapter
+  form" button goes. Auth pattern: getCurrentUser() + can(role, "members.edit").
+- Prisma schema: added ChapterOnboardingInvite model to both
+  prisma/schema.prisma (production) and prisma/schema.sqlite-sandbox.prisma
+  (local dev). Fields: id, token (unique), userId, invitedById,
+  prefillChapterName/Slug, inviteeEmail, status (PENDING/SUBMITTED/
+  EXPIRED/REVOKED), sentAt, openedAt, submittedAt, expiresAt (30 days),
+  submissionJson, adminNotes, appliedChapterId, appliedAt. Added
+  back-relations on User. Made invitedById nullable for SetNull
+  compatibility. Created migration SQL at
+  prisma/migrations/20260803000000_add_chapter_onboarding_invite/.
+- Types: created src/lib/chapter-onboarding-types.ts with
+  ChapterOnboardingFormData (mirrors DOCX sections), AUDIENCE_OPTIONS,
+  COMMON_TIMEZONES, COMMON_LANGUAGES, generateOnboardingToken().
+- Email helper: added sendChapterOnboardingEmail() to src/lib/email.ts.
+  Mirrors sendPasswordEmail() shape — HTML + text body with the form
+  URL, button, what-you'll-need list, expiry note.
+- Admin POST route: src/app/api/admin/members/[id]/send-chapter-onboarding/route.ts
+  — auth via getCurrentUser(), permission members.edit. Creates the
+  invite row, generates token (32 random bytes → base64url), emails
+  the lead. Returns { ok, invite: { token, formUrl, sentTo, expiresAt } }.
+  If SMTP fails, still returns the formUrl in the error payload so the
+  admin can copy and send manually.
+- Public API: src/app/api/chapter-onboarding/[token]/route.ts —
+  GET returns invite metadata (status, invitee name/email, prefill,
+  submission if any). Marks openedAt on first GET. POST accepts the
+  form submission JSON, validates required fields, sets status=SUBMITTED.
+  Rejects expired/revoked invites with 410.
+- Public form page: src/app/chapter-onboarding/[token]/page.tsx (server
+  component) — validates token, renders 4 states: PENDING (form),
+  SUBMITTED (thank-you), EXPIRED, REVOKED.
+- Public form client: src/app/chapter-onboarding/[token]/chapter-onboarding-form.tsx
+  — 8-section single-page form with sticky submit bar. Sections:
+  1. Chapter Basics, 2. Contact Channels (TOP 3 — emphasized),
+  3. Languages & Audience, 4. Brand Assets, 5. Email Config,
+  6. Lead Info, 7. Launch Plan, 8. Additional Notes. Pre-fills lead
+  name/email and prefill chapter name/slug from the invite. Uses
+  shadcn Card, Input, Textarea, Label, Checkbox, Button, Separator.
+  Sticky bottom Card with submit button. Toasts on submit success/error.
+- EditMemberDialog: added "Send chapter form" button (purple #820A7D
+  outline style, distinct from the pink Save button) inside the
+  DialogFooter, between Cancel/Archive and Save. Calls
+  handleSendOnboarding() which POSTs to the new API route, shows a
+  loading toast, and on success shows the formUrl in the success toast
+  with a Copy button (so admin can paste the link manually if email
+  fails). Added Send icon to lucide imports, sendingOnboarding state.
+- Admin view: /admin/chapter-onboarding/page.tsx (server) +
+  chapter-onboarding-admin-list.tsx (client). Lists all invites in a
+  filterable table (search + status filter ALL/PENDING/SUBMITTED/
+  EXPIRED). Clicking a row opens a detail dialog showing the full
+  submission organized by section (Basics, Contact, Languages, Brand,
+  Email, Lead, Launch, Notes). Includes copy-URL + open-form buttons.
+- Admin tab: added "Chapter Onboarding" tab with Send icon to
+  admin-tabs-def.ts ALL_TABS (after Chapters). Visible to ADMIN+ only.
+- Migration script: prisma/migrations/20260803000000_add_chapter_onboarding_invite/migration.sql
+  creates the ChapterOnboardingInvite table with FK to User (cascade
+  delete on userId, set null on invitedById) + indexes on userId,
+  status, invitedById, unique on token.
+- Test scripts (for local dev only, not deployed):
+  scripts/seed-test-users-and-invite.ts — creates a SUPER_ADMIN +
+  CHAPTER_ORGANIZER + an invite, prints the form URL.
+- Local testing: ran seed script, hit the form URL — page renders
+  (HTTP 200, all key fields present: chapter name, WhatsApp URL,
+  LinkedIn URL, "Top 3" emphasis). POSTed a submission — returned
+  {ok:true}. Re-hit the form URL — shows the "You're all set"
+  thank-you view. Admin route /admin/chapter-onboarding redirects to
+  login when unauthed (HTTP 307 — correct).
+
+Stage Summary:
+- DOCX updated with prominent top-3 fields box.
+- Functional onboarding form live on the platform at
+  /chapter-onboarding/[token] — public, token-authenticated, no login
+  required. 8 sections, sticky submit, success state.
+- "Send chapter form" button added to EditMemberDialog footer. Sends
+  the invite via API + email, returns the URL for manual copy.
+- Admin view at /admin/chapter-onboarding lists all invites with
+  filterable table + detail dialog showing the full submission.
+- Schema migration ready. Production deployment requires:
+  1. Commit + push to origin/main (Vercel auto-deploys)
+  2. Run prisma migration on production DB (the migration SQL is at
+     prisma/migrations/20260803000000_add_chapter_onboarding_invite/)
+  3. Set SMTP_* env vars on Vercel (so the invite email actually sends)

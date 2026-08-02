@@ -319,3 +319,96 @@ MassaPro · https://massapro.com`;
     ],
   });
 }
+/**
+ * Send a chapter onboarding form invite email to a chapter lead.
+ *
+ * Called by POST /api/admin/members/[id]/send-chapter-onboarding when an
+ * admin clicks the "Send chapter onboarding form" button on the
+ * EditMemberDialog. The email contains a tokenized URL to the public form
+ * at /chapter-onboarding/[token].
+ *
+ * The URL is valid for 30 days (per ChapterOnboardingInvite.expiresAt).
+ * After submission, the same URL shows a "you've already submitted" view.
+ */
+export async function sendChapterOnboardingEmail(opts: {
+  to: string;
+  name: string | null;
+  chapterName?: string | null;
+  formUrl: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const firstName = opts.name?.split(" ")[0] || "there";
+  const chapterName = opts.chapterName?.trim() || "your new chapter";
+  const subject = `Your AI Salon ${chapterName} chapter onboarding form`;
+  const text = `Hi ${firstName},
+
+Welcome to AI Salon ${chapterName}! We're excited to launch your chapter.
+
+To get your chapter set up on the platform, please fill out the onboarding form at:
+
+${opts.formUrl}
+
+The form takes about 10–15 minutes. You'll need:
+  - Your chapter's basic info (name, city, timezone)
+  - WhatsApp group URL + LinkedIn page URL
+  - Brand assets (logo, banner images) — optional, we have defaults
+  - Languages your chapter operates in + target audience
+  - Launch plan (target date, first event details)
+
+The form is private to you — only the global AI Salon team sees your
+responses. Once you submit, we'll provision the chapter within 2 business
+days and send you admin access.
+
+If you have any questions, just reply to this email.
+
+— The AI Salon global team
+MassaPro · https://massapro.com`;
+
+  const html = `
+<div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Welcome to AI Salon ${chapterName}!</h1>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    Hi ${firstName},
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    We're excited to launch your chapter on the AI Salon platform. To get
+    everything set up — your public landing page, login page, brand assets,
+    and email templates — please fill out the onboarding form below.
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 24px;">
+    <a href="${opts.formUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #FF005A 0%, #00E6FF 100%); color: #fff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px;">
+      Open onboarding form →
+    </a>
+  </p>
+  <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 0 0 20px; word-break: break-all;">
+    If the button doesn't work, copy and paste this URL into your browser:<br/>
+    <a href="${opts.formUrl}" style="color: #004F98; word-break: break-all;">${opts.formUrl}</a>
+  </p>
+  <div style="padding: 16px; margin: 24px 0; background: #f6f6f6; border-radius: 8px; border: 1px solid #eee;">
+    <p style="font-size: 13px; line-height: 1.6; color: #555; margin: 0;">
+      <strong>What you'll need:</strong>
+    </p>
+    <ul style="font-size: 13px; line-height: 1.6; color: #555; margin: 8px 0 0; padding-left: 20px;">
+      <li>Chapter basic info (name, city, timezone)</li>
+      <li>WhatsApp group URL + LinkedIn page URL</li>
+      <li>Brand assets (logo, banner) — optional, we have defaults</li>
+      <li>Languages + target audience</li>
+      <li>Launch plan (target date, first event)</li>
+    </ul>
+    <p style="font-size: 13px; line-height: 1.6; color: #555; margin: 12px 0 0;">
+      ⏱️ Takes about 10–15 minutes · 🔒 Private to you + the global team
+    </p>
+  </div>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 12px;">
+    Once you submit, we'll provision the chapter within 2 business days and
+    send you admin access. If you have questions, just reply to this email.
+  </p>
+  <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
+  <p style="font-size: 12px; color: #999; margin: 0;">
+    AI Salon · Empowering AI Connections<br/>
+    <a href="https://massapro.com" style="color: #999;">MassaPro</a> ·
+    <a href="https://aisalon.massapro.com" style="color: #999;">aisalon.massapro.com</a>
+  </p>
+</div>`;
+
+  return sendMail({ to: opts.to, subject, text, html });
+}

@@ -13,6 +13,7 @@ import {
   LayoutTemplate,
   ClipboardCheck,
   Globe2,
+  Send,
 } from "lucide-react";
 import { ROLES } from "@/lib/permissions";
 
@@ -58,6 +59,7 @@ export const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/events", label: "Events", icon: CalendarDays, match: "/admin/events" },
   { href: "/admin/events/new", label: "New event", icon: CalendarPlus, match: "/admin/events/new" },
   { href: "/admin/chapters", label: "Chapters", icon: Globe2, match: "/admin/chapters" },
+  { href: "/admin/chapter-onboarding", label: "Chapter Onboarding", icon: Send, match: "/admin/chapter-onboarding" },
   { href: "/admin/check-in", label: "Door Check-in", icon: QrCode, match: "/admin/check-in" },
   { href: "/admin/dashboard", label: "Dashboard", icon: BarChart3, match: "/admin/dashboard" },
   { href: "/admin/dashboard/event-dashboard", label: "Event dashboard", icon: CalendarRange, match: "/admin/dashboard/event-dashboard" },

@@ -67,6 +67,7 @@ import {
   Check,
   Globe2,
   MapPin,
+  Send,
 } from "lucide-react";
 import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
 import { CountryChapterScopeFilter } from "@/components/ais/country-chapter-scope-filter";
@@ -1790,6 +1791,11 @@ function EditMemberDialog({
   const [credSendEmail, setCredSendEmail] = useState(false);
   const [credSaving, setCredSaving] = useState(false);
 
+  // ---- Chapter onboarding invite ----
+  // Tracks the in-flight "Send chapter form" POST. The button sits in the
+  // dialog footer alongside Save / Archive.
+  const [sendingOnboarding, setSendingOnboarding] = useState(false);
+
   // Reset form whenever the member changes (i.e. when the dialog opens
   // for a different member). We use useEffect so the form fields sync
   // even when the dialog is reused across members.
@@ -2050,6 +2056,68 @@ function EditMemberDialog({
       toast.error((e as Error).message, { id: t, duration: 8000 });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ---- Send chapter onboarding form ----
+  // POSTs to /api/admin/members/[id]/send-chapter-onboarding which creates
+  // a tokenized invite + emails the chapter lead. Visible to any admin
+  // (members.edit permission) — useful for both new chapter leads and
+  // existing CHAPTER_ORGANIZERs who need to refresh their chapter info.
+  const handleSendOnboarding = async () => {
+    if (!member) return;
+    const ok = confirm(
+      `Send the chapter onboarding form to ${member.email}?\n\n` +
+      `They'll receive an email with a private link valid for 30 days. ` +
+      `You can view their submission at /admin/chapter-onboarding once they submit.`,
+    );
+    if (!ok) return;
+
+    setSendingOnboarding(true);
+    const t = toast.loading(`Sending onboarding form to ${member.email}…`);
+    try {
+      const res = await fetch(
+        `/api/admin/members/${member.id}/send-chapter-onboarding`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      // If the email was sent successfully, the API returns { invite: { formUrl } }.
+      // If SMTP failed, it returns the formUrl in an error payload — still useful.
+      const formUrl = d?.invite?.formUrl;
+      toast.success(
+        <div>
+          <div>Onboarding form sent to {member.email}.</div>
+          {formUrl && (
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-xs text-slate-500">Or copy link:</span>
+              <code className="text-[0.7rem] bg-slate-100 px-1.5 py-0.5 rounded break-all">
+                {formUrl}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(formUrl);
+                  toast.success("Link copied to clipboard");
+                }}
+                className="text-xs text-[#FF005A] hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+          )}
+        </div>,
+        { id: t, duration: 10000 },
+      );
+    } catch (e) {
+      toast.error((e as Error).message, { id: t, duration: 8000 });
+    } finally {
+      setSendingOnboarding(false);
     }
   };
 
@@ -2894,6 +2962,21 @@ function EditMemberDialog({
                 Archive member
               </Button>
             )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSendOnboarding}
+            disabled={sendingOnboarding}
+            className="border-[#820A7D] text-[#820A7D] hover:bg-[#820A7D]/5"
+            title="Send this chapter lead a tokenized URL to fill out the chapter onboarding form. They'll receive an email with a private link valid for 30 days."
+          >
+            {sendingOnboarding ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4 mr-1.5" />
+            )}
+            Send chapter form
+          </Button>
           <Button
             type="button"
             onClick={handleSave}
