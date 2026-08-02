@@ -457,6 +457,67 @@ export function canSeeAdminNav(role: string | null | undefined): boolean {
   );
 }
 
+/**
+ * TSK-0058 — Resolve the EFFECTIVE role for permission checks.
+ *
+ * The "View as" switcher (TSK-0057) lets a SUPER_ADMIN impersonate a
+ * different role to preview the platform. The impersonation is stored
+ * on the JWT as `viewAsRole`. This helper takes the real (DB) role +
+ * email and the viewAsRole from the session, and returns the role that
+ * should be used for `can()` / `canSeeAdminNav()` / `hasAtLeastRole()`
+ * checks.
+ *
+ * Rules:
+ *   - If the real user is NOT SUPER_ADMIN, the viewAs field is ignored
+ *     (defense in depth — a non-super-admin can't escalate by setting
+ *     the cookie; the API route also enforces this on write).
+ *   - If the real user IS SUPER_ADMIN and viewAsRole is set, return the
+ *     normalized viewAsRole.
+ *   - Otherwise return the real role.
+ *
+ * Use this in server components + API routes that gate on role. Pair it
+ * with `getUserScope(id, { isSuperAdminCaller, viewAsRole, viewAsChapterId })`
+ * so the data scope also reflects the impersonation.
+ *
+ * Example:
+ *   const viewAsRole = (session.user as any).viewAsRole ?? null;
+ *   const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+ *   if (!can(effectiveRole, "members.view")) redirect("/events");
+ */
+export function getEffectiveRole(
+  realRole: string | null | undefined,
+  realEmail: string | null | undefined,
+  viewAsRole: string | null | undefined,
+): string {
+  // Only SUPER_ADMIN users can use view-as. Non-super-admins: ignore override.
+  if (!isSuperAdmin({ email: realEmail, role: realRole })) {
+    return normalizeRole(realRole);
+  }
+  // Super admin with no override: use real role.
+  if (!viewAsRole) return normalizeRole(realRole);
+  // Honor the override.
+  return normalizeRole(viewAsRole);
+}
+
+/**
+ * TSK-0058 — Convenience: extract viewAs fields from a NextAuth session
+ * user object. Returns `{ viewAsRole, viewAsChapterId }` (both null when
+ * not set or when the session is missing).
+ *
+ * Use this in server components to avoid scattering `(session.user as any)`
+ * casts everywhere.
+ */
+export function readViewAsFromSession(sessionUser: unknown): {
+  viewAsRole: string | null;
+  viewAsChapterId: string | null;
+} {
+  const u = sessionUser as { viewAsRole?: string | null; viewAsChapterId?: string | null } | null | undefined;
+  return {
+    viewAsRole: u?.viewAsRole ?? null,
+    viewAsChapterId: u?.viewAsChapterId ?? null,
+  };
+}
+
 // ============================================================================
 // V7 — Hierarchy scope helpers (Global → Country → Chapter)
 // ============================================================================

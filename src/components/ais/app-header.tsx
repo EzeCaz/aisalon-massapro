@@ -3,7 +3,7 @@ import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canSeeAdminNav, normalizeRole, ROLES } from "@/lib/permissions";
+import { canSeeAdminNav, getEffectiveRole, normalizeRole, ROLES } from "@/lib/permissions";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -35,18 +35,36 @@ export async function AppHeader() {
         include: { tags: true },
       })
     : null;
+
+  // TSK-0058: Compute the EFFECTIVE role for the Admin nav gate. When a
+  // SUPER_ADMIN is using "View as" (e.g. viewing as a Member), the Admin
+  // link must be hidden — otherwise the impersonation preview is broken
+  // (the user clicks "Admin" and sees the super-admin panel despite
+  // viewing-as-member).
+  //
+  // `isSuperAdmin` is kept based on the REAL role so the ViewAsSwitcher
+  // itself stays visible (only real super admins can use it).
+  const viewAsRole = (session?.user as { viewAsRole?: string } | undefined)?.viewAsRole ?? null;
+  const viewAsChapterId = (session?.user as { viewAsChapterId?: string } | undefined)?.viewAsChapterId ?? null;
+  const isSuperAdmin = !!user && normalizeRole(user.role) === ROLES.SUPER_ADMIN;
+  const effectiveRole = user
+    ? getEffectiveRole(user.role, user.email, viewAsRole)
+    : null;
+
   // Show the "Admin" nav link to ADMIN+ and CO_HOST (event-scoped admin
   // pages). SPEAKER is excluded — they access Event Prep via the event
   // page itself (the 🎯 Event prep tab on /events/[slug]).
-  const isAdmin = !!user && canSeeAdminNav(user.role);
+  // TSK-0058: gate on EFFECTIVE role so view-as hides the link.
+  const isAdmin = !!user && canSeeAdminNav(effectiveRole);
 
-  // Pick the admin landing URL based on role so each user lands on a
-  // page they're allowed to access (instead of being redirected):
+  // Pick the admin landing URL based on EFFECTIVE role so each user
+  // lands on a page they're allowed to access (instead of being
+  // redirected):
   //   - ADMIN+       → /admin           (Members table)
   //   - CO_HOST      → /admin/speakers  (event-scoped, allowed)
   const adminHref = (() => {
     if (!user) return "/admin";
-    const r = normalizeRole(user.role);
+    const r = normalizeRole(effectiveRole);
     if (r === ROLES.CO_HOST) return "/admin/speakers";
     return "/admin";
   })();
@@ -60,8 +78,7 @@ export async function AppHeader() {
   // the "View as" switcher (TSK-0057 step 3), it's the impersonated
   // chapter. This lets a Super Admin preview Montreal's header without
   // having to log out + back in.
-  const viewAsChapterId = (session?.user as { viewAsChapterId?: string } | undefined)?.viewAsChapterId ?? null;
-  const isSuperAdmin = !!user && normalizeRole(user.role) === ROLES.SUPER_ADMIN;
+  // (viewAsChapterId + isSuperAdmin are declared above with effectiveRole.)
   const effectiveChapterId = isSuperAdmin && viewAsChapterId ? viewAsChapterId : user?.chapterId ?? null;
 
   // Public site settings — includes the WhatsApp + LinkedIn URLs. Safe

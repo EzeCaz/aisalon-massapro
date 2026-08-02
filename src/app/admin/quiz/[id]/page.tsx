@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { can, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { QuizControlRoom } from "./quiz-control-room";
@@ -21,7 +21,11 @@ export default async function QuizControlRoomPage({
     where: { email: session.user.email },
   });
   if (!me) redirect("/login");
-  if (!can(me.role, "quiz.host")) redirect("/admin");
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (!can(effectiveRole, "quiz.host")) redirect("/admin");
 
   const { id } = await params;
   const quiz = await db.quizSession.findUnique({
@@ -48,7 +52,7 @@ export default async function QuizControlRoomPage({
   return (
     <>
       <AppHeader />
-      <AdminTabs role={me.role} />
+      <AdminTabs role={effectiveRole} />
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         <QuizControlRoom
           initialSession={sessionJson}

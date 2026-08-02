@@ -4,7 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   can,
+  getEffectiveRole,
   isSuperAdminEmail,
+  normalizeRole,
   ROLES,
   roleLabel,
   getUserScope,
@@ -56,12 +58,30 @@ export default async function AdminPage() {
     me = { ...me, role: ROLES.SUPER_ADMIN };
   }
 
-  // New permission gate: any role with members.view (SUPER_ADMIN + ADMIN)
-  // can access this page. CHAPTER_ORGANIZER + MEMBER are redirected to /events.
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
+  // TSK-0058: Resolve the EFFECTIVE role (honors "View as" override for
+  // SUPER_ADMIN). The gate below uses this instead of `me.role` so that
+  // when a Super Admin is viewing-as Member/Speaker, they're redirected
+  // to /events just like a real Member would be.
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const viewAsChapterId = (session.user as { viewAsChapterId?: string | null }).viewAsChapterId ?? null;
+  const isSuper = isSuperAdminEmail(me.email) || normalizeRole(me.role) === ROLES.SUPER_ADMIN;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
 
-  // V7: scope the queries based on the user's country/chapter
-  const scope = await getUserScope(me.id);
+  // Permission gate: any role with members.view (SUPER_ADMIN + ADMIN)
+  // can access this page. CHAPTER_ORGANIZER + MEMBER + SPEAKER are
+  // redirected to /events.
+  // TSK-0058: gate on EFFECTIVE role so view-as is honored.
+  if (!can(effectiveRole, "members.view")) redirect("/events");
+
+  // V7: scope the queries based on the user's country/chapter.
+  // TSK-0058: pass viewAs opts so the scope reflects the impersonated
+  // (role, chapter) — e.g. viewing-as Chapter Organizer scopes the data
+  // to that chapter, viewing-as Member returns {kind:"none"} (though the
+  // gate above already redirected in that case).
+  const scope = await getUserScope(
+    me.id,
+    isSuper ? { isSuperAdminCaller: true, viewAsRole, viewAsChapterId } : undefined,
+  );
   const scopeUserFilter = scopeUserWhere(scope);
   const scopeEventFilter = scopeEventWhere(scope);
 
@@ -123,9 +143,12 @@ export default async function AdminPage() {
 
   // V7: load all countries + chapters (Super Admin only — used by the
   // CountryChapterScopeFilter on the Members table).
+  // TSK-0058: gate on effectiveRole === SUPER_ADMIN so viewing-as a
+  // lower role hides the country/chapter filter (the impersonated role
+  // wouldn't have access to all countries/chapters anyway).
   let allCountries: { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[] = [];
   let allChapters: { id: string; name: string; slug: string; countryId: string; city: string | null; isActive: boolean }[] = [];
-  if (isSuperAdminEmail(me.email)) {
+  if (effectiveRole === ROLES.SUPER_ADMIN) {
     [allCountries, allChapters] = await Promise.all([
       db.country.findMany({
         where: { isActive: true },
@@ -155,7 +178,7 @@ export default async function AdminPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
         {/* Header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
@@ -168,7 +191,12 @@ export default async function AdminPage() {
             <p className="mt-2 text-sm text-black/80 max-w-2xl">
               You are signed in as <strong className="font-mono">{me.email}</strong> with the{" "}
               <span className="inline-flex items-center gap-1 font-semibold text-[#FF005A]">
-                {roleLabel(me.role)}
+                {roleLabel(effectiveRole)}
+                {isSuper && viewAsRole && (
+                  <span className="ml-1 text-[0.65rem] font-normal text-black/50">
+                    (viewing as — real role: {roleLabel(me.role)})
+                  </span>
+                )}
               </span>{" "}
               role.
               {" "}Your active scope:{" "}
@@ -225,8 +253,9 @@ export default async function AdminPage() {
           <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent="#820A7D" />
         </div>
 
-        {/* Super-Admin-only archive link */}
-        {isSuperAdminEmail(me.email) && (
+        {/* Super-Admin-only archive link — TSK-0058: gate on effectiveRole
+            so viewing-as a lower role hides the archive block. */}
+        {effectiveRole === ROLES.SUPER_ADMIN && (
           <div className="mb-8 rounded-md border border-[#820A7D]/30 bg-[#820A7D]/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div className="flex items-center gap-2">
               <Archive className="h-4 w-4 text-[#820A7D]" />
@@ -261,7 +290,7 @@ export default async function AdminPage() {
             events={eventsJson}
             allSpeakers={allSpeakersJson}
             currentUserEmail={me.email}
-            currentUserRole={me.role}
+            currentUserRole={effectiveRole}
             allCountries={allCountries}
             allChapters={allChapters}
           />

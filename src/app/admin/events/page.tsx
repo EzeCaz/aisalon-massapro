@@ -8,8 +8,7 @@ import {
   ROLES,
   getUserScope,
   scopeEventWhere,
-  type UserScope,
-} from "@/lib/permissions";
+  type UserScope, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminEventsListWithActions } from "./admin-events-list-with-actions";
@@ -44,6 +43,10 @@ export default async function AdminEventsPage() {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync SUPER_ADMIN role from the allowlist
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
     await db.user.update({
@@ -54,7 +57,7 @@ export default async function AdminEventsPage() {
   }
 
   // Permission gate: ADMIN + SUPER_ADMIN + CHAPTER_ORGANIZER can manage events.
-  if (!can(me.role, "events.edit") && !isSuperAdminEmail(me.email)) {
+  if (!can(effectiveRole, "events.edit") && !isSuperAdminEmail(me.email)) {
     redirect("/events");
   }
 
@@ -178,7 +181,7 @@ export default async function AdminEventsPage() {
         orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
       }),
     ]);
-  } else if (me.role === ROLES.ADMIN && me.countryId) {
+  } else if (effectiveRole === ROLES.ADMIN && me.countryId) {
     // Admin: scoped to their country only.
     const [country, chapters] = await Promise.all([
       db.country.findUnique({
@@ -193,7 +196,7 @@ export default async function AdminEventsPage() {
     ]);
     allCountries = country ? [country] : [];
     allChapters = chapters;
-  } else if (me.role === ROLES.CHAPTER_ORGANIZER && me.chapterId) {
+  } else if (effectiveRole === ROLES.CHAPTER_ORGANIZER && me.chapterId) {
     // Chapter Organizer: scoped to their chapter only.
     const chapter = await db.chapter.findUnique({
       where: { id: me.chapterId },
@@ -226,7 +229,7 @@ export default async function AdminEventsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs />
+      <AdminTabs role={effectiveRole} />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Page header */}
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">

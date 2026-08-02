@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { isSuperAdminEmail, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ChapterEditor } from "../chapter-editor";
@@ -19,6 +19,10 @@ export default async function NewChapterPage() {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   const isSuperAdmin = isSuperAdminEmail(me.email) || me.role === ROLES.SUPER_ADMIN;
   // Admin can create chapters only in their own country.
   if (!isSuperAdmin && me.role !== ROLES.ADMIN) redirect("/admin/chapters");
@@ -33,7 +37,7 @@ export default async function NewChapterPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
         <div className="mb-6">
           <h1 className="text-2xl font-extrabold text-black">New chapter</h1>
           <p className="mt-1 text-sm text-black/70">

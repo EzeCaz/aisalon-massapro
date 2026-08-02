@@ -6,8 +6,7 @@ import {
   can,
   getUserScope,
   scopeUserWhere,
-  type UserScope,
-} from "@/lib/permissions";
+  type UserScope, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { EmailTabClient } from "./email-tab-client";
@@ -42,7 +41,11 @@ export default async function EmailTabPage({
     select: { id: true, email: true, name: true, role: true },
   });
   if (!me) redirect("/login");
-  if (!can(me.role, "members.view")) redirect("/events");
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (!can(effectiveRole, "members.view")) redirect("/events");
 
   // V7: scope email flows/campaigns/audiences/templates by chapter.
   // Global templates (chapterId = null) are visible to everyone.
@@ -167,7 +170,7 @@ export default async function EmailTabPage({
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
         <div className="mb-4 flex items-center gap-2 text-xs text-black/60">
           <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider ${badge.color}`}>
             <Globe2 className="h-2.5 w-2.5" />
