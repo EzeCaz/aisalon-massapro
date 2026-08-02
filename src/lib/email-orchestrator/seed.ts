@@ -78,26 +78,38 @@ export async function runSeed(): Promise<SeedResult> {
       if (!existing.altSubject && alt) patch.altSubject = alt.altSubject;
       if (!existing.altNotOpenedHours && alt) patch.altNotOpenedHours = alt.altNotOpenedHours;
 
-      // ── Migration 2026-08-03: replace hardcoded "Tel Aviv" with the
-      //  {{chapter_name}} merge token in the seeded default templates.
-      //  This is idempotent — once the body contains the token, the
-      //  condition below is false and the row is not patched again.
-      //  We also patch noCodeHtmlBody the same way if it has the old text.
+      // ── Migration 2026-08-03 (v2): ensure all seeded default templates
+      //  use the {{chapter_name}} merge token (not hardcoded "Tel Aviv")
+      //  AND that the email brand logo falls back to DEFAULT_BRAND_LOGO_URL
+      //  (the canonical AI Salon login banner). This is idempotent:
+      //    - htmlBody / noCodeHtmlBody are reset to the canonical tokenized
+      //      versions whenever they still contain the literal "Tel Aviv".
+      //    - logoUrl is reset to null whenever it's set to anything other
+      //      than the canonical login-banner URL. This clears any
+      //      previously-set per-template logo overrides so every email
+      //      uses the login banner as its brand mark.
+      //  We also handle the campaign footer line "AI Salon Tel Aviv · Empowering AI Connections"
+      //  by replacing the entire htmlBody — the canonical template already
+      //  has "AI Salon {{chapter_name}} · Empowering AI Connections".
       //  The subject line never contained "Tel Aviv", so we leave it alone.
       const def = DEFAULT_TEMPLATES[stageCfg.stage];
-      if (
-        existing.htmlBody &&
-        existing.htmlBody.includes("The AI Salon Tel Aviv team") &&
-        def?.html
-      ) {
+      const canonicalLogoUrl =
+        "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
+      const hasOldChapterText = (s: string | null): boolean =>
+        !!s && (s.includes("The AI Salon Tel Aviv team") ||
+                s.includes("AI Salon Tel Aviv · Empowering AI Connections") ||
+                s.includes("AI Salon Tel Aviv ·"));
+      if (existing.htmlBody && hasOldChapterText(existing.htmlBody) && def?.html) {
         patch.htmlBody = def.html;
       }
-      if (
-        existing.noCodeHtmlBody &&
-        existing.noCodeHtmlBody.includes("The AI Salon Tel Aviv team") &&
-        noCode
-      ) {
+      if (existing.noCodeHtmlBody && hasOldChapterText(existing.noCodeHtmlBody) && noCode) {
         patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
+      }
+      // Force the email brand logo to the canonical login banner. If a
+      // template had a per-template override set previously, clear it so
+      // resolveLogoUrl() falls back to DEFAULT_BRAND_LOGO_URL.
+      if (existing.logoUrl && existing.logoUrl !== canonicalLogoUrl) {
+        patch.logoUrl = null;
       }
 
       if (Object.keys(patch).length > 0) {
