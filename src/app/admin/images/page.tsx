@@ -72,6 +72,16 @@ export default async function AdminImagesPage() {
   // Load countries + chapters for the new chapter-scoped image filter.
   // Scope: Super Admin sees all; Admin sees own country; Chapter
   // Organizer sees own chapter only.
+  // PER USER SPEC 2026-08-02: chapter admins can edit their own chapter's
+  // favicon, login hero, and login banner via the chapter-scoped select
+  // buttons. The dropdown is pre-filtered so they only see chapters they
+  // can actually edit (no 403 surprises).
+  const chapterFilter =
+    isSuper
+      ? { isActive: true }
+      : me.role === ROLES.CHAPTER_ORGANIZER || me.role === ROLES.CO_HOST
+        ? { isActive: true, id: me.chapterId ?? "___NEVER___" }
+        : { isActive: true };
   const countries = await db.country.findMany({
     where: isSuper
       ? {}
@@ -82,7 +92,7 @@ export default async function AdminImagesPage() {
       code: true,
       flagEmoji: true,
       chapters: {
-        where: { isActive: true },
+        where: chapterFilter,
         select: { id: true, name: true, slug: true, city: true },
         orderBy: { name: "asc" },
       },
@@ -122,10 +132,15 @@ export default async function AdminImagesPage() {
             <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.85em]">/login?chapterSlug=&lt;slug&gt;</code>.
           </p>
           {!isSuper && (
-            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              You are signed in as <strong>Admin</strong> (not Super Admin).
-              You can view the gallery, but only Super Admins can upload images
-              or change the favicon / login hero / login banner selections.
+            <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              You are signed in as <strong>{me.role === ROLES.ADMIN ? "Admin" : "Chapter Organizer"}</strong>.
+              You can set the <strong>favicon</strong>, <strong>login hero</strong>, and{" "}
+              <strong>login banner</strong> for{" "}
+              {me.role === ROLES.ADMIN
+                ? "chapters in your country"
+                : "your own chapter"}{" "}
+              using the chapter filter below. Global brand image selections
+              remain Super-Admin-only.
             </div>
           )}
         </div>

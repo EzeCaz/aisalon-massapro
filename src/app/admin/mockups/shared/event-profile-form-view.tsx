@@ -826,11 +826,41 @@ export function EventProfileFormView({ data, onChange }: Props) {
           and replaceable". Renders at the bottom-LEFT corner by default,
           draggable via the "⠿ Move branding" handle on the canvas. */}
       <Section title="Branding asset (bottom-left)">
-        <Field label="Image URL">
+        {/* PER USER SPEC 2026-08-02: Logo theme selector. Picks between
+            the light-theme logo (for white/light backgrounds) and the
+            dark-theme logo (for dark backgrounds). The canvas renderer
+            resolves the URL from the theme via resolveBrandingImageUrl().
+            An explicit Image URL (below) always wins over the theme. */}
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() =>
+                  update((d) => {
+                    d.brandingAsset = {
+                      ...(d.brandingAsset ?? {}),
+                      theme: t,
+                    };
+                  })
+                }
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (data.brandingAsset?.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light theme (white bg)" : "Dark theme (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme)">
           <input
             type="url"
             value={data.brandingAsset?.imageUrl ?? ""}
-            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            placeholder="Leave empty to use the theme-selected logo"
             onChange={(e) =>
               update((d) => {
                 d.brandingAsset = {

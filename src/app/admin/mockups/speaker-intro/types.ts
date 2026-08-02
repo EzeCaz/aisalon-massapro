@@ -380,6 +380,16 @@ export type SpeakerIntroData = {
     height?: number;
     /** Free-form position as % of canvas. Default = bottom-left corner. */
     pos?: { x: number; y: number };
+    /**
+     * Logo theme variant. PER USER SPEC 2026-08-02: when set, the canvas
+     * renderer resolves `imageUrl` from the global brand-asset constants
+     * (BRAND_LOGO_LIGHT_URL / BRAND_LOGO_DARK_URL). An explicit `imageUrl`
+     * always wins over `theme`.
+     *   - "light" → use the light-theme logo (for light/white backgrounds)
+     *   - "dark"  → use the dark-theme logo (for dark backgrounds)
+     * If both `imageUrl` and `theme` are unset, falls back to the dark logo.
+     */
+    theme?: "light" | "dark";
   };
   /**
    * Section layout — per-section draggable position + scale, set when

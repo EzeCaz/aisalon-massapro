@@ -10,6 +10,7 @@ import type {
   Sponsor,
 } from "./types";
 import { resolvePlacement } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -578,10 +579,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               >
                 <EditableImage
                   slot={{ kind: "branding-asset" }}
-                  src={
-                    data.brandingAsset?.imageUrl ||
-                    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
-                  }
+                  src={resolveBrandingImageUrl(data.brandingAsset)}
                   alt="Brand mark"
                   placement={undefined}
                   editable={editable}

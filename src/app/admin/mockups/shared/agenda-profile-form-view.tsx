@@ -269,6 +269,71 @@ export function EventProfileFormView({ data, onChange }: Props) {
         />
       </Section>
 
+      {/* ===== BRANDING ASSET ===== */}
+      {/* PER USER SPEC 2026-08-02: Logo theme selector for the bottom-left
+          branding asset. Picks between the light-theme logo (for white
+          backgrounds) and the dark-theme logo (for dark backgrounds). */}
+      <Section title="Branding asset (bottom-left)">
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() =>
+                  update((d) => {
+                    d.brandingAsset = {
+                      ...(d.brandingAsset ?? {}),
+                      theme: t,
+                    };
+                  })
+                }
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (data.brandingAsset?.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light theme (white bg)" : "Dark theme (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme)">
+          <input
+            type="url"
+            value={data.brandingAsset?.imageUrl ?? ""}
+            placeholder="Leave empty to use the theme-selected logo"
+            onChange={(e) =>
+              update((d) => {
+                d.brandingAsset = {
+                  ...(d.brandingAsset ?? {}),
+                  imageUrl: e.target.value || undefined,
+                };
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+        <Field label="Height (px)">
+          <input
+            type="number"
+            min="8"
+            max="200"
+            value={data.brandingAsset?.height ?? 48}
+            onChange={(e) =>
+              update((d) => {
+                d.brandingAsset = {
+                  ...(d.brandingAsset ?? {}),
+                  height: parseInt(e.target.value, 10) || 48,
+                };
+              })
+            }
+            className="form-input"
+          />
+        </Field>
+      </Section>
+
       {/* ===== HERO ===== */}
       <Section title="Hero image & overlay">
         <Field label="Hero image URL">

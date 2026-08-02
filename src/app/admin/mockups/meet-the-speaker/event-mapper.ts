@@ -40,9 +40,13 @@ const STYLE1_SECTION_LAYOUT: NonNullable<MeetTheSpeakerData["sectionLayout"]> = 
   qr: { pos: { x: 39.8, y: 2.6 } },
 };
 
+// PER USER SPEC 2026-08-02: brandingAsset now uses `theme` instead of a
+// hardcoded imageUrl. The meet-the-speaker canvas is bg-white, so we use
+// theme="light" (the light-theme logo variant for white backgrounds). The
+// canvas renderer resolves the URL via resolveBrandingImageUrl() from
+// shared/brand-assets.ts.
 const STYLE1_BRANDING_ASSET: NonNullable<MeetTheSpeakerData["brandingAsset"]> = {
-  imageUrl:
-    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+  theme: "light",
   height: 48,
   pos: { x: 2.7, y: 89.57640750670241 },
 };

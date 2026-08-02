@@ -103,6 +103,16 @@ export type QrSalonData = {
     height?: number;
     /** Free-form position as % of canvas. Default = { x: 2.7, y: 94 }. */
     pos?: { x: number; y: number };
+    /**
+     * Logo theme variant. PER USER SPEC 2026-08-02: when set, the canvas
+     * renderer resolves `imageUrl` from the global brand-asset constants
+     * (BRAND_LOGO_LIGHT_URL / BRAND_LOGO_DARK_URL). An explicit `imageUrl`
+     * always wins over `theme`.
+     *   - "light" → use the light-theme logo (for light/white backgrounds)
+     *   - "dark"  → use the dark-theme logo (for dark backgrounds)
+     * If both `imageUrl` and `theme` are unset, falls back to the dark logo.
+     */
+    theme?: "light" | "dark";
   };
 
   /**
@@ -115,7 +125,11 @@ export type QrSalonData = {
   sectionLayout?: SectionLayout;
 };
 
-/** Default branding asset URL — the AI Salon logo on Vercel Blob. */
+/** Default branding asset URL — the AI Salon "light theme" logo on Vercel
+ *  Blob. PER USER SPEC 2026-08-02: this is the light-theme logo variant
+ *  (for white backgrounds). The qr-salon canvas is bg-white, so this is
+ *  the correct fallback. Used when brandingAsset has neither imageUrl nor
+ *  theme set. */
 export const DEFAULT_BRANDING_ASSET_URL =
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png";
 

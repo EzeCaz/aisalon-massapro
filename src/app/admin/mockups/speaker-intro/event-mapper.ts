@@ -129,8 +129,10 @@ const DEFAULT_BRAND_COLORS: [string, string] = ["#ff0056", "#8f0080"];
 const DEFAULT_FOOTER_CREDIT = "MassaPro";
 
 /** Branding asset image URL — AI Salon mark on Vercel Blob.
- *  PER USER SPEC 2026-07-31 (TSK-0035): updated to the new logo
- *  1785506059156-4chc96.png (was 1782505047256-bpy1ln.png). */
+ *  PER USER SPEC 2026-08-02: brandingAsset now uses `theme` instead of
+ *  a hardcoded imageUrl. The speaker-intro canvas is bg-white, so we
+ *  use theme="light" (the light-theme logo variant for white backgrounds).
+ *  The constant is kept for backward-compat fallback only. */
 const DEFAULT_BRANDING_ASSET_IMAGE =
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png";
 
@@ -392,7 +394,10 @@ export function mapEventToSpeakerIntroData(
     // Per user spec 2026-07-09 (item H): branding asset at the bottom-left
     // corner by default — height 48px, X≈3.10% Y≈87.57%.
     brandingAsset: {
-      imageUrl: DEFAULT_BRANDING_ASSET_IMAGE,
+      // PER USER SPEC 2026-08-02: use `theme` instead of `imageUrl` so the
+      // canvas renderer picks the right logo variant from shared/brand-assets.ts.
+      // speaker-intro canvas is bg-white → theme="light".
+      theme: "light",
       height: 48,
       pos: { ...DEFAULT_BRANDING_ASSET_POS },
     },

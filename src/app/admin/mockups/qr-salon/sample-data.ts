@@ -1,5 +1,4 @@
 import type { QrSalonData } from "./types";
-import { DEFAULT_BRANDING_ASSET_URL } from "./types";
 
 /**
  * Sample data for the QR Salon mockup editor.
@@ -43,7 +42,9 @@ export const SAMPLE_DATA: QrSalonData = {
   captionWidthPct: 80,
   background: "#FFFFFF",
   brandingAsset: {
-    imageUrl: DEFAULT_BRANDING_ASSET_URL,
+    // PER USER SPEC 2026-08-02: theme="light" → light-theme logo designed
+    // for white backgrounds. The qr-salon canvas is bg-white.
+    theme: "light",
     height: 48,
     // pos intentionally unset — canvas computes centered default.
   },

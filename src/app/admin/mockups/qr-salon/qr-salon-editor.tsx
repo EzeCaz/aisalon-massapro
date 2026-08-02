@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type { QrSalonData } from "./types";
-import { DEFAULT_BRANDING_ASSET_URL } from "./types";
 import { SAMPLE_DATA } from "./sample-data";
 import { QrSalonCanvas } from "./qr-salon-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
@@ -847,12 +846,31 @@ function FormView({
             Replace
           </button>
         </div>
-        <Field label="Image URL">
+        {/* PER USER SPEC 2026-08-02: Logo theme selector. */}
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onPatchBranding({ theme: t })}
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (branding.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light (white bg)" : "Dark (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme)">
           <input
             type="url"
             value={branding.imageUrl ?? ""}
             onChange={(e) => onPatchBranding({ imageUrl: e.target.value })}
-            placeholder={DEFAULT_BRANDING_ASSET_URL}
+            placeholder="Leave empty to use the theme-selected logo"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-xs font-mono focus:border-[#FF005A] focus:outline-none"
           />
         </Field>

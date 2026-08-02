@@ -14,6 +14,7 @@ import {
   resolvePlacement,
   sessionTypeLabel,
 } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import QRCode from "qrcode";
 import {
   GuideProvider,
@@ -664,10 +665,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={
-                  data.brandingAsset?.imageUrl ||
-                  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
-                }
+                src={resolveBrandingImageUrl(data.brandingAsset)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}

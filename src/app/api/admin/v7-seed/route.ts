@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin } from "@/lib/permissions";
+import {
+  setChapterBrandImage,
+  K_LOGIN_HERO,
+  K_LOGIN_BANNER,
+} from "@/lib/chapter-brand-images";
 
 // ============================================================================
 // POST /api/admin/v7-seed
@@ -73,6 +78,23 @@ export async function POST() {
       isActive: true,
     },
   });
+
+  // 2b. PER USER SPEC 2026-08-02: Seed Tel Aviv's chapter-scoped brand
+  // image overrides. The Tel Aviv chapter has its own login hero and
+  // login banner distinct from the global defaults. These are stored in
+  // the ChapterSetting table and take precedence over SiteSetting when
+  // a visitor is on /c/tel-aviv or /login?chapterSlug=tel-aviv.
+  // Idempotent: re-calling just re-writes the same values.
+  const TLV_LOGIN_HERO =
+    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png";
+  const TLV_LOGIN_BANNER =
+    "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393696779-dr4rkl.jpg";
+
+  await setChapterBrandImage(chapter.id, K_LOGIN_HERO, TLV_LOGIN_HERO, user.id);
+  await setChapterBrandImage(chapter.id, K_LOGIN_BANNER, TLV_LOGIN_BANNER, user.id);
+  // Note: favicon is NOT overridden at the chapter level — Tel Aviv uses
+  // the global favicon default (1782393850874-uwkddr.webp). Per user spec:
+  // "For global and all chapters and countries: This is the main favicon".
 
   // 3. Backfill NULLs
   // SUPER_ADMIN users keep NULL scope (global).
@@ -176,6 +198,12 @@ export async function POST() {
       name: chapter.name,
       slug: chapter.slug,
       city: chapter.city,
+      // PER USER SPEC 2026-08-02: report the seeded chapter-scoped brand
+      // image overrides so the caller can verify they were written.
+      brandImageOverrides: {
+        loginHero: TLV_LOGIN_HERO,
+        loginBanner: TLV_LOGIN_BANNER,
+      },
     },
     updates,
     verification: {

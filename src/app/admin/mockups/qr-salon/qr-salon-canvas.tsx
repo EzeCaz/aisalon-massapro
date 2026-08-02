@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useState, useCallback } from "react";
 import QRCode from "qrcode";
 import type { QrSalonData } from "./types";
 import { DEFAULT_BRANDING_ASSET_URL } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -109,8 +110,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const captionDefaultTopPx = 140; // above the QR
     const brandingHeight = data.brandingAsset?.height ?? 48;
     const brandingDefaultTopPx = 620; // below the QR
-    const brandingSrc =
-      data.brandingAsset?.imageUrl || DEFAULT_BRANDING_ASSET_URL;
+    const brandingSrc = resolveBrandingImageUrl(data.brandingAsset, DEFAULT_BRANDING_ASSET_URL);
 
     // ─── Brand mark horizontal centering ───────────────────────────
     // The brand mark's width is `auto` (driven by the image's natural

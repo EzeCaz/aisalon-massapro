@@ -9,6 +9,7 @@ import type {
   ImageSlot,
 } from "./types";
 import { resolvePlacement } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -1111,10 +1112,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={
-                  data.brandingAsset?.imageUrl ||
-                  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png"
-                }
+                src={resolveBrandingImageUrl(data.brandingAsset)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}

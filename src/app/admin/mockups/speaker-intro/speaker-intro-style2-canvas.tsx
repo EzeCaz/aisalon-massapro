@@ -10,6 +10,7 @@ import type {
   ImageSlot,
 } from "./types";
 import { resolvePlacement } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -1384,9 +1385,9 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
             >
               {/* Left: AI SALON logo + label */}
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-                {data.brandingAsset?.imageUrl ? (
+                {data.brandingAsset?.imageUrl || data.brandingAsset?.theme ? (
                   <Image
-                    src={data.brandingAsset.imageUrl}
+                    src={resolveBrandingImageUrl(data.brandingAsset)}
                     alt="AI Salon"
                     height={36}
                     width={36}

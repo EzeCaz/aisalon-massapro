@@ -143,8 +143,9 @@ export const SAMPLE_DATA: EventProfileData = {
    * Draggable via the "⠿ Move branding" handle.
    */
   brandingAsset: {
-    imageUrl:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    // PER USER SPEC 2026-08-02: theme="light" → light-theme logo designed
+    // for light/white backgrounds. The agenda-profile canvas is bg-white.
+    theme: "light",
     height: 48,
   },
 };

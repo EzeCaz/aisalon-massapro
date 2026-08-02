@@ -119,11 +119,13 @@ export const SAMPLE_DATA: SpeakerIntroData = {
    * 2026-07-02). Replaceable + draggable — see speaker-intro-canvas.tsx.
    */
   brandingAsset: {
-    // PER USER SPEC 2026-07-31 (TSK-0035): updated branding asset URL to
-    // the new AI Salon logo (1785506059156-4chc96.png). Replaces the
-    // previous 1782505047256-bpy1ln.png asset across all 3 styles.
-    imageUrl:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png",
+    // PER USER SPEC 2026-08-02: brandingAsset now uses `theme` to switch
+    // between light/dark logo variants. The speaker-intro canvas is bg-white
+    // across all 3 styles (Style 1, 2, 3), so we use theme="light" (the
+    // light-theme logo designed for light/white backgrounds). An explicit
+    // imageUrl is no longer set — the canvas renderer resolves the URL via
+    // resolveBrandingImageUrl() from shared/brand-assets.ts.
+    theme: "light",
     height: 48,
     pos: { x: 3.1021447721179625, y: 87.5656836461126 },
   },

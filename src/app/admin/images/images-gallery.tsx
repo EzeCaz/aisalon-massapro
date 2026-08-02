@@ -656,7 +656,18 @@ export function ImagesGallery({
                 </div>
 
                 {/* CHAPTER-scoped select-as buttons — only shown when a
-                    chapter is selected in the filter. */}
+                    chapter is selected in the filter.
+
+                    PER USER SPEC 2026-08-02: chapter-scoped select buttons
+                    are enabled for ANY admin (SUPER_ADMIN, ADMIN, or
+                    CHAPTER_ORGANIZER) when a chapter is selected. The API
+                    at /api/admin/chapters/[id]/brand-images/select enforces
+                    the scope — ADMIN can only edit chapters in their
+                    country, CHAPTER_ORGANIZER can only edit their own
+                    chapter. The countries/chapters dropdown in page.tsx
+                    is already scope-filtered, so non-super-admins only
+                    see chapters they can edit. Global select buttons above
+                    remain SUPER_ADMIN-only. */}
                 {selectedChapter && (
                   <div className="mt-2">
                     <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#820A7D] mb-1">
@@ -672,7 +683,7 @@ export function ImagesGallery({
                             key={`c-btn-${role}`}
                             type="button"
                             onClick={() => handleChapterSelect(img, role, selectedChapter)}
-                            disabled={!isSuperAdmin || busyKey !== null}
+                            disabled={busyKey !== null}
                             className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                               isSelected
                                 ? "bg-[#820A7D] text-white hover:bg-[#6a0868]"

@@ -10344,3 +10344,76 @@ Work Log:
 Stage Summary:
 - Event Profile mockup now renders the same sponsor/collaborator block as speaker-intro Style 1 (Amdocs + Google as collaborators, Alison.ai as sponsor), anchored to the bottom-right corner.
 - No other mockup behavior changed.
+
+---
+Task ID: brand-assets-system
+Agent: main
+Task: PER USER SPEC 2026-08-02 — Brand assets system + chapter login pages.
+  1. Add logo theme dark/light switching to all mockups (brandingAsset.theme field).
+  2. Set up global brand assets (favicon, login hero) as site-setting defaults.
+  3. Set up Tel Aviv chapter brand overrides (login hero, login banner) via v7-seed.
+  4. Allow chapter admins (ADMIN, CHAPTER_ORGANIZER) to edit their own chapter's
+     brand images via /admin/images. Global writes remain SUPER_ADMIN-only.
+  5. /login defaults to Tel Aviv when no chapterSlug is provided; /login?chapterSlug=<slug>
+     works for any chapter. Login page H1 + eyebrow now show the chapter's display
+     name (was hardcoded "Tel Aviv").
+
+Work Log:
+- Created src/app/admin/mockups/shared/brand-assets.ts with BRAND_LOGO_LIGHT_URL,
+  BRAND_LOGO_DARK_URL, BRAND_FAVICON_URL, BRAND_LOGIN_HERO_URL,
+  TEL_AVIV_LOGIN_HERO_URL, TEL_AVIV_LOGIN_BANNER_URL constants and a
+  resolveBrandingImageUrl() helper.
+- Added `theme?: "light" | "dark"` field to the brandingAsset type in all 5
+  mockup type files (speaker-intro, event-profile, agenda-profile,
+  meet-the-speaker, qr-salon).
+- Updated all 5 canvas renderers (+ speaker-intro-style2-canvas.tsx) to call
+  resolveBrandingImageUrl(data.brandingAsset) instead of reading
+  data.brandingAsset?.imageUrl directly.
+- Updated all 5 mockup sample-data.ts files + speaker-intro event-mapper.ts +
+  meet-the-speaker event-mapper.ts to use theme: "light" (since all canvases
+  are bg-white) instead of a hardcoded imageUrl.
+- Updated src/lib/site-settings.ts DEFAULTS:
+    favicon  → 1782393850874-uwkddr.webp (global)
+    loginHero → 1785654449284-sqq083.png (global)
+- Updated src/app/api/admin/v7-seed/route.ts to also seed Tel Aviv's
+  ChapterSetting overrides:
+    loginHero   → 1782393632010-jeorqc.png
+    loginBanner → 1782393696779-dr4rkl.jpg
+  (favicon is NOT overridden at chapter level — Tel Aviv uses the global default.)
+- Updated src/app/admin/images/page.tsx:
+    - Chapter filter dropdown now pre-filters to CHAPTER_ORGANIZER's own
+      chapter (was showing all chapters in their country).
+    - Replaced the "you can't edit anything" amber banner with a blue banner
+      explaining chapter admins CAN edit their own chapter's brand images.
+- Updated src/app/admin/images/images-gallery.tsx:
+    - Chapter-scoped select buttons are now ENABLED for any admin
+      (SUPER_ADMIN, ADMIN, CHAPTER_ORGANIZER) when a chapter is selected.
+      Previously gated by !isSuperAdmin. Global select buttons remain
+      SUPER_ADMIN-only. The API at /api/admin/chapters/[id]/brand-images/select
+      already enforces scope — ADMIN can edit own country's chapters,
+      CHAPTER_ORGANIZER can edit only their own chapter.
+- Rewrote src/app/login/page.tsx:
+    - DEFAULT_CHAPTER_SLUG = "tel-aviv" — /login with no chapterSlug now
+      behaves like /login?chapterSlug=tel-aviv.
+    - Looks up the chapter's display name from the DB via db.chapter.findUnique.
+      Falls back to a humanized version of the slug if the chapter doesn't
+      exist or DB is unreachable.
+    - Section A (eyebrow): "{Chapter_name} Chapter" — was hardcoded "Tel Aviv Chapter".
+    - Section B (H1): "The community for AI builders in {Chapter_name}." — was
+      hardcoded "in Tel Aviv.".
+    - All other chapter-aware text (image alt, OG title, OG description,
+      mobile subtitle, welcome paragraph) now uses the dynamic chapter name.
+- Added a "Logo theme variant" selector (Light/Dark buttons) to all 5 mockup
+  form views (event-profile, speaker-intro, agenda-profile, meet-the-speaker,
+  qr-salon). An explicit Image URL field remains available as an override.
+- Verified compilation: all 5 mockup routes return HTTP 200, /login returns
+  200 for both no-slug and ?chapterSlug=tel-aviv, /admin/images returns 200,
+  /api/admin/v7-seed returns 401 (not authenticated — expected). No errors
+  or warnings in dev.log.
+
+Stage Summary:
+- All 5 mockups now support light/dark logo theme switching via brandingAsset.theme.
+- Global site defaults updated to the canonical AI Salon brand assets.
+- Tel Aviv chapter brand overrides (login hero + banner) seeded via v7-seed route.
+- Chapter admins can now edit their own chapter's brand images via /admin/images.
+- /login defaults to Tel Aviv and shows the chapter's display name dynamically.
