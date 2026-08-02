@@ -672,3 +672,16 @@ For the full step-by-step protocol that every task must follow, see [`core/task-
 | **Worklog Ref** | `TSK-0056 — montreal-scope-and-brand-image-permissions` |
 | **Files Touched** | src/lib/permissions.ts (getUserScope fail-closed), src/app/api/admin/v7-seed/route.ts (OR→AND backfill), src/app/api/admin/brand-images/route.ts (GET gate → canSeeAdminNav), src/app/admin/images/page.tsx (page gate → canSeeAdminNav), src/app/api/admin/chapters/[id]/brand-images/route.ts (GET gate → canSeeAdminNav), src/app/api/admin/chapters/[id]/brand-images/select/route.ts (POST gate → canSeeAdminNav), src/components/ais/app-header.tsx (chapter-aware label + chapter-scoped WhatsApp/LinkedIn), /home/z/my-project/worklog.md (worklog entry) |
 | **Outcome** | (pending — see worklog for in-progress detail) |
+
+### TSK-0057
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0057` |
+| **Date** | 2026-08-02 |
+| **Title** | AppHeader: chapter-scoped login-hero meerkat + chapter label; SUPER_ADMIN "View as" role+chapter impersonation; push+deploy; backup |
+| **Category** | HIGH |
+| **Status** | IN_PROGRESS |
+| **Worklog Ref** | `TSK-0057 — chapter-header-logo-and-view-as` |
+| **Files Touched** | src/components/ais/app-header.tsx (chapter login-hero img + label), src/components/brand/aisalon-logo-server.tsx (markSrc already supported), src/lib/auth.ts (jwt callback: viewAsRole/viewAsChapterId), src/lib/permissions.ts (getUserScope + canSeeAdminNav honor viewAs overrides), src/components/ais/view-as-switcher.tsx (new — SUPER_ADMIN-only UI), src/app/api/admin/view-as/route.ts (new — POST set, DELETE clear), docs/tasks.md, worklog.md |
+| **Outcome** | (pending) |

@@ -475,15 +475,80 @@ export type UserScope =
  *   - ADMIN       → { kind: "country", countryId }  (their country only)
  *   - CHAPTER_ORGANIZER / CO_HOST → { kind: "chapter", countryId, chapterId }
  *   - MEMBER / SPEAKER → { kind: "none" }  (no admin access)
+ *
+ * TSK-0057: When the signed-in user is SUPER_ADMIN and has set a "view as"
+ * override via /api/admin/view-as, pass `viewAs` here to impersonate the
+ * given (role, chapterId). The override is ONLY honored for SUPER_ADMIN
+ * callers — non-super-admins cannot escalate by passing viewAs. The
+ * `isSuperAdminCaller` flag must be true for the override to take effect.
  */
-export async function getUserScope(userId: string): Promise<UserScope> {
+export async function getUserScope(
+  userId: string,
+  opts?: {
+    /** True only if the caller has verified the signed-in user is SUPER_ADMIN. */
+    isSuperAdminCaller?: boolean;
+    /** Role to impersonate (from the viewAs cookie). Null = no override. */
+    viewAsRole?: string | null;
+    /** Chapter to impersonate (from the viewAs cookie). Null = no override. */
+    viewAsChapterId?: string | null;
+  }
+): Promise<UserScope> {
   const { db } = await import("@/lib/db");
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { role: true, countryId: true, chapterId: true },
+    select: { role: true, countryId: true, chapterId: true, email: true },
   });
   if (!user) return { kind: "none" };
   const r = normalizeRole(user.role);
+
+  // TSK-0057: SUPER_ADMIN "view as" override. Only honored when:
+  //   1. The caller confirms the signed-in user is SUPER_ADMIN
+  //      (isSuperAdminCaller=true), AND
+  //   2. The user's DB role OR email allowlist confirms SUPER_ADMIN.
+  // This double-gate prevents a non-super-admin from escalating by
+  // passing viewAs fields directly.
+  const isActuallySuperAdmin =
+    r === ROLES.SUPER_ADMIN || isSuperAdminEmail(user.email);
+  if (
+    opts?.isSuperAdminCaller &&
+    isActuallySuperAdmin &&
+    (opts?.viewAsRole || opts?.viewAsChapterId)
+  ) {
+    const viewRole = opts.viewAsRole ? normalizeRole(opts.viewAsRole) : r;
+    const viewChapterId = opts.viewAsChapterId ?? user.chapterId;
+    // If the override role is SUPER_ADMIN with no chapter, behave as global.
+    if (viewRole === ROLES.SUPER_ADMIN && !viewChapterId) {
+      return { kind: "global" };
+    }
+    // For any other role, we need a chapterId to scope to. Look it up
+    // so we can also resolve the countryId.
+    if (viewChapterId) {
+      const chapter = await db.chapter.findUnique({
+        where: { id: viewChapterId },
+        select: { id: true, countryId: true },
+      });
+      if (chapter) {
+        // ADMIN impersonation → country scope (so they see the whole
+        // country, not just the one chapter).
+        if (viewRole === ROLES.ADMIN) {
+          return { kind: "country", countryId: chapter.countryId };
+        }
+        // CHAPTER_ORGANIZER / CO_HOST / MEMBER / SPEAKER → chapter scope.
+        return {
+          kind: "chapter",
+          countryId: chapter.countryId,
+          chapterId: chapter.id,
+        };
+      }
+      // Chapter not found — fall through to default behavior.
+    }
+    // Role-only impersonation with no chapter: treat as "none" (can't
+    // resolve a scope without a chapter). This is a no-op.
+    if (opts.viewAsRole && !opts.viewAsChapterId) {
+      return { kind: "none" };
+    }
+  }
+
   if (r === ROLES.SUPER_ADMIN) return { kind: "global" };
   if (r === ROLES.ADMIN) {
     // TSK-0056: Fail CLOSED. Previously returned { kind: "global" } when

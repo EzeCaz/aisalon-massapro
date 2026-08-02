@@ -23,7 +23,9 @@ import {
   can,
   getUserScope,
   isEventCoHost,
+  isSuperAdmin,
   isSuperAdminEmail,
+  normalizeRole,
   ROLES,
   type UserScope,
 } from "@/lib/permissions";
@@ -79,7 +81,34 @@ export async function getCurrentUser() {
       data: { role: ROLES.SUPER_ADMIN },
     });
     const syncedUser = { ...user, role: ROLES.SUPER_ADMIN };
+    // TSK-0057: even for auto-synced super admins, honor viewAs if set.
+    const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+    const viewAsChapterId = (session.user as { viewAsChapterId?: string | null }).viewAsChapterId ?? null;
+    if (viewAsRole || viewAsChapterId) {
+      const scope = await getUserScope(user.id, {
+        isSuperAdminCaller: true,
+        viewAsRole,
+        viewAsChapterId,
+      });
+      return { user: syncedUser, error: null, scope };
+    }
     return { user: syncedUser, error: null, scope: { kind: "global" } as UserScope };
+  }
+  // TSK-0057: If the signed-in user is SUPER_ADMIN and has set a "view as"
+  // override (via /api/admin/view-as), pass it through to getUserScope so
+  // the returned scope reflects the impersonated (role, chapter).
+  const isSuper = isSuperAdmin({ email: user.email, role: user.role }) ||
+    isSuperAdminEmail(user.email) ||
+    normalizeRole(user.role) === ROLES.SUPER_ADMIN;
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const viewAsChapterId = (session.user as { viewAsChapterId?: string | null }).viewAsChapterId ?? null;
+  if (isSuper && (viewAsRole || viewAsChapterId)) {
+    const scope = await getUserScope(user.id, {
+      isSuperAdminCaller: true,
+      viewAsRole,
+      viewAsChapterId,
+    });
+    return { user, error: null, scope };
   }
   const scope = await getUserScope(user.id);
   return { user, error: null, scope };
