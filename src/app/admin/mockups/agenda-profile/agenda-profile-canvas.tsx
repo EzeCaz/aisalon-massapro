@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, useEffect } from "react";
+import { forwardRef, useRef, useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import type {
   EventProfileData,
@@ -14,6 +14,7 @@ import {
   resolvePlacement,
   sessionTypeLabel,
 } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import QRCode from "qrcode";
 import {
   GuideProvider,
@@ -80,6 +81,12 @@ type Props = {
    * Photo position (X%, Y%)".
    */
   onHeroPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED to the editor so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  selectedId?: string | null;
+  /** Called when the user clicks an element on the canvas (or deselects). */
+  onSelectChange?: (id: string | null) => void;
   previewScale?: number;
 };
 
@@ -102,6 +109,8 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
       onSectionZChange,
       onBrandingAssetPosChange,
       onHeroPosChange,
+      selectedId: selectedIdProp,
+      onSelectChange,
       previewScale = 1,
     },
     ref,
@@ -120,10 +129,12 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
     );
 
     // --- Section 1: ObjectPropertiesPanel selection state ---
-    const [selectedId, setSelectedId] = useState<string | null>(null);
-    useEffect(() => {
-      if (!sectionsEditable) setSelectedId(null);
-    }, [sectionsEditable]);
+    // PER USER SPEC 2026-08-02: selectedId is now LIFTED to the editor.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     function sectionZFor(id: SectionId): number {
       const explicit = data.sectionLayout?.[id]?.z;
@@ -195,6 +206,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             sizeLabel="hero scale"
             containerClass="absolute inset-0"
             objectFit="cover"
+            onSelect={() => setSelectedId("hero-image")}
           />
           {/* Gradient overlay */}
           <div
@@ -438,6 +450,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 onPlacementChange={onPlacementChange}
                 onSizeChange={onSizeChange}
                 textStyles={data.textStyles}
+                onSelect={() => setSelectedId(`speaker-image-${idx}`)}
               />
             ))}
           </div>
@@ -488,6 +501,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                       onPickImage={onPickImage}
                       onSizeChange={onSizeChange}
                       previewScale={previewScale}
+                      onSelect={() => setSelectedId(`sponsor-image-collaborators-${i}`)}
                     />
                   ))}
                 </div>
@@ -516,6 +530,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                       onPickImage={onPickImage}
                       onSizeChange={onSizeChange}
                       previewScale={previewScale}
+                      onSelect={() => setSelectedId(`sponsor-image-sponsors-${i}`)}
                     />
                   ))}
                 </div>
@@ -650,10 +665,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={
-                  data.brandingAsset?.imageUrl ||
-                  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
-                }
+                src={resolveBrandingImageUrl(data.brandingAsset)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}
@@ -665,6 +677,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
                 sizeLabel="branding"
                 containerClass="absolute inset-0"
                 objectFit="contain"
+                onSelect={() => setSelectedId("branding-asset")}
               />
             </DraggablePhotoContainer>
           );
@@ -840,6 +853,7 @@ function SpeakerCard({
   onPlacementChange,
   onSizeChange,
   textStyles,
+  onSelect,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -854,6 +868,10 @@ function SpeakerCard({
    *  Passed down from the parent canvas so all speaker cards share one
    *  visual treatment. */
   textStyles?: EventProfileData["textStyles"];
+  /** PER USER SPEC 2026-08-02 (TSK-0055-extend): fired when the user
+   *  clicks the speaker's photo. Triggers the contextual "Selected
+   *  Element" panel for this specific speaker's photo. */
+  onSelect?: () => void;
 }) {
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
   const photoPx = Math.round(96 * photoSize);
@@ -881,6 +899,7 @@ function SpeakerCard({
           sizeLabel="photo"
           containerClass="absolute inset-0"
           objectFit="cover"
+          onSelect={onSelect}
         />
       </div>
       <div className="min-w-0 w-full">
@@ -982,6 +1001,7 @@ function EditableImage({
   sizeLabel,
   containerClass,
   objectFit,
+  onSelect,
 }: {
   slot: ImageSlot;
   src: string;
@@ -996,6 +1016,10 @@ function EditableImage({
   sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
+  /** PER USER SPEC 2026-08-02 (TSK-0055-extend): fired when the user
+   *  CLICKS the image body (mousedown). Used to trigger the contextual
+   *  "Selected Element" panel for this specific image. */
+  onSelect?: () => void;
 }) {
   const { focusX, focusY, zoom } = resolvePlacement(placement);
   const dragRef = useRef<{
@@ -1045,9 +1069,22 @@ function EditableImage({
   }
 
   function handleMouseDown(e: React.MouseEvent) {
-    if (!editable || !onPlacementChange) return;
+    if (!editable || !onPlacementChange) {
+      // Even when placement-drag isn't available, we still want
+      // click-to-select.
+      if (editable && onSelect) {
+        e.stopPropagation();
+        onSelect();
+      }
+      return;
+    }
     if (e.button !== 0) return;
     e.preventDefault();
+    // PER USER SPEC 2026-08-02 (TSK-0055-extend): fire onSelect at
+    // mousedown so the Selected Element panel appears immediately.
+    if (onSelect) {
+      onSelect();
+    }
     dragRef.current = {
       startX: e.clientX, startY: e.clientY,
       startFocusX: focusX, startFocusY: focusY,
@@ -1224,6 +1261,7 @@ function SponsorLogo({
   onPickImage,
   onSizeChange,
   previewScale = 1,
+  onSelect,
 }: {
   sponsor: { name: string; logoUrl: string; logoSize?: number };
   editable?: boolean;
@@ -1231,6 +1269,10 @@ function SponsorLogo({
   onPickImage?: (slot: ImageSlot) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055-extend): fired when the user
+   *  clicks the logo body. Used to trigger the contextual "Selected
+   *  Element" panel for this specific logo. */
+  onSelect?: () => void;
 }) {
   const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
   const heightPx = Math.round(32 * sizeMult);
@@ -1284,6 +1326,15 @@ function SponsorLogo({
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+      onMouseDown={(e) => {
+        // PER USER SPEC 2026-08-02 (TSK-0055-extend): click-to-select
+        // for sponsor logos. Fired at mousedown so the panel appears
+        // immediately. The resize handles + Replace button call
+        // e.stopPropagation() so they don't trigger this.
+        if (editable && onSelect && e.button === 0) {
+          onSelect();
+        }
+      }}
     >
       <div className="relative w-full h-full">
         <Image

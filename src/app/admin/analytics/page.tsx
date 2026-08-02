@@ -7,8 +7,7 @@ import {
   can,
   isSuperAdminEmail,
   getUserScope,
-  type UserScope,
-} from "@/lib/permissions";
+  type UserScope, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminAnalyticsClient } from "./analytics-client";
@@ -46,6 +45,10 @@ export default async function AdminAnalyticsPage() {
   });
   if (!me) redirect("/login?callbackUrl=/admin/analytics");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   let myRole = me.role;
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
     await db.user.update({ where: { id: me.id }, data: { role: ROLES.SUPER_ADMIN } });
@@ -60,7 +63,7 @@ export default async function AdminAnalyticsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs />
+      <AdminTabs role={effectiveRole} />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-8">

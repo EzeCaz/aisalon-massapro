@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { can, isSuperAdminEmail, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ExternalLink, FolderOpen, FileText, Presentation } from "lucide-react";
@@ -175,6 +175,10 @@ export default async function KnowledgeBasePage() {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync SUPER_ADMIN status (same pattern as /admin + /admin/images)
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
     await db.user.update({
@@ -185,7 +189,7 @@ export default async function KnowledgeBasePage() {
   }
 
   // Visible to ADMIN + SUPER_ADMIN (same gate as /admin members table)
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) {
+  if (!can(effectiveRole, "members.view") && !isSuperAdminEmail(me.email)) {
     redirect("/events");
   }
 
@@ -193,7 +197,7 @@ export default async function KnowledgeBasePage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         {/* Header */}
         <div className="mb-10">
@@ -295,8 +299,8 @@ export default async function KnowledgeBasePage() {
 
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
-          <span>Platform by MassaPro</span>
+          <span>© {new Date().getFullYear()} AI Salon Global· Empowering AI Connections</span>
+          <a href="https://massapro.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">Platform by MassaPro</a>
         </div>
       </footer>
     </div>

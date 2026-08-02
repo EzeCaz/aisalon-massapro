@@ -73,6 +73,20 @@ export type Speaker = {
   /** Optional session title (e.g. " fireside chat"). */
   sessionTitle?: string;
   /**
+   * Optional talk topic (e.g. "Brand in the AI era"). Rendered as a small
+   * pink pill/tag on the speaker card in Style 2. Per user spec
+   * 2026-07-31 (TSK-0024): the AI Salon Tel Aviv Marketing event JSON
+   * includes a per-speaker topic field separate from the session type.
+   */
+  topic?: string;
+  /**
+   * Optional 1-3 character initials shown in the avatar circle when no
+   * photoUrl is set (Style 2). When undefined, the canvas derives
+   * initials from the first letters of the first and last name.
+   * Per user spec 2026-07-31 (TSK-0024).
+   */
+  initials?: string;
+  /**
    * Session start time (HH:MM 24h, e.g. "18:30"). Auto-filled from the
    * speaker's first agenda item when the event dropdown is used. Rendered
    * as a small time pill next to the speaker's name.
@@ -208,6 +222,17 @@ export type SpeakerIntroData = {
      * Per user spec 2026-07-30 (Style 1): speakers aligned left.
      */
     photoAlign?: "left" | "center";
+    /**
+     * Per user spec 2026-07-31 (TSK-0033): global toggle for whether the
+     * session-time pill is shown on speaker cards. When `false`, the
+     * pill is hidden on ALL speaker cards (Style 1 + Style 2). When
+     * `true` or undefined (default), the pill is shown if the speaker
+     * has a `sessionTime` value. This is a top-level toggle — it does
+     * NOT clear the underlying `speaker.sessionTime` data, it just
+     * hides the visual rendering. Re-checking the box restores the
+     * pill immediately.
+     */
+    showSessionTime?: boolean;
   };
   /**
    * Per-text-section font + color + alignment overrides. Each key matches
@@ -304,6 +329,19 @@ export type SpeakerIntroData = {
      */
     pos?: { x: number; y: number };
     /**
+     * Explicit hero container dimensions in canvas px (1200×800 canvas).
+     * When set, the W/H override the default `imageScale`/`imageScaleY`
+     * multipliers — the hero container becomes exactly this many px wide
+     * / tall, anchored at `pos`.
+     *
+     * PER USER SPEC 2026-07-31 (TSK-0032): exposed via the new "Hero Image
+     * Properties" floating panel so the user can type precise W/H values
+     * (in canvas px) just like other SectionBoxes. When undefined, the
+     * hero falls back to the legacy `imageScale` × 58% canvas width (X)
+     * and `imageScaleY` × 100% canvas height (Y).
+     */
+    boxSize?: { width?: number; height?: number };
+    /**
      * Whether to render the geometric triangle SVG overlay on top of the
      * hero image. Defaults to true. Automatically set to false when the
      * user picks a new hero image (per user spec: "when the hero image is
@@ -342,6 +380,16 @@ export type SpeakerIntroData = {
     height?: number;
     /** Free-form position as % of canvas. Default = bottom-left corner. */
     pos?: { x: number; y: number };
+    /**
+     * Logo theme variant. PER USER SPEC 2026-08-02: when set, the canvas
+     * renderer resolves `imageUrl` from the global brand-asset constants
+     * (BRAND_LOGO_LIGHT_URL / BRAND_LOGO_DARK_URL). An explicit `imageUrl`
+     * always wins over `theme`.
+     *   - "light" → use the light-theme logo (for light/white backgrounds)
+     *   - "dark"  → use the dark-theme logo (for dark backgrounds)
+     * If both `imageUrl` and `theme` are unset, falls back to the dark logo.
+     */
+    theme?: "light" | "dark";
   };
   /**
    * Section layout — per-section draggable position + scale, set when
@@ -365,8 +413,31 @@ export type SpeakerIntroData = {
    * strictly remain behind the 'Hero Image' component whenever the
    * visibility toggle is set to 'Yes.'" The Front/Back buttons let the
    * user override this if they want, but the default respects the spec.
+   *
+   * PER USER SPEC 2026-07-31 (TSK-0028): The "Show triangle overlay"
+   * has been REPLACED with a unified shape system (see `heroOverlay.shapeConfig`).
+   * `triangleZ` is retained for backward compatibility and still controls
+   * the z-index of whatever shape is rendered by the new system.
    */
   triangleZ?: number;
+  /**
+   * Style 1 / 3 — Hero overlay SHAPE config (replaces the legacy
+   * "Show triangle overlay" toggle). PER USER SPEC 2026-07-31 (TSK-0028):
+   * "Then the Show triangle overlay change it to the shapes and allow to
+   * change the color, from fill to gradient fill, and the direction of
+   * the gradient."
+   *
+   * When `shapeConfig` is set, the canvas renders the selected shape
+   * (2D: rectangle/square/circle/oval/triangle/pentagon/hexagon/octagon,
+   * 3D: sphere/cube/cone/cylinder/pyramid) with either a solid color fill
+   * or a multi-stop gradient fill (with configurable direction).
+   *
+   * Backward compat: if `shapeConfig` is missing but the legacy
+   * `showTriangleOverlay !== false` is set, the canvas falls back to
+   * rendering a triangle using the legacy `gradientColors` /
+   * `gradientOpacity` fields.
+   */
+  heroOverlayShapeConfig?: import("../shared/hero-shape").HeroShapeConfig;
   /**
    * Style 2 — Hero gradient shape behind/over the hero image.
    *
@@ -374,6 +445,13 @@ export type SpeakerIntroData = {
    * image should support editing the shape (2D + 3D), maintaining the
    * gradient and color fill.
    *
+   * PER USER SPEC 2026-07-31 (TSK-0028): the config now also supports
+   * `fillMode` ("solid" | "gradient") and `solidColor`, so the user can
+   * choose between a solid color fill or a multi-stop gradient. The
+   * legacy `colors` array is still used when `fillMode = "gradient"`.
+   *
+   *   - fillMode: "solid" | "gradient". Default "gradient".
+   *   - solidColor: CSS color string used when fillMode = "solid".
    *   - colors: gradient stops (CSS color strings). Default: brandColors.
    *   - direction: gradient angle in degrees (0-360). Default 135.
    *   - opacity: 0-1 multiplier on the whole gradient layer. Default 0.85.
@@ -384,11 +462,21 @@ export type SpeakerIntroData = {
    *     3D shapes: sphere | cube | cone | cylinder | pyramid
    */
   style2HeroGradient?: {
+    fillMode?: "solid" | "gradient";
+    solidColor?: string;
     colors?: string[];
     direction?: number;
     opacity?: number;
     rotation?: number;
+    // PER USER SPEC 2026-07-31 (TSK-0034): "none" + "legacy-triangle" added
+    // to keep type compatibility with the shared HeroShapeConfig / HeroShapeType
+    // (which now includes those two values for Style 1/3). Style 2 doesn't
+    // actually render those shapes (it uses its own HeroShape component
+    // without legacy SVG), but the form view's HeroShapePanelFields emits
+    // the union type, so the Style 2 storage type must accept all values.
     shape?:
+      | "none"
+      | "legacy-triangle"
       | "rectangle"
       | "circle"
       | "oval"

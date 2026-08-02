@@ -24,6 +24,8 @@ import type {
   EventPickListItem,
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
+import { SelectedElementPanel } from "../shared/selected-element-panel";
 import { SAMPLE_DATA } from "./sample-data";
 import { SpeakerIntroCanvas } from "./speaker-intro-canvas";
 import { SpeakerIntroStyle2Canvas } from "./speaker-intro-style2-canvas";
@@ -53,6 +55,13 @@ import {
  */
 
 const STORAGE_KEY = "speaker-intro-data-v4";
+// PER USER SPEC 2026-08-02 (TSK-0049): Per-style default storage keys.
+// When the user clicks "Set as default" (in the properties panel or the
+// toolbar next to Style 3), the ENTIRE current `data` is saved under
+// `speaker-intro-style-defaults-{style}`. When the user clicks "Reset",
+// if a saved default exists for the current style, it is loaded instead
+// of SAMPLE_DATA.
+const STYLE_DEFAULTS_KEY_PREFIX = "speaker-intro-style-defaults-";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */
@@ -70,11 +79,20 @@ export function SpeakerIntroEditor({ events }: Props) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PER USER SPEC 2026-08-02 (TSK-0049): brief "Saved!" feedback shown on
+  // the "Set as default" button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.5);
   /** Edit mode = image areas are interactive (drag/wheel/click). */
   const [editMode, setEditMode] = useState<boolean>(false);
   /** Sections edit mode = text sections are draggable + resizeable. */
   const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
+  /** PER USER SPEC 2026-08-02 (TSK-0051): currently-selected element on the
+   *  canvas. LIFTED from the canvases so the new "Selected Element" panel
+   *  (top of the form column) can render content-specific fields for it.
+   *  Both canvases write to this via onSelectChange. Reset to null when
+   *  sectionsEditMode turns off (mirrors the old in-canvas behavior). */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Currently selected event slug in the dropdown. */
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   /** Loading state when fetching event data. */
@@ -210,6 +228,20 @@ export function SpeakerIntroEditor({ events }: Props) {
       // ignore quota errors
     }
   }, [data]);
+
+  // PER USER SPEC 2026-08-02 (TSK-0051): reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears
+  // when the user exits section-edit mode. (Mirrors the old in-canvas
+  // useEffect that did the same thing locally.)
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055): the panel now ALSO appears in
+  // image-edit mode (for per-image selections like speaker photos, sponsor
+  // logos, hero image, branding asset). So we only clear `selectedId` when
+  // BOTH modes are off — turning off one mode shouldn't kill a selection
+  // made in the other.
+  useEffect(() => {
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   // --- JSON textarea → data ------------------------------------------
 
@@ -379,6 +411,32 @@ export function SpeakerIntroEditor({ events }: Props) {
     }
   }
 
+  /** Apply a hero gradient shape change (shape type, colors, direction,
+   *  opacity, rotation) — updates data.style2HeroGradient.
+   *  PER USER SPEC 2026-07-31 (TSK-0026). */
+  function handleHeroShapeChange(
+    patch: Partial<NonNullable<SpeakerIntroData["style2HeroGradient"]>>,
+  ) {
+    const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+    if (!next.style2HeroGradient) {
+      next.style2HeroGradient = {
+        shape: "rectangle",
+        colors: ["#311B92", "#1A237E", "#0B0B2E"],
+        direction: 180,
+        opacity: 0.9,
+        rotation: 0,
+      };
+    }
+    Object.assign(next.style2HeroGradient, patch);
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   /** Apply a hero X scale change (slider). */
   function handleHeroScaleXChange(n: number) {
     const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
@@ -404,6 +462,34 @@ export function SpeakerIntroEditor({ events }: Props) {
       });
     }
   }
+
+  /**
+   * Apply a hero boxSize change (W/H in canvas px) from the new Hero
+   * Image Properties panel — PER USER SPEC 2026-07-31 (TSK-0032).
+   * Updates `data.heroOverlay.boxSize`. When W/H are set, they override
+   * the legacy imageScale/imageScaleY multipliers in the canvas.
+   */
+  const handleHeroBoxResize = useCallback(
+    (size: { width?: number; height?: number }) => {
+      const next: SpeakerIntroData = JSON.parse(JSON.stringify(data));
+      next.heroOverlay.boxSize = {
+        width: size.width && size.width > 0 ? size.width : undefined,
+        height: size.height && size.height > 0 ? size.height : undefined,
+      };
+      // Clean up: if both are undefined, remove the field entirely.
+      if (!next.heroOverlay.boxSize.width && !next.heroOverlay.boxSize.height) {
+        delete next.heroOverlay.boxSize;
+      }
+      setData(next);
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          setJsonText(JSON.stringify(next, null, 2));
+        });
+      }
+    },
+    [data],
+  );
 
   /** Apply a hero z-index change (Front/Back button). */
   function handleHeroZChange(z: number) {
@@ -467,16 +553,52 @@ export function SpeakerIntroEditor({ events }: Props) {
 
   // --- toolbar actions ------------------------------------------------
 
+  /**
+   * PER USER SPEC 2026-08-02 (TSK-0049):
+   * Save the ENTIRE current mockup state (style + all section properties +
+   * image placements + hero gradient config + etc.) as the default for the
+   * CURRENT style. Stored in localStorage under
+   * `speaker-intro-style-defaults-{style}`. When the user later clicks
+   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   *
+   * This is LOCAL per-style default (browser-only). It is separate from
+   * the per-event server-side default saved by `handleSaveAsDefault`
+   * (which uploads a PNG snapshot + dataJson to the API).
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const style = data.style ?? "style1";
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   function handleReset() {
-    if (
-      !confirm(
-        "Reset to the sample data? Any local edits you've made will be lost.",
-      )
-    ) {
+    const style = data.style ?? "style1";
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    let savedDefault: SpeakerIntroData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as SpeakerIntroData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? `Reset to the saved default for "${style}"? Any local edits you've made will be lost.`
+      : "Reset to the sample data? Any local edits you've made will be lost.";
+    if (!confirm(msg)) {
       return;
     }
-    applyData(SAMPLE_DATA);
-    setSelectedEventSlug("");
+    applyData(savedDefault ?? SAMPLE_DATA);
+    if (!savedDefault) {
+      setSelectedEventSlug("");
+    }
   }
 
   async function handleCopyJson() {
@@ -629,40 +751,12 @@ export function SpeakerIntroEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        {/* Style switcher — Style 1 / Style 2 / Style 3 */}
-        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
-          {([
-            { value: "style1", label: "Style 1" },
-            { value: "style2", label: "Style 2" },
-            { value: "style3", label: "Style 3" },
-          ] as const).map((opt, i) => {
-            const active = (data.style ?? "style1") === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
-                  i > 0 ? "border-l border-black/10" : ""
-                } ${
-                  active
-                    ? "bg-[#FF005A] text-white"
-                    : "text-black hover:bg-black/5"
-                }`}
-                title={
-                  opt.value === "style1"
-                    ? "Style 1 — hero on right, text on left"
-                    : opt.value === "style2"
-                    ? "Style 2 — hero fills canvas, gradient shape overlay"
-                    : "Style 3 — same as Style 2 with QR repositioned"
-                }
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="h-5 w-px bg-black/15 mx-0.5" />
+        {/* Per TSK-0025: "Edit images" + "Edit sections" buttons moved OUT
+            of the toolbar and into the canvas caption area (left of the
+            Style 1/2/3 segmented buttons). All three canvas-interaction
+            controls now live together as a single cluster right above the
+            canvas. Toolbar keeps only the data/export actions:
+            Form/JSON · Reset · Copy · Download · Save. */}
         {/* View-mode toggle: Form vs JSON */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
@@ -740,9 +834,6 @@ export function SpeakerIntroEditor({ events }: Props) {
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`speaker-intro-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
-        <span className="ml-auto text-xs text-black/80">
-          1200 × 800 · auto-saved
-        </span>
       </div>
 
       {/* Edit-mode hint */}
@@ -755,6 +846,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 <li><strong>Replace</strong> button (top-left) — swap from brand library</li>
                 <li><strong>4 corner handles</strong> (pink squares) — drag to resize the image</li>
                 <li>Drag the image body to pan; scroll to zoom; double-click to reset</li>
+                <li><strong>Click any image</strong> (hero, speaker photo, sponsor logo, branding) to open its edit panel above</li>
               </ul>
             </>
           )}
@@ -821,106 +913,186 @@ export function SpeakerIntroEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
-        {viewMode === "form" ? (
-          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
-              <div className="flex items-center gap-2">
-                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/80">
-                  speaker-intro.form
-                </span>
-              </div>
-              <span className="text-[0.65rem] font-mono text-[#27C93F]">
-                LIVE
-              </span>
-            </div>
-            <SpeakerIntroFormView
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02 (TSK-0051): when the user clicks an
+         *  element on the canvas (header, speakers, hero-image, logo, etc.),
+         *  a compact "Selected Element" panel appears at the TOP of this
+         *  column showing ONLY the content-specific fields for that element.
+         *  The full form stays below (unchanged). */}
+        <div className="flex flex-col gap-3">
+          {/* PER USER SPEC 2026-08-02 (TSK-0051): Selected Element panel.
+           *  Renders when an element is selected AND at least one edit mode
+           *  is on. PER USER SPEC 2026-08-02 (TSK-0055): now also renders in
+           *  image-edit mode — clicking a specific image on the canvas
+           *  (speaker photo, sponsor logo, hero image, branding asset)
+           *  triggers this panel with per-image edit fields (Replace
+           *  button, URL, focus/zoom, size). */}
+          {(sectionsEditMode || editMode) && selectedId && (
+            <SelectedElementPanel
+              selectedId={selectedId}
               data={data}
               onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
             />
-          </div>
-        ) : (
-          <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
-                <span className="ml-3 text-[0.7rem] font-mono text-white/40">
-                  speaker-intro.data.json
-                </span>
-              </div>
-              <span
-                className={`text-[0.65rem] font-mono ${
-                  parseError ? "text-[#FF5F56]" : "text-[#27C93F]"
-                }`}
-              >
-                {parseError ? "ERROR" : "VALID"}
-              </span>
-            </div>
-            <textarea
-              value={jsonText}
-              onChange={(e) => handleJsonChange(e.target.value)}
-              spellCheck={false}
-              className="flex-1 min-h-[640px] w-full resize-none bg-[#0a0a0a] text-white/85 font-mono text-[0.72rem] leading-relaxed p-4 outline-none"
-              style={{ tabSize: 2 }}
-            />
-            {parseError && (
-              <div className="border-t border-[#FF5F56]/40 bg-[#FF5F56]/10 px-4 py-2.5 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-[#FF5F56] mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[0.7rem] font-mono text-[#FF5F56] break-words">
-                    {parseError}
-                  </p>
-                  <p className="text-[0.65rem] text-white/40 mt-1">
-                    The canvas still shows the last valid state — fix the JSON
-                    to live-update.
-                  </p>
+          )}
+
+          {/* Full form (or JSON editor) — collapsed by default per TSK-0050 */}
+          {viewMode === "form" ? (
+            <CollapsibleFormPanel
+              title="speaker-intro.form"
+              icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+            >
+              <SpeakerIntroFormView
+                data={data}
+                onChange={(next) => applyData(next)}
+              />
+            </CollapsibleFormPanel>
+          ) : (
+            <CollapsibleFormPanel
+              title="speaker-intro.data.json"
+              icon={
+                <div className="flex items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              }
+              dark
+              error={parseError}
+            >
+              <textarea
+                value={jsonText}
+                onChange={(e) => handleJsonChange(e.target.value)}
+                spellCheck={false}
+                className="flex-1 min-h-[640px] w-full resize-none bg-[#0a0a0a] text-white/85 font-mono text-[0.72rem] leading-relaxed p-4 outline-none"
+                style={{ tabSize: 2 }}
+              />
+              {parseError && (
+                <div className="border-t border-[#FF5F56]/40 bg-[#FF5F56]/10 px-4 py-2.5 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-[#FF5F56] mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[0.7rem] font-mono text-[#FF5F56] break-words">
+                      {parseError}
+                    </p>
+                    <p className="text-[0.65rem] text-white/40 mt-1">
+                      The canvas still shows the last valid state — fix the JSON
+                      to live-update.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CollapsibleFormPanel>
+          )}
+        </div>
 
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
-        {/* Edit images + Edit sections — floating at the top-right of the
-            Live Preview box, per user spec. The buttons stay visible
-            regardless of scroll position inside the preview area. */}
-        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              editMode
-                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {editMode ? "Editing images" : "Edit images"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSectionsEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              sectionsEditMode
-                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-          >
-            <LayoutPanelTop className="h-3.5 w-3.5" />
-            {sectionsEditMode ? "Editing sections" : "Edit sections"}
-          </button>
-        </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
+          {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
+              Per TSK-0024: Style 1/2/3 segmented buttons live here on the
+              RIGHT side (replacing the previous "{scale}% scale · PNG export
+              2400 × 1600" text).
+              Per TSK-0025: "Edit images" + "Edit sections" buttons ALSO live
+              here now, positioned to the LEFT of the Style buttons. All three
+              canvas-interaction controls (Edit images, Edit sections, Style
+              1/2/3) cluster together right above the canvas. */}
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div className="text-[0.7rem] font-semibold text-black/70">
+              Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+              <span className="ml-2 text-black/40 font-normal">
+                · {Math.round(previewScale * 100)}% scale
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 flex-wrap">
+              {/* Edit images + Edit sections — moved here from the toolbar per TSK-0025. */}
+              <button
+                type="button"
+                onClick={() => setEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  editMode
+                    ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                {editMode ? "Editing images" : "Edit images"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSectionsEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  sectionsEditMode
+                    ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+              >
+                <LayoutPanelTop className="h-3.5 w-3.5" />
+                {sectionsEditMode ? "Editing sections" : "Edit sections"}
+              </button>
+              {/* Style 1/2/3 segmented buttons (TSK-0024). */}
+              <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden shadow-sm">
+                {([
+                  { value: "style1", label: "Style 1" },
+                  { value: "style2", label: "Style 2" },
+                  { value: "style3", label: "Style 3" },
+                ] as const).map((opt, i) => {
+                  const active = (data.style ?? "style1") === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                        i > 0 ? "border-l border-black/10" : ""
+                      } ${
+                        active
+                          ? "bg-[#FF005A] text-white"
+                          : "text-black hover:bg-black/5"
+                      }`}
+                      title={
+                        opt.value === "style1"
+                          ? "Style 1 — hero on right, text on left"
+                          : opt.value === "style2"
+                          ? "Style 2 — split-screen: speaker cards on left, hero on right"
+                          : "Style 3 — exact duplicate of Style 1 (per user spec 2026-07-31)"
+                      }
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* PER USER SPEC 2026-08-02 (TSK-0049): "Set as default"
+                  button next to the Style 3 button. Saves the ENTIRE
+                  current mockup state (style + all section properties +
+                  image placements) as the default for the current style.
+                  Click "Reset" to restore. */}
+              <button
+                type="button"
+                onClick={handleSetAsDefault}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                  savedDefaultFeedback
+                    ? "bg-[#27C93F] text-white"
+                    : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+                }`}
+                title={`Save the entire current style (${data.style ?? "style1"}) + all section properties as the default. Click Reset to restore.`}
+              >
+                {savedDefaultFeedback ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Saved!
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5" /> Set as default
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div
             className="relative mx-auto"
@@ -938,16 +1110,29 @@ export function SpeakerIntroEditor({ events }: Props) {
                 height: "800px",
               }}
             >
-              {data.style === "style2" || data.style === "style3" ? (
+              {/* PER USER SPEC 2026-07-31 (TSK-0028): "Intro speaker style 3
+                  must be an exact duplicate of style one." So Style 1 AND
+                  Style 3 both use the SpeakerIntroCanvas (Style 1), not the
+                  Style 2 canvas. Only Style 2 uses SpeakerIntroStyle2Canvas. */}
+              {data.style === "style2" ? (
                 <SpeakerIntroStyle2Canvas
                   ref={canvasRef}
                   data={data}
+                  editable={editMode}
                   sectionsEditable={sectionsEditMode}
                   previewScale={previewScale}
+                  onPickImage={handlePickImage}
+                  onPlacementChange={handlePlacementChange}
+                  onSizeChange={handleSizeChange}
                   onSectionMove={handleSectionMove}
                   onSectionResize={handleSectionResize}
                   onSectionBoxResize={handleSectionBoxResize}
                   onSectionZChange={handleSectionZChange}
+                  onHeroShapeChange={handleHeroShapeChange}
+                  onHeroPosChange={handleHeroPosChange}
+                  onSetAsDefault={handleSetAsDefault}
+                  selectedId={selectedId}
+                  onSelectChange={setSelectedId}
                 />
               ) : (
                 <SpeakerIntroCanvas
@@ -966,9 +1151,13 @@ export function SpeakerIntroEditor({ events }: Props) {
                   onTriangleZChange={handleTriangleZChange}
                   onHeroScaleXChange={handleHeroScaleXChange}
                   onHeroScaleYChange={handleHeroScaleYChange}
+                  onHeroBoxResize={handleHeroBoxResize}
                   onSectionZChange={handleSectionZChange}
                   onBrandingAssetPosChange={handleBrandingAssetPosChange}
                   onHeroPosChange={handleHeroPosChange}
+                  onSetAsDefault={handleSetAsDefault}
+                  selectedId={selectedId}
+                  onSelectChange={setSelectedId}
                 />
               )}
             </div>

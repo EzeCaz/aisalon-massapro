@@ -13,11 +13,13 @@ import type {
   EventPickListItem,
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
 import { SAMPLE_DATA } from "./sample-data";
 import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
 import { EventProfileFormView } from "../shared/event-profile-form-view";
+import { EventProfileSelectedPanel } from "../shared/event-profile-selected-panel";
 import {
   mapEventToEventProfileData,
   type DbEventForMapping,
@@ -36,6 +38,11 @@ import {
  */
 
 const STORAGE_KEY = "event-profile-data-v1";
+// PER TSK-0053: Local "Set as default" storage. The ENTIRE current `data`
+// is saved under `event-profile-style-defaults-current`. When the user
+// clicks "Reset", if a saved default exists it is loaded instead of
+// SAMPLE_DATA.
+const STYLE_DEFAULTS_KEY_PREFIX = "event-profile-style-defaults-";
 
 type Props = {
   events: EventPickListItem[];
@@ -52,6 +59,9 @@ export function EventProfileEditor({ events }: Props) {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // PER TSK-0053: brief "Saved!" feedback shown on the "Set as default"
+  // button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
   const [previewScale, setPreviewScale] = useState<number>(0.32);
   const [editMode, setEditMode] = useState<boolean>(false);
   /** Sections edit mode = text sections are draggable + resizeable. */
@@ -59,6 +69,10 @@ export function EventProfileEditor({ events }: Props) {
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   const [loadingEvent, setLoadingEvent] = useState(false);
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +88,18 @@ export function EventProfileEditor({ events }: Props) {
       });
     }
   }, []);
+
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for per-image selections like the hero
+  // image, branding asset, sponsor logos). So we only clear `selectedId`
+  // when BOTH modes are off — turning off one mode shouldn't kill a
+  // selection made in the other.
+  useEffect(() => {
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   function applyImagePick(slot: ImageSlot, url: string): EventProfileData {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
@@ -404,10 +430,49 @@ export function EventProfileEditor({ events }: Props) {
     applyData(next);
   }
 
+  // --- toolbar actions ------------------------------------------------
+
+  /**
+   * PER TSK-0053: Save the ENTIRE current mockup state (all section
+   * properties + image placements + hero gradient config + etc.) as the
+   * default. Stored in localStorage under
+   * `event-profile-style-defaults-current`. When the user later clicks
+   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   *
+   * This is LOCAL default (browser-only). It is separate from the
+   * per-event server-side default saved by `handleSaveAsDefault`
+   * (which uploads a PNG snapshot + dataJson to the API).
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   function handleReset() {
-    if (!confirm("Reset to the sample data? Any local edits you've made will be lost.")) return;
-    applyData(SAMPLE_DATA);
-    setSelectedEventSlug("");
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    let savedDefault: EventProfileData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as EventProfileData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? "Reset to the saved default? Any local edits you've made will be lost."
+      : "Reset to the sample data? Any local edits you've made will be lost.";
+    if (!confirm(msg)) return;
+    applyData(savedDefault ?? SAMPLE_DATA);
+    if (!savedDefault) {
+      setSelectedEventSlug("");
+    }
   }
   async function handleCopyJson() {
     try {
@@ -728,40 +793,54 @@ export function EventProfileEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
+         *  canvas, a compact "Selected Element" panel appears at the TOP
+         *  of this column showing ONLY the content-specific fields for
+         *  that element. The full form stays below (collapsed by default). */}
+        <div className="flex flex-col gap-3">
+          {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Renders when an element is selected AND at least one edit
+           *  mode is on. PER USER SPEC 2026-08-02 (TSK-0055-extend): now
+           *  also renders in image-edit mode — clicking a specific image
+           *  on the canvas (hero image, branding asset, sponsor logo)
+           *  triggers this panel with per-image edit fields. */}
+          {(sectionsEditMode || editMode) && selectedId && (
+            <EventProfileSelectedPanel
+              selectedId={selectedId}
+              data={data}
+              onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
+            />
+          )}
+
+        {/* Left: Form view OR JSON editor (toggled by viewMode).
+         *  PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
+         *  COMPRESSED (collapsed) by default. Click the header to expand. */}
         {viewMode === "form" ? (
-          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
-              <div className="flex items-center gap-2">
-                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/80">
-                  event-profile.form
-                </span>
-              </div>
-              <span className="text-[0.65rem] font-mono text-[#27C93F]">
-                LIVE
-              </span>
-            </div>
+          <CollapsibleFormPanel
+            title="event-profile.form"
+            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+          >
             <EventProfileFormView
               data={data}
               onChange={(next) => applyData(next)}
             />
-          </div>
+          </CollapsibleFormPanel>
         ) : (
-          <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
-              <div className="flex items-center gap-2">
+          <CollapsibleFormPanel
+            title="event-profile.data.json"
+            icon={
+              <div className="flex items-center gap-1">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
-                <span className="ml-3 text-[0.7rem] font-mono text-white/40">
-                  event-profile.data.json
-                </span>
               </div>
-              <span className={`text-[0.65rem] font-mono ${parseError ? "text-[#FF5F56]" : "text-[#27C93F]"}`}>
-                {parseError ? "ERROR" : "VALID"}
-              </span>
-            </div>
+            }
+            dark
+            error={parseError}
+          >
             <textarea
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
@@ -780,48 +859,77 @@ export function EventProfileEditor({ events }: Props) {
                 </div>
               </div>
             )}
-          </div>
+          </CollapsibleFormPanel>
         )}
+        </div>
 
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
-        {/* Edit images + Edit sections — floating at the top-right of the
-            Live Preview box, per user spec. The buttons stay visible
-            regardless of scroll position inside the preview area. */}
-        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              editMode
-                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {editMode ? "Editing images" : "Edit images"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSectionsEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              sectionsEditMode
-                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-          >
-            <LayoutPanelTop className="h-3.5 w-3.5" />
-            {sectionsEditMode ? "Editing sections" : "Edit sections"}
-          </button>
-        </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 2400 (2× DPR)
+        {/* Canvas caption — moved ABOVE the canvas per TSK-0053.
+            Edit images + Edit sections + Set as default cluster together
+            right above the canvas (mirrors speaker-intro pattern). */}
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div className="text-[0.7rem] font-semibold text-black/70">
+            Canvas: 1200 × 1200 (1:1 square) · Edits auto-saved to this browser
+            <span className="ml-2 text-black/40 font-normal">
+              · {Math.round(previewScale * 100)}% scale
+            </span>
           </div>
+          <div className="inline-flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setEditMode((s) => !s)}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                editMode
+                  ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
+              }`}
+              title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              {editMode ? "Editing images" : "Edit images"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSectionsEditMode((s) => !s)}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                sectionsEditMode
+                  ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
+              }`}
+              title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+            >
+              <LayoutPanelTop className="h-3.5 w-3.5" />
+              {sectionsEditMode ? "Editing sections" : "Edit sections"}
+            </button>
+            {/* PER TSK-0053: "Set as default" button — saves the ENTIRE
+                current mockup state as the default. Click "Reset" to
+                restore. */}
+            <button
+              type="button"
+              onClick={handleSetAsDefault}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                savedDefaultFeedback
+                  ? "bg-[#27C93F] text-white"
+                  : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+              }`}
+              title="Save the entire current mockup state as the default. Click Reset to restore."
+            >
+              {savedDefaultFeedback ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Saved!
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" /> Set as default
+                </>
+              )}
+            </button>
+          </div>
+        </div>
           <div
             className="relative mx-auto"
             style={{
@@ -857,6 +965,8 @@ export function EventProfileEditor({ events }: Props) {
                 onSectionZChange={handleSectionZChange}
                 onBrandingAssetPosChange={handleBrandingAssetPosChange}
                 onHeroPosChange={handleHeroPosChange}
+                selectedId={selectedId}
+                onSelectChange={setSelectedId}
               />
             </div>
           </div>

@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { SpeakerIntroData } from "../speaker-intro/types";
 import { GradientColorPicker } from "./gradient-color-picker";
 import { TextStyleRow } from "./text-style-row";
+import { HeroShapePanelFields, type HeroShapeConfig } from "./hero-shape";
 
 /**
  * SpeakerIntroFormView — a structured form view of the SpeakerIntroData.
@@ -97,8 +98,15 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
         </Field>
       </Section>
 
-      {/* ===== STYLE 2 — HERO GRADIENT SHAPE ===== */}
-      {(data.style === "style2" || data.style === "style3") && (
+      {/* ===== STYLE 2 — HERO GRADIENT SHAPE =====
+          PER USER SPEC 2026-07-31 (TSK-0034): This section is now Style 2
+          ONLY. Style 3 uses SpeakerIntroCanvas (Style 1's canvas), so its
+          hero overlay shape is managed via `heroOverlayShapeConfig` (the
+          "Hero Overlay Shape" panel in the Hero overlay section above),
+          NOT via `style2HeroGradient`. Previously this section was shown
+          for both Style 2 + Style 3, which was incorrect — Style 3's
+          canvas doesn't read `style2HeroGradient` at all. */}
+      {data.style === "style2" && (
         <Section title="Style 2 — Hero gradient shape">
           <Field label="Shape">
             <select
@@ -106,12 +114,17 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               onChange={(e) => update((d) => {
                 if (!d.style2HeroGradient) d.style2HeroGradient = {};
                 d.style2HeroGradient.shape = e.target.value as
+                  | "none" | "legacy-triangle"
                   | "rectangle" | "circle" | "oval" | "triangle" | "square"
                   | "pentagon" | "hexagon" | "octagon"
                   | "sphere" | "cube" | "cone" | "cylinder" | "pyramid";
               })}
               className="form-input"
             >
+              <optgroup label="Special">
+                <option value="none">None (no shape)</option>
+                <option value="legacy-triangle">Triangle (legacy SVG)</option>
+              </optgroup>
               <optgroup label="2D plane shapes">
                 <option value="rectangle">Rectangle (full panel)</option>
                 <option value="circle">Circle</option>
@@ -345,7 +358,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.eventVenue?.fontSize}
           fontColor={data.textStyles?.eventVenue?.color}
           align={data.textStyles?.eventVenue?.align}
-          defaultFontSize={14}
+          defaultFontSize={20}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
@@ -371,7 +384,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.eventTopic?.fontSize}
           fontColor={data.textStyles?.eventTopic?.color}
           align={data.textStyles?.eventTopic?.align}
-          defaultFontSize={24}
+          defaultFontSize={26}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
@@ -504,7 +517,11 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 onChange={(e) =>
                   update((d) => {
                     if (!d.speakersLayout) d.speakersLayout = {};
-                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3;
+                    // PER USER SPEC 2026-08-01 (TSK-0041): expanded dropdown
+                    // from 1-3 to 1-6 so the user can match any speaker count
+                    // (4 speakers → 4 columns, etc). The underlying type already
+                    // allowed 1-6; the dropdown was just missing the options.
+                    d.speakersLayout.columns = parseInt(e.target.value, 10) as 1 | 2 | 3 | 4 | 5 | 6;
                   })
                 }
                 className="form-input"
@@ -512,6 +529,9 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
                 <option value="1">1 column</option>
                 <option value="2">2 columns</option>
                 <option value="3">3 columns</option>
+                <option value="4">4 columns</option>
+                <option value="5">5 columns</option>
+                <option value="6">6 columns</option>
               </select>
             </Field>
             <Field label="Flow direction">
@@ -579,6 +599,28 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
               return `${n} speaker${n === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"} · ${rows} row${rows === 1 ? "" : "s"} (ordered by # field)`;
             })()}
           </p>
+          {/* PER USER SPEC 2026-07-31 (TSK-0033): global toggle for whether
+              the session-time pill is shown on speaker cards. When
+              unchecked, the pill is hidden on ALL speaker cards (Style 1 +
+              Style 2) regardless of the underlying speaker.sessionTime
+              value. The data is preserved — only the visual rendering is
+              suppressed. Re-checking restores the pill immediately. */}
+          <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={data.speakersLayout?.showSessionTime !== false}
+              onChange={(e) =>
+                update((d) => {
+                  if (!d.speakersLayout) d.speakersLayout = {};
+                  d.speakersLayout.showSessionTime = e.target.checked;
+                })
+              }
+              className="h-4 w-4 rounded border-black/30 text-[#FF005A] focus:ring-[#FF005A] cursor-pointer"
+            />
+            <span className="text-[0.7rem] font-semibold text-black/80">
+              Show session time on speaker cards
+            </span>
+          </label>
         </div>
         {/* ===== Per-section TextStyle controls for the speaker cards =====
             These apply uniformly to EVERY speaker card on the canvas
@@ -589,7 +631,7 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           fontSize={data.textStyles?.speakersLabel?.fontSize}
           fontColor={data.textStyles?.speakersLabel?.color}
           align={data.textStyles?.speakersLabel?.align}
-          defaultFontSize={12}
+          defaultFontSize={16}
           onChange={(fontSize, fontColor, align) =>
             update((d) => {
               if (!d.textStyles) d.textStyles = {};
@@ -962,20 +1004,100 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
             />
           </Field>
         </div>
-        <Field label="Show triangle overlay?">
-          <select
-            value={data.heroOverlay.showTriangleOverlay === false ? "false" : "true"}
-            onChange={(e) =>
+        {/* ===== HERO OVERLAY SHAPE (replaces legacy "Show triangle overlay?") =====
+            PER USER SPEC 2026-07-31 (TSK-0034):
+              "Style 1 should have the Show triangle overlay? (legacy) as
+              default. And be able to add to the shape selector above, the
+              none to show no shape at all, and the default (Triangle) to
+              use the current legacy triangle."
+
+            The shape selector now includes (in a "Special" optgroup):
+              - "None (no shape)"               → renders no shape
+              - "Triangle (default — legacy SVG)" → renders the original
+                Style 1 right-pointing triangle SVG with dual gradient
+                layers (preserves the visual identity of Style 1)
+
+            When `data.heroOverlayShapeConfig` is undefined, the canvas
+            computes a default based on `data.style`:
+              - Style 1 → "legacy-triangle"
+              - Style 3 → "rectangle"
+            The form view below mirrors that fallback so the dropdown
+            shows the actual current shape on initial load.
+
+            Supports:
+            - 15 shapes (Special: none + legacy-triangle, 8×2D, 5×3D)
+            - Solid OR gradient fill mode
+            - Gradient direction slider (when in gradient mode)
+            - Opacity + rotation
+            - Position X/Y, Size W/H, Scale % (PER USER SPEC 2026-07-31 TSK-0034)
+        */}
+        <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/[0.03] p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-[#FF005A]">
+              Hero Overlay Shape
+            </h4>
+            <span className="text-[0.55rem] font-semibold uppercase tracking-wider text-black/40">
+              {data.style === "style3" ? "Style 3 — rectangle default" : "Style 1 — triangle default"}
+            </span>
+          </div>
+          <p className="mb-2 text-[0.65rem] text-black/60 leading-relaxed">
+            Choose <strong>None</strong> to render no shape, <strong>Triangle (default — legacy SVG)</strong> for
+            the original Style 1 right-pointing triangle, or any of 13 other
+            shapes (2D or 3D). Pick solid or gradient fill, adjust the
+            gradient direction, rotation, and (below the rotation scroller)
+            the position + size + scale.
+          </p>
+          <HeroShapePanelFields
+            config={(() => {
+              // Mirror the canvas's `heroShapeConfig` computed default so
+              // the form view's dropdown shows the actual current shape
+              // on initial load (when data.heroOverlayShapeConfig is
+              // undefined). When the user picks a shape, the onChange
+              // below writes the full config to data.heroOverlayShapeConfig.
+              if (data.heroOverlayShapeConfig) {
+                return data.heroOverlayShapeConfig as HeroShapeConfig;
+              }
+              return {
+                shape: data.style === "style3" ? "rectangle" : "legacy-triangle",
+                fillMode: "gradient",
+                colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+                direction: 135,
+                opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+                rotation: 0,
+              } as HeroShapeConfig;
+            })()}
+            onChange={(patch) =>
               update((d) => {
-                d.heroOverlay.showTriangleOverlay = e.target.value === "true";
+                if (!d.heroOverlayShapeConfig) {
+                  d.heroOverlayShapeConfig = {
+                    shape: d.style === "style3" ? "rectangle" : "legacy-triangle",
+                    fillMode: "gradient",
+                    colors: [...(d.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"])],
+                    direction: 135,
+                    opacity: d.heroOverlay.gradientOpacity ?? 0.55,
+                    rotation: 0,
+                  };
+                }
+                Object.assign(d.heroOverlayShapeConfig, patch);
               })
             }
-            className="form-input"
+          />
+          {/* Reset button — clears the user's customization so the canvas
+              falls back to its style-based default (legacy-triangle for
+              Style 1, rectangle for Style 3). */}
+          <button
+            type="button"
+            onClick={() =>
+              update((d) => {
+                d.heroOverlayShapeConfig = undefined;
+              })
+            }
+            className="mt-2 text-[0.6rem] font-semibold text-black/60 hover:text-[#FF005A] underline"
+            title="Clear the shape config (revert to style default: legacy-triangle for Style 1, rectangle for Style 3)"
           >
-            <option value="true">Yes (default)</option>
-            <option value="false">No (hidden — auto-disabled when hero image changes)</option>
-          </select>
-        </Field>
+            Reset to style default
+          </button>
+        </div>
 
         {/* ===== LAYER Z-INDEX CONTROLS (Section 1 — moved from canvas to sidebar) =====
             Per user spec 2026-06-28: "Move all 'Capabilities' controls
@@ -1408,11 +1530,39 @@ export function SpeakerIntroFormView({ data, onChange }: Props) {
           and replaceable". Renders at the bottom-LEFT corner by default,
           draggable via the "⠿ Move branding" handle on the canvas. */}
       <Section title="Branding asset (bottom-left)">
-        <Field label="Image URL">
+        {/* PER USER SPEC 2026-08-02: Logo theme selector. Picks between
+            the light-theme logo (for white/light backgrounds) and the
+            dark-theme logo (for dark backgrounds). */}
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() =>
+                  update((d) => {
+                    d.brandingAsset = {
+                      ...(d.brandingAsset ?? {}),
+                      theme: t,
+                    };
+                  })
+                }
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (data.brandingAsset?.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light theme (white bg)" : "Dark theme (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme)">
           <input
             type="url"
             value={data.brandingAsset?.imageUrl ?? ""}
-            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            placeholder="Leave empty to use the theme-selected logo"
             onChange={(e) =>
               update((d) => {
                 d.brandingAsset = {

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny } from "@/lib/permissions";
+import { canAny, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { FlowsPageClient } from "./flows-page-client";
@@ -26,7 +26,11 @@ export default async function FlowBuilderPage() {
     select: { id: true, email: true, role: true, name: true },
   });
   if (!me) redirect("/login");
-  if (!canAny(me.role, ["members.view"])) {
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (!canAny(effectiveRole, ["members.view"])) {
     redirect("/events");
   }
 
@@ -120,7 +124,7 @@ export default async function FlowBuilderPage() {
   return (
     <div className="min-h-screen bg-neutral-50">
       <AppHeader />
-      <AdminTabs />
+      <AdminTabs role={effectiveRole} />
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         <EmailAdminNav active="flows" />
         <FlowsPageClient

@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isEventCoHost, isSuperAdminEmail, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { can, isEventCoHost, isSuperAdminEmail, isSuperAdmin, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { EventEditor, type EventForEditor } from "@/components/admin/event-editor";
@@ -21,6 +21,10 @@ export default async function EditEventPage({ params }: Params) {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync SUPER_ADMIN role
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
     await db.user.update({
@@ -31,8 +35,8 @@ export default async function EditEventPage({ params }: Params) {
   }
 
   // Permission gate: ADMIN + SUPER_ADMIN + (CO_HOST of THIS event)
-  const isAdmin = can(me.role, "events.edit") || isSuperAdmin({ email: me.email, role: me.role });
-  const isCoHostOfThis = me.role === ROLES.CO_HOST ? await isEventCoHost(me.id, eventId) : false;
+  const isAdmin = can(effectiveRole, "events.edit") || isSuperAdmin({ email: me.email, role: me.role });
+  const isCoHostOfThis = effectiveRole === ROLES.CO_HOST ? await isEventCoHost(me.id, eventId) : false;
   if (!isAdmin && !isCoHostOfThis) {
     redirect("/events");
   }
@@ -160,7 +164,7 @@ export default async function EditEventPage({ params }: Params) {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs />
+      <AdminTabs role={effectiveRole} />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         <EventEditor
           event={eventForEditor}

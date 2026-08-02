@@ -1,9 +1,10 @@
 "use client";
 
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useState, useCallback } from "react";
 import QRCode from "qrcode";
 import type { QrSalonData } from "./types";
 import { DEFAULT_BRANDING_ASSET_URL } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -55,6 +56,12 @@ type Props = {
   onSectionBoxResize?: (id: SectionId, size: SectionBoxSize) => void;
   /** SectionBox z-index change (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED to the editor so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  selectedId?: string | null;
+  /** Called when the user clicks an element on the canvas (or deselects). */
+  onSelectChange?: (id: string | null) => void;
   /** Render scale of the canvas in the editor (1 = full size). */
   previewScale?: number;
 };
@@ -71,6 +78,8 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
       onSectionResize,
       onSectionBoxResize,
       onSectionZChange,
+      selectedId: selectedIdProp,
+      onSelectChange,
       previewScale = 1,
     },
     ref,
@@ -101,8 +110,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const captionDefaultTopPx = 140; // above the QR
     const brandingHeight = data.brandingAsset?.height ?? 48;
     const brandingDefaultTopPx = 620; // below the QR
-    const brandingSrc =
-      data.brandingAsset?.imageUrl || DEFAULT_BRANDING_ASSET_URL;
+    const brandingSrc = resolveBrandingImageUrl(data.brandingAsset, DEFAULT_BRANDING_ASSET_URL);
 
     // ─── Brand mark horizontal centering ───────────────────────────
     // The brand mark's width is `auto` (driven by the image's natural
@@ -157,7 +165,12 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
 
     // ─── SectionBox state ──────────────────────────────────────────
     const sectionLayout = data.sectionLayout ?? {};
-    const [selectedId, setSelectedId] = useState<SectionId | null>(null);
+    // PER USER SPEC 2026-08-02: selectedId is now LIFTED to the editor.
+    const selectedId = (selectedIdProp ?? null) as SectionId | null;
+    const setSelectedId = useCallback(
+      (id: SectionId | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     // Per-section z-index resolution: explicit > default by section order.
     // Branding on top of caption on top of QR (so the brand mark never
@@ -316,10 +329,23 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
           >
             <button
               type="button"
+              onMouseDown={(e) => {
+                // PER USER SPEC 2026-08-02 (TSK-0055-extend): in Edit-images
+                // mode, clicking the brand mark selects it (fires the
+                // contextual Selected Element panel). The Replace button
+                // inside that panel then opens the picker modal.
+                if (editable && e.button === 0) {
+                  e.stopPropagation();
+                  setSelectedId("branding");
+                }
+              }}
               onClick={
                 editable && !sectionsEditable
                   ? (e) => {
                       e.stopPropagation();
+                      // Legacy behavior: in Edit-images mode the click
+                      // also opens the picker directly (for users who
+                      // don't notice the new Selected Element panel).
                       onPickBranding?.();
                     }
                   : undefined

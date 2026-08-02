@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdmin, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, canSeeAdminNav, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
@@ -45,6 +45,10 @@ export default async function AdminImagesPage() {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync: if the user's email is in the SUPER_ADMIN_EMAILS allowlist
   // but their DB role isn't SUPER_ADMIN yet, upgrade it inline so the UI
   // immediately reflects their true role. (Same pattern as /admin.)
@@ -56,11 +60,14 @@ export default async function AdminImagesPage() {
     me = { ...me, role: ROLES.SUPER_ADMIN };
   }
 
-  // Allow view access for any admin (consistent with /admin), but the
-  // upload + select buttons in ImagesGallery are SUPER_ADMIN-only at the
-  // API layer, so a non-super-admin viewing the page will see the gallery
-  // but get 403s if they try to write.
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) {
+  // TSK-0056: Allow ANY admin (SUPER_ADMIN, ADMIN, CHAPTER_ORGANIZER,
+  // CO_HOST) to view the brand-images gallery. The previous gate used
+  // `can(role, "members.view")` which requires ADMIN+ rank, excluding
+  // CHAPTER_ORGANIZER (rank 2) — so they got redirected to /events
+  // before ever reaching the gallery. Now they can view; write buttons
+  // remain SUPER_ADMIN-only at the API layer (POST /api/admin/brand-images
+  // still uses isSuperAdmin()).
+  if (!canSeeAdminNav(effectiveRole)) {
     redirect("/events");
   }
 
@@ -72,6 +79,16 @@ export default async function AdminImagesPage() {
   // Load countries + chapters for the new chapter-scoped image filter.
   // Scope: Super Admin sees all; Admin sees own country; Chapter
   // Organizer sees own chapter only.
+  // PER USER SPEC 2026-08-02: chapter admins can edit their own chapter's
+  // favicon, login hero, and login banner via the chapter-scoped select
+  // buttons. The dropdown is pre-filtered so they only see chapters they
+  // can actually edit (no 403 surprises).
+  const chapterFilter =
+    isSuper
+      ? { isActive: true }
+      : me.role === ROLES.CHAPTER_ORGANIZER || me.role === ROLES.CO_HOST
+        ? { isActive: true, id: me.chapterId ?? "___NEVER___" }
+        : { isActive: true };
   const countries = await db.country.findMany({
     where: isSuper
       ? {}
@@ -82,7 +99,7 @@ export default async function AdminImagesPage() {
       code: true,
       flagEmoji: true,
       chapters: {
-        where: { isActive: true },
+        where: chapterFilter,
         select: { id: true, name: true, slug: true, city: true },
         orderBy: { name: "asc" },
       },
@@ -94,7 +111,7 @@ export default async function AdminImagesPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         {/* Header */}
         <div className="mb-8">
@@ -122,10 +139,17 @@ export default async function AdminImagesPage() {
             <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[0.85em]">/login?chapterSlug=&lt;slug&gt;</code>.
           </p>
           {!isSuper && (
-            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              You are signed in as <strong>Admin</strong> (not Super Admin).
-              You can view the gallery, but only Super Admins can upload images
-              or change the favicon / login hero / login banner selections.
+            <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              You are signed in as <strong>{me.role === ROLES.ADMIN ? "Admin" : "Chapter Organizer"}</strong>.
+              The gallery below shows the <strong>global brand library</strong>{" "}
+              (curated logos, mascots, and banners) plus the 3 globally-selected
+              defaults. Pick from these to set the favicon, login hero, and{" "}
+              login banner for{" "}
+              {me.role === ROLES.ADMIN
+                ? "chapters in your country"
+                : "your own chapter"}{" "}
+              using the chapter filter below. Global brand image selections
+              + uploads remain Super-Admin-only.
             </div>
           )}
         </div>

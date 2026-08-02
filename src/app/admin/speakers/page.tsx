@@ -10,8 +10,7 @@ import {
   scopeEventWhere,
   scopeChapterWhere,
   scopeUserWhere,
-  type UserScope,
-} from "@/lib/permissions";
+  type UserScope, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { SpeakersTabClient } from "./speakers-tab-client";
@@ -38,8 +37,12 @@ export default async function AdminSpeakersPage() {
 
   const me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Gate: ADMIN+ (members.view) OR CHAPTER_ORGANIZER/CO_HOST (eventdata.viewCoHosted).
-  if (!canAny(me.role, ["members.view", "eventdata.viewCoHosted"])) {
+  if (!canAny(effectiveRole, ["members.view", "eventdata.viewCoHosted"])) {
     redirect("/events");
   }
 
@@ -104,7 +107,7 @@ export default async function AdminSpeakersPage() {
   });
 
   // All platform users in scope — for the "link user to speaker" picker.
-  const shouldLoadUsers = canAny(me.role, ["members.view"]);
+  const shouldLoadUsers = canAny(effectiveRole, ["members.view"]);
   const users = shouldLoadUsers
     ? await db.user.findMany({
         where: scopeUserWhere(scope),
@@ -146,7 +149,7 @@ export default async function AdminSpeakersPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         <div className="mb-6">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2 flex items-center gap-2">

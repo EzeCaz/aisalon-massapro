@@ -13,10 +13,10 @@ import {
   FormInput,
   ImageIcon,
   LayoutPanelTop,
+  Save,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import type { QrSalonData } from "./types";
-import { DEFAULT_BRANDING_ASSET_URL } from "./types";
 import { SAMPLE_DATA } from "./sample-data";
 import { QrSalonCanvas } from "./qr-salon-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
@@ -26,6 +26,8 @@ import type {
   SectionPos,
   SectionBoxSize,
 } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
+import { QrSalonSelectedPanel } from "../shared/qr-salon-selected-panel";
 
 /**
  * QrSalonEditor — the editor + live preview surface for the QR-only
@@ -45,6 +47,10 @@ import type {
  */
 
 const STORAGE_KEY = "qr-salon-data-v4";
+// PER TSK-0053: Local "Set as default" storage. The ENTIRE current `data`
+// is saved under `qr-salon-style-defaults-current`. When the user clicks
+// "Reset", if a saved default exists it is loaded instead of SAMPLE_DATA.
+const STYLE_DEFAULTS_KEY_PREFIX = "qr-salon-style-defaults-";
 
 export function QrSalonEditor() {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);
@@ -56,13 +62,31 @@ export function QrSalonEditor() {
   const [editImages, setEditImages] = useState(false);
   const [sectionsEditMode, setSectionsEditMode] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewScale, setPreviewScale] = useState(0.5);
+  // PER TSK-0053: brief "Saved!" feedback shown on the "Set as default"
+  // button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
   // ─── localStorage hydration ─────────────────────────────────────
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for the per-image branding selection).
+  // So we only clear `selectedId` when BOTH modes are off — turning
+  // off one mode shouldn't kill a selection made in the other.
+  useEffect(() => {
+    if (!sectionsEditMode && !editImages) setSelectedId(null);
+  }, [sectionsEditMode, editImages]);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -225,10 +249,43 @@ export function QrSalonEditor() {
     applyData(next);
   }
 
+  // ─── Toolbar actions ────────────────────────────────────────────
+
+  /**
+   * PER TSK-0053: Save the ENTIRE current mockup state (all section
+   * properties + image placements + caption config + etc.) as the
+   * default. Stored in localStorage under
+   * `qr-salon-style-defaults-current`. When the user later clicks
+   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   // ─── Reset ──────────────────────────────────────────────────────
   function handleReset() {
-    if (!confirm("Reset to sample data? Your current edits will be lost.")) return;
-    applyData(SAMPLE_DATA);
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    let savedDefault: QrSalonData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as QrSalonData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? "Reset to the saved default? Any local edits you've made will be lost."
+      : "Reset to sample data? Your current edits will be lost.";
+    if (!confirm(msg)) return;
+    applyData(savedDefault ?? SAMPLE_DATA);
   }
 
   // ─── PNG export ─────────────────────────────────────────────────
@@ -304,47 +361,80 @@ export function QrSalonEditor() {
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-6">
       {/* ===== LEFT: CANVAS PREVIEW ===== */}
       <div className="space-y-3">
+        {/* Top row: Reset button (kept here per TSK-0053; Edit images /
+            Edit sections / Set as default moved to the canvas caption row
+            directly above the canvas, mirroring speaker-intro). */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold bg-black/5 text-black hover:bg-black/10"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
+          </button>
+        </div>
+
+        {/* Canvas caption — moved ABOVE the canvas per TSK-0053.
+            Edit images + Edit sections + Set as default cluster together
+            right above the canvas (mirrors speaker-intro pattern). */}
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div className="text-[0.7rem] font-semibold text-black/70">
+            Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+            <span className="ml-2 text-black/40 font-normal">
+              · {Math.round(previewScale * 100)}% scale
+            </span>
+          </div>
+          <div className="inline-flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => setEditImages((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
                 editImages
                   ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                  : "bg-black/5 text-black hover:bg-black/10"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
               }`}
               title="Toggle image edit mode: click the brand mark to replace it from the brand library."
             >
               <ImageIcon className="h-3.5 w-3.5" />
-              {editImages ? "Editing images — click brand mark to replace" : "Edit images"}
+              {editImages ? "Editing images" : "Edit images"}
             </button>
             <button
               type="button"
               onClick={() => setSectionsEditMode((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
                 sectionsEditMode
                   ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                  : "bg-black/5 text-black hover:bg-black/10"
+                  : "border border-black/15 bg-white text-black hover:bg-black/5"
               }`}
               title="Toggle section edit mode: drag the QR / caption / brand mark to reposition; 8 handles to resize; Object Properties Panel for precise control."
             >
               <LayoutPanelTop className="h-3.5 w-3.5" />
               {sectionsEditMode ? "Editing sections" : "Edit sections"}
             </button>
+            {/* PER TSK-0053: "Set as default" button — saves the ENTIRE
+                current mockup state as the default. Click "Reset" to
+                restore. */}
             <button
               type="button"
-              onClick={handleReset}
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold bg-black/5 text-black hover:bg-black/10"
+              onClick={handleSetAsDefault}
+              className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                savedDefaultFeedback
+                  ? "bg-[#27C93F] text-white"
+                  : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+              }`}
+              title="Save the entire current mockup state as the default. Click Reset to restore."
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset
+              {savedDefaultFeedback ? (
+                <>
+                  <Check className="h-3.5 w-3.5" /> Saved!
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" /> Set as default
+                </>
+              )}
             </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[0.7rem] text-black/60">
-              {Math.round(previewScale * 100)}%
-            </span>
           </div>
         </div>
 
@@ -371,19 +461,17 @@ export function QrSalonEditor() {
               onSectionResize={handleSectionResize}
               onSectionBoxResize={handleSectionBoxResize}
               onSectionZChange={handleSectionZChange}
+              selectedId={selectedId}
+              onSelectChange={setSelectedId}
             />
           </div>
         </div>
 
         <p className="text-[0.7rem] text-black/50 leading-relaxed">
-          Canvas: 1200×800 (3:2). Default layout: <strong>caption above</strong>,{" "}
-          <strong>QR centered</strong>, <strong>brand mark below</strong> — all
-          horizontally centered. <strong>Edit images</strong> (blue) → click the
-          brand mark to swap it from the brand library.{" "}
+          <strong>Edit images</strong> (blue) → click the brand mark to swap it from the brand library.{" "}
           <strong>Edit sections</strong> (pink) → drag the QR / caption / brand
           mark to reposition; 8 handles to resize; Object Properties Panel for
-          precise position, size, and z-order. Same pattern as the other
-          mockups.
+          precise position, size, and z-order.
         </p>
       </div>
 
@@ -417,24 +505,65 @@ export function QrSalonEditor() {
           </button>
         </div>
 
-        {viewMode === "form" ? (
-          <FormView
+        {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Sits ABOVE the form editor in the right column. Renders when
+           *  an element is selected AND at least one edit mode is on.
+           *  PER USER SPEC 2026-08-02 (TSK-0055-extend): now also renders
+           *  in image-edit mode — clicking the brand mark in Edit-images
+           *  mode triggers this panel with per-image edit fields. */}
+        {(sectionsEditMode || editImages) && selectedId && (
+          <QrSalonSelectedPanel
+            selectedId={selectedId}
             data={data}
-            onPatch={patch}
-            onPatchCaption={patchCaption}
-            onPatchCaptionStyle={patchCaptionStyle}
-            onPatchBranding={patchBranding}
-            onPatchWithSectionClear={patchWithSectionClear}
+            onChange={(next) => applyData(next)}
             onPickBranding={() => setPickerOpen(true)}
+            onDeselect={() => setSelectedId(null)}
           />
+        )}
+
+        {viewMode === "form" ? (
+          /* PER USER SPEC 2026-08-02 (TSK-0050): the entire form is now
+             COMPRESSED (collapsed) by default. Click the header to expand.
+             The floating ObjectPropertiesPanel anchors top-LEFT of the
+             canvas (the left column) so it doesn't overlap this editor. */
+          <CollapsibleFormPanel
+            title="qr-salon.form"
+            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+          >
+            <div className="p-4">
+              <FormView
+                data={data}
+                onPatch={patch}
+                onPatchCaption={patchCaption}
+                onPatchCaptionStyle={patchCaptionStyle}
+                onPatchBranding={patchBranding}
+                onPatchWithSectionClear={patchWithSectionClear}
+                onPickBranding={() => setPickerOpen(true)}
+              />
+            </div>
+          </CollapsibleFormPanel>
         ) : (
-          <JsonView
-            jsonText={jsonText}
-            parseError={parseError}
-            onJsonChange={handleJsonChange}
-            onCopy={handleCopyJson}
-            copied={copied}
-          />
+          <CollapsibleFormPanel
+            title="qr-salon.data.json"
+            icon={
+              <div className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
+              </div>
+            }
+            error={parseError}
+          >
+            <div className="p-4">
+              <JsonView
+                jsonText={jsonText}
+                parseError={parseError}
+                onJsonChange={handleJsonChange}
+                onCopy={handleCopyJson}
+                copied={copied}
+              />
+            </div>
+          </CollapsibleFormPanel>
         )}
 
         {/* Export buttons */}
@@ -717,12 +846,31 @@ function FormView({
             Replace
           </button>
         </div>
-        <Field label="Image URL">
+        {/* PER USER SPEC 2026-08-02: Logo theme selector. */}
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onPatchBranding({ theme: t })}
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (branding.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light (white bg)" : "Dark (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme)">
           <input
             type="url"
             value={branding.imageUrl ?? ""}
             onChange={(e) => onPatchBranding({ imageUrl: e.target.value })}
-            placeholder={DEFAULT_BRANDING_ASSET_URL}
+            placeholder="Leave empty to use the theme-selected logo"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-xs font-mono focus:border-[#FF005A] focus:outline-none"
           />
         </Field>

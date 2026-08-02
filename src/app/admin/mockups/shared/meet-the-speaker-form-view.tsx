@@ -215,6 +215,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             })
           }
         />
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Topic:" label that prefixes the topic title. */}
+        <TextStyleRow
+          label="Topic: label — font size + color + align"
+          fontSize={data.textStyles?.topicLabel?.fontSize}
+          fontColor={data.textStyles?.topicLabel?.color}
+          align={data.textStyles?.topicLabel?.align}
+          defaultFontSize={11}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.topicLabel = {
+                ...(d.textStyles.topicLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Topic description">
           <input
             type="text"
@@ -494,6 +513,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
             className="form-input"
           />
         </Field>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Register here" caption next to the QR. */}
+        <TextStyleRow
+          label="Register here — font size + color + align"
+          fontSize={data.textStyles?.registerHere?.fontSize}
+          fontColor={data.textStyles?.registerHere?.color}
+          align={data.textStyles?.registerHere?.align}
+          defaultFontSize={9}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.registerHere = {
+                ...(d.textStyles.registerHere ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         <Field label="Footer credit">
           <input
             type="text"
@@ -597,36 +635,14 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
       {/* ===== HERO OVERLAY ===== */}
       <Section title="Hero overlay (gradient)">
         {/* ===== HERO STYLE PICKER =====
-            Per user spec 2026-07-02: "ad another hero image alternative,
-            and add it a style Number 2". Style 1 = geometric gradient
-            triangles (default). Style 2 = pre-designed low-poly network
-            graph image with 4 editable "Local Street" pins. */}
-        <Field label="Hero style">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => update((d) => { d.heroStyle = 1; })}
-              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                (data.heroStyle ?? 1) === 1
-                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
-              }`}
-            >
-              Style 1 — Gradient triangles
-            </button>
-            <button
-              type="button"
-              onClick={() => update((d) => { d.heroStyle = 2; })}
-              className={`flex-1 rounded border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                data.heroStyle === 2
-                  ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
-                  : "border-black/15 bg-white text-black/70 hover:bg-black/5"
-              }`}
-            >
-              Style 2 — Network image
-            </button>
-          </div>
-        </Field>
+            Per TSK-0023 Phase 1: the Style 1/2/3 selector has been MOVED
+            to the top toolbar of the editor. This section now only shows
+            the per-style controls (Style 2 image URL, Local Street pins,
+            Style 1 gradient colors, etc.). */}
+        <p className="text-[0.65rem] text-black/60 mb-2">
+          Style 1/2/3 selector is now in the toolbar at the top of the page.
+          Currently active: <strong>Style {data.heroStyle ?? 1}</strong>
+        </p>
 
         {/* Style 2 image URL — only shown when Style 2 is selected. */}
         {data.heroStyle === 2 && (
@@ -988,11 +1004,35 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
           branding asset should be this as default, ...1782505047256-bpy1ln.png
           and replaceable". */}
       <Section title="Branding asset (bottom-left)">
-        <Field label="Image URL (defaults to AI Salon brand image — click Replace on the canvas in edit mode to swap)">
+        {/* PER USER SPEC 2026-08-02: Logo theme selector. */}
+        <Field label="Logo theme variant">
+          <div className="flex gap-2">
+            {(["light", "dark"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() =>
+                  update((d) => {
+                    if (!d.brandingAsset) d.brandingAsset = {};
+                    d.brandingAsset.theme = t;
+                  })
+                }
+                className={`flex-1 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  (data.brandingAsset?.theme ?? "light") === t
+                    ? "border-[#FF005A] bg-[#FF005A]/10 text-[#FF005A]"
+                    : "border-black/15 bg-white text-black/70 hover:bg-black/5"
+                }`}
+              >
+                {t === "light" ? "Light theme (white bg)" : "Dark theme (dark bg)"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Image URL (overrides theme — click Replace on the canvas in edit mode to swap)">
           <input
             type="url"
             value={data.brandingAsset?.imageUrl ?? ""}
-            placeholder="https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+            placeholder="Leave empty to use the theme-selected logo"
             onChange={(e) =>
               update((d) => {
                 if (!d.brandingAsset) d.brandingAsset = {};
@@ -1069,6 +1109,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
 
       {/* ===== SPONSORS ===== */}
       <Section title={`Collaborators (${data.collaborators.length})`}>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "In collaboration with" label. */}
+        <TextStyleRow
+          label="In collaboration with — font size + color + align"
+          fontSize={data.textStyles?.collaboratorsLabel?.fontSize}
+          fontColor={data.textStyles?.collaboratorsLabel?.color}
+          align={data.textStyles?.collaboratorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.collaboratorsLabel = {
+                ...(d.textStyles.collaboratorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.collaborators.map((s, idx) => (
           <SubCard
             key={`coll-${idx}`}
@@ -1150,6 +1209,25 @@ export function MeetTheSpeakerFormView({ data, onChange }: Props) {
       </Section>
 
       <Section title={`Sponsors (${data.sponsors.length})`}>
+        {/* PER USER SPEC 2026-08-02 (TSK-0053): "Sponsored by" label. */}
+        <TextStyleRow
+          label="Sponsored by — font size + color + align"
+          fontSize={data.textStyles?.sponsorsLabel?.fontSize}
+          fontColor={data.textStyles?.sponsorsLabel?.color}
+          align={data.textStyles?.sponsorsLabel?.align}
+          defaultFontSize={10}
+          onChange={(fontSize, fontColor, align) =>
+            update((d) => {
+              if (!d.textStyles) d.textStyles = {};
+              d.textStyles.sponsorsLabel = {
+                ...(d.textStyles.sponsorsLabel ?? {}),
+                ...(fontSize !== undefined ? { fontSize } : {}),
+                ...(fontColor !== undefined ? { color: fontColor } : {}),
+                ...(align !== undefined ? { align } : {}),
+              };
+            })
+          }
+        />
         {data.sponsors.map((s, idx) => (
           <SubCard
             key={`spo-${idx}`}

@@ -3,7 +3,7 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { isSuperAdminEmail, ROLES, type Role } from "@/lib/permissions";
+import { isSuperAdminEmail, normalizeRole, ROLES, type Role } from "@/lib/permissions";
 import { generateUtmUid } from "@/lib/utm";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "eze@massapro.com").toLowerCase();
@@ -207,6 +207,66 @@ export const authOptions: NextAuthOptions = {
       }
     },
     async jwt({ token, user, account }) {
+      // TSK-0057: Read the "view as" cookie. If the signed-in user is
+      // SUPER_ADMIN and has set a viewAs override via /api/admin/view-as,
+      // stamp it onto the token so the session callback can propagate
+      // it to session.user. The downstream readers (permissions.ts,
+      // app-header.tsx) only honor the override when the signed-in user
+      // is SUPER_ADMIN — so a non-super-admin can't escalate by setting
+      // the cookie (they'd need to be SUPER_ADMIN for the override to
+      // take effect, and the API route enforces that on write).
+      try {
+        // TSK-0057: On the server, NextAuth's jwt callback runs in a
+        // request scope, so we can read cookies via next/headers. We
+        // can't use document.cookie here (this is server-side).
+        if (typeof document === "undefined") {
+          // Server-side: use next/headers cookies() (lazy import to
+          // avoid pulling it into client bundles). In Next.js 15+,
+          // cookies() is async and returns a Promise<ReadonlyRequestCookies>.
+          const { cookies } = await import("next/headers");
+          const cookieStore = await cookies();
+          const viewAsCookie = cookieStore.get("ais_view_as")?.value;
+          if (viewAsCookie) {
+            const parsed = JSON.parse(viewAsCookie) as {
+              role: string | null;
+              chapterId: string | null;
+              setBy: string;
+              setAt: number;
+            };
+            // Only honor the override if the CURRENT signed-in user is
+            // the one who set it (defensive — prevents a stale cookie
+            // from a previous super-admin session affecting a new
+            // non-super-admin session on the same browser).
+            const currentEmail = (user?.email || token.email || "").toString().toLowerCase();
+            const currentUser = await db.user.findUnique({
+              where: { email: currentEmail },
+              select: { id: true, role: true, email: true },
+            });
+            const isSuper = currentUser && (
+              normalizeRole(currentUser.role) === ROLES.SUPER_ADMIN ||
+              isSuperAdminEmail(currentUser.email)
+            );
+            if (isSuper && currentUser.id === parsed.setBy) {
+              token.viewAsRole = parsed.role;
+              token.viewAsChapterId = parsed.chapterId;
+            } else {
+              // Stale cookie from a different/previous user — clear it
+              // from the token (and the cookie will be overwritten next
+              // time the user sets a new view-as).
+              delete token.viewAsRole;
+              delete token.viewAsChapterId;
+            }
+          } else {
+            delete token.viewAsRole;
+            delete token.viewAsChapterId;
+          }
+        }
+      } catch (err) {
+        // Non-fatal — view-as is a convenience feature, not a security
+        // control. Log + continue.
+        console.warn("[auth.jwt] could not read ais_view_as cookie:", err);
+      }
+
       if (user?.email) {
         // For the JWT, we always re-resolve from the DB so role changes
         // by an admin take effect on the user's NEXT login (not the
@@ -252,6 +312,13 @@ export const authOptions: NextAuthOptions = {
         (session.user as { role?: string }).role =
           (token.role as string) || resolveInitialRole(session.user.email);
         (session.user as { id?: string }).id = token.id as string;
+        // TSK-0057: propagate viewAs fields from the JWT to the session
+        // so server components (app-header.tsx, permissions.ts, etc.)
+        // can read them via getServerSession(authOptions).
+        (session.user as { viewAsRole?: string | null }).viewAsRole =
+          (token.viewAsRole as string | null) ?? null;
+        (session.user as { viewAsChapterId?: string | null }).viewAsChapterId =
+          (token.viewAsChapterId as string | null) ?? null;
       }
       return session;
     },

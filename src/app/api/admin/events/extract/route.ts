@@ -3,19 +3,16 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
+import {
+  hasLlm,
+  createChatCompletion,
+  getActiveProvider,
+} from "@/lib/zai-client";
 import ZAI from "z-ai-web-dev-sdk";
 import {
   createGeminiChatCompletion,
   hasGeminiEnv,
 } from "@/lib/gemini-client";
-import {
-  createKimiChatCompletion,
-  hasKimiEnv,
-} from "@/lib/kimi-client";
-import {
-  createChatCompletion as createZaiChatCompletion,
-  hasZaiEnv,
-} from "@/lib/zai-client";
 
 /**
  * POST /api/admin/events/extract
@@ -37,6 +34,24 @@ import {
  * and fall back to null for any missing/invalid field. The frontend
  * uses the response to pre-fill the New Event form, but the user can
  * still review and edit everything before saving.
+ *
+ * LLM provider selection (in priority order):
+ *   1. GEMINI_API_KEY   — Google Gemini (RECOMMENDED; free at aistudio.google.com,
+ *      native JSON output mode, fast Flash model). NOTE: Gemini blocks some
+ *      regions (HK/CN) — dev server may get 400 "User location is not supported",
+ *      which is NOT an auth failure. Vercel us-east-1 works fine.
+ *   2. KIMI_API_KEY     — Moonshot Kimi (OpenAI-compatible). Keys from
+ *      platform.moonshot.ai must use api.moonshot.ai; keys from
+ *      platform.moonshot.cn must use api.moonshot.cn. Set KIMI_BASE_URL
+ *      accordingly.
+ *   3. OPENAI_API_KEY   — OpenAI or any OpenAI-compatible provider via
+ *      OPENAI_BASE_URL (Together, Groq, OpenRouter…).
+ *   4. ZAI_BASE_URL + ZAI_API_KEY — ZAI internal API (DEV ONLY).
+ *      `internal-api.z.ai` resolves to private IPs (172.25.x.x) that are
+ *      NOT reachable from Vercel's public network — only works in the
+ *      Super Z dev runtime.
+ *   5. Otherwise (local dev, where /etc/.z-ai-config is installed by the
+ *      Super Z runtime), fall back to the official SDK's ZAI.create().
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -107,7 +122,7 @@ Rules:
 5. Speakers: include ANY person mentioned with a speaking role. If you can't tell if someone is speaking vs. just mentioned, include them with a warning.
 6. Don't invent data — if a field isn't in the text, use null.`;
 
-  // Provider priority: Gemini → Kimi → ZAI env → ZAI SDK (dev only).
+  // Provider priority: Gemini → Kimi → OpenAI → ZAI env → ZAI SDK (dev only).
   // Gemini is the recommended provider for this prefill flow — free tier
   // at aistudio.google.com, native JSON output mode, fast Flash model.
   // Note: Gemini blocks some regions (HK/CN) — if running from a blocked
@@ -133,24 +148,18 @@ Rules:
         model: process.env.GEMINI_MODEL || "gemini-flash-latest",
       });
       raw = geminiRes.choices[0]?.message?.content || "";
-    } else if (hasKimiEnv()) {
-      providerUsed = "kimi";
-      const kimiRes = await createKimiChatCompletion({
-        messages,
-        temperature: 0.2,
-        // kimi-k2.6 has 262k context — comfortably fits the 20k-char input
-        // cap + JSON output. Override via KIMI_MODEL env var if needed.
-        model: process.env.KIMI_MODEL || "kimi-k2.6",
-      });
-      raw = kimiRes.choices[0]?.message?.content || "";
-    } else if (hasZaiEnv()) {
-      providerUsed = "zai-env";
-      const zaiRes = await createZaiChatCompletion({
+    } else if (hasLlm()) {
+      // Unified zai-client.ts path: Kimi (Option A) → OpenAI-compatible
+      // (Option B/C) → ZAI internal (Option D, dev only). Works on Vercel.
+      providerUsed = getActiveProvider() || "llm";
+      const completion = await createChatCompletion({
         messages,
         thinking: { type: "disabled" },
       });
-      raw = zaiRes.choices[0]?.message?.content || "";
+      raw = completion.choices[0]?.message?.content || "";
     } else {
+      // Dev fallback: use the SDK, which reads /etc/.z-ai-config installed
+      // by the Super Z runtime. This path will NOT work on Vercel.
       providerUsed = "zai-sdk";
       const zai = await ZAI.create();
       const completion = await zai.chat.completions.create({
@@ -164,13 +173,50 @@ Rules:
       `[events/extract] LLM call failed (provider=${providerUsed || "none"}):`,
       err
     );
+    const msg = (err as Error).message || String(err);
+
+    // Surface actionable errors for the common failure modes:
+    //
+    // 1. "fetch failed" — Node.js fetch threw at the network level. On
+    //    Vercel this happens because `internal-api.z.ai` resolves to
+    //    private IPs (172.25.x.x) that aren't routable from Vercel's
+    //    public network. Fix: switch to a public provider by setting
+    //    GEMINI_API_KEY (recommended) or KIMI_API_KEY / OPENAI_API_KEY.
+    //
+    // 2. "Configuration file not found" / ".z-ai-config" — SDK fallback
+    //    failed because no /etc/.z-ai-config exists (Vercel's read-only
+    //    filesystem). Same fix: set GEMINI_API_KEY.
+    //
+    // 3. "User location is not supported" — Gemini region block. Fix:
+    //    deploy on Vercel (us-east-1) or fall back to KIMI_API_KEY.
+    if (
+      msg.includes("fetch failed") ||
+      msg.includes("Configuration file not found") ||
+      msg.includes(".z-ai-config") ||
+      msg.includes("ZAI env vars not set") ||
+      msg.includes("No LLM provider configured")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "AI service is not reachable from this server. " +
+            "Set GEMINI_API_KEY (recommended — free at aistudio.google.com) " +
+            "or KIMI_API_KEY / OPENAI_API_KEY in Vercel Project Settings → " +
+            "Environment Variables, then redeploy. " +
+            "See src/lib/zai-client.ts and src/lib/gemini-client.ts for details.",
+          provider: providerUsed,
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       {
-        error: `AI extraction failed via ${providerUsed || "no provider"}: ${(err as Error).message}`,
+        error: `AI extraction failed via ${providerUsed}: ${msg}`,
         hint:
           "Set GEMINI_API_KEY (free at aistudio.google.com) — the recommended " +
-          "provider for this flow. If Gemini is blocked in your region, " +
-          "deploy on Vercel (us-east-1) or fall back to KIMI_API_KEY.",
+          "provider. If Gemini is region-blocked, fall back to KIMI_API_KEY " +
+          "(platform.moonshot.ai) or OPENAI_API_KEY.",
+        provider: providerUsed,
       },
       { status: 500 }
     );
@@ -266,6 +312,7 @@ Rules:
     return NextResponse.json(
       {
         error: `Extraction failed during response parsing: ${(err as Error).message}`,
+        provider: providerUsed,
       },
       { status: 500 }
     );

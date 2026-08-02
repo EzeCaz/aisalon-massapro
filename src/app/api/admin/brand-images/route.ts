@@ -3,9 +3,12 @@ import { promises as fs } from "fs";
 import path from "path";
 import { list, put } from "@vercel/blob";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { isSuperAdmin } from "@/lib/permissions";
+import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
+import { db } from "@/lib/db";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings } from "@/lib/site-settings";
+import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
+import { GLOBAL_BRAND_LIBRARY_URLS } from "@/lib/global-brand-library";
 
 /**
  * GET /api/admin/brand-images
@@ -41,11 +44,40 @@ const LOCAL_BRAND_DIR = path.join(process.cwd(), "public", "uploads", "brand-ass
 const LOCAL_BRAND_URL = "/uploads/brand-assets";
 
 export async function GET() {
-  const { user, error } = await getCurrentUser();
+  const { user, error, scope } = await getCurrentUser();
   if (error) return error;
-  if (!isSuperAdmin({ email: user!.email, role: user!.role })) {
+  // TSK-0056: Allow ANY signed-in admin (SUPER_ADMIN, ADMIN,
+  // CHAPTER_ORGANIZER, CO_HOST) to LIST brand images. The image list is
+  // scope-agnostic (it lists the global Vercel Blob `brand-assets/`
+  // prefix + the `.images/` stock folder) — there is no per-chapter
+  // image storage to filter at this endpoint. Per-chapter overrides are
+  // managed via the separate /api/admin/chapters/[id]/brand-images
+  // routes, which enforce scope at lines 50-61 / 64-74.
+  //
+  // The previous `isSuperAdmin()` gate caused a 403 for every
+  // CHAPTER_ORGANIZER who opened /admin/images, even though the page
+  // itself allowed them in. They saw the gallery mount, then immediately
+  // hit "Could not load images — Request failed with 403".
+  //
+  // Write operations (POST upload, POST select-global) below REMAIN
+  // SUPER_ADMIN-only — global brand asset writes should stay Super-Admin.
+  if (!canSeeAdminNav(user!.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // TSK-0059: Determine whether the caller has GLOBAL scope.
+  //   - Real SUPER_ADMIN with no view-as override → scope.kind === "global"
+  //   - SUPER_ADMIN viewing-as a non-global role/chapter → scope.kind is
+  //     "country" or "chapter" (or "none")
+  //   - ADMIN → scope.kind === "country"
+  //   - CHAPTER_ORGANIZER / CO_HOST → scope.kind === "chapter"
+  //
+  // Non-global callers should ONLY see the currently-selected defaults
+  // (global favicon/loginHero/loginBanner) plus their own chapter's
+  // override images — NOT the entire brand-assets library. The full
+  // library is curated by the Super Admin; chapter admins pick from the
+  // curated defaults for their chapter overrides.
+  const isGlobalScope = scope?.kind === "global";
 
   // 1. List stock images from the hidden .images/ folder.
   const stock: Array<{
@@ -115,6 +147,72 @@ export async function GET() {
     } catch (e) {
       console.warn("[brand-images] could not list Vercel Blob brand-assets/:", e);
     }
+
+    // TSK-0062: Also list chapter-scoped brand image uploads. Super Admin
+    // (global scope) sees ALL chapters' uploads. Chapter scope sees only
+    // their own chapter's uploads. Country scope (ADMIN) sees uploads for
+    // all chapters in their country.
+    try {
+      const chapterBrandPrefix =
+        isGlobalScope
+          ? "chapter-brand/"
+          : scope?.kind === "chapter"
+            ? `chapter-brand/${scope.chapterId}/`
+            : scope?.kind === "country"
+              ? // Country admin — list all chapter-brand/ entries; we'll
+                // filter by chapter country below. (Vercel Blob list()
+                // doesn't support OR prefixes, so we list everything and
+                // filter client-side. This is fine — chapter-brand/ is
+                // typically a small set.)
+                "chapter-brand/"
+              : null;
+
+      if (chapterBrandPrefix) {
+        // For country scope, pre-load the chapter IDs in this country so
+        // we can filter the list results.
+        let countryChapterIds: Set<string> | null = null;
+        if (scope?.kind === "country") {
+          const chaptersInCountry = await db.chapter.findMany({
+            where: { countryId: scope.countryId },
+            select: { id: true },
+          });
+          countryChapterIds = new Set(chaptersInCountry.map((c) => c.id));
+        }
+
+        let cbCursor: string | undefined = undefined;
+        for (let i = 0; i < 10; i++) {
+          const result = await list({
+            prefix: chapterBrandPrefix,
+            limit: 100,
+            cursor: cbCursor,
+          });
+          for (const blob of result.blobs) {
+            // Extract chapterId from pathname: chapter-brand/<chapterId>/<filename>
+            const parts = blob.pathname.split("/");
+            if (parts.length < 3) continue;
+            const blobChapterId = parts[1];
+            if (!blobChapterId) continue;
+
+            // Filter for country scope
+            if (countryChapterIds && !countryChapterIds.has(blobChapterId)) {
+              continue;
+            }
+
+            uploaded.push({
+              name: parts[2] ?? blob.pathname,
+              size: blob.size,
+              mimeType: blob.contentType || "application/octet-stream",
+              url: blob.url,
+              kind: "uploaded",
+            });
+          }
+          if (!result.hasMore || !result.cursor) break;
+          cbCursor = result.cursor;
+        }
+      }
+    } catch (e) {
+      console.warn("[brand-images] could not list Vercel Blob chapter-brand/:", e);
+    }
   } else {
     // Local sandbox fallback: read /public/uploads/brand-assets/
     try {
@@ -142,10 +240,160 @@ export async function GET() {
     } catch (e) {
       console.warn("[brand-images] could not read local brand-assets dir:", e);
     }
+
+    // Local sandbox fallback for chapter-brand/<chapterId>/
+    try {
+      const localChapterBrandDir = path.join(process.cwd(), "public", "uploads", "chapter-brand");
+      let chapterDirs: string[] = [];
+      try {
+        chapterDirs = await fs.readdir(localChapterBrandDir);
+      } catch {
+        /* directory doesn't exist yet — that's fine */
+      }
+
+      // Determine which chapter dirs to read
+      const scopeChapterIds: string[] | null =
+        isGlobalScope
+          ? null // null = read all
+          : scope?.kind === "chapter"
+            ? [scope.chapterId]
+            : scope?.kind === "country"
+              ? await db.chapter.findMany({
+                  where: { countryId: scope.countryId },
+                  select: { id: true },
+                }).then((cs) => cs.map((c) => c.id))
+              : null;
+
+      for (const dir of chapterDirs) {
+        // Skip if not in scope
+        if (scopeChapterIds !== null && !scopeChapterIds.includes(dir)) continue;
+
+        const chapterDir = path.join(localChapterBrandDir, dir);
+        let stat;
+        try {
+          stat = await fs.stat(chapterDir);
+        } catch {
+          continue;
+        }
+        if (!stat.isDirectory()) continue;
+
+        const files = await fs.readdir(chapterDir);
+        const ALLOWED_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg"]);
+        for (const name of files.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
+          const ext = path.extname(name).toLowerCase();
+          if (!ALLOWED_EXT.has(ext)) continue;
+          let size = 0;
+          try {
+            const s = await fs.stat(path.join(chapterDir, name));
+            size = s.size;
+          } catch {
+            /* ignore */
+          }
+          uploaded.push({
+            name,
+            size,
+            mimeType: extToMime(ext),
+            url: `/uploads/chapter-brand/${dir}/${encodeURIComponent(name)}`,
+            kind: "uploaded",
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("[brand-images] could not read local chapter-brand dir:", e);
+    }
   }
 
   // 3. Current selections for each role.
   const settings = await getPublicSettings();
+
+  // TSK-0059 + TSK-0060: Filter the image list for non-global callers.
+  //
+  // Real SUPER_ADMIN (or SUPER_ADMIN viewing-as SUPER_ADMIN with no
+  // chapter) sees the full library — both stock images and every
+  // uploaded brand asset in Vercel Blob.
+  //
+  // Non-global callers (ADMIN, CHAPTER_ORGANIZER, CO_HOST, or a
+  // SUPER_ADMIN viewing-as one of those) see:
+  //   - The 3 globally-selected images (favicon, loginHero, loginBanner)
+  //   - The curated global brand library (GLOBAL_BRAND_LIBRARY_URLS —
+  //     the canonical AI Salon logos/mascots/banners that every chapter
+  //     can pick from for their chapter overrides)
+  //   - Their own chapter's override images (if scope is "chapter")
+  //
+  // Rationale: the brand-assets/ Vercel Blob folder may contain test
+  // uploads, alternate variants, and deprecated logos that chapter
+  // admins shouldn't have to wade through. The Super Admin curates
+  // GLOBAL_BRAND_LIBRARY_URLS in code (src/lib/global-brand-library.ts)
+  // to expose only the canonical brand images chapter admins should
+  // pick from.
+  //
+  // Stock images are always hidden for non-global callers — their URLs
+  // (/api/admin/hidden-images/[name]) never match a selection URL
+  // (which is always a Vercel Blob URL), so they're filtered out
+  // naturally.
+  if (!isGlobalScope) {
+    const allowedUrls = new Set<string>();
+    if (settings.favicon) allowedUrls.add(settings.favicon);
+    if (settings.loginHero) allowedUrls.add(settings.loginHero);
+    if (settings.loginBanner) allowedUrls.add(settings.loginBanner);
+
+    // TSK-0060: Always include the curated global brand library so
+    // chapter admins can pick from these images for their overrides.
+    for (const url of GLOBAL_BRAND_LIBRARY_URLS) {
+      allowedUrls.add(url);
+    }
+
+    // For chapter scope, also include the chapter's current overrides
+    // so the chapter admin can see + manage the images they've already
+    // selected (e.g. to re-pick or clear them).
+    if (scope?.kind === "chapter") {
+      try {
+        const overrides = await getChapterBrandImageOverrides(scope.chapterId);
+        for (const url of Object.values(overrides)) {
+          if (typeof url === "string" && url) allowedUrls.add(url);
+        }
+      } catch (err) {
+        console.warn("[brand-images] could not load chapter overrides for filter:", err);
+      }
+    }
+
+    // TSK-0062: Non-global callers can now upload their own chapter-scoped
+    // brand images. Those uploads live under `chapter-brand/<chapterId>/`
+    // (or `/uploads/chapter-brand/<chapterId>/` locally) and are already
+    // in the `uploaded` array (filtered by scope above). We need to allow
+    // them through the URL filter — they're not in GLOBAL_BRAND_LIBRARY_URLS
+    // nor in the global defaults.
+    //
+    // For chapter scope, only allow their own chapterId's prefix.
+    // For country scope, allow any chapter in their country (the list
+    // above already filtered to those chapters).
+    const isChapterScopedUpload = (url: string): boolean => {
+      // Local sandbox URLs
+      if (url.startsWith("/uploads/chapter-brand/")) {
+        if (scope?.kind === "chapter") {
+          return url.includes(`/uploads/chapter-brand/${scope.chapterId}/`);
+        }
+        return true; // country or global scope — already filtered above
+      }
+      // Vercel Blob URLs — check pathname contains /chapter-brand/<chapterId>/
+      if (url.includes(".blob.vercel-storage.com/chapter-brand/")) {
+        if (scope?.kind === "chapter") {
+          return url.includes(`/chapter-brand/${scope.chapterId}/`);
+        }
+        return true; // country or global scope — already filtered above
+      }
+      return false;
+    };
+
+    const filteredImages = [...uploaded, ...stock].filter(
+      (img) => allowedUrls.has(img.url) || isChapterScopedUpload(img.url)
+    );
+
+    return NextResponse.json({
+      images: filteredImages,
+      selections: settings,
+    });
+  }
 
   return NextResponse.json({
     images: [...uploaded, ...stock],

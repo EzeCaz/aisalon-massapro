@@ -328,9 +328,11 @@ export function ImagesGallery({
     return (
       <div className="rounded-md border border-black/10 bg-black/[0.02] px-4 py-12 text-center">
         <Images className="h-8 w-8 mx-auto text-black/30 mb-3" />
-        <p className="text-sm font-semibold text-black/70">No images yet</p>
+        <p className="text-sm font-semibold text-black/70">No images available</p>
         <p className="text-xs text-black/50 mt-1">
-          Upload your first brand image using the button above.
+          {isSuperAdmin
+            ? "Upload your first brand image using the button above."
+            : "No global brand defaults have been set yet. Please ask a Super Admin to set the favicon, login hero, and login banner before configuring chapter overrides."}
         </p>
       </div>
     );
@@ -340,60 +342,64 @@ export function ImagesGallery({
 
   return (
     <div className="space-y-6">
-      {/* Upload zone */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const f = e.dataTransfer.files?.[0];
-          if (f) handleUpload(f);
-        }}
-        className={`rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
-          dragOver ? "border-[#FF005A] bg-[#FF005A]/5" : "border-black/15 bg-black/[0.02]"
-        }`}
-      >
-        <Upload className="h-6 w-6 mx-auto text-black/80 mb-2" />
-        <p className="text-sm text-black/70 mb-2">
-          <span className="font-semibold">Click to upload</span> or drag & drop
-        </p>
-        <p className="text-[0.7rem] text-black/80 mb-3">
-          JPG, PNG, WebP, GIF, AVIF — max 8 MB. Stored in Vercel Blob.
-        </p>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!isSuperAdmin || busyKey === "upload"}
-          className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#D8004D] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {busyKey === "upload" ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Uploading…
-            </>
-          ) : (
-            <>
-              <Upload className="h-3.5 w-3.5" />
-              Choose file
-            </>
-          )}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleUpload(f);
-            e.target.value = "";
+      {/* Upload zone — SUPER_ADMIN-only. Non-super-admins can only pick
+          from the global defaults curated by the Super Admin, so they
+          don't need (and can't use) the upload zone. */}
+      {isSuperAdmin && (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
           }}
-        />
-      </div>
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const f = e.dataTransfer.files?.[0];
+            if (f) handleUpload(f);
+          }}
+          className={`rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
+            dragOver ? "border-[#FF005A] bg-[#FF005A]/5" : "border-black/15 bg-black/[0.02]"
+          }`}
+        >
+          <Upload className="h-6 w-6 mx-auto text-black/80 mb-2" />
+          <p className="text-sm text-black/70 mb-2">
+            <span className="font-semibold">Click to upload</span> or drag & drop
+          </p>
+          <p className="text-[0.7rem] text-black/80 mb-3">
+            JPG, PNG, WebP, GIF, AVIF — max 8 MB. Stored in Vercel Blob.
+          </p>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busyKey === "upload"}
+            className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#D8004D] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busyKey === "upload" ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              <>
+                <Upload className="h-3.5 w-3.5" />
+                Choose file
+              </>
+            )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
 
       {/* Chapter filter — when a chapter is selected, per-chapter
           selection buttons appear on each image card. */}
@@ -656,7 +662,18 @@ export function ImagesGallery({
                 </div>
 
                 {/* CHAPTER-scoped select-as buttons — only shown when a
-                    chapter is selected in the filter. */}
+                    chapter is selected in the filter.
+
+                    PER USER SPEC 2026-08-02: chapter-scoped select buttons
+                    are enabled for ANY admin (SUPER_ADMIN, ADMIN, or
+                    CHAPTER_ORGANIZER) when a chapter is selected. The API
+                    at /api/admin/chapters/[id]/brand-images/select enforces
+                    the scope — ADMIN can only edit chapters in their
+                    country, CHAPTER_ORGANIZER can only edit their own
+                    chapter. The countries/chapters dropdown in page.tsx
+                    is already scope-filtered, so non-super-admins only
+                    see chapters they can edit. Global select buttons above
+                    remain SUPER_ADMIN-only. */}
                 {selectedChapter && (
                   <div className="mt-2">
                     <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#820A7D] mb-1">
@@ -672,7 +689,7 @@ export function ImagesGallery({
                             key={`c-btn-${role}`}
                             type="button"
                             onClick={() => handleChapterSelect(img, role, selectedChapter)}
-                            disabled={!isSuperAdmin || busyKey !== null}
+                            disabled={busyKey !== null}
                             className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                               isSelected
                                 ? "bg-[#820A7D] text-white hover:bg-[#6a0868]"

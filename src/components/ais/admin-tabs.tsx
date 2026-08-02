@@ -111,6 +111,9 @@ function filterTabsByRole(role: string | null | undefined): AdminTabDef[] {
   const r = (role || "").toUpperCase();
 
   // CO_HOST sees the event-scoped tabs only.
+  // CHAPTER_ORGANIZER sees event-scoped tabs + Chapters + Images tabs
+  // (so they can navigate to their own chapter editor and manage brand
+  // image overrides). PER USER SPEC 2026-08-02.
   if (r === "CO_HOST") {
     const allowed = new Set<string>([
       "/admin/speakers",
@@ -118,6 +121,19 @@ function filterTabsByRole(role: string | null | undefined): AdminTabDef[] {
       "/admin/check-in",
       "/admin/dashboard/event-dashboard",
       "/admin/mockups",
+    ]);
+    return ALL_TABS.filter((t) => allowed.has(t.href));
+  }
+  if (r === "CHAPTER_ORGANIZER") {
+    const allowed = new Set<string>([
+      "/admin/speakers",
+      "/admin/registrants",
+      "/admin/check-in",
+      "/admin/dashboard/event-dashboard",
+      "/admin/mockups",
+      "/admin/event-prep",
+      "/admin/chapters",
+      "/admin/images",
     ]);
     return ALL_TABS.filter((t) => allowed.has(t.href));
   }

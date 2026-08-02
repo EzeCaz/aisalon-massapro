@@ -1,13 +1,16 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canSeeAdminNav, normalizeRole, ROLES } from "@/lib/permissions";
+import { canSeeAdminNav, getEffectiveRole, normalizeRole, ROLES } from "@/lib/permissions";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
 import { InboxButtonServer } from "./inbox-button-server";
+import { ViewAsSwitcher } from "./view-as-switcher";
 import { getPublicSettings } from "@/lib/site-settings";
+import { getEffectiveBrandImages } from "@/lib/chapter-brand-images";
 
 /**
  * Site-wide top nav header.
@@ -17,6 +20,12 @@ import { getPublicSettings } from "@/lib/site-settings";
  * or not). Both URLs come from SiteSetting rows (`linkedinUrl` and
  * `whatsappGroupUrl`), admin-editable at /admin/images, no redeploy
  * needed.
+ *
+ * TSK-0057: The meerkat mark + chapter label are now chapter-scoped for
+ * signed-in users. The mark uses the chapter's `loginHero` brand image
+ * (falling back to the global default, then to /images/falafel-meerkat.jpg).
+ * The label reads "{chapter.name} Chapter" instead of the previously
+ * hardcoded "Tel Aviv Chapter".
  */
 export async function AppHeader() {
   const session = await getServerSession(authOptions);
@@ -26,31 +35,96 @@ export async function AppHeader() {
         include: { tags: true },
       })
     : null;
+
+  // TSK-0058: Compute the EFFECTIVE role for the Admin nav gate. When a
+  // SUPER_ADMIN is using "View as" (e.g. viewing as a Member), the Admin
+  // link must be hidden — otherwise the impersonation preview is broken
+  // (the user clicks "Admin" and sees the super-admin panel despite
+  // viewing-as-member).
+  //
+  // `isSuperAdmin` is kept based on the REAL role so the ViewAsSwitcher
+  // itself stays visible (only real super admins can use it).
+  const viewAsRole = (session?.user as { viewAsRole?: string } | undefined)?.viewAsRole ?? null;
+  const viewAsChapterId = (session?.user as { viewAsChapterId?: string } | undefined)?.viewAsChapterId ?? null;
+  const isSuperAdmin = !!user && normalizeRole(user.role) === ROLES.SUPER_ADMIN;
+  const effectiveRole = user
+    ? getEffectiveRole(user.role, user.email, viewAsRole)
+    : null;
+
   // Show the "Admin" nav link to ADMIN+ and CO_HOST (event-scoped admin
   // pages). SPEAKER is excluded — they access Event Prep via the event
   // page itself (the 🎯 Event prep tab on /events/[slug]).
-  const isAdmin = !!user && canSeeAdminNav(user.role);
+  // TSK-0058: gate on EFFECTIVE role so view-as hides the link.
+  const isAdmin = !!user && canSeeAdminNav(effectiveRole);
 
-  // Pick the admin landing URL based on role so each user lands on a
-  // page they're allowed to access (instead of being redirected):
+  // Pick the admin landing URL based on EFFECTIVE role so each user
+  // lands on a page they're allowed to access (instead of being
+  // redirected):
   //   - ADMIN+       → /admin           (Members table)
   //   - CO_HOST      → /admin/speakers  (event-scoped, allowed)
   const adminHref = (() => {
     if (!user) return "/admin";
-    const r = normalizeRole(user.role);
+    const r = normalizeRole(effectiveRole);
     if (r === ROLES.CO_HOST) return "/admin/speakers";
     return "/admin";
   })();
+
+  // TSK-0057: TSO-0056 already made the WhatsApp/LinkedIn URLs chapter-
+  // aware. TSK-0057 extends this to the meerkat mark + chapter label,
+  // sourcing both from the chapter's effective brand-image bundle.
+  //
+  // `effectiveChapterId` is the chapter we're currently viewing as —
+  // normally the user's own chapterId, but when a SUPER_ADMIN is using
+  // the "View as" switcher (TSK-0057 step 3), it's the impersonated
+  // chapter. This lets a Super Admin preview Montreal's header without
+  // having to log out + back in.
+  // (viewAsChapterId + isSuperAdmin are declared above with effectiveRole.)
+  const effectiveChapterId = isSuperAdmin && viewAsChapterId ? viewAsChapterId : user?.chapterId ?? null;
 
   // Public site settings — includes the WhatsApp + LinkedIn URLs. Safe
   // to read for anonymous visitors (the URLs are shown publicly in the
   // header).
   const settings = await getPublicSettings();
-  const whatsappUrl = settings.whatsappGroupUrl;
-  // LinkedIn showcase for the AI Salon Tel Aviv chapter. Admin-editable
-  // at /admin/images (no redeploy needed). Defaults to the AI Salon TLV
-  // LinkedIn showcase when no SiteSetting row exists.
-  const linkedInUrl = settings.linkedinUrl;
+  // TSK-0056: For signed-in users, prefer the chapter-scoped WhatsApp +
+  // LinkedIn URLs (falls back to global defaults when the chapter has
+  // no override). Anonymous visitors still see the global defaults.
+  // This ensures a Montreal admin sees Montreal's community links, not
+  // TLV's.
+  let whatsappUrl = settings.whatsappGroupUrl;
+  let linkedInUrl = settings.linkedinUrl;
+  let chapterLabel: string | null = null;
+  // TSK-0057: meerkat mark source — chapter-scoped login hero (falls
+  // back to global default, then to /images/falafel-meerkat.jpg).
+  let meerkatSrc: string | undefined;
+  if (effectiveChapterId) {
+    const chapter = await db.chapter.findUnique({
+      where: { id: effectiveChapterId },
+      select: {
+        name: true,
+        whatsappGroupUrl: true,
+        linkedinUrl: true,
+      },
+    });
+    if (chapter) {
+      // Chapter-level URLs (set on the Chapter row, not ChapterSetting)
+      // override the global defaults for signed-in members of that chapter.
+      if (chapter.whatsappGroupUrl) whatsappUrl = chapter.whatsappGroupUrl;
+      if (chapter.linkedinUrl) linkedInUrl = chapter.linkedinUrl;
+      // TSK-0056: Show the signed-in user's chapter name in the header
+      // instead of the previously hardcoded "Tel Aviv Chapter". Falls
+      // back to no label for users with no chapter.
+      chapterLabel = `${chapter.name} Chapter`;
+    }
+    // TSK-0057: resolve the chapter-scoped loginHero (with global
+    // fallback built in). This is the image shown as the meerkat mark
+    // in the header.
+    const effective = await getEffectiveBrandImages(effectiveChapterId);
+    if (effective.loginHero) meerkatSrc = effective.loginHero;
+  } else {
+    // No chapter — still resolve global loginHero so anonymous visitors
+    // see the admin-configured default (not the hardcoded fallback).
+    if (settings.loginHero) meerkatSrc = settings.loginHero;
+  }
 
   const navLinks = [
     { href: "/events", label: "Events" },
@@ -64,12 +138,42 @@ export async function AppHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo + tagline — Falafel Meerkat mark on the left, on every page */}
+          {/* Logo + tagline — chapter-scoped meerkat mark on the left, on every page */}
           <Link href="/events" className="flex items-center gap-2">
-            <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
-            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
-              Tel Aviv Chapter
+            {/* TSK-0057: render the meerkat mark inline with the exact
+                alt + srcset pattern the user specified, so the chapter's
+                loginHero image is used (with global fallback). The
+                AiSalonLogoServer wrapper handles the wordmark + tagline. */}
+            <span className="inline-flex flex-col items-start leading-none text-black text-[1.05rem]">
+              <span className="inline-flex items-end">
+                <Image
+                  src={meerkatSrc || "/images/falafel-meerkat.jpg"}
+                  alt={chapterLabel ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat` : "AI Salon Falafel Meerkat"}
+                  width={624}
+                  height={1686}
+                  className="object-contain align-middle mr-[0.2em]"
+                  style={{
+                    color: "transparent",
+                    height: "1.5em",
+                    width: "auto",
+                    maxWidth: "100%",
+                    display: "inline-block",
+                    verticalAlign: "middle",
+                  }}
+                  priority
+                  unoptimized={(meerkatSrc || "").startsWith("http")}
+                />
+                <span className="text-[1.6em] font-extrabold tracking-tight lowercase">aisalon</span>
+              </span>
+              <span className="mt-[0.45em] pl-[1.2em] text-[0.42em] font-semibold uppercase tracking-[0.18em] text-black/80">
+                Empowering AI Connections
+              </span>
             </span>
+            {chapterLabel && (
+              <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
+                {chapterLabel}
+              </span>
+            )}
           </Link>
 
           {/* Desktop nav */}
@@ -108,6 +212,16 @@ export async function AppHeader() {
               </Link>
             ))}
             {user && <InboxButtonServer />}
+            {/* TSK-0057: SUPER_ADMIN-only "View as" switcher. Lets the
+                Super Admin impersonate a (role, chapter) combo to
+                preview the platform from that perspective. Renders
+                only when the signed-in user is SUPER_ADMIN. */}
+            {isSuperAdmin && (
+              <ViewAsSwitcher
+                currentViewAsRole={(session?.user as { viewAsRole?: string } | undefined)?.viewAsRole ?? null}
+                currentViewAsChapterId={viewAsChapterId}
+              />
+            )}
             {user && <UserMenu user={user} isAdmin={isAdmin} adminHref={adminHref} />}
           </nav>
 
@@ -138,6 +252,9 @@ export async function AppHeader() {
               </a>
             )}
             {user && <InboxButtonServer />}
+            {/* TSK-0057: ViewAsSwitcher is desktop-only (the dropdown is
+                too wide for mobile). Super Admins can still use it from
+                a desktop. */}
             <MobileNav links={navLinks} user={user} isAdmin={isAdmin} adminHref={adminHref} />
           </div>
         </div>

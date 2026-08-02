@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, useEffect, type ReactNode } from "react";
+import { forwardRef, useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import type {
   SpeakerIntroData,
@@ -9,6 +9,7 @@ import type {
   ImageSlot,
 } from "./types";
 import { resolvePlacement } from "./types";
+import { resolveBrandingImageUrl } from "../shared/brand-assets";
 import {
   GuideProvider,
   GuideOverlay,
@@ -19,7 +20,9 @@ import {
   type SectionId,
   type SectionPos,
   type SectionBoxSize,
+  type SectionLayoutEntry,
 } from "../shared/section-edit";
+import { HeroShape, type HeroShapeConfig } from "../shared/hero-shape";
 
 /**
  * SpeakerIntroCanvas — the data-driven mockup renderer.
@@ -82,6 +85,12 @@ type Props = {
   onHeroScaleXChange?: (n: number) => void;
   /** Called when the hero overlay Y scale changes (slider). */
   onHeroScaleYChange?: (n: number) => void;
+  /**
+   * Called when the hero image's boxSize W/H changes (from the new
+   * "Hero Image Properties" floating panel — per user spec 2026-07-31
+   * TSK-0032). Updates `data.heroOverlay.boxSize` (canvas px).
+   */
+  onHeroBoxResize?: (size: { width?: number; height?: number }) => void;
   /** Called when a section's z-index changes (Front/Back in ObjectPropertiesPanel). */
   onSectionZChange?: (id: SectionId, z: number) => void;
   /**
@@ -99,8 +108,20 @@ type Props = {
    * Photo position (X%, Y%)".
    */
   onHeroPosChange?: (pos: { x: number; y: number }) => void;
+  /** PER USER SPEC 2026-08-02 (TSK-0049): Called when the user clicks the
+   *  "Set as default" button (in the Object Properties Panel or the
+   *  toolbar next to Style 3). Saves the ENTIRE current mockup state
+   *  as the default for the current style. */
+  onSetAsDefault?: () => void;
   /** The current scale of the preview (used to convert screen-drag to canvas-%). */
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0051): selectedId is now LIFTED to the
+   *  editor so the new "Selected Element" panel (top of the form column)
+   *  can render the content-specific fields for the selected element.
+   *  Both canvases write to this via onSelectChange; the editor owns the
+   *  state. */
+  selectedId?: string | null;
+  onSelectChange?: (id: string | null) => void;
 };
 
 export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
@@ -120,10 +141,14 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       onTriangleZChange,
       onHeroScaleXChange,
       onHeroScaleYChange,
+      onHeroBoxResize,
       onSectionZChange,
       onBrandingAssetPosChange,
       onHeroPosChange,
+      onSetAsDefault,
       previewScale = 1,
+      selectedId: selectedIdProp,
+      onSelectChange,
     },
     ref,
   ) {
@@ -147,6 +172,119 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const triangleZ = data.triangleZ ?? 1;
     const TEXT_Z = 50; // base text layer z; specific sections override above this
 
+    // PER USER SPEC 2026-07-31 (TSK-0034): Default hero overlay shape config,
+    // computed based on `data.style` when `data.heroOverlayShapeConfig` is
+    // undefined. This way:
+    //   - Style 1 (default) → shape = "legacy-triangle" (the original
+    //                          Style 1 right-pointing triangle SVG with
+    //                          dual gradient layers — same visual as the
+    //                          pre-TSK-0028 legacy `showTriangleOverlay`
+    //                          rendering).
+    //   - Style 3           → shape = "rectangle" (a clean rectangle
+    //                          overlay, per user spec).
+    //   - Style 2           → not applicable (Style 2 uses its own
+    //                          `style2HeroGradient` + Style2Canvas).
+    // When the user picks a different shape in the form view, their
+    // selection is written to `data.heroOverlayShapeConfig` and overrides
+    // this default. This default only applies on initial load + when the
+    // user switches style and hasn't yet customized the shape.
+    const heroShapeConfig: HeroShapeConfig = data.heroOverlayShapeConfig ?? (
+      data.style === "style3"
+        ? {
+            shape: "rectangle",
+            fillMode: "gradient",
+            colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+            direction: 135,
+            opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+            rotation: 0,
+          }
+        : {
+            // Style 1 (default) — legacy triangle with the user's gradient.
+            shape: "legacy-triangle",
+            fillMode: "gradient",
+            colors: data.heroOverlay.gradientColors ?? ["#8A2BE2", "#1E90FF", "#20B2AA"],
+            direction: 135,
+            opacity: data.heroOverlay.gradientOpacity ?? 0.55,
+            rotation: 0,
+          }
+    );
+
+    // PER USER SPEC 2026-07-31 (TSK-0031): Default section layout values
+    // for Style 1 (and Style 3, which is an exact duplicate of Style 1).
+    // Used as fallbacks when `data.sectionLayout[id]` is missing — both
+    // for the SectionBox (rendering position) and the ObjectPropertiesPanel
+    // (the floating form that shows X/Y/W/H/Scale/z).
+    //   - header: X=-1.1, Y=0.3, W=1100, H=auto, Scale=97%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=1.5, Y=0.2,
+    //              W=1200, Scale=100% per TSK-0031)
+    //   - topic:  X=-12.8, Y=21.9, W=864, H=45, Scale=65%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=-13, Y=14.4,
+    //              W=951, H=auto per TSK-0031)
+    //   - qr:     X=91.6, Y=2.5, W=auto, H=auto, Scale=124%, z=50
+    //             (PER USER SPEC 2026-07-31 TSK-0034 — was X=91, Y=2.2,
+    //              Scale=114% per TSK-0032)
+    //   - sponsors: X=23.8, Y=82.6, W=auto, H=auto, Scale=100%, z=1
+    //             (PER USER SPEC 2026-07-31 TSK-0032; z=1 also in sectionZFor)
+    //   - hero-image: virtual section id for the hero overlay image —
+    //             bound to data.heroOverlay.pos/imageScale/imageScaleY.
+    //             Default pos used when data.heroOverlay.pos is undefined.
+    //             (PER USER SPEC 2026-07-31 TSK-0032)
+    //   - speakers: X=-8.5, Y=23.7, W=891, H=381, Scale=76%, z=60
+    //             (PER USER SPEC 2026-07-31 TSK-0036 — was X=-7.9, Y=17.6,
+    //              H=auto per TSK-0034)
+    const STYLE1_DEFAULTS: Record<string, SectionLayoutEntry> = {
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 header defaults
+      // updated to X=-1.1, Y=0.3, W=1100, H=auto, Scale=97% (was
+      // X=1.5, Y=0.2, W=1200, Scale=100% per TSK-0031).
+      header:   { pos: { x: -1.1, y: 0.3 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 topic defaults
+      // updated to X=-12.8, Y=21.9, W=864, H=45, Scale=65% (was
+      // X=-13, Y=14.4, W=951, H=auto, Scale=65% per TSK-0031).
+      topic:    { pos: { x: -12.8, y: 21.9 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
+      // PER USER SPEC 2026-08-02 (TSK-0047): Style 1/3 QR defaults
+      // updated to X=91.6, Y=84.9, Scale=100% (was X=91.6, Y=2.5,
+      // Scale=124% per TSK-0034). The QR code moves from the top-right
+      // to the BOTTOM-right of the canvas, and the scale resets to 100%
+      // (was 124% which made it overflow the canvas top edge).
+      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
+      sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
+      "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
+      // defaults updated to Position X=-8.5 Y=23.7, Size W=891 H=381,
+      // Scale=76% (was X=-7.9, Y=17.6, H=auto per TSK-0034).
+      // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
+      // and above the branding asset (52) — same z as the previous defaults
+      // in sample-data + event-mapper, so existing user drag/resize edits
+      // continue to layer correctly.
+      speakers: { pos: { x: -8.5, y: 23.7 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
+    };
+
+    // PER USER SPEC 2026-08-02 (TSK-0044): Style 3 now has its OWN defaults
+    // (different from Style 1). Previously Style 3 was "an exact duplicate
+    // of Style 1" and shared SECTION_DEFAULTS. The user has now specified
+    // distinct values for 4 sections (speakers / qr / topic / header).
+    // Style 1's defaults are UNCHANGED — only Style 3 gets new values.
+    //   - header:  X=-0.6, Y=1.2,  W=1100, H=auto, Scale=97%,  z=50
+    //   - topic:   X=-12.7, Y=15.7, W=864, H=45,   Scale=65%,  z=50
+    //   - qr:      X=90.1, Y=80.2, W=auto, H=auto, Scale=100%, z=50
+    //   - speakers: X=-6.1, Y=26.2, W=653, H=auto, Scale=76%,  z=50
+    // (sponsors + hero-image keep the same defaults as Style 1 — the user
+    //  didn't specify new values for those sections.)
+    const STYLE3_DEFAULTS: Record<string, SectionLayoutEntry> = {
+      header:   { pos: { x: -0.6, y: 1.2 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
+      topic:    { pos: { x: -12.7, y: 15.7 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
+      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
+      sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
+      "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
+      speakers: { pos: { x: -6.1, y: 26.2 }, boxSize: { width: 653 }, scale: 0.76, z: 50 },
+    };
+
+    // PER USER SPEC 2026-08-02 (TSK-0044): select defaults based on the
+    // active style. Style 1 → STYLE1_DEFAULTS; Style 3 → STYLE3_DEFAULTS.
+    // Style 2 has its own canvas (SpeakerIntroStyle2Canvas) and doesn't
+    // use this code path, so we don't need a Style 2 case here.
+    const SECTION_DEFAULTS = data.style === "style3" ? STYLE3_DEFAULTS : STYLE1_DEFAULTS;
+
     // --- Section 4: Scroll Isolation ---
     // Disable parent/window scrolling when the user hovers over the canvas
     // or actively edits a component. The canvas itself doesn't scroll (it's
@@ -161,7 +299,17 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     // Tracks which SectionBox is currently selected. When set, the
     // ObjectPropertiesPanel is rendered at the top-right of the canvas
     // with X/Y coordinate inputs + Front/Back layer toggles.
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    //
+    // PER USER SPEC 2026-08-02 (TSK-0051): selectedId is now LIFTED to
+    // the editor. We accept it as `selectedIdProp` and notify the parent
+    // via `onSelectChange`. This lets the new "Selected Element" panel
+    // (top of the form column) render content-specific fields for the
+    // selected element.
+    const selectedId = selectedIdProp ?? null;
+    const setSelectedId = useCallback(
+      (id: string | null) => onSelectChange?.(id),
+      [onSelectChange],
+    );
 
     // Reset selection when sections-edit mode is turned off.
     useEffect(() => {
@@ -169,12 +317,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     }, [sectionsEditable]);
 
     /** Compute the z-index for a given section. Falls back to a sensible
-     *  default based on the section id (text sections at TEXT_Z+). */
+     *  default based on the section id (text sections at TEXT_Z+).
+     *
+     *  PER USER SPEC 2026-07-31 (TSK-0030): Style 1/3 sponsors default
+     *  z-index is 1 (not 50). */
     function sectionZFor(id: SectionId): number {
       const explicit = data.sectionLayout?.[id]?.z;
       if (typeof explicit === "number") return explicit;
       // Default z by section type
       if (id === "footer") return TEXT_Z + 1;
+      if (id === "sponsors") return 1;
       return TEXT_Z;
     }
 
@@ -196,8 +348,22 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
               "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
           }}
         >
-        {/* ===== 5. HERO VISUAL (right side, behind everything else on right) ===== */}
+        {/* ===== 5. HERO VISUAL (right side, behind everything else on right) =====
+            PER USER SPEC 2026-07-31 (TSK-0032): the hero image is now
+            SELECTABLE in Edit Sections mode — clicking it (or its grip)
+            sets selectedId="hero-image" and shows the ObjectPropertiesPanel
+            with Position X/Y, Size W/H, Scale % just like other sections.
+            The panel is wired to data.heroOverlay.pos / boxSize /
+            imageScale via onHeroPosChange / onHeroBoxResize /
+            onHeroScaleXChange. When boxSize is set, it overrides the
+            legacy imageScale/imageScaleY multipliers. */}
         {(() => {
+          // boxSize override (from the new Hero Image Properties panel).
+          // When set, the hero container is sized in canvas px instead of
+          // the legacy imageScale/imageScaleY multipliers.
+          const heroBoxSize = data.heroOverlay.boxSize;
+          const hasBoxW = !!(heroBoxSize?.width && heroBoxSize.width > 0);
+          const hasBoxH = !!(heroBoxSize?.height && heroBoxSize.height > 0);
           // imageScale (X): 1 = default 58% width starting at 42% left.
           //   - scale < 1 shrinks the hero (anchored to the right edge).
           //   - scale > 1.72 grows the hero beyond the canvas width; the
@@ -205,20 +371,32 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           //   - The ONLY limitation is the canvas border — no arbitrary
           //     min/max clamp is applied here. (User spec 2026-06-28.)
           const scale = Math.max(0.01, data.heroOverlay.imageScale ?? 1);
-          const heroWidth = 58 * scale; // % of canvas
+          // Width: explicit px (from boxSize) wins over legacy multiplier.
+          // Convert px → % of canvas so DraggablePhotoContainer can still
+          // use widthPct/heightPct.
+          const heroWidth = hasBoxW
+            ? ((heroBoxSize!.width as number) / CANVAS_W) * 100
+            : 58 * scale; // % of canvas
           // Default anchor: top-right (clamped so the right edge stays
           // anchored to the canvas right border; the bleed goes off the
           // LEFT side and is clipped by overflow-hidden). When the user
           // has dragged the hero via the "⠿ Move hero" grip bar,
           // `data.heroOverlay.pos` overrides this default.
           const defaultHeroLeft = Math.max(0, 100 - heroWidth);
-          const pos = data.heroOverlay.pos;
-          const heroLeft = pos ? pos.x : defaultHeroLeft;
+          const pos = data.heroOverlay.pos ?? SECTION_DEFAULTS["hero-image"].pos ?? { x: defaultHeroLeft, y: 0 };
+          const heroLeft = pos.x ?? defaultHeroLeft;
           // imageScaleY: 1 = full canvas height. scale < 1 shrinks
           // vertically; scale > 1 bleeds off the bottom (clipped).
           const scaleY = Math.max(0.01, data.heroOverlay.imageScaleY ?? 1);
-          const heroHeight = 100 * scaleY; // % of canvas
-          const heroTop = pos ? pos.y : 0; // default: anchored to top
+          // Height: explicit px (from boxSize) wins over legacy multiplier.
+          const heroHeight = hasBoxH
+            ? ((heroBoxSize!.height as number) / CANVAS_H) * 100
+            : 100 * scaleY; // % of canvas
+          const heroTop = pos.y ?? 0; // default: anchored to top
+          // Selection state — when selectedId === "hero-image", show a
+          // dashed outline so the user knows the Hero Image Properties
+          // panel is bound to this element.
+          const heroSelected = selectedId === "hero-image";
           return (
         <DraggablePhotoContainer
           leftPct={heroLeft}
@@ -232,6 +410,30 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           onPosChange={onHeroPosChange}
           moveLabel="⠿ Move hero"
         >
+          {/* Click-catcher for selecting the hero image in Edit Sections
+              mode. Sits ABOVE the image but BELOW the EditableImage's
+              own pan/zoom interactions (so it only intercepts clicks
+              when sectionsEditable is on). */}
+          {sectionsEditable && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId("hero-image");
+              }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                cursor: "pointer",
+                zIndex: 999,
+                outline: heroSelected
+                  ? "2px dashed #0066FF"
+                  : "1px dashed rgba(0, 102, 255, 0.4)",
+                outlineOffset: "-2px",
+                pointerEvents: "auto",
+              }}
+              title="Click to edit Hero Image properties"
+            />
+          )}
           {/* Background image (Tel Aviv skyline + beach).
               Wrapped in a div with explicit zIndex = triangleZ + 1 so the
               hero image always renders IN FRONT of the triangle overlay
@@ -255,58 +457,67 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             sizeLabel="hero scale"
             containerClass="absolute inset-0"
             objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+            onSelect={() => setSelectedId("hero-image")}
           />
           </div>
 
-          {/* 6. TRIANGLE GRADIENT OVERLAY — hidden when user picks a new hero image */}
-          {data.heroOverlay.showTriangleOverlay !== false && (
-            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: triangleZ }}>
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden
-            >
-              <defs>
-                <linearGradient
-                  id="tri-grad"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="100%"
+          {/* 6. SHAPE OVERLAY — PER USER SPEC 2026-07-31 (TSK-0034):
+              Unified shape system. The shape is computed in `heroShapeConfig`
+              (defined above the JSX) — falls back to:
+                - Style 1 (default) → "legacy-triangle" (the original Style 1
+                  right-pointing triangle SVG with dual gradient layers)
+                - Style 3           → "rectangle" (clean rectangle overlay)
+              The user can pick any of 15 shapes (none / legacy-triangle /
+              8×2D / 5×3D) via the form view's "Hero Overlay Shape" panel.
+
+              The shape is rendered inside the hero container (sibling of
+              the hero EditableImage), at zIndex = triangleZ (so the
+              Front/Back layer buttons in the sidebar still control it).
+              The hero image is rendered above the shape (its wrapper has
+              zIndex = triangleZ + 1).
+
+              PER USER SPEC 2026-07-31 (TSK-0034): When the shape's config
+              has `pos` / `boxSize` / `scale` set, the shape is positioned
+              ABSOLUTELY on the canvas (overriding the parent container's
+              position). This is used by Style 3 to make the rectangle
+              overlay a standalone, draggable section. */}
+          {heroShapeConfig.shape !== "none" && (
+            (() => {
+              // Compute the shape wrapper style based on pos/boxSize/scale.
+              const shapePos = heroShapeConfig.pos;
+              const shapeBox = heroShapeConfig.boxSize;
+              const shapeScale = heroShapeConfig.scale ?? 1;
+              const hasPosOrBox = !!(shapePos || shapeBox);
+              const wrapperStyle: React.CSSProperties = {
+                zIndex: triangleZ,
+                ...(shapePos
+                  ? {
+                      left: `${shapePos.x}%`,
+                      top: `${shapePos.y}%`,
+                    }
+                  : { left: 0, top: 0 }),
+                ...(shapeBox?.width
+                  ? { width: `${shapeBox.width}px` }
+                  : { width: "100%" }),
+                ...(shapeBox?.height
+                  ? { height: `${shapeBox.height}px` }
+                  : { height: "100%" }),
+                ...(shapeScale !== 1
+                  ? {
+                      transform: `scale(${shapeScale})`,
+                      transformOrigin: "top left",
+                    }
+                  : {}),
+              };
+              return (
+                <div
+                  className={`absolute pointer-events-none ${hasPosOrBox ? "" : "inset-0"}`}
+                  style={wrapperStyle}
                 >
-                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                    <stop
-                      key={i}
-                      offset={`${(i / (arr.length - 1)) * 100}%`}
-                      stopColor={color}
-                      stopOpacity={data.heroOverlay.gradientOpacity}
-                    />
-                  ))}
-                </linearGradient>
-                <linearGradient
-                  id="tri-grad-2"
-                  x1="100%"
-                  y1="0%"
-                  x2="0%"
-                  y2="100%"
-                >
-                  {data.heroOverlay.gradientColors.map((color, i, arr) => (
-                    <stop
-                      key={i}
-                      offset={`${(i / (arr.length - 1)) * 100}%`}
-                      stopColor={color}
-                      stopOpacity={data.heroOverlay.gradientOpacity * 0.7}
-                    />
-                  ))}
-                </linearGradient>
-              </defs>
-              {/* Right-pointing large triangle covering ~60% of hero */}
-              <polygon points="0,0 100,50 0,100" fill="url(#tri-grad)" />
-              {/* Smaller counter-triangle for geometric depth */}
-              <polygon points="40,15 95,35 50,75" fill="url(#tri-grad-2)" opacity={0.6} />
-            </svg>
-            </div>
+                  <HeroShape config={heroShapeConfig} />
+                </div>
+              );
+            })()
           )}
 
           {/* 7. LOCATION PINS — per-pin connector line + dot + label
@@ -384,14 +595,19 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           );
         })()}
 
-        {/* ===== 1. EVENT HEADER (top-left) ===== */}
+        {/* ===== 1. EVENT HEADER (top-left) =====
+            PER USER SPEC 2026-07-31 (TSK-0031): Default header Properties
+            to X=1.5%, Y=0.2%, W=1200px, H=auto, Scale=100%, z=50.
+            The default pos/boxSize/scale apply when the user has not
+            dragged the section yet; once dragged, data.sectionLayout.header
+            wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "header"}
           onSelect={() => setSelectedId("header")}
-          pos={data.sectionLayout?.header?.pos}
-          scale={data.sectionLayout?.header?.scale ?? 1}
-          boxSize={data.sectionLayout?.header?.boxSize}
+          pos={data.sectionLayout?.header?.pos ?? SECTION_DEFAULTS.header.pos}
+          scale={data.sectionLayout?.header?.scale ?? SECTION_DEFAULTS.header.scale}
+          boxSize={data.sectionLayout?.header?.boxSize ?? SECTION_DEFAULTS.header.boxSize}
           onMove={(p) => onSectionMove?.("header", p)}
           onResize={(s) => onSectionResize?.("header", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("header", sz)}
@@ -399,7 +615,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute"
-          style={{ left: "48px", top: "40px", maxWidth: "640px", zIndex: sectionZFor("header") }}
+          style={{ left: 0, top: 0, zIndex: sectionZFor("header") }}
           accentColor="#FF005A"
           label="Header"
           guideId="header"
@@ -433,7 +649,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           <p
             className="mt-1 text-black/80"
             style={{
-              fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 14}px`,
+              fontSize: `${data.textStyles?.eventVenue?.fontSize ?? 20}px`,
               color: data.textStyles?.eventVenue?.color,
               textAlign: data.textStyles?.eventVenue?.align,
             }}
@@ -442,14 +658,19 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </p>
         </SectionBox>
 
-        {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) ===== */}
+        {/* ===== 2. EVENT TOPIC (below header, with vertical accent bar) =====
+            PER USER SPEC 2026-07-31 (TSK-0031): Default topic Properties
+            to X=-13%, Y=14.4%, W=951px, H=auto, Scale=65%, z=50.
+            The default pos/boxSize/scale apply when the user has not
+            dragged the section yet; once dragged, data.sectionLayout.topic
+            wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "topic"}
           onSelect={() => setSelectedId("topic")}
-          pos={data.sectionLayout?.topic?.pos}
-          scale={data.sectionLayout?.topic?.scale ?? 1}
-          boxSize={data.sectionLayout?.topic?.boxSize}
+          pos={data.sectionLayout?.topic?.pos ?? SECTION_DEFAULTS.topic.pos}
+          scale={data.sectionLayout?.topic?.scale ?? SECTION_DEFAULTS.topic.scale}
+          boxSize={data.sectionLayout?.topic?.boxSize ?? SECTION_DEFAULTS.topic.boxSize}
           onMove={(p) => onSectionMove?.("topic", p)}
           onResize={(s) => onSectionResize?.("topic", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("topic", sz)}
@@ -457,7 +678,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex items-start gap-3"
-          style={{ left: "48px", top: "160px", maxWidth: "440px", zIndex: sectionZFor("topic") }}
+          style={{ left: 0, top: 0, zIndex: sectionZFor("topic") }}
           accentColor="#FF005A"
           label="Topic"
           guideId="topic"
@@ -473,7 +694,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           <h2
             className="font-extrabold text-black leading-tight"
             style={{
-              fontSize: `${data.textStyles?.eventTopic?.fontSize ?? (24 * (data.event.topicFontScale ?? 1))}px`,
+              fontSize: `${data.textStyles?.eventTopic?.fontSize ?? (26 * (data.event.topicFontScale ?? 1))}px`,
               color: data.textStyles?.eventTopic?.color,
               textAlign: data.textStyles?.eventTopic?.align,
             }}
@@ -482,13 +703,17 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </h2>
         </SectionBox>
 
-        {/* ===== 3. QR CODE (top-right) ===== */}
+        {/* ===== 3. QR CODE (top-right) =====
+            PER USER SPEC 2026-07-31 (TSK-0032): Default qr Properties
+            to X=91%, Y=2.2%, W=auto, H=auto, Scale=114%, z=50.
+            Anchor switched from top-right to top-left (default) so X/Y
+            match the Properties form. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "qr"}
           onSelect={() => setSelectedId("qr")}
-          pos={data.sectionLayout?.qr?.pos}
-          scale={data.sectionLayout?.qr?.scale ?? 1}
+          pos={data.sectionLayout?.qr?.pos ?? SECTION_DEFAULTS.qr.pos}
+          scale={data.sectionLayout?.qr?.scale ?? SECTION_DEFAULTS.qr.scale}
           boxSize={data.sectionLayout?.qr?.boxSize}
           onMove={(p) => onSectionMove?.("qr", p)}
           onResize={(s) => onSectionResize?.("qr", s)}
@@ -497,8 +722,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col items-center gap-1"
-          style={{ right: "48px", top: "40px", zIndex: sectionZFor("qr") }}
-          anchor="top-right"
+          style={{ left: 0, top: 0, zIndex: sectionZFor("qr") }}
           accentColor="#FF005A"
           label="QR"
           guideId="qr"
@@ -522,14 +746,21 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           </span>
         </SectionBox>
 
-        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) ===== */}
+        {/* ===== 4. SPEAKERS LIST (left column / multi-column grid) =====
+            PER USER SPEC 2026-07-31 (TSK-0033): Style 1/3 speakers
+            Properties defaults: Position X=-8.8 Y=22.1, Size W=891 H=auto,
+            Scale=76%, z=60. When the user has not dragged the speakers
+            section yet, data.sectionLayout.speakers is undefined and the
+            SECTION_DEFAULTS.speakers fallback below applies — the Properties
+            panel shows the spec values on initial load. Once dragged, the
+            user's data.sectionLayout.speakers.pos/scale/boxSize overrides. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "speakers"}
           onSelect={() => setSelectedId("speakers")}
-          pos={data.sectionLayout?.speakers?.pos}
-          scale={data.sectionLayout?.speakers?.scale ?? 1}
-          boxSize={data.sectionLayout?.speakers?.boxSize}
+          pos={data.sectionLayout?.speakers?.pos ?? SECTION_DEFAULTS.speakers.pos}
+          scale={data.sectionLayout?.speakers?.scale ?? SECTION_DEFAULTS.speakers.scale}
+          boxSize={data.sectionLayout?.speakers?.boxSize ?? SECTION_DEFAULTS.speakers.boxSize}
           onMove={(p) => onSectionMove?.("speakers", p)}
           onResize={(s) => onSectionResize?.("speakers", s)}
           onBoxResize={(sz) => onSectionBoxResize?.("speakers", sz)}
@@ -537,7 +768,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col gap-3"
-          style={{ left: "48px", top: "260px", width: `${(() => {
+          style={{ left: 0, top: 0, width: `${(() => {
             // Per user spec 2026-07-09 (item C): auto-compute columns from
             // visible speaker count when not explicitly set. The width
             // here is a fallback — when `sectionLayout.speakers.boxSize.width`
@@ -555,25 +786,52 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           label="Speakers"
           guideId="speakers"
         >
-          <div className="flex items-center gap-2 mb-1">
-            <div
-              className="h-px flex-1"
-              style={{
-                background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
-              }}
-            />
-            <span
-              className="font-bold text-black uppercase tracking-widest"
-              style={{
-                fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 12}px`,
-                letterSpacing: "0.2em",
-                color: data.textStyles?.speakersLabel?.color,
-                textAlign: data.textStyles?.speakersLabel?.align,
-              }}
-            >
-              Speakers
-            </span>
-          </div>
+          {/* PER USER SPEC 2026-07-31 (TSK-0033): The speakersLabel row is
+              a flex container with a gradient line + "Speakers" span.
+              Previously, `textAlign` was set on the span itself, which had
+              no visible effect — spans in a flex row shrink-to-fit content,
+              so text-align can't push them left/center/right. The fix is
+              to restructure the row based on `speakersLabel.align`:
+                - "left"   / undefined (default): label on LEFT, gradient line on RIGHT
+                - "center": gradient line on BOTH sides, label in the MIDDLE
+                - "right":  gradient line on LEFT,  label on RIGHT
+              PER USER SPEC 2026-07-31 (TSK-0036): default align changed
+              from "right" to "left" — undefined now means label-left /
+              line-right (was line-left / label-right). Default font size
+              also changed from 12 to 16, color stays black (text-black
+              Tailwind class applies when speakersLabel.color is unset).
+              This way clicking the ⟵ L / ↔ C / ⟶ R buttons in the form
+              view produces a visible change on the canvas. */}
+          {(() => {
+            const labelAlign = data.textStyles?.speakersLabel?.align;
+            const showLineBefore = labelAlign === "right";
+            const showLineAfter = !labelAlign || labelAlign === "left" || labelAlign === "center";
+            const lineEl = (
+              <div
+                className="h-px flex-1"
+                style={{
+                  background: `linear-gradient(90deg, ${data.event.brandColors[1]}, transparent)`,
+                }}
+              />
+            );
+            return (
+              <div className="flex items-center gap-2 mb-1">
+                {showLineBefore && lineEl}
+                <span
+                  className="font-bold text-black uppercase tracking-widest"
+                  style={{
+                    fontSize: `${data.textStyles?.speakersLabel?.fontSize ?? 16}px`,
+                    letterSpacing: "0.2em",
+                    color: data.textStyles?.speakersLabel?.color,
+                    textAlign: data.textStyles?.speakersLabel?.align,
+                  }}
+                >
+                  Speakers
+                </span>
+                {showLineAfter && lineEl}
+              </div>
+            );
+          })()}
           {(() => {
             // Sorted + filtered speakers (paired with their sort index).
             const sortedSpeakers = [...data.speakers]
@@ -676,6 +934,8 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                         onPlacementChange={onPlacementChange}
                         onSizeChange={onSizeChange}
                         textStyles={data.textStyles}
+                        showSessionTime={data.speakersLayout?.showSessionTime !== false}
+                        onSelect={() => setSelectedId(`speaker-image-${idx}`)}
                       />
                     </div>
                   );
@@ -685,13 +945,24 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           })()}
         </SectionBox>
 
-        {/* ===== 8. SPONSORS (bottom-right) ===== */}
+        {/* ===== 8. SPONSORS (bottom-right) =====
+            PER USER SPEC 2026-07-31 (TSK-0030): Default sponsors Properties
+            to X=37.9%, Y=85.5%, W=auto, H=auto, Scale=100%, z-index=1.
+            PER USER SPEC 2026-07-31 (TSK-0030): Style 1/3 sponsors MUST
+            NOT be linked to Style 2's footer — Style 2's footer now uses
+            a separate section id "style2-footer" (see speaker-intro-style2-
+            canvas.tsx). The "sponsors" key in sectionLayout is exclusively
+            owned by Style 1/3's sponsors list.
+            Anchor switched from top-right (right/bottom) to top-left
+            (left/top) so the X/Y % match the Properties form. The default
+            pos applies when the user has not dragged the section yet;
+            once dragged, data.sectionLayout.sponsors.pos wins. */}
         <SectionBox
           active={sectionsEditable}
           selected={selectedId === "sponsors"}
           onSelect={() => setSelectedId("sponsors")}
-          pos={data.sectionLayout?.sponsors?.pos}
-          scale={data.sectionLayout?.sponsors?.scale ?? 1}
+          pos={data.sectionLayout?.sponsors?.pos ?? SECTION_DEFAULTS.sponsors.pos}
+          scale={data.sectionLayout?.sponsors?.scale ?? SECTION_DEFAULTS.sponsors.scale}
           boxSize={data.sectionLayout?.sponsors?.boxSize}
           onMove={(p) => onSectionMove?.("sponsors", p)}
           onResize={(s) => onSectionResize?.("sponsors", s)}
@@ -700,8 +971,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute flex flex-col items-end gap-2"
-          style={{ right: "48px", bottom: "100px", zIndex: sectionZFor("sponsors") }}
-          anchor="top-right"
+          style={{ left: 0, top: 0, zIndex: sectionZFor("sponsors") }}
           accentColor="#FF005A"
           label="Sponsored by"
           guideId="sponsors"
@@ -729,6 +999,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     onPickImage={onPickImage}
                     onSizeChange={onSizeChange}
                     previewScale={previewScale}
+                    onSelect={() => setSelectedId(`sponsor-image-collaborators-${i}`)}
                   />
                 ))}
               </div>
@@ -757,6 +1028,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     onPickImage={onPickImage}
                     onSizeChange={onSizeChange}
                     previewScale={previewScale}
+                    onSelect={() => setSelectedId(`sponsor-image-sponsors-${i}`)}
                   />
                 ))}
               </div>
@@ -840,10 +1112,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={
-                  data.brandingAsset?.imageUrl ||
-                  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
-                }
+                src={resolveBrandingImageUrl(data.brandingAsset)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}
@@ -855,6 +1124,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 sizeLabel="branding"
                 containerClass="absolute inset-0"
                 objectFit="contain"
+                onSelect={() => setSelectedId("branding-asset")}
               />
             </DraggablePhotoContainer>
           );
@@ -871,20 +1141,44 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                    placement.
                  - Layering: Front and Back toggles to reorder the
                    z-index of the currently selected element." */}
-        {sectionsEditable && selectedId && (
+        {/* PER USER SPEC 2026-07-31 (TSK-0032): when "hero-image" is
+            selected, render a special Hero Image Properties panel that
+            binds Position to data.heroOverlay.pos, Size W/H to
+            data.heroOverlay.boxSize, and Scale % to data.heroOverlay.imageScale.
+            For any other selected id, fall back to the standard section
+            ObjectPropertiesPanel bound to data.sectionLayout[id]. */}
+        {sectionsEditable && selectedId && selectedId === "hero-image" && (
+          <ObjectPropertiesPanel
+            label="Hero Image"
+            pos={data.heroOverlay.pos ?? SECTION_DEFAULTS["hero-image"].pos}
+            onPosChange={(p) => onHeroPosChange?.(p)}
+            z={heroZ}
+            onZChange={(z) => onHeroZChange?.(z)}
+            peers={sectionPeerZs}
+            onDeselect={() => setSelectedId(null)}
+            showBoxSize
+            boxSize={data.heroOverlay.boxSize}
+            onBoxSizeChange={(sz) => onHeroBoxResize?.(sz)}
+            scale={data.heroOverlay.imageScale ?? SECTION_DEFAULTS["hero-image"].scale ?? 1}
+            onScaleChange={(s) => onHeroScaleXChange?.(s)}
+            onSetAsDefault={onSetAsDefault}
+          />
+        )}
+        {sectionsEditable && selectedId && selectedId !== "hero-image" && (
           <ObjectPropertiesPanel
             label={selectedId}
-            pos={data.sectionLayout?.[selectedId]?.pos}
+            pos={data.sectionLayout?.[selectedId]?.pos ?? SECTION_DEFAULTS[selectedId]?.pos}
             onPosChange={(p) => onSectionMove?.(selectedId, p)}
             z={sectionZFor(selectedId)}
             onZChange={(z) => onSectionZChange?.(selectedId, z)}
             peers={sectionPeerZs}
             onDeselect={() => setSelectedId(null)}
             showBoxSize
-            boxSize={data.sectionLayout?.[selectedId]?.boxSize}
+            boxSize={data.sectionLayout?.[selectedId]?.boxSize ?? SECTION_DEFAULTS[selectedId]?.boxSize}
             onBoxSizeChange={(sz) => onSectionBoxResize?.(selectedId, sz)}
-            scale={data.sectionLayout?.[selectedId]?.scale ?? 1}
+            scale={data.sectionLayout?.[selectedId]?.scale ?? SECTION_DEFAULTS[selectedId]?.scale ?? 1}
             onScaleChange={(s) => onSectionResize?.(selectedId, s)}
+            onSetAsDefault={onSetAsDefault}
           />
         )}
 
@@ -904,7 +1198,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
  *
  * Used for the hero background and the speaker headshots.
  */
-function EditableImage({
+export function EditableImage({
   slot,
   src,
   alt,
@@ -918,6 +1212,8 @@ function EditableImage({
   sizeLabel,
   containerClass,
   objectFit,
+  minZoom = 0.01,
+  onSelect,
 }: {
   slot: ImageSlot;
   src: string;
@@ -937,8 +1233,31 @@ function EditableImage({
   sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
+  /** PER USER SPEC 2026-08-02 (TSK-0043): minimum zoom floor for rendering
+   *  AND the wheel handler. Default 0.01 preserves Style 1's behavior
+   *  (zoom < 1 shrinks the image, showing empty space inside the container).
+   *  Style 2 sets minZoom=1 so the image ALWAYS fills the container —
+   *  scrolling down below 1× does nothing visually (no shrinking, no empty
+   *  space), matching the deployed version's behavior. */
+  minZoom?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): called when the user CLICKS the
+   *  image body (mousedown + mouseup without significant drag). Used to
+   *  trigger the contextual "Selected Element" panel at the top of the
+   *  form column so the user can edit this specific image's properties
+   *  (Replace, URL, focus/zoom, size). Fired at mousedown — so the panel
+   *  appears immediately, even if the user then drags to pan. The Replace
+   *  button + resize handles call e.stopPropagation() so they don't
+   *  trigger this. */
+  onSelect?: () => void;
 }) {
   const { focusX, focusY, zoom } = resolvePlacement(placement);
+  // PER USER SPEC 2026-08-02 (TSK-0043): clamp the rendered zoom to
+  // minZoom so the image never shrinks below this floor. With minZoom=1
+  // (Style 2), the image always fills the container (object-fit: cover +
+  // scale >= 1.005). The raw `zoom` from placement may still be < 1 (from
+  // a previous session), but effectiveZoom clamps it for rendering, wheel
+  // computation, and the on-screen readout so they all stay consistent.
+  const effectiveZoom = Math.max(minZoom, zoom);
   // We track drag state on a ref so we don't re-render on every mousemove.
   const dragRef = useRef<{
     startX: number;
@@ -957,10 +1276,25 @@ function EditableImage({
   } | null>(null);
 
   function handleMouseDown(e: React.MouseEvent) {
-    if (!editable || !onPlacementChange) return;
+    if (!editable || !onPlacementChange) {
+      // Even when placement-drag isn't available (e.g. sponsor logos
+      // without onPlacementChange), we still want click-to-select.
+      if (editable && onSelect) {
+        e.stopPropagation();
+        onSelect();
+      }
+      return;
+    }
     // Only start a drag on left-click outside the Replace button.
     if (e.button !== 0) return;
     e.preventDefault();
+    // PER USER SPEC 2026-08-02 (TSK-0055): fire onSelect at mousedown so
+    // the Selected Element panel appears immediately. The drag still
+    // works — onSelect just shows the panel; it doesn't change canvas
+    // state. If the user drags, both happen: panel shows + image pans.
+    if (onSelect) {
+      onSelect();
+    }
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -993,7 +1327,10 @@ function EditableImage({
       onPlacementChange(slot, {
         focusX: nextFocusX,
         focusY: nextFocusY,
-        zoom,
+        // PER USER SPEC 2026-08-02 (TSK-0043): persist effectiveZoom (not
+        // raw zoom) so panning doesn't accidentally save a sub-minZoom
+        // value that would render as clamped on next load.
+        zoom: effectiveZoom,
       });
     };
     const onUp = () => {
@@ -1022,7 +1359,10 @@ function EditableImage({
     // the parent workspace does not scroll while the user spins
     // the wheel over a hovered image.
 const step = e.deltaY < 0 ? 0.1 : -0.1;
-    const nextZoom = Math.max(0.01, zoom + step);
+    // PER USER SPEC 2026-08-02 (TSK-0043): use effectiveZoom (clamped to
+    // minZoom) as the base so scrolling down below minZoom does nothing
+    // (no shrinking below the floor). Scrolling up still zooms in normally.
+    const nextZoom = Math.max(minZoom, effectiveZoom + step);
     onPlacementChange(slot, {
       focusX,
       focusY,
@@ -1115,7 +1455,12 @@ const step = e.deltaY < 0 ? 0.1 : -0.1;
           // "CSS transform scale(1) shows hairline gap" bug — adding a
           // 0.5% overscan forces the image to spill 1-2px past each
           // edge, which the parent's overflow:hidden then clips cleanly.
-          transform: `scale(${zoom * 1.005})`,
+          //
+          // PER USER SPEC 2026-08-02 (TSK-0043): use effectiveZoom
+          // (clamped to minZoom) so the image never shrinks below the
+          // floor. With minZoom=1 (Style 2), scale is always >= 1.005,
+          // so the image always fills the container — no empty space.
+          transform: `scale(${effectiveZoom * 1.005})`,
           transformOrigin: "center center",
           // Force GPU compositing so the transform is applied on a
           // separate layer — eliminates the闪烁 / shimmer that can
@@ -1143,7 +1488,7 @@ const step = e.deltaY < 0 ? 0.1 : -0.1;
       {/* Placement readout (only in edit mode) */}
       {editable && (
         <div className="absolute bottom-1 right-1 z-10 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white opacity-0 group-hover:opacity-100 transition pointer-events-none">
-          {Math.round(focusX)}/{Math.round(focusY)} · {zoom.toFixed(1)}×
+          {Math.round(focusX)}/{Math.round(focusY)} · {effectiveZoom.toFixed(1)}×
         </div>
       )}
       {/* Resize corner handles (only when size-control is enabled) */}
@@ -1224,6 +1569,8 @@ function SpeakerCard({
   onPlacementChange,
   onSizeChange,
   textStyles,
+  showSessionTime = true,
+  onSelect,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -1238,6 +1585,14 @@ function SpeakerCard({
    *  from the parent canvas so all speaker cards share one visual
    *  treatment. */
   textStyles?: SpeakerIntroData["textStyles"];
+  /** PER USER SPEC 2026-07-31 (TSK-0033): global toggle for the
+   *  session-time pill on speaker cards. When `false`, the pill is
+   *  hidden regardless of `speaker.sessionTime`. Default `true`. */
+  showSessionTime?: boolean;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): fired when the user clicks the
+   *  speaker's photo. Triggers the contextual "Selected Element" panel
+   *  for this specific speaker's photo. */
+  onSelect?: () => void;
 }) {
   // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
@@ -1267,12 +1622,33 @@ function SpeakerCard({
           sizeLabel="photo"
           containerClass="absolute inset-0"
           objectFit="cover"
+          onSelect={onSelect}
         />
       </div>
       {/* Text block */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {speaker.sessionTime && (
+        {/* PER USER SPEC 2026-07-31 (TSK-0033): The name row is a flex
+            container holding sessionTime + name + role spans. Previously,
+            `textAlign` was set on each span individually, which had NO
+            visible effect — spans in a flex row shrink-to-fit content, so
+            text-align can't push them left/center/right. The fix is to
+            apply `justifyContent` to the row based on speakerName.align
+            (name is the primary element; sessionTime + role are pills
+            that ride along). We also still set textAlign on each span
+            for data-flow consistency, but the visible alignment comes
+            from justifyContent below. */}
+        <div
+          className="flex items-center gap-2 flex-wrap"
+          style={{
+            justifyContent:
+              textStyles?.speakerName?.align === "center"
+                ? "center"
+                : textStyles?.speakerName?.align === "right"
+                ? "flex-end"
+                : "flex-start",
+          }}
+        >
+          {speaker.sessionTime && showSessionTime && (
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-white font-bold tracking-wider"
               style={{
@@ -1331,6 +1707,12 @@ function SpeakerCard({
             fontSize: `${textStyles?.speakerTitle?.fontSize ?? 12}px`,
             color: textStyles?.speakerTitle?.color,
             textAlign: textStyles?.speakerTitle?.align,
+            // PER USER SPEC 2026-07-31 (TSK-0033): explicit width:100% so
+            // textAlign left/center/right produces a visible change. Block
+            // `<p>` already defaults to width:auto (fill parent), but
+            // setting it explicitly avoids any edge case where the parent
+            // flex item shrinks below content width.
+            width: "100%",
           }}
         >
           {speaker.title}
@@ -1348,6 +1730,9 @@ function SpeakerCard({
               fontSize: `${textStyles?.speakerBio?.fontSize ?? 11}px`,
               color: textStyles?.speakerBio?.color,
               textAlign: textStyles?.speakerBio?.align,
+              // PER USER SPEC 2026-07-31 (TSK-0033): explicit width:100%
+              // (see comment on title <p> above).
+              width: "100%",
             }}
           >
             {speaker.bio}
@@ -1370,6 +1755,7 @@ function SponsorLogo({
   onPickImage,
   onSizeChange,
   previewScale = 1,
+  onSelect,
 }: {
   sponsor: { name: string; logoUrl: string; logoSize?: number };
   editable?: boolean;
@@ -1377,6 +1763,10 @@ function SponsorLogo({
   onPickImage?: (slot: ImageSlot) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): fired when the user clicks the
+   *  logo body (not the Replace button or resize handles). Used to trigger
+   *  the contextual "Selected Element" panel for this specific logo. */
+  onSelect?: () => void;
 }) {
   const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
   const heightPx = Math.round(32 * sizeMult);
@@ -1434,6 +1824,15 @@ function SponsorLogo({
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+      onMouseDown={(e) => {
+        // PER USER SPEC 2026-08-02 (TSK-0055): click-to-select for sponsor
+        // logos. Fired at mousedown so the panel appears immediately. The
+        // resize handles + Replace button call e.stopPropagation() so they
+        // don't trigger this.
+        if (editable && onSelect && e.button === 0) {
+          onSelect();
+        }
+      }}
     >
       <div className="relative w-full h-full">
         <Image
@@ -1618,7 +2017,7 @@ export function PlacementControls({
  * replaceable" + "Should be able to drag the [image] all around the
  * canvas without limitation".
  */
-function DraggablePhotoContainer({
+export function DraggablePhotoContainer({
   leftPct,
   topPct,
   widthPct,

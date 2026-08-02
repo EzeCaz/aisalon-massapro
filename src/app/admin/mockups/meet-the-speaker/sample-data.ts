@@ -87,8 +87,9 @@ export const SAMPLE_DATA: MeetTheSpeakerData = {
   // 2026-07-13 update (item 7): height 48px (unchanged), position
   //   X=2.7%, Y=89.57640750670241%.
   brandingAsset: {
-    imageUrl:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    // PER USER SPEC 2026-08-02: theme="light" → light-theme logo designed
+    // for light/white backgrounds. The meet-the-speaker canvas is bg-white.
+    theme: "light",
     height: 48,
     pos: { x: 2.7, y: 89.57640750670241 },
   },

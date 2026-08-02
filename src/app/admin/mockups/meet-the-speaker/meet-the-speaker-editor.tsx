@@ -25,11 +25,13 @@ import type {
   EventPickListItem,
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
+import { CollapsibleFormPanel } from "../shared/section-edit";
 import { SAMPLE_DATA } from "./sample-data";
 import { MeetTheSpeakerCanvas } from "./meet-the-speaker-canvas";
 import { ImagePickerModalShared } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
 import { MeetTheSpeakerFormView } from "../shared/meet-the-speaker-form-view";
+import { MeetTheSpeakerSelectedPanel } from "../shared/meet-the-speaker-selected-panel";
 import {
   mapEventToMeetTheSpeakerData,
   type DbEventForMapping,
@@ -58,6 +60,11 @@ const LEGACY_STORAGE_KEYS = [
   "meet-the-speaker-data-v2",
   "meet-the-speaker-data-v3",
 ];
+// PER USER SPEC 2026-08-02 (TSK-0053): localStorage key prefix for the
+// "Set as default" button. Saves the ENTIRE current mockup state as the
+// local default. When the user clicks Reset, the saved default is loaded
+// instead of SAMPLE_DATA (mirrors speaker-intro's behavior).
+const STYLE_DEFAULTS_KEY_PREFIX = "meet-the-speaker-style-defaults-";
 
 type Props = {
   events: EventPickListItem[];
@@ -78,6 +85,9 @@ export function MeetTheSpeakerEditor({ events }: Props) {
   const [editMode, setEditMode] = useState<boolean>(false);
   /** Sections edit mode = text sections are draggable + resizeable. */
   const [sectionsEditMode, setSectionsEditMode] = useState<boolean>(false);
+  // PER USER SPEC 2026-08-02 (TSK-0053): brief "Saved!" feedback shown on
+  // the "Set as default" button after the user clicks it.
+  const [savedDefaultFeedback, setSavedDefaultFeedback] = useState(false);
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>("");
   const [loadingEvent, setLoadingEvent] = useState(false);
   /**
@@ -90,12 +100,30 @@ export function MeetTheSpeakerEditor({ events }: Props) {
    *  that specific speaker's data instead of the default first-by-order). */
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>("");
   const [pickerSlot, setPickerSlot] = useState<ImageSlot | null>(null);
+  /** PER USER SPEC 2026-08-02: currently-selected element on the canvas.
+   *  LIFTED from the canvas so the new "Selected Element" panel (rendered
+   *  above the form) can read/write it. The canvas calls onSelectChange
+   *  when the user clicks a section; we clear it when sectionsEditMode
+   *  turns off so the panel disappears. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
   // --- helpers ---------------------------------------------------------
+
+  // PER USER SPEC 2026-08-02: reset the selected element when
+  // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for per-image selections like the
+  // speaker photo, graphic, branding asset, sponsor logos, hero image).
+  // So we only clear `selectedId` when BOTH modes are off — turning off
+  // one mode shouldn't kill a selection made in the other.
+  useEffect(() => {
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   const applyData = useCallback((next: MeetTheSpeakerData) => {
     setData(next);
@@ -491,18 +519,67 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     }
   }
 
+  /** PER USER SPEC 2026-08-02 (TSK-0053): Apply a Style 3 hero shape
+   *  config change (shape type / fill mode / colors / direction / opacity /
+   *  rotation). Patch is partial — only the changed fields are applied. */
+  function handleHeroShapeChange(
+    patch: Partial<NonNullable<MeetTheSpeakerData["style3HeroShape"]>>,
+  ) {
+    const next: MeetTheSpeakerData = JSON.parse(JSON.stringify(data));
+    if (!next.style3HeroShape) next.style3HeroShape = {};
+    next.style3HeroShape = { ...next.style3HeroShape, ...patch };
+    setData(next);
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setJsonText(JSON.stringify(next, null, 2));
+      });
+    }
+  }
+
   // --- toolbar actions ------------------------------------------------
 
+  /** PER USER SPEC 2026-08-02 (TSK-0053): Save the ENTIRE current mockup
+   *  state as the local default. Stored in localStorage under
+   *  `${STYLE_DEFAULTS_KEY_PREFIX}current`. When the user later clicks
+   *  Reset, this saved default is loaded instead of SAMPLE_DATA.
+   *
+   *  This is LOCAL per-mockup default (browser-only). It is separate
+   *  from the per-event server-side default saved by `handleSaveAsDefault`
+   *  (which uploads a PNG snapshot + dataJson to the API).
+   */
+  const handleSetAsDefault = useCallback(() => {
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+      setSavedDefaultFeedback(true);
+      setTimeout(() => setSavedDefaultFeedback(false), 2000);
+    } catch {
+      // ignore quota errors
+    }
+  }, [data]);
+
   function handleReset() {
-    if (
-      !confirm(
-        "Reset to the sample data? Any local edits you've made will be lost.",
-      )
-    ) {
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    let savedDefault: MeetTheSpeakerData | null = null;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        savedDefault = JSON.parse(saved) as MeetTheSpeakerData;
+      }
+    } catch {
+      // ignore — fall through to SAMPLE_DATA
+    }
+    const msg = savedDefault
+      ? "Reset to the saved default? Any local edits you've made will be lost."
+      : "Reset to the sample data? Any local edits you've made will be lost.";
+    if (!confirm(msg)) {
       return;
     }
-    applyData(SAMPLE_DATA);
-    setSelectedEventSlug("");
+    applyData(savedDefault ?? SAMPLE_DATA);
+    if (!savedDefault) {
+      setSelectedEventSlug("");
+    }
   }
 
   async function handleCopyJson() {
@@ -675,7 +752,45 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-black/10 bg-white p-3">
-        {/* View-mode toggle: Form vs JSON */}
+        {/* Style switcher — Style 1 / Style 2 / Style 3.
+            Per TSK-0023 Phase 1: moved here from the form-view "Hero overlay" section. */}
+        <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
+          {([
+            { value: 1, label: "Style 1" },
+            { value: 2, label: "Style 2" },
+            { value: 3, label: "Style 3" },
+          ] as const).map((opt, i) => {
+            const active = (data.heroStyle ?? 1) === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setData((prev) => ({ ...prev, heroStyle: opt.value }))}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
+                  i > 0 ? "border-l border-black/10" : ""
+                } ${
+                  active
+                    ? "bg-[#FF005A] text-white"
+                    : "text-black hover:bg-black/5"
+                }`}
+                title={
+                  opt.value === 1
+                    ? "Style 1 — geometric gradient triangles via SVG (default)"
+                    : opt.value === 2
+                    ? "Style 2 — pre-designed low-poly network image with Local Street pins"
+                    : "Style 3 — editable HeroShape (rectangle / circle / etc.) with solid or gradient fill, direction, opacity, rotation — same as speaker-intro Style 2"
+                }
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="h-5 w-px bg-black/15 mx-0.5" />
+        {/* View-mode toggle: Form vs JSON.
+            Edit images + Edit sections + Set as default have been MOVED to
+            the canvas caption row above the canvas (per TSK-0053), matching
+            speaker-intro's placement. Order in toolbar: Style 1/2/3 · Form/JSON · Reset/Copy/Download/Save. */}
         <div className="inline-flex items-center rounded-md border border-black/15 bg-white overflow-hidden">
           <button
             type="button"
@@ -752,9 +867,6 @@ export function MeetTheSpeakerEditor({ events }: Props) {
           title={`${data.speaker.fullName} — ${data.speaker.topic}`}
           filename={`meet-the-speaker-${(data.speaker.fullName || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
         />
-        <span className="ml-auto text-xs text-black/80">
-          Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
-        </span>
       </div>
 
       {/* Edit-mode hint */}
@@ -801,44 +913,53 @@ export function MeetTheSpeakerEditor({ events }: Props) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left: Form view OR JSON editor (toggled by viewMode) */}
-        {viewMode === "form" ? (
-          <div className="rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/[0.03] border-b border-black/10">
-              <div className="flex items-center gap-2">
-                <FormInput className="h-3.5 w-3.5 text-[#FF005A]" />
-                <span className="text-[0.7rem] font-mono text-black/80">
-                  meet-the-speaker.form
-                </span>
-              </div>
-              <span className="text-[0.65rem] font-mono text-[#27C93F]">
-                LIVE
-              </span>
-            </div>
+        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
+         *  canvas, a compact "Selected Element" panel appears at the TOP
+         *  of this column showing ONLY the content-specific fields for
+         *  that element. The full form stays below (collapsed by default). */}
+        <div className="flex flex-col gap-3">
+          {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Renders when an element is selected AND at least one edit
+           *  mode is on. PER USER SPEC 2026-08-02 (TSK-0055-extend): now
+           *  also renders in image-edit mode — clicking a specific image
+           *  on the canvas (speaker photo, graphic, branding asset,
+           *  sponsor logo, hero image) triggers this panel with per-image
+           *  edit fields (Replace button, URL, focus/zoom, size). */}
+          {(sectionsEditMode || editMode) && selectedId && (
+            <MeetTheSpeakerSelectedPanel
+              selectedId={selectedId}
+              data={data}
+              onChange={(next) => applyData(next)}
+              onPickImage={handlePickImage}
+              onDeselect={() => setSelectedId(null)}
+            />
+          )}
+
+          {/* Full form (or JSON editor) — collapsed by default per TSK-0050 */}
+          {viewMode === "form" ? (
+          <CollapsibleFormPanel
+            title="meet-the-speaker.form"
+            icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+          >
             <MeetTheSpeakerFormView
               data={data}
               onChange={(next) => applyData(next)}
             />
-          </div>
+          </CollapsibleFormPanel>
         ) : (
-          <div className="rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2.5 bg-black/90 border-b border-white/10">
-              <div className="flex items-center gap-2">
+          <CollapsibleFormPanel
+            title="meet-the-speaker.data.json"
+            icon={
+              <div className="flex items-center gap-1">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F56]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[#27C93F]" />
-                <span className="ml-3 text-[0.7rem] font-mono text-white/40">
-                  meet-the-speaker.data.json
-                </span>
               </div>
-              <span
-                className={`text-[0.65rem] font-mono ${
-                  parseError ? "text-[#FF5F56]" : "text-[#27C93F]"
-                }`}
-              >
-                {parseError ? "ERROR" : "VALID"}
-              </span>
-            </div>
+            }
+            dark
+            error={parseError}
+          >
             <textarea
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
@@ -860,47 +981,77 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 </div>
               </div>
             )}
-          </div>
+          </CollapsibleFormPanel>
         )}
+        </div>
 
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
           className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
         >
-        {/* Edit images + Edit sections — floating at the top-right of the
-            Live Preview box, per user spec. The buttons stay visible
-            regardless of scroll position inside the preview area. */}
-        <div className="flex items-center gap-1.5 absolute top-2 right-2 z-10">
-          <button
-            type="button"
-            onClick={() => setEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              editMode
-                ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
-          >
-            <ImageIcon className="h-3.5 w-3.5" />
-            {editMode ? "Editing images" : "Edit images"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSectionsEditMode((s) => !s)}
-            className={`inline-flex items-center gap-1 rounded-md font-semibold px-2.5 py-1.5 text-[0.7rem] shadow-md ${
-              sectionsEditMode
-                ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
-                : "border border-black/15 bg-white text-black hover:bg-black/5"
-            }`}
-            title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
-          >
-            <LayoutPanelTop className="h-3.5 w-3.5" />
-            {sectionsEditMode ? "Editing sections" : "Edit sections"}
-          </button>
-        </div>
-          <div className="text-[0.65rem] font-semibold uppercase tracking-wider text-black/80 mb-3">
-            Live Preview · {Math.round(previewScale * 100)}% scale · exported PNG is 2400 × 1600 (2× DPR)
+          {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
+              PER USER SPEC 2026-08-02 (TSK-0053): Edit images / Edit sections /
+              Set as default buttons now live here (matching speaker-intro's
+              placement). Style 1/2/3 segmented buttons stay in the top toolbar. */}
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div className="text-[0.7rem] font-semibold text-black/70">
+              Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
+              <span className="ml-2 text-black/40 font-normal">
+                · {Math.round(previewScale * 100)}% scale
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 flex-wrap">
+              {/* Edit images */}
+              <button
+                type="button"
+                onClick={() => setEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  editMode
+                    ? "bg-[#0066FF] text-white hover:bg-[#0052CC]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle image edit mode: drag/wheel/click on images to pan, zoom, and swap from the brand library."
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                {editMode ? "Editing images" : "Edit images"}
+              </button>
+              {/* Edit sections */}
+              <button
+                type="button"
+                onClick={() => setSectionsEditMode((s) => !s)}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs ${
+                  sectionsEditMode
+                    ? "bg-[#FF005A] text-white hover:bg-[#CC0048]"
+                    : "border border-black/15 bg-white text-black hover:bg-black/5"
+                }`}
+                title="Toggle section edit mode: drag text sections and the QR code to reposition; drag handles to resize."
+              >
+                <LayoutPanelTop className="h-3.5 w-3.5" />
+                {sectionsEditMode ? "Editing sections" : "Edit sections"}
+              </button>
+              {/* Set as default — mirrors speaker-intro's local-default save flow. */}
+              <button
+                type="button"
+                onClick={handleSetAsDefault}
+                className={`inline-flex items-center gap-1.5 rounded-md font-semibold px-3 py-1.5 text-xs transition ${
+                  savedDefaultFeedback
+                    ? "bg-[#27C93F] text-white"
+                    : "border border-[#FF005A] bg-[#FF005A]/5 text-[#FF005A] hover:bg-[#FF005A]/10"
+                }`}
+                title="Save the entire current mockup state as the default. Click Reset to restore."
+              >
+                {savedDefaultFeedback ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Saved!
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5" /> Set as default
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div
             className="relative mx-auto"
@@ -939,6 +1090,9 @@ export function MeetTheSpeakerEditor({ events }: Props) {
                 onHeroStyle2PosChange={handleHeroStyle2PosChange}
                 onGraphicPosChange={handleGraphicPosChange}
                 onBrandingAssetPosChange={handleBrandingAssetPosChange}
+                onHeroShapeChange={handleHeroShapeChange}
+                selectedId={selectedId}
+                onSelectChange={setSelectedId}
               />
             </div>
           </div>

@@ -13,6 +13,11 @@
 // everything from this file.
 export type { SectionLayout, SectionPos, SectionId } from "../shared/section-edit";
 import type { SectionLayout } from "../shared/section-edit";
+// PER USER SPEC 2026-08-02 (TSK-0053): Style 3 hero shape uses the shared
+// HeroShape system. These types are re-exported so the editor / canvas /
+// form-view can all reference them without re-declaring.
+export type { HeroShapeType, HeroShapeFillMode } from "../shared/hero-shape";
+import type { HeroShapeType, HeroShapeFillMode } from "../shared/hero-shape";
 
 export type SpeakerRole = "Speaker" | "Moderator" | "Panelist" | "Host";
 
@@ -142,6 +147,24 @@ export type MeetTheSpeakerData = {
     eventTime?: TextStyle;
     venue?: TextStyle;
     footer?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the small "Topic:" label that
+     *  prefixes the topic title on the canvas. */
+    topicLabel?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the "Register here" caption
+     *  next to the QR code. */
+    registerHere?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the "In collaboration with"
+     *  label above the collaborator logos. */
+    collaboratorsLabel?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the "Sponsored by" label
+     *  above the sponsor logos. */
+    sponsorsLabel?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the index number inside the
+     *  Local Street pin dot (Style 2 only). */
+    localStreetPinIndex?: TextStyle;
+    /** PER USER SPEC 2026-08-02 (TSK-0053): the text label under the
+     *  Local Street pin dot (Style 2 only). */
+    localStreetPinLabel?: TextStyle;
   };
   /** Event context (auto-filled from the event picker). */
   event: {
@@ -196,6 +219,16 @@ export type MeetTheSpeakerData = {
     height?: number;
     /** Free-form position as % of canvas. Default = bottom-left corner. */
     pos?: { x: number; y: number };
+    /**
+     * Logo theme variant. PER USER SPEC 2026-08-02: when set, the canvas
+     * renderer resolves `imageUrl` from the global brand-asset constants
+     * (BRAND_LOGO_LIGHT_URL / BRAND_LOGO_DARK_URL). An explicit `imageUrl`
+     * always wins over `theme`.
+     *   - "light" → use the light-theme logo (for light/white backgrounds)
+     *   - "dark"  → use the dark-theme logo (for dark backgrounds)
+     * If both `imageUrl` and `theme` are unset, falls back to the dark logo.
+     */
+    theme?: "light" | "dark";
   };
   /** Geometric triangle overlays on the right side (behind speaker photo). */
   heroOverlay: {
@@ -227,7 +260,36 @@ export type MeetTheSpeakerData = {
    *       overlaid on top of the image and replace the placeholder
    *       labels visually.
    */
-  heroStyle?: 1 | 2;
+  /**
+   * Visual style preset for the hero area.
+   *   - 1 (default): Geometric gradient triangles via SVG.
+   *   - 2: Pre-designed low-poly network image (heroStyle2Url) with 4
+   *        editable "Local Street" pins.
+   *   - 3: PER USER SPEC 2026-08-02 (TSK-0053) — Style 3 now uses the
+   *        shared `HeroShape` system (from `../shared/hero-shape.tsx`)
+   *        to render an editable hero shape (rectangle / circle /
+   *        triangle / etc.) with solid or gradient fill, direction,
+   *        opacity, rotation. Same editing model as speaker-intro
+   *        Style 2's hero-shape section. The shape config is stored
+   *        in `style3HeroShape` below; section layout (pos / size /
+   *        scale / z) is stored in `sectionLayout["hero-shape"]`.
+   */
+  heroStyle?: 1 | 2 | 3;
+  /**
+   * PER USER SPEC 2026-08-02 (TSK-0053): Style 3 hero shape config.
+   * Mirrors speaker-intro's `style2HeroGradient` field. When `heroStyle`
+   * is 3, this config drives the `<HeroShape>` rendered on the canvas.
+   * All fields optional; defaults are applied in the canvas.
+   */
+  style3HeroShape?: {
+    shape?: HeroShapeType;
+    fillMode?: HeroShapeFillMode;
+    solidColor?: string;
+    colors?: string[];
+    direction?: number;
+    opacity?: number;
+    rotation?: number;
+  };
   /**
    * Image URL for hero style #2. Defaults to the AI Salon branded
    * low-poly network graph uploaded to Vercel Blob.

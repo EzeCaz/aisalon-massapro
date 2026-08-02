@@ -43,6 +43,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { ChevronDown, ChevronRight, X, Star } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -470,7 +471,7 @@ export function SectionBox({
   accentColor?: string;
   label?: string;
   /** Which corner the box is anchored to (used for transformOrigin). */
-  anchor?: "top-left" | "top-right";
+  anchor?: "top-left" | "top-right" | "bottom-right" | "bottom-left";
   /** Id for guide-system registration (so peers can snap to it). */
   guideId?: string;
   zIndex?: number;
@@ -759,7 +760,11 @@ export function SectionBox({
         ? "top-left"
         : anchor === "top-right"
           ? "top-right"
-          : "top-left";
+          : anchor === "bottom-right"
+            ? "bottom-right"
+            : anchor === "bottom-left"
+              ? "bottom-left"
+              : "top-left";
   }
   // Mid-edge handle drags update the box's explicit width / height in
   // canvas px (preferred over the legacy padding approach). When set,
@@ -1168,13 +1173,25 @@ export function useCanvasScrollIsolation(
 //      - Positioning: X and Y coordinate inputs for precise placement.
 //      - Layering: Front and Back toggles to reorder the z-index."
 //
-// Drop this into any canvas inside the section-edit overlay. It anchors to
-// the top-right of the canvas so it doesn't overlap the HeroOverlayControl
-// (which sits top-left).
+// PER USER SPEC 2026-08-02 (TSK-0050):
+//   The panel is now a sleek collapsible "edit tab" that anchors to the
+//   LEFT side of the canvas (above the entire form editor, which is now
+//   compressed by default). It supports two anchor sides:
+//     - side="left"  → anchors top-LEFT, styled as a sleek tab with a
+//                      gradient header, chevron collapse toggle, and
+//                      smooth body animation. Used by ALL mockup canvases.
+//     - side="right" → legacy top-RIGHT anchor (kept for back-compat if
+//                      any future canvas needs it; not currently used).
+//   The body collapses to just the header bar when the user clicks the
+//   chevron, freeing up canvas real estate. The header ALWAYS shows the
+//   element label + LIVE badge so the user knows what they're editing.
+//
+// Drop this into any canvas inside the section-edit overlay.
 //
 // Usage:
 //   {selectedId && (
 //     <ObjectPropertiesPanel
+//       side="left"
 //       label="Header"
 //       pos={data.sectionLayout?.[selectedId]?.pos}
 //       onPosChange={(p) => onSectionMove?.(selectedId, p)}
@@ -1198,6 +1215,9 @@ export function ObjectPropertiesPanel({
   onBoxSizeChange,
   scale,
   onScaleChange,
+  onSetAsDefault,
+  side = "left",
+  defaultCollapsed = false,
 }: {
   label?: string;
   pos?: SectionPos;
@@ -1223,12 +1243,27 @@ export function ObjectPropertiesPanel({
   scale?: number;
   /** Called when the user types a new scale percentage (e.g. 150 = 150%). */
   onScaleChange?: (scale: number) => void;
+  /**
+   *  PER USER SPEC 2026-08-02 (TSK-0049): Called when the user clicks the
+   *  "Set as default" button at the bottom of the panel. Saves the ENTIRE
+   *  current mockup state (all sections + style + image placements) as the
+   *  default for the current style. The parent editor handles the actual
+   *  localStorage save + feedback.
+   */
+  onSetAsDefault?: () => void;
+  /** Which side of the canvas to anchor to. Defaults to "left" (per
+   *  TSK-0050 spec: panel sits on the left of the mockup, above the
+   *  compressed form editor). */
+  side?: "left" | "right";
+  /** Initial collapsed state of the body. Default = false (expanded). */
+  defaultCollapsed?: boolean;
 }) {
   const px = pos?.x ?? 0;
   const py = pos?.y ?? 0;
   const bw = boxSize?.width ?? 0;
   const bh = boxSize?.height ?? 0;
   const sc = scale ?? 1;
+  const [collapsed, setCollapsed] = useState<boolean>(defaultCollapsed);
 
   const bringToFront = () => {
     if (!onZChange) return;
@@ -1249,181 +1284,409 @@ export function ObjectPropertiesPanel({
     }
   };
 
+  // PER USER SPEC 2026-08-02 (TSK-0050): sleek "edit tab" styling.
+  //   - side="left"  → anchored top-LEFT, gradient header, soft shadow,
+  //                    rounded right corners only (so it looks like a tab
+  //                    attached to the left edge of the canvas).
+  //   - side="right" → legacy top-RIGHT, hard pink border (back-compat).
+  const isLeft = side === "left";
+  const anchorStyle: CSSProperties = isLeft
+    ? { left: "12px", top: "12px", zIndex: 9998, minWidth: "240px" }
+    : { right: "12px", top: "12px", zIndex: 9998, minWidth: "220px" };
+  const containerClass = isLeft
+    ? "absolute rounded-r-lg rounded-bl-lg bg-white shadow-2xl ring-1 ring-black/5 overflow-hidden " +
+      "transition-shadow hover:shadow-[0_8px_32px_rgba(255,0,90,0.18)] " +
+      "animate-[panelSlideIn_180ms_ease-out]"
+    : "absolute rounded-md border-2 border-[#FF005A] bg-white shadow-xl";
+  const headerClass = isLeft
+    ? "flex items-center justify-between px-3 py-2 " +
+      "bg-gradient-to-r from-[#FF005A] to-[#CC0048] text-white " +
+      "cursor-pointer select-none"
+    : "flex items-center justify-between bg-[#FF005A] text-white px-2 py-1 rounded-t-md";
+
   return (
-    <div
-      className="absolute rounded-md border-2 border-[#FF005A] bg-white shadow-xl"
-      style={{ right: "12px", top: "12px", zIndex: 9998, minWidth: "220px" }}
-    >
-      {/* Header bar */}
-      <div className="flex items-center justify-between bg-[#FF005A] text-white px-2 py-1 rounded-t-md">
-        <span className="text-[0.65rem] font-bold uppercase tracking-wider">
-          {label ?? "Element"} Properties
-        </span>
+    <div className={containerClass} style={anchorStyle}>
+      <style>{`
+        @keyframes panelSlideIn {
+          from { opacity: 0; transform: translateX(-12px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes panelBodyIn {
+          from { opacity: 0; max-height: 0; }
+          to   { opacity: 1; max-height: 600px; }
+        }
+      `}</style>
+      {/* Header bar — click to collapse/expand (sleek tab style) */}
+      <div
+        className={headerClass}
+        onClick={isLeft ? () => setCollapsed((c) => !c) : undefined}
+        title={isLeft ? (collapsed ? "Expand panel" : "Collapse panel") : undefined}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isLeft && (
+            <span
+              className="shrink-0 inline-flex items-center justify-center"
+              aria-hidden
+            >
+              {collapsed
+                ? <ChevronRight className="h-3 w-3" />
+                : <ChevronDown className="h-3 w-3" />}
+            </span>
+          )}
+          <span className="text-[0.65rem] font-bold uppercase tracking-wider truncate">
+            {label ?? "Element"} Properties
+          </span>
+          {isLeft && (
+            <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-white/20 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider">
+              <span className="h-1 w-1 rounded-full bg-[#27C93F] animate-pulse" />
+              LIVE
+            </span>
+          )}
+        </div>
         {onDeselect && (
           <button
             type="button"
-            onClick={onDeselect}
-            className="text-white/80 hover:text-white text-[0.8rem] leading-none ml-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeselect();
+            }}
+            className="text-white/80 hover:text-white hover:bg-white/15 rounded p-0.5 ml-2 transition"
             title="Deselect"
             aria-label="Deselect"
           >
-            ×
+            {isLeft ? <X className="h-3 w-3" /> : <span className="text-[0.8rem] leading-none">×</span>}
           </button>
         )}
       </div>
 
-      {/* Body */}
-      <div className="px-2 py-2 flex flex-col gap-2">
-        {/* Positioning: X / Y coordinate inputs */}
-        <div>
-          <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-            Position (% of canvas)
+      {/* Body — collapsible when side="left" (click header chevron to toggle).
+       *  When collapsed, the entire body is hidden so the panel shrinks to
+       *  just the gradient header bar. Useful for freeing up canvas real
+       *  estate while keeping the "LIVE" badge visible. */}
+      {(!isLeft || !collapsed) && (
+        <div
+          className={
+            isLeft
+              ? "px-3 py-2.5 flex flex-col gap-2.5 animate-[panelBodyIn_220ms_ease-out]"
+              : "px-2 py-2 flex flex-col gap-2"
+          }
+        >
+          {/* Positioning: X / Y coordinate inputs */}
+          <div>
+            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+              Position (% of canvas)
+            </div>
+            <div className="flex items-center gap-1.5">
+              <label className="inline-flex items-center gap-1 flex-1">
+                <span className="text-[0.6rem] font-semibold text-black/80 w-3">X</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={Number(px.toFixed(1))}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n)) onPosChange?.({ x: n, y: py });
+                  }}
+                  className={
+                    isLeft
+                      ? "w-full text-[0.7rem] font-mono border border-black/15 rounded px-1.5 py-1 bg-white focus:border-[#FF005A] focus:ring-1 focus:ring-[#FF005A]/30 outline-none transition"
+                      : "w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  }
+                  title="X position as % of canvas width"
+                />
+              </label>
+              <label className="inline-flex items-center gap-1 flex-1">
+                <span className="text-[0.6rem] font-semibold text-black/80 w-3">Y</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={Number(py.toFixed(1))}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n)) onPosChange?.({ x: px, y: n });
+                  }}
+                  className={
+                    isLeft
+                      ? "w-full text-[0.7rem] font-mono border border-black/15 rounded px-1.5 py-1 bg-white focus:border-[#FF005A] focus:ring-1 focus:ring-[#FF005A]/30 outline-none transition"
+                      : "w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  }
+                  title="Y position as % of canvas height"
+                />
+              </label>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <label className="inline-flex items-center gap-1 flex-1">
-              <span className="text-[0.6rem] font-semibold text-black/80 w-3">X</span>
-              <input
-                type="number"
-                step="0.1"
-                value={Number(px.toFixed(1))}
-                onChange={(e) => {
-                  const n = parseFloat(e.target.value);
-                  if (Number.isFinite(n)) onPosChange?.({ x: n, y: py });
-                }}
-                className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                title="X position as % of canvas width"
-              />
-            </label>
-            <label className="inline-flex items-center gap-1 flex-1">
-              <span className="text-[0.6rem] font-semibold text-black/80 w-3">Y</span>
-              <input
-                type="number"
-                step="0.1"
-                value={Number(py.toFixed(1))}
-                onChange={(e) => {
-                  const n = parseFloat(e.target.value);
-                  if (Number.isFinite(n)) onPosChange?.({ x: px, y: n });
-                }}
-                className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                title="Y position as % of canvas height"
-              />
-            </label>
-          </div>
+
+          {/* Box size (width / height in canvas px).
+           *  Always shown by default so users can type a precise size for the
+           *  selected section — they no longer have to drag a mid-edge handle
+           *  first just to reveal the inputs. Typing a value here visibly
+           *  grows/shrinks the container; content inside reflows. To grow the
+           *  TEXT together with the box, use the Scale % input below. */}
+          {showBoxSize && onBoxSizeChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Size (canvas px) — box dimensions
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">W</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bw > 0 ? Math.round(bw) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0)
+                        onBoxSizeChange({ ...boxSize, width: n });
+                    }}
+                    className={
+                      isLeft
+                        ? "w-full text-[0.7rem] font-mono border border-black/15 rounded px-1.5 py-1 bg-white focus:border-[#FF005A] focus:ring-1 focus:ring-[#FF005A]/30 outline-none transition"
+                        : "w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                    }
+                    title="Width in canvas pixels. Empty = auto-fit content."
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1 flex-1">
+                  <span className="text-[0.6rem] font-semibold text-black/80 w-3">H</span>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="auto"
+                    value={bh > 0 ? Math.round(bh) : ""}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value);
+                      if (Number.isFinite(n) && n >= 0)
+                        onBoxSizeChange({ ...boxSize, height: n });
+                    }}
+                    className={
+                      isLeft
+                        ? "w-full text-[0.7rem] font-mono border border-black/15 rounded px-1.5 py-1 bg-white focus:border-[#FF005A] focus:ring-1 focus:ring-[#FF005A]/30 outline-none transition"
+                        : "w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                    }
+                    title="Height in canvas pixels. Empty = auto-fit content."
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Scale % — uniform scale multiplier for the entire element
+           *  (box + text + images). Uses CSS transform: scale(N) so EVERYTHING
+           *  grows/shrinks together. 100% = default. Type 150 to make the whole
+           *  element 1.5× bigger, 50 to halve it. */}
+          {onScaleChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Scale % (box + text together)
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={Math.round(sc * 100)}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    if (Number.isFinite(n) && n > 0)
+                      onScaleChange(n / 100);
+                  }}
+                  className={
+                    isLeft
+                      ? "w-full text-[0.7rem] font-mono border border-black/15 rounded px-1.5 py-1 bg-white focus:border-[#FF005A] focus:ring-1 focus:ring-[#FF005A]/30 outline-none transition"
+                      : "w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
+                  }
+                  title="Scale percentage — 100 = default size, 150 = 1.5× bigger, 50 = half size. Scales the entire element (box + text + images)."
+                />
+                <span className="text-[0.6rem] font-semibold text-black/80">%</span>
+                <button
+                  type="button"
+                  onClick={() => onScaleChange(1)}
+                  title="Reset to 100%"
+                  className={
+                    isLeft
+                      ? "rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5 transition"
+                      : "rounded border border-black/15 bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold text-black hover:bg-black/5"
+                  }
+                >
+                  100%
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Layering: Front / Back toggles */}
+          {onZChange && (
+            <div>
+              <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
+                Layer (z-index: {z ?? 0})
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={bringToFront}
+                  title="Bring this element to the front"
+                  className={
+                    isLeft
+                      ? "flex-1 rounded-md border border-black/15 bg-white px-2 py-1.5 text-[0.65rem] font-semibold text-black hover:bg-black/5 hover:border-[#FF005A]/40 transition"
+                      : "flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  }
+                >
+                  ↑ Front
+                </button>
+                <button
+                  type="button"
+                  onClick={sendToBack}
+                  title="Send this element to the back"
+                  className={
+                    isLeft
+                      ? "flex-1 rounded-md border border-black/15 bg-white px-2 py-1.5 text-[0.65rem] font-semibold text-black hover:bg-black/5 hover:border-[#FF005A]/40 transition"
+                      : "flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
+                  }
+                >
+                  ↓ Back
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* PER USER SPEC 2026-08-02 (TSK-0049): "Set as default" button —
+              saves the ENTIRE current mockup state (all sections + style +
+              image placements) as the default for the current style. The
+              parent editor handles the actual localStorage save + feedback.
+              Shown only when onSetAsDefault is provided. */}
+          {onSetAsDefault && (
+            <button
+              type="button"
+              onClick={onSetAsDefault}
+              title="Save the entire current style + all section properties as the default for this style. Click Reset to restore."
+              className={
+                isLeft
+                  ? "w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-[#FF005A] bg-[#FF005A]/5 px-2 py-1.5 text-[0.65rem] font-bold text-[#FF005A] hover:bg-[#FF005A]/10 transition"
+                  : "w-full rounded border border-[#FF005A] bg-[#FF005A]/5 px-2 py-1.5 text-[0.6rem] font-bold text-[#FF005A] hover:bg-[#FF005A]/10"
+              }
+            >
+              {isLeft ? (
+                <>
+                  <Star className="h-3 w-3" /> Set as default
+                </>
+              ) : (
+                "★ Set as default"
+              )}
+            </button>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
 
-        {/* Box size (width / height in canvas px).
-         *  Always shown by default so users can type a precise size for the
-         *  selected section — they no longer have to drag a mid-edge handle
-         *  first just to reveal the inputs. Typing a value here visibly
-         *  grows/shrinks the container; content inside reflows. To grow the
-         *  TEXT together with the box, use the Scale % input below. */}
-        {showBoxSize && onBoxSizeChange && (
-          <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-              Size (canvas px) — box dimensions
-            </div>
-            <div className="flex items-center gap-1.5">
-              <label className="inline-flex items-center gap-1 flex-1">
-                <span className="text-[0.6rem] font-semibold text-black/80 w-3">W</span>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  placeholder="auto"
-                  value={bw > 0 ? Math.round(bw) : ""}
-                  onChange={(e) => {
-                    const n = parseFloat(e.target.value);
-                    if (Number.isFinite(n) && n >= 0)
-                      onBoxSizeChange({ ...boxSize, width: n });
-                  }}
-                  className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                  title="Width in canvas pixels. Empty = auto-fit content."
-                />
-              </label>
-              <label className="inline-flex items-center gap-1 flex-1">
-                <span className="text-[0.6rem] font-semibold text-black/80 w-3">H</span>
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  placeholder="auto"
-                  value={bh > 0 ? Math.round(bh) : ""}
-                  onChange={(e) => {
-                    const n = parseFloat(e.target.value);
-                    if (Number.isFinite(n) && n >= 0)
-                      onBoxSizeChange({ ...boxSize, height: n });
-                  }}
-                  className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                  title="Height in canvas pixels. Empty = auto-fit content."
-                />
-              </label>
-            </div>
-          </div>
-        )}
+// ---------------------------------------------------------------------------
+// CollapsibleFormPanel — PER USER SPEC 2026-08-02 (TSK-0050):
+//   "make sure the entire form is compressed, and when clicking the specific
+//    asset we want to edit, generate a new tab on the left of the mockup,
+//    above the entire form editor, only the specific edit details..."
+//
+// This wraps the form-view (or JSON editor) in a sleek collapsible container.
+//   - Collapsed by default — just the header bar shows.
+//   - Click the header (or the chevron) to expand.
+//   - When collapsed, the body is hidden so the canvas + the floating
+//     ObjectPropertiesPanel (which now anchors top-LEFT of the canvas) get
+//     maximum screen real estate.
+//   - Matches the existing editor styling: dark-on-light header, mono font
+//     for the file name, pink accent icon, green LIVE badge.
+//
+// Usage:
+//   <CollapsibleFormPanel
+//     title="speaker-intro.form"
+//     icon={<FormInput className="h-3.5 w-3.5 text-[#FF005A]" />}
+//     live
+//     dark={false}            // set true for the JSON editor (dark bg)
+//     error={parseError}      // shows red "ERROR" badge instead of green LIVE
+//     rightExtra={<button>...</button>}  // optional extra header buttons
+//   >
+//     <SpeakerIntroFormView data={data} onChange={onChange} />
+//   </CollapsibleFormPanel>
+// ---------------------------------------------------------------------------
 
-        {/* Scale % — uniform scale multiplier for the entire element
-         *  (box + text + images). Uses CSS transform: scale(N) so EVERYTHING
-         *  grows/shrinks together. 100% = default. Type 150 to make the whole
-         *  element 1.5× bigger, 50 to halve it. */}
-        {onScaleChange && (
-          <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-              Scale % (box + text together)
-            </div>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                step="1"
-                min="1"
-                value={Math.round(sc * 100)}
-                onChange={(e) => {
-                  const n = parseFloat(e.target.value);
-                  if (Number.isFinite(n) && n > 0)
-                    onScaleChange(n / 100);
-                }}
-                className="w-full text-[0.65rem] font-mono border border-black/15 rounded px-1 py-0.5 bg-white"
-                title="Scale percentage — 100 = default size, 150 = 1.5× bigger, 50 = half size. Scales the entire element (box + text + images)."
-              />
-              <span className="text-[0.6rem] font-semibold text-black/80">%</span>
-              <button
-                type="button"
-                onClick={() => onScaleChange(1)}
-                title="Reset to 100%"
-                className="rounded border border-black/15 bg-white px-1.5 py-0.5 text-[0.55rem] font-semibold text-black hover:bg-black/5"
-              >
-                100%
-              </button>
-            </div>
-          </div>
-        )}
+export function CollapsibleFormPanel({
+  title,
+  icon,
+  live = true,
+  dark = false,
+  error,
+  rightExtra,
+  defaultCollapsed = true,
+  children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  /** Show the green "LIVE" badge in the header. Set false to hide. */
+  live?: boolean;
+  /** Dark mode header (for JSON editor with dark bg). */
+  dark?: boolean;
+  /** When set, shows a red "ERROR" badge instead of the green LIVE badge. */
+  error?: string | null;
+  /** Optional extra elements rendered on the right side of the header
+   *  (next to the LIVE badge + chevron). */
+  rightExtra?: ReactNode;
+  /** Initial collapsed state. Default = true (collapsed). */
+  defaultCollapsed?: boolean;
+  children: ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState<boolean>(defaultCollapsed);
 
-        {/* Layering: Front / Back toggles */}
-        {onZChange && (
-          <div>
-            <div className="text-[0.55rem] font-bold uppercase tracking-wider text-black/80 mb-1">
-              Layer (z-index: {z ?? 0})
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={bringToFront}
-                title="Bring this element to the front"
-                className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
-              >
-                ↑ Front
-              </button>
-              <button
-                type="button"
-                onClick={sendToBack}
-                title="Send this element to the back"
-                className="flex-1 rounded border border-black/15 bg-white px-2 py-1 text-[0.6rem] font-semibold text-black hover:bg-black/5"
-              >
-                ↓ Back
-              </button>
-            </div>
-          </div>
-        )}
+  const headerBg = dark
+    ? "bg-black/90 border-b border-white/10"
+    : "bg-black/[0.03] border-b border-black/10";
+  const titleColor = dark ? "text-white/40" : "text-black/80";
+  const liveBadge = error
+    ? "text-[#FF5F56]"
+    : dark
+      ? "text-[#27C93F]"
+      : "text-[#27C93F]";
+
+  return (
+    <div
+      className={
+        dark
+          ? "rounded-lg border border-black/15 bg-[#0a0a0a] overflow-hidden flex flex-col"
+          : "rounded-lg border border-black/15 bg-white overflow-hidden flex flex-col"
+      }
+    >
+      {/* Header — clickable to toggle collapse */}
+      <div
+        className={`flex items-center justify-between px-4 py-2.5 ${headerBg} cursor-pointer select-none group`}
+        onClick={() => setCollapsed((c) => !c)}
+        title={collapsed ? "Click to expand" : "Click to collapse"}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="shrink-0 inline-flex items-center justify-center transition-transform duration-200"
+            style={{
+              transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)",
+            }}
+            aria-hidden
+          >
+            <ChevronDown className="h-3.5 w-3.5 text-black/40 group-hover:text-[#FF005A] transition-colors" />
+          </span>
+          {icon}
+          <span className={`text-[0.7rem] font-mono ${titleColor} truncate`}>
+            {title}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {rightExtra}
+          <span className={`text-[0.65rem] font-mono ${liveBadge}`}>
+            {error ? "ERROR" : live ? "LIVE" : ""}
+          </span>
+        </div>
       </div>
+      {/* Body — hidden when collapsed */}
+      {!collapsed && children}
     </div>
   );
 }

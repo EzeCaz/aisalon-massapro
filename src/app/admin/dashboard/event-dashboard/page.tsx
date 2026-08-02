@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny, getCoHostedEventIds, isSuperAdmin } from "@/lib/permissions";
+import { canAny, getCoHostedEventIds, isSuperAdmin, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import Link from "next/link";
@@ -42,7 +42,11 @@ export default async function EventDashboardPage() {
     select: { id: true, email: true, role: true, name: true },
   });
   if (!me) redirect("/login");
-  if (!canAny(me.role, ["members.view", "eventdata.viewCoHosted"])) {
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (!canAny(effectiveRole, ["members.view", "eventdata.viewCoHosted"])) {
     redirect("/events");
   }
 
@@ -142,7 +146,7 @@ export default async function EventDashboardPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         <div className="mb-8">
           <Link

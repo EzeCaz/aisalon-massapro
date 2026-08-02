@@ -7,8 +7,7 @@ import {
   isEventCoHost,
   isEventSpeaker,
   isSuperAdminEmail,
-  ROLES,
-} from "@/lib/permissions";
+  ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import Link from "next/link";
@@ -63,6 +62,10 @@ export default async function EventPrepDetailPage({ params }: Params) {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync SUPER_ADMIN
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
     await db.user.update({
@@ -73,7 +76,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
   }
 
   // Gate 1: must be SPEAKER, CO_HOST, ADMIN, or SUPER_ADMIN
-  if (!canSeeAdminNav(me.role)) {
+  if (!canSeeAdminNav(effectiveRole)) {
     redirect("/events");
   }
 
@@ -220,7 +223,7 @@ export default async function EventPrepDetailPage({ params }: Params) {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-5xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         <div className="mb-6">
           <Link
@@ -571,8 +574,8 @@ export default async function EventPrepDetailPage({ params }: Params) {
 
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
-          <span>Platform by MassaPro</span>
+          <span>© {new Date().getFullYear()} AI Salon Global· Empowering AI Connections</span>
+          <a href="https://massapro.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">Platform by MassaPro</a>
         </div>
       </footer>
     </div>

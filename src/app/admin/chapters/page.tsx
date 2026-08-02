@@ -2,13 +2,14 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { can, isSuperAdminEmail, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ChapterMapPanel } from "@/components/ais/chapter-map-panel";
 import { SeedV7Button } from "@/components/ais/seed-v7-button";
+import { GlobalBrandImagesEditor } from "./global-brand-images-editor";
 import Link from "next/link";
-import { Globe2, MapPin, Users, CalendarDays, Plus } from "lucide-react";
+import { Globe2, MapPin, Users, CalendarDays, Plus, Image as ImageIcon } from "lucide-react";
 
 export const metadata = { title: "Chapters — AI Salon" };
 
@@ -22,6 +23,10 @@ export default async function ChaptersPage() {
   });
   if (!me) redirect("/login");
 
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   // Auto-sync SUPER_ADMIN role
   let myRole = me.role;
   if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
@@ -29,18 +34,41 @@ export default async function ChaptersPage() {
     myRole = ROLES.SUPER_ADMIN;
   }
 
-  // Gate: SUPER_ADMIN + ADMIN can view. CHAPTER_ORGANIZER sees only their own
-  // chapter (still useful but read-only). MEMBER/SPEAKER → /events.
-  if (!can(myRole, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
+  // Gate: SUPER_ADMIN + ADMIN + CHAPTER_ORGANIZER can view.
+  // - SUPER_ADMIN sees all countries + chapters (global scope).
+  // - ADMIN sees only their country + all chapters in it.
+  // - CHAPTER_ORGANIZER sees only their own chapter (rendered as a
+  //   single-chapter list so they can click through to the editor and
+  //   manage brand image overrides, etc.).
+  // - MEMBER/SPEAKER/CO_HOST → /events (no chapter admin access).
+  //
+  // PER USER SPEC 2026-08-02: chapter organizers should be able to
+  // change any of the default images for the specific chapter they
+  // manage — they need to reach /admin/chapters to find their chapter.
+  if (
+    !can(myRole, "members.view") &&
+    effectiveRole !== ROLES.CHAPTER_ORGANIZER &&
+    !isSuperAdminEmail(me.email)
+  ) {
+    redirect("/events");
+  }
 
   const isSuperAdmin = isSuperAdminEmail(me.email) || myRole === ROLES.SUPER_ADMIN;
+  const isChapterOrganizer = effectiveRole === ROLES.CHAPTER_ORGANIZER;
 
-  // Scope: Super Admin sees all countries; Admin sees only their country.
+  // Scope: Super Admin sees all countries; Admin sees only their country;
+  // Chapter Organizer sees only their country AND only their own chapter
+  // inside that country (so they can click through to the editor and
+  // manage brand image overrides without seeing other chapters).
   const countryWhere = isSuperAdmin ? {} : { id: me.countryId ?? "___NEVER___" };
+  const chapterWhere = isChapterOrganizer
+    ? { id: me.chapterId ?? "___NEVER___" }
+    : {};
   const countries = await db.country.findMany({
     where: countryWhere,
     include: {
       chapters: {
+        where: chapterWhere,
         include: {
           _count: {
             select: {
@@ -133,7 +161,7 @@ export default async function ChaptersPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs />
+        <AdminTabs role={effectiveRole} />
 
         {/* Header */}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
@@ -178,6 +206,53 @@ export default async function ChaptersPage() {
           <StatCard label="Members (scoped)" value={totalMembers} accent="#00E6FF" icon={<Users className="h-4 w-4" />} />
           <StatCard label="Events (scoped)" value={totalEvents} accent="#007E72" icon={<CalendarDays className="h-4 w-4" />} />
         </div>
+
+        {/* Global Brand Images picker — Super Admin only.
+            Lets the super admin set the site-wide favicon, login hero, and
+            login banner directly from /admin/chapters (no need to navigate
+            to /admin/images for a quick change). Per-chapter overrides are
+            set on each chapter's edit page (click a chapter pin below). */}
+        {isSuperAdmin ? (
+          <div className="mb-8 rounded-lg border border-[#FF005A]/20 bg-[#FF005A]/[0.02] p-5 sm:p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#FF005A]/10 shrink-0">
+                <ImageIcon className="h-5 w-5 text-[#FF005A]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-black">
+                  Global brand images
+                </h2>
+                <p className="text-xs text-black/70 mt-0.5">
+                  Set the site-wide defaults for the favicon, login hero, and
+                  login banner. Per-chapter overrides can be set on each
+                  chapter&rsquo;s edit page (click a chapter pin below).
+                </p>
+              </div>
+            </div>
+            <GlobalBrandImagesEditor canEdit={true} />
+          </div>
+        ) : (
+          <div className="mb-8 rounded-lg border border-[#820A7D]/20 bg-[#820A7D]/[0.02] p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#820A7D]/10 shrink-0">
+                <ImageIcon className="h-5 w-5 text-[#820A7D]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-bold text-black">
+                  Brand images for your chapter
+                </h2>
+                <p className="text-xs text-black/70 mt-0.5">
+                  Click your chapter pin below to open its edit page, where you
+                  can <strong>upload your own images</strong> and set the
+                  favicon, login hero, and login banner{" "}
+                  <strong>for your chapter only</strong> (overriding the global
+                  defaults when visitors are on your chapter&rsquo;s landing
+                  page). Global brand images are managed by the Super Admin.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* World map + chapter tree panel */}
         {chapters.length === 0 ? (

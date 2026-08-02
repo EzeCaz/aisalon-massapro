@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLES } from "@/lib/permissions";
+import { ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ActivityReportClient } from "./activity-report-client";
@@ -34,7 +34,11 @@ export default async function ActivityReportPage({
   });
   if (!me) redirect("/login?callbackUrl=/admin/members/activity-report");
 
-  if (me.role !== ROLES.ADMIN && me.role !== ROLES.SUPER_ADMIN) {
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (effectiveRole !== ROLES.ADMIN && effectiveRole !== ROLES.SUPER_ADMIN) {
     redirect("/admin");
   }
 
@@ -44,7 +48,7 @@ export default async function ActivityReportPage({
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs role={me.role} />
+      <AdminTabs role={effectiveRole} />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="mb-8">
           <Link

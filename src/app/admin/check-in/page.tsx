@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny } from "@/lib/permissions";
+import { canAny, getEffectiveRole } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { DoorCheckInClient } from "./door-check-in-client";
@@ -45,17 +45,21 @@ export default async function DoorCheckInPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, email: true },
   });
   if (!me) redirect("/login?callbackUrl=/admin/check-in");
-  if (!canAny(me.role, ["events.edit", "eventdata.viewCoHosted"])) {
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  if (!canAny(effectiveRole, ["events.edit", "eventdata.viewCoHosted"])) {
     redirect("/admin?error=" + encodeURIComponent("Door check-in requires admin or co-host access"));
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
-      <AdminTabs role={me.role} />
+      <AdminTabs role={effectiveRole} />
       <main className="flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         <DoorCheckInClient adminName={me.name || "Admin"} />
       </main>

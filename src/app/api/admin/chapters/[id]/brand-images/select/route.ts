@@ -3,7 +3,7 @@ import { promises as fs, createReadStream } from "fs";
 import path from "path";
 import { put } from "@vercel/blob";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { isSuperAdmin, canSeeAdminNav, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import {
   setChapterBrandImage,
@@ -49,7 +49,14 @@ export async function POST(
   // ── Auth ────────────────────────────────────────────────────────
   const { user, error } = await getCurrentUser();
   if (error) return error;
-  if (!can(user!.role, "members.view")) {
+  // TSK-0056: Allow ANY admin to set/clear their own chapter's brand-image
+  // overrides. Scope (own country / own chapter) is enforced at lines
+  // 64-74 below. The previous `can(role, "members.view")` gate required
+  // ADMIN+ rank, which blocked CHAPTER_ORGANIZER from setting their own
+  // chapter's favicon/loginHero/loginBanner — directly contradicting
+  // the user spec ("each chapter admin sets their own chapter's default
+  // login banner, favicon, and login hero image").
+  if (!canSeeAdminNav(user!.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

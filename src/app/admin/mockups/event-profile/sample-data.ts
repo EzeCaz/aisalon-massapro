@@ -145,14 +145,27 @@ export const SAMPLE_DATA: EventProfileData = {
       visible: true,
     },
   ],
-  sponsors: [],
-  collaborators: [],
+  // PER USER SPEC 2026-08-02: Populate sponsors + collaborators to match
+  // the speaker-intro Style 1 sample data (Amdocs, Google as collaborators,
+  // Alison.ai as sponsor). Renders at the bottom-right corner of the canvas
+  // (see event-profile-canvas.tsx sponsors SectionBox).
+  collaborators: [
+    { name: "Amdocs", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+    { name: "Google", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+  ],
+  sponsors: [
+    { name: "Alison.ai", logoUrl: "https://aisalon.massapro.com/images/falafel-meerkat.png", theme: "light" },
+  ],
   // Bottom-LEFT branding asset (per user spec 2026-07-02): defaults to
   // the AI Salon brand image hosted on Vercel Blob. Replaceable via the
   // canvas Replace button or the form view URL input.
+  // PER USER SPEC 2026-08-02: brandingAsset now uses `theme` to switch
+  // between the light-theme logo (for light/white backgrounds) and the
+  // dark-theme logo (for dark backgrounds). The event-profile canvas is
+  // bg-white, so we use theme="light" (the logo variant designed for
+  // light-theme / white backgrounds).
   brandingAsset: {
-    imageUrl:
-      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png",
+    theme: "light",
     height: 48,
   },
   qrCodeUrl: "https://aisalon.massapro.com/events/ai-cmo-blueprint-2026-06-18",
