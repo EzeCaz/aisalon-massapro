@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
+import {
+  hasZaiEnv,
+  createChatCompletion,
+} from "@/lib/zai-client";
 import ZAI from "z-ai-web-dev-sdk";
 
 /**
@@ -25,6 +29,14 @@ import ZAI from "z-ai-web-dev-sdk";
  * and fall back to null for any missing/invalid field. The frontend
  * uses the response to pre-fill the New Event form, but the user can
  * still review and edit everything before saving.
+ *
+ * ZAI client selection:
+ *   - If ZAI_BASE_URL + ZAI_API_KEY env vars are set (Vercel production),
+ *     use the env-var-based HTTP client in @/lib/zai-client. This avoids
+ *     the SDK's hard requirement on a `.z-ai-config` file, which can't
+ *     exist on Vercel's read-only filesystem.
+ *   - Otherwise (local dev, where /etc/.z-ai-config is installed by the
+ *     Super Z runtime), fall back to the official SDK's ZAI.create().
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -96,16 +108,32 @@ Rules:
 6. Don't invent data — if a field isn't in the text, use null.`;
 
   try {
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text },
-      ],
-      thinking: { type: "disabled" },
-    });
+    let raw: string;
 
-    const raw = completion.choices[0]?.message?.content || "";
+    if (hasZaiEnv()) {
+      // Production path: env-var-based HTTP client (no .z-ai-config needed).
+      const completion = await createChatCompletion({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text },
+        ],
+        thinking: { type: "disabled" },
+      });
+      raw = completion.choices[0]?.message?.content || "";
+    } else {
+      // Dev fallback: use the SDK, which reads /etc/.z-ai-config installed
+      // by the Super Z runtime. This path will NOT work on Vercel.
+      const zai = await ZAI.create();
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text },
+        ],
+        thinking: { type: "disabled" },
+      });
+      raw = completion.choices[0]?.message?.content || "";
+    }
+
     // Strip any markdown fences the LLM might have added despite instructions.
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
@@ -190,9 +218,27 @@ Rules:
     });
   } catch (err) {
     console.error("[events/extract] LLM call failed:", err);
+    const msg = (err as Error).message || String(err);
+    // Surface a more actionable error when env vars are missing on Vercel.
+    if (
+      msg.includes("Configuration file not found") ||
+      msg.includes(".z-ai-config") ||
+      msg.includes("ZAI env vars not set")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "AI service is not configured on the server. " +
+            "Set ZAI_BASE_URL, ZAI_API_KEY (and optionally ZAI_CHAT_ID, " +
+            "ZAI_USER_ID, ZAI_TOKEN) in Vercel Project Settings → Environment Variables, " +
+            "then redeploy.",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       {
-        error: `AI extraction failed: ${(err as Error).message}`,
+        error: `AI extraction failed: ${msg}`,
       },
       { status: 500 }
     );
