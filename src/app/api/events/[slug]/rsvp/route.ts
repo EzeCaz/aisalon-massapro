@@ -49,6 +49,7 @@ async function getUser(req: NextRequest, slug: string) {
       address: true,
       city: true,
       country: true,
+      chapter: true,
     },
   });
   if (!event) return { user: null, event: null, status: 404 as const };
@@ -158,6 +159,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
         eventDescription: event.description,
         eventUrl,
         icsContent,
+        chapterName: event.chapter,
       });
     } catch (err) {
       // Don't fail the RSVP if the email fails — the registration is

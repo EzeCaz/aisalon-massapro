@@ -34,6 +34,13 @@ export type RenderInput = {
   };
   baseUrl: string;
   /**
+   * Optional chapter display name — used to resolve the {{chapter_name}}
+   * and {{chapterName}} merge tags. When omitted (or empty), both tokens
+   * resolve to "Tel Aviv" (the original AI Salon chapter) for backward
+   * compatibility with existing seeded templates.
+   */
+  chapterName?: string;
+  /**
    * Optional event context — when the campaign targets an event
    * (listSource === "EVENT:<eventId>"), pass the event slug + title here
    * so the renderer can resolve {{eventUrl}}, {{myCodeUrl}},
@@ -92,13 +99,18 @@ export function applyMergeTags(
   text: string,
   recipient: { email: string; name: string | null },
   event?: MergeEventContext,
+  /** Chapter display name — defaults to "Tel Aviv" when not provided. */
+  chapterName?: string,
 ): string {
   const firstName = recipient.name?.split(" ")[0] || "";
   const fullName = recipient.name || "";
+  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
   let out = text
     .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
     .replace(/\{\{\s*full_name\s*\}\}/g, fullName)
-    .replace(/\{\{\s*email\s*\}\}/g, recipient.email);
+    .replace(/\{\{\s*email\s*\}\}/g, recipient.email)
+    .replace(/\{\{\s*chapter_name\s*\}\}/g, chapter)
+    .replace(/\{\{\s*chapterName\s*\}\}/g, chapter);
 
   if (event && event.slug) {
     const eventUrl = `${event.baseUrl}/e/${event.slug}`;
@@ -146,14 +158,18 @@ export function appendTrackingPixel(
   html: string,
   campaignId: string,
   trackToken: string,
-  baseUrl: string
+  baseUrl: string,
+  /** Chapter display name — used in the unsubscribe footer text.
+   *  Defaults to "Tel Aviv" when not provided. */
+  chapterName?: string,
 ): string {
   const pixelUrl = `${baseUrl}/api/email/open?t=${trackToken}&c=${campaignId}`;
   const unsubUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${campaignId}`;
+  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
 
   const footer = `
     <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
-      <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon Tel Aviv.</p>
+      <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon ${chapter}.</p>
       <p style="margin: 0;"><a href="${unsubUrl}" style="color: #999;">Unsubscribe</a></p>
     </div>
     <img src="${pixelUrl}" width="1" height="1" alt="" style="display:none; visibility:hidden; position:absolute; left:-9999px;" />
@@ -185,25 +201,25 @@ export function htmlToText(html: string): string {
 }
 
 export function renderEmail(input: RenderInput): RenderedEmail {
-  const { recipient, snapshot, from, baseUrl, campaignId, trackToken, event } = input;
+  const { recipient, snapshot, from, baseUrl, campaignId, trackToken, event, chapterName } = input;
 
   const eventCtx: MergeEventContext | undefined = event
     ? { slug: event.slug, title: event.title, venue: event.venue, address: event.address, baseUrl }
     : undefined;
 
-  const subject = applyMergeTags(snapshot.subject, recipient, eventCtx);
-  let html = applyMergeTags(snapshot.bodyHtml, recipient, eventCtx);
+  const subject = applyMergeTags(snapshot.subject, recipient, eventCtx, chapterName);
+  let html = applyMergeTags(snapshot.bodyHtml, recipient, eventCtx, chapterName);
   const text = snapshot.bodyText
-    ? applyMergeTags(snapshot.bodyText, recipient, eventCtx)
+    ? applyMergeTags(snapshot.bodyText, recipient, eventCtx, chapterName)
     : htmlToText(snapshot.bodyHtml);
 
   if (snapshot.signatureHtml) {
-    const sig = applyMergeTags(snapshot.signatureHtml, recipient, eventCtx);
+    const sig = applyMergeTags(snapshot.signatureHtml, recipient, eventCtx, chapterName);
     html = html + `\n<div style="margin-top: 24px;">${sig}</div>`;
   }
 
   html = wrapClickLinks(html, campaignId, trackToken, baseUrl);
-  html = appendTrackingPixel(html, campaignId, trackToken, baseUrl);
+  html = appendTrackingPixel(html, campaignId, trackToken, baseUrl, chapterName);
 
   const domain = baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const messageId = generateMessageId(domain);

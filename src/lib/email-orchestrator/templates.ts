@@ -31,14 +31,18 @@ import type { Event, EventRsvp, Speaker, EventAgendaItem } from "@prisma/client"
 // Brand logo (top-right of every email)
 // ----------------------------------------------------------------------------
 
-/** Default brand logo URL — a small AI Salon mark hosted on Vercel Blob.
+/** Default brand logo URL — the canonical AI Salon login banner image
+ *  (the same wide hero image used as the login-page background / OG image).
+ *  This is the global default from SiteSetting[K_LOGIN_BANNER].
+ *
  *  Override per-template via `EmailStageTemplate.logoUrl`, or globally via
  *  the `EMAIL_BRAND_LOGO_URL` env var.
  *
- *  Spec: ~24px tall, transparent background, anchored top-right of the
- *  560px-wide email body. Equivalent to a Plus Jakarta Sans 24px glyph. */
+ *  Spec: banner-proportioned (~3.5:1), anchored top-right of the 560px-wide
+ *  email body. Sized at 160×40px to fit comfortably without dominating the
+ *  heading. */
 export const DEFAULT_BRAND_LOGO_URL =
-  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png";
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
 
 /** Resolve the brand logo URL with the fallback chain:
  *  per-template → env var → hardcoded default. */
@@ -52,13 +56,15 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
 /** Build the HTML block for the brand-logo <img> tag, anchored top-right.
  *  Returns an empty string if the resolved URL is falsy (which only happens
  *  if someone explicitly sets `EMAIL_BRAND_LOGO_URL=""` and the per-template
- *  override is also empty). */
+ *  override is also empty).
+ *
+ *  The default logo is the wide login banner image — we render it at 160×40
+ *  (banner-proportioned, ~3.5:1) so it reads as a brand mark rather than a
+ *  tiny glyph. Floated right with a small margin so body text wraps cleanly. */
 export function buildLogoBlock(templateLogoUrl: string | null | undefined): string {
   const url = resolveLogoUrl(templateLogoUrl);
   if (!url) return "";
-  // 24px tall — visually equivalent to Plus Jakarta Sans 24px line-height.
-  // Floated right with a small margin so body text wraps around it cleanly.
-  return `<img src="${url}" alt="AI Salon" width="120" height="24" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:120px;height:24px;max-height:24px;"/>`;
+  return `<img src="${url}" alt="AI Salon" width="160" height="40" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:160px;height:40px;max-height:40px;"/>`;
 }
 
 // ----------------------------------------------------------------------------
@@ -77,13 +83,23 @@ export type TemplateContext = {
   checkInCode: string;
   speakers: string;
   agenda: string;
+  /** Chapter display name — used for the {{chapter_name}} merge token in
+   *  email templates (e.g. "— The AI Salon {{chapter_name}} team").
+   *  Defaults to "Tel Aviv" when not provided, preserving backward compat
+   *  with the original hardcoded templates. */
+  chapterName: string;
   /** Tracking pixel URL — injected by worker before send. */
   openPixelUrl: string;
   /** Function that wraps a URL with the click-redirect. */
   wrapLink: (url: string) => string;
 };
 
-/** Build the TemplateContext from DB rows. */
+/** Build the TemplateContext from DB rows.
+ *
+ *  `chapterName` is optional and defaults to "Tel Aviv" (the original AI
+ *  Salon chapter) for backward compatibility. Callers that have the event's
+ *  chapter loaded should pass it in so the {{chapter_name}} merge token
+ *  resolves to the correct chapter display name. */
 export function buildContext(args: {
   event: Pick<Event, "title" | "startsAt" | "venue" | "address" | "slug">;
   rsvp: Pick<EventRsvp, "name" | "email" | "checkInCode">;
@@ -91,6 +107,9 @@ export function buildContext(args: {
   agenda: Pick<EventAgendaItem, "title" | "startsAt">[];
   baseUrl: string;
   queueId: string;
+  /** Optional chapter display name — used for the {{chapter_name}} merge
+   *  token. Defaults to "Tel Aviv" when not provided. */
+  chapterName?: string;
 }): TemplateContext {
   const { event, rsvp, speakers, agenda, baseUrl, queueId } = args;
   const firstName = (rsvp.name || rsvp.email.split("@")[0]).split(" ")[0];
@@ -112,6 +131,7 @@ export function buildContext(args: {
     agenda: agenda
       .map((a) => `• ${formatTime(a.startsAt)} — ${a.title}`)
       .join("\n"),
+    chapterName: args.chapterName ?? "Tel Aviv",
     openPixelUrl,
     wrapLink: (url: string) =>
       `${baseUrl}/api/track/email-click?id=${queueId}&target=${encodeURIComponent(url)}`,
@@ -144,7 +164,11 @@ function formatTime(d: Date): string {
 // Template rendering
 // ----------------------------------------------------------------------------
 
-/** Replace {{tokens}} in a template body and inject the open pixel + brand logo. */
+/** Replace {{tokens}} in a template body and inject the open pixel + brand logo.
+ *
+ *  Supported chapter tokens:
+ *    {{chapter_name}}   — chapter display name (snake_case, user-facing)
+ *    {{chapterName}}    — same value (camelCase, for parity with other tokens) */
 export function renderTemplate(
   html: string,
   ctx: TemplateContext,
@@ -154,6 +178,8 @@ export function renderTemplate(
     // {{name}} and {{firstName}} are aliases — both resolve to the same value.
     .replace(/{{firstName}}/g, escapeHtml(ctx.firstName))
     .replace(/{{name}}/g, escapeHtml(ctx.firstName))
+    .replace(/{{chapter_name}}/g, escapeHtml(ctx.chapterName))
+    .replace(/{{chapterName}}/g, escapeHtml(ctx.chapterName))
     .replace(/{{eventTitle}}/g, escapeHtml(ctx.eventTitle))
     .replace(/{{eventDate}}/g, escapeHtml(ctx.eventDate))
     .replace(/{{eventVenue}}/g, escapeHtml(ctx.eventVenue))
@@ -209,6 +235,8 @@ export function renderSubject(subject: string, ctx: TemplateContext): string {
   return subject
     .replace(/{{firstName}}/g, ctx.firstName)
     .replace(/{{name}}/g, ctx.firstName)
+    .replace(/{{chapter_name}}/g, ctx.chapterName)
+    .replace(/{{chapterName}}/g, ctx.chapterName)
     .replace(/{{eventTitle}}/g, ctx.eventTitle)
     .replace(/{{eventDate}}/g, ctx.eventDate)
     .replace(/{{eventVenue}}/g, ctx.eventVenue)
@@ -255,7 +283,7 @@ const SHELL = (inner: string): string => `<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>AI Salon Tel Aviv</title>
+  <title>AI Salon {{chapter_name}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -265,7 +293,7 @@ const SHELL = (inner: string): string => `<!DOCTYPE html>
     ${inner}
     <hr style="margin:32px 0;border:none;border-top:1px solid #eee;"/>
     <p style="font-size:12px;color:#999;margin:0;line-height:1.5;">
-      AI Salon Tel Aviv · Empowering AI Connections<br/>
+      AI Salon {{chapter_name}} · Empowering AI Connections<br/>
       <a href="https://aisalon.massapro.com" style="color:#999;text-decoration:underline;">aisalon.massapro.com</a>
     </p>
   </div>
@@ -294,7 +322,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
     `),
   },
@@ -309,7 +337,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
     `),
   },
@@ -332,7 +360,7 @@ export const DEFAULT_TEMPLATES: Record<
           </p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
     `),
   },
@@ -350,7 +378,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
     `),
   },
@@ -370,7 +398,7 @@ export const DEFAULT_TEMPLATES: Record<
             See you at the next one — <a href="https://aisalon.massapro.com/events" style="color:#FF005A;text-decoration:underline;">browse upcoming events</a>.
           </p>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:16px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
     `),
   },
@@ -411,7 +439,7 @@ const NO_CODE_BODY = (eventTitle: string, eventDate: string, venue: string) => `
             will appear on screen — show it to door staff when you arrive.
           </p>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:20px 0 0;">
-            — The AI Salon Tel Aviv team
+            — The AI Salon {{chapter_name}} team
           </p>
 `;
 

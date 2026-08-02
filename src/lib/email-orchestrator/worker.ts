@@ -37,6 +37,7 @@ import { STAGES, getStage, scheduledFor, nextStage } from "./stages";
 import {
   buildContext,
   renderTemplate,
+  renderSubject,
   DEFAULT_TEMPLATES,
   buildLogoBlock,
 } from "./templates";
@@ -148,6 +149,7 @@ async function processDuePending(result: WorkerResult): Promise<void> {
               venue: true,
               address: true,
               slug: true,
+              chapter: true,
             },
           },
         },
@@ -271,6 +273,8 @@ async function sendStageEmail(
         venue: string | null;
         address: string | null;
         slug: string;
+        /** Legacy free-form chapter label — defaults to "Tel Aviv". */
+        chapter: string;
       };
     } | null;
   },
@@ -323,12 +327,13 @@ async function sendStageEmail(
     agenda,
     baseUrl,
     queueId: row.id,
+    chapterName: rsvp.event.chapter,
   });
 
-  // ─── Feature 2: inject brand logo (top-right, 24px) at render time ─────
+  // ─── Feature 2: inject brand logo (top-right) at render time ─────
   const logoHtml = buildLogoBlock(tpl?.logoUrl);
   const renderedHtml = renderTemplate(htmlTemplate, ctx, { logoHtml });
-  const renderedSubject = subject.replace(/{{eventTitle}}/g, ctx.eventTitle);
+  const renderedSubject = renderSubject(subject, ctx);
 
   const sendResult = await sendEmail({
     to: row.email,
@@ -460,6 +465,19 @@ async function processAltResends(result: WorkerResult): Promise<void> {
           select: { title: true, startsAt: true },
         }),
       ]);
+      // Look up the chapter name for the {{chapter_name}} merge token.
+      // Uses the legacy `chapter` string field on Event (defaults to
+      // "Tel Aviv"). Best-effort — fall back to the buildContext default.
+      let altChapterName: string | undefined;
+      try {
+        const eventWithChapter = await db.event.findUnique({
+          where: { id: row.eventId },
+          select: { chapter: true },
+        });
+        altChapterName = eventWithChapter?.chapter ?? undefined;
+      } catch {
+        // ignore — buildContext falls back to "Tel Aviv".
+      }
       const ctx = buildContext({
         event: row.rsvp.event,
         rsvp: row.rsvp,
@@ -467,12 +485,15 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         agenda,
         baseUrl,
         queueId: altRow.id,
+        chapterName: altChapterName,
       });
       const logoHtml = buildLogoBlock(tpl.logoUrl);
       const altRenderedHtml = renderTemplate(tpl.htmlBody, ctx, { logoHtml });
       const altRenderedSubject = tpl.altSubject
         .replace(/{{eventTitle}}/g, ctx.eventTitle)
         .replace(/{{firstName}}/g, ctx.firstName)
+        .replace(/{{chapter_name}}/g, ctx.chapterName)
+        .replace(/{{chapterName}}/g, ctx.chapterName)
         .replace(/{{eventDate}}/g, ctx.eventDate)
         .replace(/{{eventVenue}}/g, ctx.eventVenue);
 

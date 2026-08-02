@@ -212,6 +212,21 @@ async function processQueueRow(row: DueQueueRow) {
 
   // Build context.
   const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+
+  // Look up the chapter name for the {{chapter_name}} merge token.
+  // Uses the legacy `chapter` string field on Event (defaults to
+  // "Tel Aviv"). Best-effort — fall back to the buildContext default.
+  let chapterName: string | undefined;
+  try {
+    const eventWithChapter = await db.event.findUnique({
+      where: { id: row.eventId },
+      select: { chapter: true },
+    });
+    chapterName = eventWithChapter?.chapter ?? undefined;
+  } catch {
+    // ignore — buildContext falls back to "Tel Aviv".
+  }
+
   const ctx = buildContext({
     event: eventCtx,
     rsvp: {
@@ -223,6 +238,7 @@ async function processQueueRow(row: DueQueueRow) {
     agenda: [],
     baseUrl,
     queueId: row.id,
+    chapterName,
   });
 
   const htmlBody = renderTemplate(step.template.htmlBody, ctx);

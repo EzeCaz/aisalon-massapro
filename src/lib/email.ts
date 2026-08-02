@@ -8,7 +8,7 @@ import nodemailer from "nodemailer";
  *  - SMTP_PORT       e.g. 465 (SSL) or 587 (STARTTLS)
  *  - SMTP_USER       SMTP username
  *  - SMTP_PASS       SMTP password / app-specific password
- *  - SMTP_FROM       From address, e.g. "AI Salon Tel Aviv <no-reply@massapro.com>"
+ *  - SMTP_FROM       From address, e.g. "AI Salon {chapter_name} <no-reply@massapro.com>"
  *  - SMTP_SECURE     "true" for port 465 (SSL), "false" for 587 (STARTTLS)
  *
  * If SMTP_HOST is missing, sends are no-ops and we log to console instead.
@@ -106,14 +106,20 @@ export async function sendMail(opts: {
  * — some email clients (notably Outlook desktop) strip the href from
  * <a> tags or break them with link-protection wrappers, so the plain-
  * text fallback lets the user copy-paste if the button doesn't work.
- */
+ *
+ * `chapterName` is optional and defaults to "Tel Aviv" for backward
+ * compatibility. Pass the actual chapter display name when known so the
+ * email subject + body render with the correct chapter branding. */
 export async function sendPasswordEmail(opts: {
   to: string;
   name: string | null;
   password: string;
   siteUrl: string;
+  /** Optional chapter display name. Defaults to "Tel Aviv". */
+  chapterName?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const firstName = opts.name?.split(" ")[0] || "there";
+  const chapterName = opts.chapterName ?? "Tel Aviv";
   // Strip any trailing slash from siteUrl + append /login.
   // Add ?callbackUrl=/events so the user lands on the events list
   // (not the event page they may have come from) after a successful
@@ -121,10 +127,10 @@ export async function sendPasswordEmail(opts: {
   // event page instead of the login page" confusion.
   const base = opts.siteUrl.replace(/\/$/, "");
   const loginUrl = `${base}/login?callbackUrl=${encodeURIComponent("/events")}`;
-  const subject = "Your AI Salon Tel Aviv login";
+  const subject = `Your AI Salon ${chapterName} login`;
   const text = `Hi ${firstName},
 
-Welcome to AI Salon Tel Aviv — the community for AI builders, founders, CMOs and investors in Tel Aviv.
+Welcome to AI Salon ${chapterName} — the community for AI builders, founders, CMOs and investors in ${chapterName}.
 
 Here is your one-time password for your first login:
 
@@ -138,11 +144,11 @@ the URL into your browser.)
 
 After you sign in, you can change your password from your profile page.
 
-— The AI Salon Tel Aviv team
+— The AI Salon ${chapterName} team
 MassaPro · https://massapro.com`;
   const html = `
 <div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
-  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Welcome to AI Salon Tel Aviv</h1>
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Welcome to AI Salon ${chapterName}</h1>
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
     Hi ${firstName},
   </p>
@@ -168,7 +174,7 @@ MassaPro · https://massapro.com`;
   </p>
   <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 12px; color: #999; margin: 0;">
-    AI Salon Tel Aviv · Empowering AI Connections<br/>
+    AI Salon ${chapterName} · Empowering AI Connections<br/>
     <a href="https://massapro.com" style="color: #999;">MassaPro</a>
   </p>
 </div>`;
@@ -200,8 +206,11 @@ export async function sendRsvpConfirmationEmail(opts: {
   eventDescription?: string | null;
   eventUrl: string;
   icsContent: string;
+  /** Optional chapter display name. Defaults to "Tel Aviv". */
+  chapterName?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const firstName = opts.name?.split(" ")[0] || "there";
+  const chapterName = opts.chapterName ?? "Tel Aviv";
   const start = new Date(opts.eventStartsAt);
   const end = new Date(opts.eventEndsAt);
 
@@ -245,7 +254,7 @@ event page and click "Save to Calendar".
 
 See you at the event!
 
-— The AI Salon Tel Aviv team
+— The AI Salon ${chapterName} team
 MassaPro · https://massapro.com`;
 
   const html = `
@@ -283,7 +292,7 @@ MassaPro · https://massapro.com`;
   </p>
   <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 12px; color: #999; margin: 0;">
-    AI Salon Tel Aviv · Empowering AI Connections<br/>
+    AI Salon ${chapterName} · Empowering AI Connections<br/>
     <a href="https://massapro.com" style="color: #999;">MassaPro</a>
   </p>
 </div>`;

@@ -46,6 +46,7 @@ import { STAGES, scheduledFor, nextStage } from "@/lib/email-orchestrator/stages
 import {
   buildContext,
   renderTemplate,
+  renderSubject,
   DEFAULT_TEMPLATES,
   buildLogoBlock,
 } from "@/lib/email-orchestrator/templates";
@@ -145,6 +146,7 @@ export async function POST(req: NextRequest) {
               venue: true,
               address: true,
               slug: true,
+              chapter: true,
             },
           },
         },
@@ -239,6 +241,8 @@ async function sendStageEmailDirect(
         venue: string | null;
         address: string | null;
         slug: string;
+        /** Legacy free-form chapter label — defaults to "Tel Aviv". */
+        chapter: string;
       };
     } | null;
   },
@@ -284,11 +288,12 @@ async function sendStageEmailDirect(
     agenda,
     baseUrl,
     queueId: row.id,
+    chapterName: rsvp.event.chapter,
   });
 
   const logoHtml = buildLogoBlock(tpl?.logoUrl);
   const renderedHtml = renderTemplate(htmlTemplate, ctx, { logoHtml });
-  const renderedSubject = subject.replace(/{{eventTitle}}/g, ctx.eventTitle);
+  const renderedSubject = renderSubject(subject, ctx);
 
   const sendResult = await sendEmail({
     to: row.email,

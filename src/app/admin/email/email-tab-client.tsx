@@ -894,7 +894,7 @@ function CampaignComposer({
   const [listSource, setListSource] = React.useState(campaign?.listSource || "ALL_MEMBERS");
   const [tagLabel, setTagLabel] = React.useState("");
   const [manualEmails, setManualEmails] = React.useState("");
-  const [fromName, setFromName] = React.useState(campaign?.fromName || "AI Salon Tel Aviv");
+  const [fromName, setFromName] = React.useState(campaign?.fromName || "AI Salon");
   const [fromEmail, setFromEmail] = React.useState(
     campaign?.fromEmail || process.env.NEXT_PUBLIC_SMTP_FROM_DEFAULT || "no-reply@aisalon.massapro.com"
   );
@@ -1103,7 +1103,8 @@ function CampaignComposer({
         </div>
         <p className="text-xs text-black/50 mt-1 text-center">
           Email-safe width: 600px · Merge fields: <code>{"{{name}}"}</code> resolves
-          to recipient's name. HTML supported.
+          to recipient's name; <code>{"{{chapter_name}}"}</code> resolves to the
+          campaign's chapter display name (defaults to "Tel Aviv"). HTML supported.
         </p>
       </div>
 
@@ -1242,14 +1243,14 @@ function defaultBodyHtml() {
   return `<div style="font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
   <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Hi {{name}},</h1>
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 16px;">
-    Here's what's coming up at AI Salon Tel Aviv...
+    Here's what's coming up at AI Salon {{chapter_name}}...
   </p>
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 24px;">
-    — The AI Salon Tel Aviv team
+    — The AI Salon {{chapter_name}} team
   </p>
   <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 12px; color: #999; margin: 0;">
-    AI Salon Tel Aviv · Empowering AI Connections<br/>
+    AI Salon {{chapter_name}} · Empowering AI Connections<br/>
     <a href="https://aisalon.massapro.com" style="color: #999;">aisalon.massapro.com</a>
   </p>
 </div>`;

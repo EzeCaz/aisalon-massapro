@@ -44,7 +44,13 @@ export async function POST(
   const { id } = await params;
   const target = await db.user.findUnique({
     where: { id },
-    select: { id: true, email: true, name: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      chapter: { select: { name: true } },
+    },
   });
   if (!target) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -107,6 +113,7 @@ export async function POST(
     name: target.name,
     password,
     siteUrl,
+    chapterName: target.chapter?.name,
   });
 
   if (!result.ok) {

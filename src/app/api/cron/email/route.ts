@@ -83,6 +83,7 @@ export async function GET(req: NextRequest) {
           fromEmail: true,
           replyTo: true,
           status: true,
+          chapter: { select: { name: true } },
         },
       },
     },
@@ -94,14 +95,20 @@ export async function GET(req: NextRequest) {
     if (!r.campaign) continue;
     stats.retriedFailed++;
 
-    const fromName = r.campaign.fromName || "AI Salon Tel Aviv";
+    const fromName = r.campaign.fromName || "AI Salon";
     const fromEmail =
       r.campaign.fromEmail || process.env.SMTP_FROM || "no-reply@aisalon.massapro.com";
     const from = `${fromName} <${fromEmail}>`;
 
+    // Resolve chapter name for the {{chapter_name}} merge token.
+    // Falls back to "Tel Aviv" when the campaign has no chapter.
+    const chapterName = r.campaign.chapter?.name ?? "Tel Aviv";
+
     const personalizedHtml = r.campaign.bodyHtmlSnapshot
       .replace(/\{\{name\}\}/g, r.name || "there")
-      .replace(/\{\{email\}\}/g, r.email);
+      .replace(/\{\{email\}\}/g, r.email)
+      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
+      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName);
 
     const result = await sendMail({
       to: r.email,
@@ -161,6 +168,7 @@ export async function GET(req: NextRequest) {
             fromName: true,
             fromEmail: true,
             replyTo: true,
+            chapter: { select: { name: true } },
           },
         },
       },
@@ -172,14 +180,20 @@ export async function GET(req: NextRequest) {
       stats.processedQueued++;
       if (!r.campaign) continue;
 
-      const fromName = r.campaign.fromName || "AI Salon Tel Aviv";
+      const fromName = r.campaign.fromName || "AI Salon";
       const fromEmail =
         r.campaign.fromEmail || process.env.SMTP_FROM || "no-reply@aisalon.massapro.com";
       const from = `${fromName} <${fromEmail}>`;
 
+      // Resolve chapter name for the {{chapter_name}} merge token.
+      // Falls back to "Tel Aviv" when the campaign has no chapter.
+      const chapterName = r.campaign.chapter?.name ?? "Tel Aviv";
+
       const personalizedHtml = r.campaign.bodyHtmlSnapshot
         .replace(/\{\{name\}\}/g, r.name || "there")
-        .replace(/\{\{email\}\}/g, r.email);
+        .replace(/\{\{email\}\}/g, r.email)
+        .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
+        .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName);
 
       const result = await sendMail({
         to: r.email,

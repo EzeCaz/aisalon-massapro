@@ -5,6 +5,11 @@ import { db } from "@/lib/db";
  * GET /api/email/unsubscribe?t=<trackToken>&c=<campaignId>
  *
  * Marks the recipient as UNSUBSCRIBED and shows a confirmation page.
+ *
+ * The confirmation page is chapter-neutral — we no longer hardcode
+ * "Tel Aviv" in the unsubscribe copy. If the campaign has a linked
+ * chapter, we look up its display name and show "AI Salon {chapter}";
+ * otherwise we just show "AI Salon" without a chapter suffix.
  */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -22,6 +27,21 @@ export async function GET(req: NextRequest) {
 
   if (!recipient) {
     return new NextResponse("Invalid unsubscribe link", { status: 404 });
+  }
+
+  // Look up the campaign to resolve the chapter name (best-effort —
+  // campaigns without a chapter just render as "AI Salon").
+  let chapterSuffix = "";
+  try {
+    const campaign = await db.emailCampaign.findUnique({
+      where: { id: campaignId },
+      select: { chapter: { select: { name: true } } },
+    });
+    if (campaign?.chapter?.name) {
+      chapterSuffix = ` ${campaign.chapter.name}`;
+    }
+  } catch {
+    // DB error or campaign not found — fall back to no chapter suffix.
   }
 
   if (recipient.status !== "UNSUBSCRIBED") {
@@ -55,9 +75,9 @@ export async function GET(req: NextRequest) {
 <body>
   <div class="card">
     <h1>You're unsubscribed</h1>
-    <p>We've removed <span class="email">${recipient.email}</span> from the AI Salon Tel Aviv mailing list.</p>
+    <p>We've removed <span class="email">${recipient.email}</span> from the AI Salon${chapterSuffix} mailing list.</p>
     <p>You won't receive future campaigns from us.</p>
-    <div class="footer">AI Salon Tel Aviv · MassaPro</div>
+    <div class="footer">AI Salon${chapterSuffix} · MassaPro</div>
   </div>
 </body></html>`;
 

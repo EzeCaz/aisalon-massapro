@@ -77,6 +77,29 @@ export async function runSeed(): Promise<SeedResult> {
         patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
       if (!existing.altSubject && alt) patch.altSubject = alt.altSubject;
       if (!existing.altNotOpenedHours && alt) patch.altNotOpenedHours = alt.altNotOpenedHours;
+
+      // ── Migration 2026-08-03: replace hardcoded "Tel Aviv" with the
+      //  {{chapter_name}} merge token in the seeded default templates.
+      //  This is idempotent — once the body contains the token, the
+      //  condition below is false and the row is not patched again.
+      //  We also patch noCodeHtmlBody the same way if it has the old text.
+      //  The subject line never contained "Tel Aviv", so we leave it alone.
+      const def = DEFAULT_TEMPLATES[stageCfg.stage];
+      if (
+        existing.htmlBody &&
+        existing.htmlBody.includes("The AI Salon Tel Aviv team") &&
+        def?.html
+      ) {
+        patch.htmlBody = def.html;
+      }
+      if (
+        existing.noCodeHtmlBody &&
+        existing.noCodeHtmlBody.includes("The AI Salon Tel Aviv team") &&
+        noCode
+      ) {
+        patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
+      }
+
       if (Object.keys(patch).length > 0) {
         await db.emailStageTemplate.update({
           where: { id: existing.id },

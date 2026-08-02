@@ -11172,3 +11172,129 @@ Stage Summary:
   /api/admin/chapters/[id]/brand-images/select (Super Admin = any
   chapter; Admin = own country; Chapter Organizer = own chapter).
 - Ready to push to origin/main for Vercel auto-deploy.
+
+---
+Task ID: email-chapter-name-merge-token
+Agent: main
+Task: Replace hardcoded "Tel Aviv" in all email templates with the
+{{chapter_name}} merge token, AND change the brand logo (top-right of
+every email) to the default login banner image.
+
+Work Log:
+- Audited all email-related files for hardcoded "Tel Aviv" — found
+  references in 7 files:
+  * src/lib/email-orchestrator/templates.ts (5 stage templates + SHELL
+    wrapper + NO_CODE_BODY)
+  * src/lib/email.ts (sendPasswordEmail + sendRsvpConfirmationEmail)
+  * src/lib/email-campaign/render.ts (unsubscribe footer)
+  * src/app/admin/email/email-tab-client.tsx (default fromName + body)
+  * src/app/api/email/unsubscribe/route.ts (confirmation page)
+  * src/app/api/admin/email/campaigns/[id]/send/route.ts (default fromName)
+  * src/app/api/cron/email/route.ts (default fromName in 2 places)
+- Confirmed the "default login banner" URL is
+  https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png
+  (K_LOGIN_BANNER default from src/lib/site-settings.ts).
+- Discovered that the Prisma Event model has BOTH a free-form
+  `chapter: String @default("Tel Aviv")` field AND a `chapterRef: Chapter?`
+  relation. Used the legacy string field (event.chapter) directly —
+  simpler than adding Prisma includes.
+- For User / EmailCampaign, the `chapter` field IS the relation, so I
+  include `chapter: { select: { name: true } }` in their queries.
+
+Changes by file:
+- src/lib/email-orchestrator/templates.ts
+  * Replaced "Tel Aviv" with {{chapter_name}} in SHELL title, footer,
+    all 5 stage templates' signature lines, and NO_CODE_BODY.
+  * Added `chapterName: string` to TemplateContext (default "Tel Aviv"
+    via buildContext).
+  * Added {{chapter_name}} + {{chapterName}} token replacement in
+    renderTemplate() and renderSubject().
+  * Changed DEFAULT_BRAND_LOGO_URL from the small 120x24 logo
+    (1782393632010-jeorqc.png) to the wide login banner
+    (1785668808200-0fdrda.png).
+  * Updated buildLogoBlock() dimensions from 120x24 to 160x40
+    (banner-proportioned ~3.5:1).
+- src/lib/email-orchestrator/seed.ts
+  * Added idempotent migration: when an existing EmailStageTemplate row
+    still contains "The AI Salon Tel Aviv team", it's overwritten with
+    the new DEFAULT_TEMPLATES HTML (which uses {{chapter_name}}). Same
+    for noCodeHtmlBody.
+- src/lib/email.ts
+  * sendPasswordEmail + sendRsvpConfirmationEmail now accept an optional
+    `chapterName?: string` parameter (defaults to "Tel Aviv").
+  * All hardcoded "Tel Aviv" replaced with the chapterName variable.
+- src/lib/email-campaign/render.ts
+  * applyMergeTags() now replaces {{chapter_name}} + {{chapterName}}
+    merge tags (defaults to "Tel Aviv" when chapterName is empty).
+  * appendTrackingPixel() footer now uses the chapter name in the
+    unsubscribe notice.
+  * renderEmail() accepts an optional `chapterName` in RenderInput.
+- src/app/admin/email/email-tab-client.tsx
+  * Default fromName changed from "AI Salon Tel Aviv" to "AI Salon"
+    (chapter-neutral).
+  * defaultBodyHtml() now uses {{chapter_name}} merge tokens.
+  * Updated merge-field help text to mention {{chapter_name}}.
+- src/app/api/email/unsubscribe/route.ts
+  * Confirmation page is now chapter-neutral — looks up the campaign's
+    chapter name from the DB and renders "AI Salon {chapter}" (or just
+    "AI Salon" when the campaign has no chapter).
+- src/app/api/admin/email/campaigns/[id]/send/route.ts
+  * Looks up the chapter name from campaign.chapterId.
+  * Adds {{chapter_name}} + {{chapterName}} + {{first_name}} +
+    {{full_name}} merge tag replacement to personalizedHtml and
+    personalizedSubject.
+  * Default fromName changed from "AI Salon Tel Aviv" to "AI Salon".
+- src/app/api/cron/email/route.ts
+  * Both retry-failed and process-queued loops now include
+    chapter: { select: { name: true } } in the campaign select.
+  * Both loops apply {{chapter_name}} + {{chapterName}} merge tags.
+  * Default fromName changed from "AI Salon Tel Aviv" to "AI Salon".
+- src/lib/email-orchestrator/worker.ts
+  * Main query (processDuePending) now selects event.chapter (string).
+  * sendStageEmail's row type updated to include chapter: string on event.
+  * buildContext() call passes chapterName: rsvp.event.chapter.
+  * Alt-resend path does a separate db.event.findUnique to fetch the
+    chapter name, then passes it to buildContext().
+  * Replaced manual subject.replace() with renderSubject() for full
+    token coverage.
+  * Added renderSubject to the import from "./templates".
+- src/lib/email-orchestrator/flow-worker.ts
+  * Added a separate db.event.findUnique to fetch event.chapter, then
+    passes it to buildContext() as chapterName.
+- src/app/api/admin/email/force-send-stage/route.ts
+  * Main query now selects event.chapter (string).
+  * sendStageEmail's row type updated to include chapter: string on event.
+  * buildContext() call passes chapterName: rsvp.event.chapter.
+  * Replaced manual subject.replace() with renderSubject().
+  * Added renderSubject to the import.
+- src/app/api/auth/signup/route.ts
+  * Passes chapterScope?.chapterName to sendPasswordEmail().
+- src/app/api/admin/members/[id]/reset-password/route.ts
+  * User lookup now includes chapter: { select: { name: true } }.
+  * Passes target.chapter?.name to sendPasswordEmail().
+- src/app/api/admin/members/bulk-reset-password/route.ts
+  * User lookup now includes chapter: { select: { name: true } }.
+  * Passes target.chapter?.name to sendPasswordEmail().
+- src/app/api/admin/members/[id]/credentials/route.ts
+  * User lookup now includes chapter: { select: { name: true } }.
+  * Passes target.chapter?.name to sendPasswordEmail().
+- src/app/api/events/[slug]/rsvp/route.ts
+  * Event lookup now includes chapter: true (the legacy string field).
+  * Passes event.chapter to sendRsvpConfirmationEmail().
+
+Stage Summary:
+- All email templates (orchestrator stages 1-5, no-code variants,
+  campaign renderer, password reset, RSVP confirmation, unsubscribe
+  page) now use the {{chapter_name}} merge token instead of hardcoded
+  "Tel Aviv".
+- The brand logo at the top-right of every orchestrator email is now
+  the canonical AI Salon login banner image (160x40px, banner-
+  proportioned).
+- Backward-compatible: when chapterName isn't provided (e.g. legacy
+  callers, campaigns with no chapterId), it defaults to "Tel Aviv".
+- Existing seeded EmailStageTemplate rows in the DB are auto-migrated
+  to use {{chapter_name}} on the next seed run (idempotent — only
+  patches rows that still contain "The AI Salon Tel Aviv team").
+- TypeScript clean — no new errors introduced. 3 pre-existing errors
+  in unrelated files (email-audiences/route.ts, simulate/route.ts,
+  meta-capi.ts) remain unchanged.

@@ -85,7 +85,13 @@ export async function POST(req: NextRequest) {
   // Fetch all targets in one query.
   const targets = await db.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, email: true, name: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      chapter: { select: { name: true } },
+    },
   });
   const targetMap = new Map(targets.map((t) => [t.id, t]));
 
@@ -126,6 +132,7 @@ export async function POST(req: NextRequest) {
         name: target.name,
         password,
         siteUrl,
+        chapterName: target.chapter?.name,
       });
       if (!result.ok) {
         failed.push({ id, email: target.email, error: result.error || "email send failed" });

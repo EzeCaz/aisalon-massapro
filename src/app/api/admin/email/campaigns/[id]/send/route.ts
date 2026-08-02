@@ -76,7 +76,11 @@ export async function POST(
   await db.emailRecipient.deleteMany({ where: { campaignId: id } });
 
   // ---- Create recipient rows + send ----
-  const fromName = campaign.fromName || "AI Salon Tel Aviv";
+  // Default from-name is "AI Salon" (chapter-neutral). The from-name is
+  // admin-editable per campaign, so we only use this default when the
+  // admin left it blank. We resolve the chapter name separately below
+  // for the {{chapter_name}} merge token in the body.
+  const fromName = campaign.fromName || "AI Salon";
   const fromEmail = campaign.fromEmail || process.env.SMTP_FROM || "no-reply@aisalon.massapro.com";
   const from = `${fromName} <${fromEmail}>`;
   const replyTo = campaign.replyTo || undefined;
@@ -100,6 +104,23 @@ export async function POST(
   const eventUrl = eventCtx ? `${baseUrl}/e/${eventCtx.slug}` : "";
   const myCodeUrl = eventCtx ? `${eventUrl}/my-code` : "";
 
+  // Resolve the chapter display name for the {{chapter_name}} merge token.
+  // If the campaign is linked to a chapter, use its name; otherwise fall
+  // back to "Tel Aviv" (the original AI Salon chapter) for backward
+  // compatibility with existing seeded templates.
+  let chapterName = "Tel Aviv";
+  if (campaign.chapterId) {
+    try {
+      const chapter = await db.chapter.findUnique({
+        where: { id: campaign.chapterId },
+        select: { name: true },
+      });
+      if (chapter?.name) chapterName = chapter.name;
+    } catch {
+      // DB error — keep the default "Tel Aviv".
+    }
+  }
+
   let sentCount = 0;
   let failedCount = 0;
   const errors: string[] = [];
@@ -119,12 +140,18 @@ export async function POST(
     });
 
     // Personalize the body — replace merge fields. {{name}}/{{email}} are
-    // always available; {{eventUrl}}, {{myCodeUrl}}, {{event.myCodeUrl}},
-    // {{eventTitle}}, {{eventVenue}}, {{eventAddress}} only resolve when
-    // the campaign targets an event (otherwise stripped to "").
+    // always available; {{chapter_name}}/{{chapterName}} resolve to the
+    // campaign's chapter display name (default "Tel Aviv");
+    // {{eventUrl}}, {{myCodeUrl}}, {{event.myCodeUrl}}, {{eventTitle}},
+    // {{eventVenue}}, {{eventAddress}} only resolve when the campaign
+    // targets an event (otherwise stripped to "").
     const personalizedHtml = campaign.bodyHtmlSnapshot
       .replace(/\{\{name\}\}/g, r.name || "there")
       .replace(/\{\{email\}\}/g, r.email)
+      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
+      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName)
+      .replace(/\{\{\s*first_name\s*\}\}/g, (r.name || "there").split(" ")[0])
+      .replace(/\{\{\s*full_name\s*\}\}/g, r.name || "")
       .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
       .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
       .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
@@ -133,6 +160,10 @@ export async function POST(
       .replace(/\{\{\s*eventAddress\s*\}\}/g, eventCtx?.address || "");
     const personalizedSubject = campaign.subjectSnapshot
       .replace(/\{\{name\}\}/g, r.name || "there")
+      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
+      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName)
+      .replace(/\{\{\s*first_name\s*\}\}/g, (r.name || "there").split(" ")[0])
+      .replace(/\{\{\s*full_name\s*\}\}/g, r.name || "")
       .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
       .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
       .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)

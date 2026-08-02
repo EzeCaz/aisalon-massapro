@@ -269,6 +269,7 @@ export async function POST(req: NextRequest) {
       name: displayName,
       password,
       siteUrl,
+      chapterName: chapterScope?.chapterName,
     });
     if (!result.ok) {
       return NextResponse.json(
