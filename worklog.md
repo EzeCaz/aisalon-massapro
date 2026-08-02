@@ -10805,3 +10805,94 @@ Stage Summary:
 - Did NOT push to origin/main. Local only — awaiting user confirmation
   per the no-push-without-confirmation policy.
 
+
+---
+Task ID: TSK-0059 — chapter-admin-brand-images-filter
+Agent: main
+Task: User reported two issues:
+  1. As admin of Montreal chapter (que_qui@hotmail.com, role
+     CHAPTER_ORGANIZER), the /admin/images gallery showed ALL brand
+     images in Vercel Blob brand-assets/ — instead of only the ones
+     set as default (favicon, loginHero, loginBanner).
+  2. The brand-assets images listed (13 Vercel Blob URLs in the
+     brand-assets/ prefix) should remain globally accessible — i.e.,
+     they are global brand assets curated by the Super Admin, not
+     per-chapter images.
+
+Work Log:
+- Reviewed the brand-images pipeline:
+  * /admin/images/page.tsx — already scope-filters the countries/
+    chapters dropdown so non-super-admins only see chapters they
+    can edit. But the gallery itself (ImagesGallery) loads ALL
+    images via /api/admin/brand-images without scope filtering.
+  * /api/admin/brand-images GET — returns the full library (every
+    Vercel Blob brand-assets/ object + every .images/ stock image)
+    for ANY signed-in admin, regardless of scope.
+  * /api/admin/brand-images/select POST — already SUPER_ADMIN-only
+    for global selections (correct).
+  * /api/admin/chapters/[id]/brand-images/select POST — already
+    scope-enforced (Admin/ChapterOrganizer for own chapter).
+  * /lib/permissions.ts getUserScope — returns the caller's effective
+    scope (global/country/chapter/none), honoring the ViewAs override
+    when the real user is SUPER_ADMIN.
+
+- Step 1 — Modified /api/admin/brand-images/route.ts GET to filter
+  the image list for non-global callers:
+  * Reads `scope` from getCurrentUser() (already honors ViewAs).
+  * If scope.kind === "global" → returns the full library (current
+    behavior, real super admin or super admin viewing-as super admin
+    with no chapter).
+  * If scope.kind is "country" / "chapter" / "none" → returns ONLY:
+      - The 3 globally-selected images (settings.favicon,
+        settings.loginHero, settings.loginBanner)
+      - Plus the caller's own chapter's override images (if scope
+        is "chapter"), so the chapter admin can manage/clear images
+        they've already selected.
+  * Stock images are naturally filtered out — their URLs
+    (/api/admin/hidden-images/[name]) never match a selection URL
+    (which is always a Vercel Blob URL after the select API copies
+    the stock image to Blob).
+
+- Step 2 — Updated /admin/images/images-gallery.tsx:
+  * Upload zone is now hidden for non-super-admins (the upload
+    button was already disabled, but hiding the whole zone is
+    cleaner — non-super-admins can only pick from the curated
+    defaults, so they don't need the upload UI).
+  * Empty-state message now distinguishes between super admin
+    ("Upload your first brand image using the button above") and
+    non-super-admin ("No global brand defaults have been set yet.
+    Please ask a Super Admin to set the favicon, login hero, and
+    login banner before configuring chapter overrides.").
+
+- Step 3 — Updated /admin/images/page.tsx:
+  * The non-super-admin notice now clarifies that "the gallery
+    below shows only the global brand defaults curated by the
+    Super Admin" so the chapter admin knows why they see a
+    short list.
+
+- Verification:
+  * `npx tsc --noEmit` — no new errors in modified files
+    (src/app/api/admin/brand-images/route.ts,
+     src/app/admin/images/images-gallery.tsx,
+     src/app/admin/images/page.tsx).
+  * `npx next build` — succeeded with no errors.
+  * Brand-assets images remain globally accessible via their
+    public Vercel Blob URLs (issue 2 is automatically resolved —
+    the URLs are public, and the Super Admin still sees + manages
+    the full library in the gallery).
+
+Stage Summary:
+- Montreal chapter admin (que_qui@hotmail.com) now sees ONLY the 3
+  globally-selected default images in the /admin/images gallery
+  (plus any chapter overrides they've already set), instead of
+  every image in the brand-assets/ Vercel Blob folder.
+- The 13 brand-assets images the user listed remain in the global
+  brand-assets/ folder — they are still accessible via their public
+  Vercel Blob URLs, and the Super Admin can still see + select them
+  in the gallery. They are just no longer visible to chapter admins
+  unless explicitly selected as a default.
+- The fix also works for the "View as" switcher — when a Super Admin
+  views-as a Chapter Organizer, they see the filtered gallery (only
+  the curated defaults), matching the real Chapter Organizer's
+  experience.
+- Ready to push to origin/main for Vercel auto-deploy.

@@ -141,13 +141,15 @@ export default async function AdminImagesPage() {
           {!isSuper && (
             <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
               You are signed in as <strong>{me.role === ROLES.ADMIN ? "Admin" : "Chapter Organizer"}</strong>.
-              You can set the <strong>favicon</strong>, <strong>login hero</strong>, and{" "}
-              <strong>login banner</strong> for{" "}
+              The gallery below shows only the <strong>global brand defaults</strong>{" "}
+              (favicon, login hero, login banner) curated by the Super Admin.
+              Pick from these defaults to set the favicon, login hero, and{" "}
+              login banner for{" "}
               {me.role === ROLES.ADMIN
                 ? "chapters in your country"
                 : "your own chapter"}{" "}
               using the chapter filter below. Global brand image selections
-              remain Super-Admin-only.
+              + uploads remain Super-Admin-only.
             </div>
           )}
         </div>

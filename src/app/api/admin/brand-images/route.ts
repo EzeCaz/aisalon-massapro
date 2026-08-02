@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings } from "@/lib/site-settings";
+import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
 
 /**
  * GET /api/admin/brand-images
@@ -41,7 +42,7 @@ const LOCAL_BRAND_DIR = path.join(process.cwd(), "public", "uploads", "brand-ass
 const LOCAL_BRAND_URL = "/uploads/brand-assets";
 
 export async function GET() {
-  const { user, error } = await getCurrentUser();
+  const { user, error, scope } = await getCurrentUser();
   if (error) return error;
   // TSK-0056: Allow ANY signed-in admin (SUPER_ADMIN, ADMIN,
   // CHAPTER_ORGANIZER, CO_HOST) to LIST brand images. The image list is
@@ -61,6 +62,20 @@ export async function GET() {
   if (!canSeeAdminNav(user!.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // TSK-0059: Determine whether the caller has GLOBAL scope.
+  //   - Real SUPER_ADMIN with no view-as override → scope.kind === "global"
+  //   - SUPER_ADMIN viewing-as a non-global role/chapter → scope.kind is
+  //     "country" or "chapter" (or "none")
+  //   - ADMIN → scope.kind === "country"
+  //   - CHAPTER_ORGANIZER / CO_HOST → scope.kind === "chapter"
+  //
+  // Non-global callers should ONLY see the currently-selected defaults
+  // (global favicon/loginHero/loginBanner) plus their own chapter's
+  // override images — NOT the entire brand-assets library. The full
+  // library is curated by the Super Admin; chapter admins pick from the
+  // curated defaults for their chapter overrides.
+  const isGlobalScope = scope?.kind === "global";
 
   // 1. List stock images from the hidden .images/ folder.
   const stock: Array<{
@@ -161,6 +176,57 @@ export async function GET() {
 
   // 3. Current selections for each role.
   const settings = await getPublicSettings();
+
+  // TSK-0059: Filter the image list for non-global callers.
+  //
+  // Real SUPER_ADMIN (or SUPER_ADMIN viewing-as SUPER_ADMIN with no
+  // chapter) sees the full library — both stock images and every
+  // uploaded brand asset in Vercel Blob.
+  //
+  // Non-global callers (ADMIN, CHAPTER_ORGANIZER, CO_HOST, or a
+  // SUPER_ADMIN viewing-as one of those) see ONLY:
+  //   - The 3 globally-selected images (favicon, loginHero, loginBanner)
+  //   - Their own chapter's override images (if scope is "chapter")
+  //
+  // Rationale: the brand-assets library is curated by the Super Admin.
+  // Chapter admins should pick from the curated defaults for their
+  // chapter overrides — they should NOT see every image ever uploaded
+  // to the brand-assets/ folder (which may include test uploads,
+  // alternate variants, deprecated logos, etc.).
+  //
+  // Stock images are always hidden for non-global callers — their URLs
+  // (/api/admin/hidden-images/[name]) never match a selection URL
+  // (which is always a Vercel Blob URL), so they're filtered out
+  // naturally.
+  if (!isGlobalScope) {
+    const allowedUrls = new Set<string>();
+    if (settings.favicon) allowedUrls.add(settings.favicon);
+    if (settings.loginHero) allowedUrls.add(settings.loginHero);
+    if (settings.loginBanner) allowedUrls.add(settings.loginBanner);
+
+    // For chapter scope, also include the chapter's current overrides
+    // so the chapter admin can see + manage the images they've already
+    // selected (e.g. to re-pick or clear them).
+    if (scope?.kind === "chapter") {
+      try {
+        const overrides = await getChapterBrandImageOverrides(scope.chapterId);
+        for (const url of Object.values(overrides)) {
+          if (typeof url === "string" && url) allowedUrls.add(url);
+        }
+      } catch (err) {
+        console.warn("[brand-images] could not load chapter overrides for filter:", err);
+      }
+    }
+
+    const filteredImages = [...uploaded, ...stock].filter(
+      (img) => allowedUrls.has(img.url)
+    );
+
+    return NextResponse.json({
+      images: filteredImages,
+      selections: settings,
+    });
+  }
 
   return NextResponse.json({
     images: [...uploaded, ...stock],
