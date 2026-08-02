@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import ZAI from "z-ai-web-dev-sdk";
 import {
+  createGeminiChatCompletion,
+  hasGeminiEnv,
+} from "@/lib/gemini-client";
+import {
   createKimiChatCompletion,
   hasKimiEnv,
 } from "@/lib/kimi-client";
@@ -103,9 +107,12 @@ Rules:
 5. Speakers: include ANY person mentioned with a speaking role. If you can't tell if someone is speaking vs. just mentioned, include them with a warning.
 6. Don't invent data — if a field isn't in the text, use null.`;
 
-  // Provider priority: Kimi (Moonshot) → ZAI env → ZAI SDK (dev only).
-  // Kimi is the recommended provider for this prefill flow — free tier
-  // at platform.moonshot.cn, OpenAI-compatible, no extra SDK deps.
+  // Provider priority: Gemini → Kimi → ZAI env → ZAI SDK (dev only).
+  // Gemini is the recommended provider for this prefill flow — free tier
+  // at aistudio.google.com, native JSON output mode, fast Flash model.
+  // Note: Gemini blocks some regions (HK/CN) — if running from a blocked
+  // region, set GEMINI_API_KEY in Vercel env vars and deploy instead of
+  // testing locally, or fall back to Kimi.
   const messages = [
     { role: "system" as const, content: systemPrompt },
     { role: "user" as const, content: text },
@@ -115,7 +122,18 @@ Rules:
   let providerUsed = "";
 
   try {
-    if (hasKimiEnv()) {
+    if (hasGeminiEnv()) {
+      providerUsed = "gemini";
+      const geminiRes = await createGeminiChatCompletion({
+        messages,
+        temperature: 0.2,
+        // gemini-flash-latest is fast + cheap; the system prompt asks for
+        // JSON, and the client sets responseMimeType=application/json
+        // so Gemini emits strict JSON directly.
+        model: process.env.GEMINI_MODEL || "gemini-flash-latest",
+      });
+      raw = geminiRes.choices[0]?.message?.content || "";
+    } else if (hasKimiEnv()) {
       providerUsed = "kimi";
       const kimiRes = await createKimiChatCompletion({
         messages,
@@ -150,7 +168,9 @@ Rules:
       {
         error: `AI extraction failed via ${providerUsed || "no provider"}: ${(err as Error).message}`,
         hint:
-          "Set KIMI_API_KEY (free tier at platform.moonshot.cn) for the most reliable extraction.",
+          "Set GEMINI_API_KEY (free at aistudio.google.com) — the recommended " +
+          "provider for this flow. If Gemini is blocked in your region, " +
+          "deploy on Vercel (us-east-1) or fall back to KIMI_API_KEY.",
       },
       { status: 500 }
     );
