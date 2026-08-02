@@ -93,7 +93,14 @@ export function filterTabsByRole(
   }
 
   // CO_HOST sees the event-scoped tabs + Event Prep.
-  if (r === ROLES.CO_HOST || r === ROLES.CHAPTER_ORGANIZER) {
+  // CHAPTER_ORGANIZER also sees event-scoped tabs + Event Prep, PLUS
+  // the Chapters tab (so they can navigate to their own chapter editor
+  // and manage brand image overrides) and the Images tab (so they can
+  // view the global brand library + their own chapter's overrides).
+  // PER USER SPEC 2026-08-02: chapter organizers should be able to
+  // change any of the default images for the specific chapter they
+  // manage — they need a way to navigate to the chapter editor.
+  if (r === ROLES.CO_HOST) {
     const allowed = new Set<string>([
       "/admin/speakers",
       "/admin/registrants",
@@ -101,6 +108,19 @@ export function filterTabsByRole(
       "/admin/dashboard/event-dashboard",
       "/admin/mockups",
       "/admin/event-prep",
+    ]);
+    return ALL_TABS.filter((t) => allowed.has(t.href));
+  }
+  if (r === ROLES.CHAPTER_ORGANIZER) {
+    const allowed = new Set<string>([
+      "/admin/speakers",
+      "/admin/registrants",
+      "/admin/check-in",
+      "/admin/dashboard/event-dashboard",
+      "/admin/mockups",
+      "/admin/event-prep",
+      "/admin/chapters",
+      "/admin/images",
     ]);
     return ALL_TABS.filter((t) => allowed.has(t.href));
   }

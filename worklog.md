@@ -11020,3 +11020,88 @@ Stage Summary:
 - Ready to push to origin/main for Vercel auto-deploy. After deploy,
   the Super Admin should call POST /api/admin/v7-seed once to sync
   the production DB.
+
+---
+Task ID: TSK-0062 — Per-chapter brand image editor inside /admin/chapters/[id]
+Agent: main
+Task: User request:
+  "Chapter organizer and admin of a specific chapter can change any of
+  the default images for the specific chapter he manages. Super admin
+  can change for all, that means need to add to each chapter editing
+  options in https://aisalon.massapro.com/admin/chapters the three
+  default images and enable to be selected from any existing image
+  that the chapter has."
+
+  So: add a brand-image picker UI (favicon / loginHero / loginBanner)
+  directly inside the chapter editor at /admin/chapters/[id] and
+  /admin/c/[slug], pickable from the same global brand library that
+  /admin/images uses. Chapter organizers should be able to reach
+  the editor for their own chapter.
+
+Work Log:
+- Step 1 — Created /src/app/admin/chapters/chapter-brand-images-editor.tsx:
+  * New client component `ChapterBrandImagesEditor({ chapterId, chapterName, canEdit })`.
+  * On mount, fetches both /api/admin/brand-images (gallery list —
+    already scope-filtered for non-super-admins to show the global
+    brand library + 3 global defaults + this chapter's overrides)
+    and /api/admin/chapters/[chapterId]/brand-images (current
+    overrides + global fallback values).
+  * Renders 3 summary cards (one per role) showing the current
+    override OR the global fallback it's inheriting, with thumbnail
+    previews + a "Clear" button to remove an override.
+  * "Pick from image gallery" button toggles a grid of all pickable
+    images. Each image has 3 per-role buttons (favicon / loginHero /
+    loginBanner) that POST to /api/admin/chapters/[id]/brand-images/select
+    (which already enforces scope server-side).
+  * Loading / error / empty states handled inline.
+
+- Step 2 — Wired the editor into chapter-editor.tsx:
+  * Imported ChapterBrandImagesEditor.
+  * Wrapped the existing single-Card return in a React fragment
+    (`<>...</>`) so we can render a second Card below.
+  * Added a "Brand image overrides" Card (only in edit mode, needs
+    chapterId) below the main chapter form Card.
+  * canEdit is true for anyone who reached the editor — the page-
+    level scope check (chapter-edit-content.tsx) already verified
+    the user can edit this chapter, and the select API enforces
+    its own scope server-side as defense-in-depth.
+
+- Step 3 — Added Chapters + Images tabs to CHAPTER_ORGANIZER:
+  * /src/components/ais/admin-tabs-def.ts: split the
+    `CO_HOST || CHAPTER_ORGANIZER` branch into two separate branches.
+    CHAPTER_ORGANIZER now also sees `/admin/chapters` and `/admin/images`
+    so they can navigate to their own chapter editor and view the
+    global brand library.
+  * /src/components/ais/admin-tabs.tsx (legacy copy): same split
+    applied so both code paths behave identically.
+
+- Step 4 — Relaxed the /admin/chapters gate for CHAPTER_ORGANIZER:
+  * /src/app/admin/chapters/page.tsx:
+    - Changed the gate from `can(role, "members.view")` to also
+      allow `effectiveRole === ROLES.CHAPTER_ORGANIZER`.
+    - Added a `chapterWhere` filter that scopes the chapters list
+      inside the country query to ONLY the chapter organizer's own
+      chapter (id: me.chapterId). They see a single-chapter list,
+      click through to the editor, and manage brand image overrides.
+    - Super Admin + Admin behavior unchanged (they see all chapters
+      in their scope).
+
+- Verification:
+  * `npx tsc --noEmit` — no new errors in modified files.
+  * `npx next build` — succeeded with no errors.
+
+Stage Summary:
+- Super Admin can now edit any chapter's favicon, login hero, and
+  login banner directly from the chapter editor at
+  /admin/chapters/[id] (or /admin/c/[slug]) — no need to go to
+  /admin/images and use the chapter filter dropdown.
+- Admin (country-scoped) can do the same for chapters in their
+  country.
+- Chapter Organizer can now see the Chapters + Images tabs, navigate
+  to their own chapter editor, and pick the favicon / login hero /
+  login banner for their chapter from the global brand library +
+  global defaults + their existing overrides.
+- All writes are scope-enforced server-side at
+  /api/admin/chapters/[id]/brand-images/select (Super Admin = any
+  chapter; Admin = own country; Chapter Organizer = own chapter).
+- Ready to push to origin/main for Vercel auto-deploy.

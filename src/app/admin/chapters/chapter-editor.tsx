@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
+import { ChapterBrandImagesEditor } from "./chapter-brand-images-editor";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -156,6 +157,7 @@ export function ChapterEditor({
   }
 
   return (
+    <>
     <Card className="p-6 bg-white border border-black/10 max-w-2xl">
       <h2 className="text-lg font-bold text-black mb-4">
         {mode === "new" ? "Create new chapter" : "Edit chapter"}
@@ -466,6 +468,37 @@ export function ChapterEditor({
         </div>
       </div>
     </Card>
+
+    {/* Chapter-scoped brand image overrides — only shown in edit mode
+        (needs a saved chapterId to write overrides against). Lets the
+        Super Admin / Admin / Chapter Organizer pick the favicon, login
+        hero, and login banner for THIS chapter, overriding the global
+        defaults when visitors are on /c/[slug] or /login?chapterSlug=[slug].
+
+        PER USER SPEC 2026-08-02: chapter admins should be able to change
+        any of the default images for the specific chapter they manage,
+        directly from the chapter editor at /admin/chapters/[id]. The
+        pickable images come from the global brand library + the 3
+        global defaults + this chapter's already-set overrides.
+
+        `canEdit` is true for anyone who reached this editor — the
+        page-level scope check (chapter-edit-content.tsx) already
+        verified the user can edit this chapter. The brand-images
+        select API also enforces its own scope server-side as a
+        defense-in-depth measure. */}
+    {mode === "edit" && chapterId && (
+      <Card className="p-6 bg-white border border-black/10 max-w-2xl mt-6">
+        <h2 className="text-lg font-bold text-black mb-4">
+          Brand image overrides
+        </h2>
+        <ChapterBrandImagesEditor
+          chapterId={chapterId}
+          chapterName={form.name || "this chapter"}
+          canEdit={true}
+        />
+      </Card>
+    )}
+    </>
   );
 }
 

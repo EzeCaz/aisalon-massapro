@@ -33,18 +33,41 @@ export default async function ChaptersPage() {
     myRole = ROLES.SUPER_ADMIN;
   }
 
-  // Gate: SUPER_ADMIN + ADMIN can view. CHAPTER_ORGANIZER sees only their own
-  // chapter (still useful but read-only). MEMBER/SPEAKER → /events.
-  if (!can(myRole, "members.view") && !isSuperAdminEmail(me.email)) redirect("/events");
+  // Gate: SUPER_ADMIN + ADMIN + CHAPTER_ORGANIZER can view.
+  // - SUPER_ADMIN sees all countries + chapters (global scope).
+  // - ADMIN sees only their country + all chapters in it.
+  // - CHAPTER_ORGANIZER sees only their own chapter (rendered as a
+  //   single-chapter list so they can click through to the editor and
+  //   manage brand image overrides, etc.).
+  // - MEMBER/SPEAKER/CO_HOST → /events (no chapter admin access).
+  //
+  // PER USER SPEC 2026-08-02: chapter organizers should be able to
+  // change any of the default images for the specific chapter they
+  // manage — they need to reach /admin/chapters to find their chapter.
+  if (
+    !can(myRole, "members.view") &&
+    effectiveRole !== ROLES.CHAPTER_ORGANIZER &&
+    !isSuperAdminEmail(me.email)
+  ) {
+    redirect("/events");
+  }
 
   const isSuperAdmin = isSuperAdminEmail(me.email) || myRole === ROLES.SUPER_ADMIN;
+  const isChapterOrganizer = effectiveRole === ROLES.CHAPTER_ORGANIZER;
 
-  // Scope: Super Admin sees all countries; Admin sees only their country.
+  // Scope: Super Admin sees all countries; Admin sees only their country;
+  // Chapter Organizer sees only their country AND only their own chapter
+  // inside that country (so they can click through to the editor and
+  // manage brand image overrides without seeing other chapters).
   const countryWhere = isSuperAdmin ? {} : { id: me.countryId ?? "___NEVER___" };
+  const chapterWhere = isChapterOrganizer
+    ? { id: me.chapterId ?? "___NEVER___" }
+    : {};
   const countries = await db.country.findMany({
     where: countryWhere,
     include: {
       chapters: {
+        where: chapterWhere,
         include: {
           _count: {
             select: {
