@@ -471,7 +471,7 @@ export function SectionBox({
   accentColor?: string;
   label?: string;
   /** Which corner the box is anchored to (used for transformOrigin). */
-  anchor?: "top-left" | "top-right";
+  anchor?: "top-left" | "top-right" | "bottom-right" | "bottom-left";
   /** Id for guide-system registration (so peers can snap to it). */
   guideId?: string;
   zIndex?: number;
@@ -760,7 +760,11 @@ export function SectionBox({
         ? "top-left"
         : anchor === "top-right"
           ? "top-right"
-          : "top-left";
+          : anchor === "bottom-right"
+            ? "bottom-right"
+            : anchor === "bottom-left"
+              ? "bottom-left"
+              : "top-left";
   }
   // Mid-edge handle drags update the box's explicit width / height in
   // canvas px (preferred over the legacy padding approach). When set,
