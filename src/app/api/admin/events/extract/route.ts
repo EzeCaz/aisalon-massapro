@@ -4,6 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import ZAI from "z-ai-web-dev-sdk";
+import {
+  createKimiChatCompletion,
+  hasKimiEnv,
+} from "@/lib/kimi-client";
+import {
+  createChatCompletion as createZaiChatCompletion,
+  hasZaiEnv,
+} from "@/lib/zai-client";
 
 /**
  * POST /api/admin/events/extract
@@ -95,17 +103,60 @@ Rules:
 5. Speakers: include ANY person mentioned with a speaking role. If you can't tell if someone is speaking vs. just mentioned, include them with a warning.
 6. Don't invent data — if a field isn't in the text, use null.`;
 
-  try {
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text },
-      ],
-      thinking: { type: "disabled" },
-    });
+  // Provider priority: Kimi (Moonshot) → ZAI env → ZAI SDK (dev only).
+  // Kimi is the recommended provider for this prefill flow — free tier
+  // at platform.moonshot.cn, OpenAI-compatible, no extra SDK deps.
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: text },
+  ];
 
-    const raw = completion.choices[0]?.message?.content || "";
+  let raw = "";
+  let providerUsed = "";
+
+  try {
+    if (hasKimiEnv()) {
+      providerUsed = "kimi";
+      const kimiRes = await createKimiChatCompletion({
+        messages,
+        temperature: 0.2,
+        // moonshot-v1-32k comfortably fits the 20k-char input cap + JSON output
+        model: process.env.KIMI_MODEL || "moonshot-v1-32k",
+      });
+      raw = kimiRes.choices[0]?.message?.content || "";
+    } else if (hasZaiEnv()) {
+      providerUsed = "zai-env";
+      const zaiRes = await createZaiChatCompletion({
+        messages,
+        thinking: { type: "disabled" },
+      });
+      raw = zaiRes.choices[0]?.message?.content || "";
+    } else {
+      providerUsed = "zai-sdk";
+      const zai = await ZAI.create();
+      const completion = await zai.chat.completions.create({
+        messages,
+        thinking: { type: "disabled" },
+      });
+      raw = completion.choices[0]?.message?.content || "";
+    }
+  } catch (err) {
+    console.error(
+      `[events/extract] LLM call failed (provider=${providerUsed || "none"}):`,
+      err
+    );
+    return NextResponse.json(
+      {
+        error: `AI extraction failed via ${providerUsed || "no provider"}: ${(err as Error).message}`,
+        hint:
+          "Set KIMI_API_KEY (free tier at platform.moonshot.cn) for the most reliable extraction.",
+      },
+      { status: 500 }
+    );
+  }
+
+  try {
+    // inner try: parse the LLM JSON output
     // Strip any markdown fences the LLM might have added despite instructions.
     const cleaned = raw
       .replace(/^```(?:json)?\s*/i, "")
@@ -187,12 +238,13 @@ Rules:
       event: sanitizedEvent,
       speakers: sanitizedSpeakers,
       warnings,
+      provider: providerUsed,
     });
   } catch (err) {
-    console.error("[events/extract] LLM call failed:", err);
+    console.error("[events/extract] parse/sanitize failed:", err);
     return NextResponse.json(
       {
-        error: `AI extraction failed: ${(err as Error).message}`,
+        error: `Extraction failed during response parsing: ${(err as Error).message}`,
       },
       { status: 500 }
     );

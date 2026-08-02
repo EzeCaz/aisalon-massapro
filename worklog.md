@@ -7379,3 +7379,24 @@ Stage Summary:
   2. "Style" section at the top of the form view (3-column button grid with subtitles)
 - The dropdown has been removed from the form view.
 - STORAGE_KEY bumped to v4.
+
+---
+Task ID: kimi-api-key-for-prefill-event
+Agent: main
+Task: Wire the AI event-extraction ("prefill event") flow to use Moonshot/Kimi via KIMI_API_KEY (free tier at platform.moonshot.cn). User provided credentials: ID ak-fbqowozmddfi11ccdd71, Key sk-epGS...REDACTED.
+
+Work Log:
+- Identified the "AI services prefill event" = /api/admin/events/extract route (called by the "Extract fields with AI" button on the New Event form at /admin/events/new).
+- Reviewed existing providers: src/lib/zai-client.ts (env-based, OpenAI-compatible) and direct ZAI SDK usage in the route.
+- Created src/lib/kimi-client.ts mirroring zai-client's createChatCompletion() shape, targeting https://api.moonshot.cn/v1, default model moonshot-v1-32k.
+- Refactored /api/admin/events/extract/route.ts to use provider priority: KIMI_API_KEY → ZAI_BASE_URL+ZAI_API_KEY → ZAI SDK (dev only). Split the LLM-call try/catch from the parse/sanitize try/catch, fixed the misleading error message, and added `provider` field to the success response for debuggability.
+- Added KIMI_API_KEY (and optional KIMI_BASE_URL, KIMI_MODEL) to .env with the user-provided key, and documented it in .env.example.
+- Wrote scripts/test-kimi.ts smoke test and ran it against https://api.moonshot.cn/v1/chat/completions.
+- TypeScript check: no errors in the touched files (kimi-client, zai-client, extract/route). Pre-existing errors elsewhere (dashboard charts, skills/) are unrelated.
+
+Stage Summary:
+- Code wiring is complete and type-clean. Provider priority: Kimi → ZAI-env → ZAI-SDK.
+- BLOCKER: Moonshot API returns 401 Invalid Authentication for BOTH provided credentials (tried sk-... as Bearer, and ak-... as Bearer). Key length and format are correct (51 chars including sk- prefix, no hidden characters). The ak-... value is not a Z.ai key either (Z.ai config uses apiKey="Z.ai" + JWT token, not ak-...).
+- Most likely causes: (a) the key was revoked or never activated on platform.moonshot.cn, (b) email verification pending on the Moonshot account, (c) the key was copy-pasted incompletely.
+- Action needed from user: re-issue or re-verify the key at platform.moonshot.cn → API Keys, then update KIMI_API_KEY in .env (and on Vercel project env vars for production). The code will pick it up automatically — no further code changes needed.
+- Artifacts produced: src/lib/kimi-client.ts, scripts/test-kimi.ts, updated .env, updated .env.example, updated /api/admin/events/extract/route.ts.
