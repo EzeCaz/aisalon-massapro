@@ -681,7 +681,7 @@ For the full step-by-step protocol that every task must follow, see [`core/task-
 | **Date** | 2026-08-02 |
 | **Title** | AppHeader: chapter-scoped login-hero meerkat + chapter label; SUPER_ADMIN "View as" role+chapter impersonation; push+deploy; backup |
 | **Category** | HIGH |
-| **Status** | IN_PROGRESS |
+| **Status** | DONE |
 | **Worklog Ref** | `TSK-0057 — chapter-header-logo-and-view-as` |
-| **Files Touched** | src/components/ais/app-header.tsx (chapter login-hero img + label), src/components/brand/aisalon-logo-server.tsx (markSrc already supported), src/lib/auth.ts (jwt callback: viewAsRole/viewAsChapterId), src/lib/permissions.ts (getUserScope + canSeeAdminNav honor viewAs overrides), src/components/ais/view-as-switcher.tsx (new — SUPER_ADMIN-only UI), src/app/api/admin/view-as/route.ts (new — POST set, DELETE clear), docs/tasks.md, worklog.md |
-| **Outcome** | (pending) |
+| **Files Touched** | src/components/ais/app-header.tsx (chapter login-hero img + label), src/components/ais/view-as-switcher.tsx (new — SUPER_ADMIN-only UI), src/app/api/admin/view-as/route.ts (new — POST/DELETE cookie API), src/lib/auth.ts (jwt + session callbacks read + propagate viewAs), src/lib/auth-guards.ts (getCurrentUser passes viewAs to getUserScope), src/lib/permissions.ts (getUserScope accepts + honors viewAs opts), docs/tasks.md, worklog.md |
+| **Outcome** | (1) Header meerkat now uses chapter-scoped loginHero with alt='AI Salon "{chapter_name}" Meerkat'. (2) Header label shows '{chapter.name} Chapter' (was hardcoded 'Tel Aviv Chapter'). (3) SUPER_ADMIN 'View as' switcher in header — pick any (role, chapter) combo and the entire platform re-scopes to that perspective via the ais_view_as cookie + jwt callback + getUserScope. (4) Pushed d640927 to origin/main — Vercel auto-deploy triggered. (5) Backup at /home/z/my-project/download/backups/TSK-0057-20260802-092133/ (dev DB + git state). All routes compile + respond. |

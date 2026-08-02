@@ -10582,3 +10582,124 @@ Stage Summary:
   The code fix prevents FUTURE scope corruption; it does not auto-repair
   existing corrupted rows.
 - Tasks registry backfilled (TSK-0026 → TSK-0055) + TSK-0056 added.
+
+---
+Task ID: TSK-0057 — chapter-header-logo-and-view-as
+Agent: main
+Task: 5 sub-tasks per user spec 2026-08-02:
+  1. AppHeader chapter label — render '{chapter_name} Chapter' (was
+     already done in TSK-0056; verified + adjusted the chapter lookup
+     to use effectiveChapterId so 'View as' overrides also affect the
+     label).
+  2. AppHeader meerkat img → chapter-scoped login hero image with alt
+     'AI Salon "{chapter_name}" Meerkat'.
+  3. SUPER_ADMIN 'View as' switcher — pick (role, chapter) and the
+     entire platform re-scopes to that perspective.
+  4. Push to origin/main + deploy.
+  5. Backup.
+
+Work Log:
+- Logged TSK-0057 in docs/tasks.md registry (HIGH tier — touches auth,
+  session, permissions, header; affects every admin page).
+- Step 1+2 (header): Rewrote the meerkat mark in app-header.tsx to
+  use an inline next/image <img> with:
+    * src = chapter's effective loginHero (via getEffectiveBrandImages)
+      → falls back to global default → /images/falafel-meerkat.jpg
+    * alt = 'AI Salon "{chapter_name}" Meerkat' (or 'AI Salon Falafel
+      Meerkat' when no chapter)
+    * exact inline style pattern from the user's spec (height: 1.5em,
+      width: auto, max-width: 100%, display: inline-block, vertical-
+      align: middle, color: transparent)
+    * unoptimized=true when src is an external URL (Vercel Blob)
+  The chapter label span is unchanged from TSK-0056 — already matches
+  the user's spec exactly. The chapter lookup now uses
+  effectiveChapterId so 'View as' overrides affect both the label
+  and the meerkat image.
+- Step 3 (View as switcher) — the big one. Built 4 layers:
+  (a) ViewAsSwitcher client component (view-as-switcher.tsx):
+      Dropdown pill in the header, SUPER_ADMIN-only. Two sections:
+      'View as role' (Member/Speaker/Co-Host/Chapter Organizer/Admin/
+      Super Admin) + 'View as chapter' (None + all chapters with
+      flag emoji, loaded from /api/admin/chapters). 'Reset to my real
+      identity' clears both. When active, the pill turns amber.
+  (b) /api/admin/view-as/route.ts (new):
+      POST { role, chapterId } → sets the ais_view_as cookie (HttpOnly,
+      SameSite=lax, 7-day max-age). Validates role against ROLES
+      allowlist + chapterId against DB. SUPER_ADMIN-only.
+      DELETE → clears the cookie.
+  (c) auth.ts jwt callback: reads ais_view_as cookie via
+      `await cookies()` (Next.js 15+ async). Double-gates: only honors
+      the override when the signed-in user is SUPER_ADMIN (DB role OR
+      email allowlist) AND setBy matches their user id (so a stale
+      cookie from a previous session can't affect a new one). Stamps
+      viewAsRole + viewAsChapterId on the token.
+      auth.ts session callback propagates these to session.user so
+      server components can read them via getServerSession.
+  (d) permissions.ts getUserScope: new opts param
+      { isSuperAdminCaller, viewAsRole, viewAsChapterId }. When all
+      gates pass, returns the impersonated scope:
+        - SUPER_ADMIN + no chapter → global
+        - ADMIN + chapter → country scope (chapter's countryId)
+        - any other role + chapter → chapter scope
+        - role-only with no chapter → none (can't resolve a scope)
+      auth-guards.ts getCurrentUser: reads viewAs from the session +
+      passes to getUserScope. This means EVERY API route that uses
+      getCurrentUser() (events, members, registrants, speakers,
+      analytics, reports, email) automatically honors the viewAs
+      override. The Super Admin sees exactly what the impersonated
+      role+chapter would see.
+- Step 4 (push + deploy): Committed [TSK-0057] locally, then pushed
+  to origin/main (user explicitly confirmed 'push and deploy'). Push
+  succeeded: d38666e..d640927 main -> main. Vercel will auto-deploy.
+  3 commits are now on origin/main that were previously local-only:
+    - 9fa5c54 (SectionBox bottom-right anchor fix)
+    - 30d7853 [TSK-0056] (Montreal scope + 403 + chapter-aware header)
+    - d640927 [TSK-0057] (chapter header logo + View as switcher)
+- Step 5 (backup): Created
+  /home/z/my-project/download/backups/TSK-0057-20260802-092133/
+  containing:
+    - custom.db (966,656 bytes — copy of the dev SQLite DB)
+    - git-head.txt (last 5 commits at backup time)
+    - commit-sha.txt (d640927...)
+    - README.md (restore instructions + commit list)
+  This lets us roll back the dev DB if the production deploy breaks
+  anything. Production DB is separate (Vercel-hosted) — not part of
+  this backup.
+
+- VERIFICATION:
+  - Dev server compiles cleanly after all edits.
+  - GET /events → 200, GET /login → 200, GET /admin/images → 307.
+  - GET /api/admin/view-as → 405 (only POST/DELETE defined — correct).
+  - GET /api/admin/chapters → 401 (auth required — correct).
+  - No new TypeScript errors in touched files.
+  - Initial Next.js 15 cookies() async issue caught + fixed (was
+    `cookies().get(...)` → now `await cookies()` then `.get(...)`).
+
+Stage Summary:
+- Header (Steps 1+2): meerkat mark + chapter label are now chapter-
+  scoped. A Montreal admin sees Montreal's loginHero image + 'Montreal
+  Chapter' label. Anonymous visitors see the global defaults.
+- View as (Step 3): SUPER_ADMIN can pick any (role, chapter) combo
+  from the header dropdown. The entire platform re-scopes to that
+  perspective — events list, members table, registrants, speakers,
+  analytics, reports, email campaigns all filter to the impersonated
+  scope. 'Reset' returns to real identity. The cookie survives page
+  refreshes; clearing the browser cookie also works.
+- Push + deploy (Step 4): d640927 is on origin/main. Vercel auto-
+  deploy triggered. Verify at https://aisalon.massapro.com once the
+  build completes (typically 2-4 minutes).
+- Backup (Step 5): /home/z/my-project/download/backups/TSK-0057-
+  20260802-092133/ — dev DB + git state snapshot. Production DB is
+  not affected by this backup (separate Vercel-hosted instance).
+
+FOLLOW-UP (not blocking):
+- The View as switcher is desktop-only (mobile nav is too cramped for
+  the dropdown). Super Admins on mobile can still use it from a
+  desktop. If needed, a mobile-optimized version could be a follow-up.
+- The View as override does NOT change the user's actual role for
+  write operations — getCurrentUser() still returns the real user
+  object, so APIs that check `can(user.role, '...')` for write
+  permissions still gate on the real SUPER_ADMIN role. This is
+  intentional: View as is for PREVIEWING, not for actually performing
+  actions as the impersonated role. If the user wants full action
+  impersonation, that's a separate (riskier) feature.

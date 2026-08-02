@@ -183,7 +183,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 ## Current Task
 
-> **TSK-0056 IN_PROGRESS** — Fix Montreal admin seeing TLV events + /admin/images 403 + AppHeader hardcoded "Tel Aviv Chapter". Root cause: `getUserScope()` failed open to global scope when a CHAPTER_ORGANIZER had missing countryId/chapterId; `/api/admin/brand-images` GET was hard-gated to SUPER_ADMIN; AppHeader hardcoded "Tel Aviv Chapter" on every page. Fixes applied: fail-closed getUserScope, canSeeAdminNav gates on brand-image APIs, chapter-aware AppHeader, v7-seed OR→AND backfill. Local only — NOT pushed (per no-push-without-confirmation policy). Follow-up: Super Admin must verify `que_qui@hotmail.com`'s User row has correct role+chapterId+countryId in production.
+> **TSK-0057 DONE** — AppHeader chapter-scoped meerkat + chapter label; SUPER_ADMIN 'View as' (role+chapter) switcher; push+deploy; backup. Commit d640927 pushed to origin/main — Vercel auto-deploy triggered. Backup at /home/z/my-project/download/backups/TSK-0057-20260802-092133/. The View as switcher lets a Super Admin preview the platform from any (role, chapter) perspective via the ais_view_as cookie + jwt callback + getUserScope override. All admin API routes (events, members, registrants, speakers, analytics, reports, email) automatically honor the override.
 
 When a new session starts, read this section first to know what's in flight. Update it before ending a session so the next agent can pick up seamlessly.
 
