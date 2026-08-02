@@ -11354,3 +11354,65 @@ Stage Summary:
 - The form is reusable — chapter leads fill it once per new chapter. Global team
   uses it as the source of truth when creating the Chapter record, uploading
   brand assets, and configuring email templates.
+
+---
+Task ID: email-template-tokens-deploy
+Agent: main
+Task: Deploy the previous task (replace hardcoded "Tel Aviv" with {{chapter_name}}
+  token in all email templates + use login banner as the email brand logo) to
+  production, then call POST /api/email-orchestrator/seed to migrate existing
+  DB rows to the new tokenized templates.
+
+Work Log:
+- Verified the previous task was already implemented locally in commit
+  69ae04d ("feat(email): replace hardcoded 'Tel Aviv' with {{chapter_name}}
+  merge token + use login banner as brand logo") but had NOT been pushed
+  (branch was 2 commits ahead of origin/main).
+- Audited the existing seed.ts migration logic and found two gaps:
+  1. The migration only matched "The AI Salon Tel Aviv team" (the sign-off
+     line). It missed the campaign footer line "AI Salon Tel Aviv ·
+     Empowering AI Connections" — existing DB rows with the old footer
+     text would NOT be patched.
+  2. The migration did NOT clear EmailStageTemplate.logoUrl overrides.
+     If a per-template logoUrl was previously set to something other
+     than the canonical login banner URL, resolveLogoUrl() would still
+     return that override — meaning the email brand logo would NOT be
+     the login banner.
+- Extended runSeed() in src/lib/email-orchestrator/seed.ts with a v2
+  migration block:
+  * Broadened the matching regex to catch both the sign-off line AND
+    the footer line (any "AI Salon Tel Aviv ·" substring).
+  * Added a check: if existing.logoUrl is set AND != canonical login
+    banner URL, set patch.logoUrl = null. This forces every email to
+    fall back to DEFAULT_BRAND_LOGO_URL (the login banner).
+  * Migration is idempotent — safe to call POST /api/email-orchestrator/seed
+    multiple times.
+- Committed the strengthening as b1cef85 ("feat(seed): strengthen email
+  migration — clear logoUrl overrides + match footer text").
+- Pushed 3 commits to origin/main:
+  * 69ae04d — feat(email): replace hardcoded 'Tel Aviv' with {{chapter_name}} + login banner as brand logo
+  * ecb2b97 — login page bg-white fix (previous turn)
+  * b1cef85 — feat(seed): strengthen email migration — clear logoUrl overrides + match footer text
+- Vercel auto-deploy triggered. Confirmed the endpoint is reachable:
+  curl -X POST https://aisalon.massapro.com/api/email-orchestrator/seed
+  → HTTP 401 (expected without auth).
+- Attempted to call the seed endpoint via curl with no auth → 401.
+  Cannot authenticate from CLI without CRON_SECRET (set on Vercel, not
+  in local env). Two paths for the user to trigger the migration:
+    A. UI: visit https://aisalon.massapro.com/admin/email → orchestrator
+       panel → click "Seed templates" button. Uses the authenticated
+       admin session.
+    B. CLI: curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+         -H "Content-Type: application/json" \
+         -d '{"action":"seed"}' \
+         https://aisalon.massapro.com/api/email-orchestrator/seed
+
+Stage Summary:
+- Code changes complete and pushed. Vercel deploy in progress (or complete
+  by the time the user reads this).
+- Migration ready: next call to POST /api/email-orchestrator/seed will
+  patch any existing EmailStageTemplate rows that still contain "Tel Aviv"
+  text AND clear any non-canonical logoUrl overrides.
+- User action required: trigger the seed endpoint once via the admin UI
+  button or via curl with CRON_SECRET. The migration is idempotent —
+  running it multiple times is safe.
