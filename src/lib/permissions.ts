@@ -486,18 +486,31 @@ export async function getUserScope(userId: string): Promise<UserScope> {
   const r = normalizeRole(user.role);
   if (r === ROLES.SUPER_ADMIN) return { kind: "global" };
   if (r === ROLES.ADMIN) {
-    if (!user.countryId) return { kind: "global" }; // unscoped admin = global (defensive)
+    // TSK-0056: Fail CLOSED. Previously returned { kind: "global" } when
+    // an ADMIN had a missing countryId — that meant a misconfigured admin
+    // (e.g. a Montreal admin whose countryId was wiped by v7-seed) would
+    // silently see ALL countries' data. Now they see nothing until their
+    // scope is fixed, which is the safe default.
+    if (!user.countryId) {
+      console.warn(
+        `[permissions] ADMIN ${userId} has no countryId — failing safe to "none" scope. Fix this user's countryId in /admin.`
+      );
+      return { kind: "none" };
+    }
     return { kind: "country", countryId: user.countryId };
   }
   if (r === ROLES.CHAPTER_ORGANIZER || r === ROLES.CO_HOST) {
-    // Chapter scope requires both countryId + chapterId. If missing,
-    // fall back to country scope (or global if both missing) so the user
-    // isn't locked out of everything while their scope is being set up.
-    if (user.chapterId && user.countryId) {
-      return { kind: "chapter", countryId: user.countryId, chapterId: user.chapterId };
+    // TSK-0056: Fail CLOSED. Same reasoning — a chapter organizer whose
+    // chapterId/countryId was wiped must NOT silently escalate to global
+    // scope. The previous "fail open" behaviour was the root cause of the
+    // "Montreal admin sees TLV events" bug.
+    if (!user.chapterId || !user.countryId) {
+      console.warn(
+        `[permissions] ${r} ${userId} is missing chapterId/countryId — failing safe to "none" scope. Fix this user's scope in /admin.`
+      );
+      return { kind: "none" };
     }
-    if (user.countryId) return { kind: "country", countryId: user.countryId };
-    return { kind: "global" };
+    return { kind: "chapter", countryId: user.countryId, chapterId: user.chapterId };
   }
   return { kind: "none" };
 }

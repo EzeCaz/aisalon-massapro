@@ -46,11 +46,34 @@ export async function AppHeader() {
   // to read for anonymous visitors (the URLs are shown publicly in the
   // header).
   const settings = await getPublicSettings();
-  const whatsappUrl = settings.whatsappGroupUrl;
-  // LinkedIn showcase for the AI Salon Tel Aviv chapter. Admin-editable
-  // at /admin/images (no redeploy needed). Defaults to the AI Salon TLV
-  // LinkedIn showcase when no SiteSetting row exists.
-  const linkedInUrl = settings.linkedinUrl;
+  // TSK-0056: For signed-in users, prefer the chapter-scoped WhatsApp +
+  // LinkedIn URLs (falls back to global defaults when the chapter has
+  // no override). Anonymous visitors still see the global defaults.
+  // This ensures a Montreal admin sees Montreal's community links, not
+  // TLV's.
+  let whatsappUrl = settings.whatsappGroupUrl;
+  let linkedInUrl = settings.linkedinUrl;
+  let chapterLabel: string | null = null;
+  if (user?.chapterId) {
+    const chapter = await db.chapter.findUnique({
+      where: { id: user.chapterId },
+      select: {
+        name: true,
+        whatsappGroupUrl: true,
+        linkedinUrl: true,
+      },
+    });
+    if (chapter) {
+      // Chapter-level URLs (set on the Chapter row, not ChapterSetting)
+      // override the global defaults for signed-in members of that chapter.
+      if (chapter.whatsappGroupUrl) whatsappUrl = chapter.whatsappGroupUrl;
+      if (chapter.linkedinUrl) linkedInUrl = chapter.linkedinUrl;
+      // TSK-0056: Show the signed-in user's chapter name in the header
+      // instead of the previously hardcoded "Tel Aviv Chapter". Falls
+      // back to no label for users with no chapter.
+      chapterLabel = `${chapter.name} Chapter`;
+    }
+  }
 
   const navLinks = [
     { href: "/events", label: "Events" },
@@ -67,9 +90,11 @@ export async function AppHeader() {
           {/* Logo + tagline — Falafel Meerkat mark on the left, on every page */}
           <Link href="/events" className="flex items-center gap-2">
             <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
-            <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
-              Tel Aviv Chapter
-            </span>
+            {chapterLabel && (
+              <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
+                {chapterLabel}
+              </span>
+            )}
           </Link>
 
           {/* Desktop nav */}

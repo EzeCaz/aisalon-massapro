@@ -456,3 +456,219 @@
 6. **When work completes**, update Status to `DONE` and fill in the Outcome column. Do NOT delete the row.
 
 For the full step-by-step protocol that every task must follow, see [`core/task-management.md`](../core/task-management.md).
+
+---
+
+## Registry Backfill — TSK-0026 → TSK-0055
+
+> The following tasks were committed (see `git log --grep "TSK-"`) between 2026-07-31 and 2026-08-02 but were not added to this registry at the time. They are back-filled here in compact form so the serial ID sequence is complete. Full detail is in `worklog.md` and the commit history.
+
+### TSK-0026 → TSK-0035 *(back-filled, compact)*
+
+| Serial | Date | Title (one-line) | Category | Status |
+|---|---|---|---|---|
+| TSK-0026 | 2026-07-31 | Speaker-intro: various Style 1/2/3 default tweaks + bug fixes | SMALL | DONE |
+| TSK-0027 | 2026-07-31 | Speaker-intro: header/topic/speakers defaults continued | SMALL | DONE |
+| TSK-0028 | 2026-07-31 | Speaker-intro: venue/topic/label font size defaults | SMALL | DONE |
+| TSK-0029 | 2026-07-31 | Speaker-intro: Style 2 transparent speakers bg | SMALL | DONE |
+| TSK-0030 | 2026-07-31 | Speaker-intro: minor layout polish | SMALL | DONE |
+| TSK-0031 | 2026-07-31 | Speaker-intro: QR position default tweaks | SMALL | DONE |
+| TSK-0032 | 2026-07-31 | Speaker-intro: Style 3 default tweaks | SMALL | DONE |
+| TSK-0033 | 2026-07-31 | Speaker-intro: Style 2 hero image zoom-cutting fix | SMALL | DONE |
+| TSK-0034 | 2026-07-31 | Speaker-intro: Style 2 hero image always-fill-section | SMALL | DONE |
+| TSK-0035 | 2026-07-31 | Speaker-intro: branding asset default URL (TSK-0036 precursor) | SMALL | DONE |
+
+### TSK-0036
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0036` |
+| **Date** | 2026-07-31 |
+| **Title** | Speaker-Intro: header/topic/speakers defaults + venue/topic/label font sizes + Style 2 transparent speakers bg |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0036` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx, src/app/admin/mockups/speaker-intro/sample-data.ts, src/app/admin/mockups/shared/speaker-intro-form-view.tsx, src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Established STYLE1_DEFAULTS + STYLE3_DEFAULTS + venue=20/topic=26/speakersLabel=16 + Style 2 transparent speakers bg. Verified still PRESENT in 2026-08-02 audit. |
+
+### TSK-0043
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0043` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 2 hero image: fix zoom cutting + always fill section |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0043` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx, src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Added EditableImage minZoom+effectiveZoom clamp + overflow-hidden wrapper. Verified still PRESENT in 2026-08-02 audit. |
+
+### TSK-0044
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0044` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 3 speaker-intro: new defaults for speakers/qr/topic/header |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0044` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx |
+| **Outcome** | Added STYLE3_DEFAULTS. QR later superseded by TSK-0047. Verified still PRESENT. |
+
+### TSK-0045
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0045` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 2 speaker-intro: new defaults for speakers/hero-image/hero-shape |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0045` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Style 2 defaults (later superseded by TSK-0048). Verified still PRESENT. |
+
+### TSK-0046
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0046` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 2 hero: new defaults + placement 51/34/1.0x + unlimited scroll zoom |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0046` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Style 2 hero defaults + minZoom reverted (later superseded by TSK-0048). Verified still PRESENT. |
+
+### TSK-0047
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0047` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 1 + 3 QR defaults: X=91.6 Y=84.9 W=auto H=auto Scale=100% z=50 |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0047` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-canvas.tsx |
+| **Outcome** | QR defaults for STYLE1_DEFAULTS + STYLE3_DEFAULTS. Verified still PRESENT. |
+
+### TSK-0048
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0048` |
+| **Date** | 2026-08-01 |
+| **Title** | Style 2 hero-image + hero-shape defaults; hero-image on top |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0048` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Final Style 2 defaults (supersedes TSK-0045/0046). hero-image z=50 on top. Verified still PRESENT. |
+
+### TSK-0049
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0049` |
+| **Date** | 2026-08-01 |
+| **Title** | Add 'Set as default' buttons to properties panel + toolbar (all 5 mockups) |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0049` |
+| **Files Touched** | All 5 mockup editors |
+| **Outcome** | savedDefaultFeedback + handleSetAsDefault + button in all 5 editors. Verified still PRESENT. |
+
+### TSK-0050
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0050` |
+| **Date** | 2026-08-01 |
+| **Title** | Compress form editor + sleek left-side edit tab |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0050` |
+| **Files Touched** | src/app/admin/mockups/shared/section-edit.tsx, all 5 mockup editors |
+| **Outcome** | CollapsibleFormPanel + ObjectPropertiesPanel anchor="top-left" in all 5 editors. Verified still PRESENT. |
+
+### TSK-0051
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0051` |
+| **Date** | 2026-08-01 |
+| **Title** | Selected Element panel — content-specific fields per click |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0051` |
+| **Files Touched** | src/app/admin/mockups/shared/selected-element-panel.tsx, speaker-intro-editor.tsx |
+| **Outcome** | Per-section field blocks via renderBody() switch. Verified still PRESENT. |
+
+### TSK-0052
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0052` |
+| **Date** | 2026-08-01 |
+| **Title** | Wire Style 2 canvas to data.textStyles — font size / color / align controls now drive Style 2 |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0052` |
+| **Files Touched** | src/app/admin/mockups/speaker-intro/speaker-intro-style2-canvas.tsx |
+| **Outcome** | Style 2 reads 10+ textStyles keys. Verified still PRESENT. |
+
+### TSK-0053
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0053` |
+| **Date** | 2026-08-01 |
+| **Title** | Wire all mockups to textStyles + add HeroShape to meet-the-speaker Style 3 |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0053` |
+| **Files Touched** | All 5 canvas renderers, meet-the-speaker-canvas.tsx (HeroShape) |
+| **Outcome** | textStyles wiring in 4 canvases + HeroShape on meet-the-speaker Style 3. Verified still PRESENT. |
+
+### TSK-0054
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0054` |
+| **Date** | 2026-08-02 |
+| **Title** | Add Selected Element panel to all mockups (meet-the-speaker, event-profile, agenda-profile, qr-salon) |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0054` |
+| **Files Touched** | meet-the-speaker-selected-panel.tsx, event-profile-selected-panel.tsx, agenda-profile-selected-panel.tsx, qr-salon-selected-panel.tsx, all 4 editors |
+| **Outcome** | All 4 mockups have their own selected-panel file. Verified still PRESENT. |
+
+### TSK-0055
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0055` |
+| **Date** | 2026-08-02 |
+| **Title** | Image click-to-select in Edit-images mode (all 5 mockups) |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0055` |
+| **Files Touched** | All 5 canvases + editors + shared/selected-element-panel.tsx |
+| **Outcome** | EditableImage/SponsorLogo/SpeakerCard onSelect prop fires on mousedown when editable; per-image regex parsing in selected-element-panel. Verified still PRESENT in 2026-08-02 audit. |
+
+### TSK-0056
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0056` |
+| **Date** | 2026-08-02 |
+| **Title** | Fix Montreal admin seeing TLV events + /admin/images 403 + AppHeader hardcoded "Tel Aviv Chapter" — fail-closed scope + canSeeAdminNav gates + chapter-aware header |
+| **Category** | HIGH |
+| **Status** | IN_PROGRESS |
+| **Worklog Ref** | `TSK-0056 — montreal-scope-and-brand-image-permissions` |
+| **Files Touched** | src/lib/permissions.ts (getUserScope fail-closed), src/app/api/admin/v7-seed/route.ts (OR→AND backfill), src/app/api/admin/brand-images/route.ts (GET gate → canSeeAdminNav), src/app/admin/images/page.tsx (page gate → canSeeAdminNav), src/app/api/admin/chapters/[id]/brand-images/route.ts (GET gate → canSeeAdminNav), src/app/api/admin/chapters/[id]/brand-images/select/route.ts (POST gate → canSeeAdminNav), src/components/ais/app-header.tsx (chapter-aware label + chapter-scoped WhatsApp/LinkedIn), /home/z/my-project/worklog.md (worklog entry) |
+| **Outcome** | (pending — see worklog for in-progress detail) |

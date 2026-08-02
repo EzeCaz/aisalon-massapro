@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdmin, isSuperAdminEmail, ROLES } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, canSeeAdminNav, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
@@ -56,11 +56,14 @@ export default async function AdminImagesPage() {
     me = { ...me, role: ROLES.SUPER_ADMIN };
   }
 
-  // Allow view access for any admin (consistent with /admin), but the
-  // upload + select buttons in ImagesGallery are SUPER_ADMIN-only at the
-  // API layer, so a non-super-admin viewing the page will see the gallery
-  // but get 403s if they try to write.
-  if (!can(me.role, "members.view") && !isSuperAdminEmail(me.email)) {
+  // TSK-0056: Allow ANY admin (SUPER_ADMIN, ADMIN, CHAPTER_ORGANIZER,
+  // CO_HOST) to view the brand-images gallery. The previous gate used
+  // `can(role, "members.view")` which requires ADMIN+ rank, excluding
+  // CHAPTER_ORGANIZER (rank 2) — so they got redirected to /events
+  // before ever reaching the gallery. Now they can view; write buttons
+  // remain SUPER_ADMIN-only at the API layer (POST /api/admin/brand-images
+  // still uses isSuperAdmin()).
+  if (!canSeeAdminNav(me.role)) {
     redirect("/events");
   }
 

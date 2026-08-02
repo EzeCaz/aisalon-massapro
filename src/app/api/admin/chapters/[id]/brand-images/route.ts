@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { isSuperAdmin, canSeeAdminNav, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import {
   getChapterBrandImageOverrides,
@@ -35,7 +35,13 @@ export async function GET(
 
   const { user, error } = await getCurrentUser();
   if (error) return error;
-  if (!can(user!.role, "members.view")) {
+  // TSK-0056: Allow ANY admin to read chapter brand-image overrides.
+  // Scope (own country / own chapter) is enforced at lines 50-61 below.
+  // The previous `can(role, "members.view")` gate required ADMIN+ rank,
+  // which blocked CHAPTER_ORGANIZER from reading their own chapter's
+  // overrides — so the /admin/images page couldn't pre-fill the form
+  // for them.
+  if (!canSeeAdminNav(user!.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

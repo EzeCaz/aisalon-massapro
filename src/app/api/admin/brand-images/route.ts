@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { list, put } from "@vercel/blob";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { isSuperAdmin } from "@/lib/permissions";
+import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings } from "@/lib/site-settings";
 
@@ -43,7 +43,22 @@ const LOCAL_BRAND_URL = "/uploads/brand-assets";
 export async function GET() {
   const { user, error } = await getCurrentUser();
   if (error) return error;
-  if (!isSuperAdmin({ email: user!.email, role: user!.role })) {
+  // TSK-0056: Allow ANY signed-in admin (SUPER_ADMIN, ADMIN,
+  // CHAPTER_ORGANIZER, CO_HOST) to LIST brand images. The image list is
+  // scope-agnostic (it lists the global Vercel Blob `brand-assets/`
+  // prefix + the `.images/` stock folder) — there is no per-chapter
+  // image storage to filter at this endpoint. Per-chapter overrides are
+  // managed via the separate /api/admin/chapters/[id]/brand-images
+  // routes, which enforce scope at lines 50-61 / 64-74.
+  //
+  // The previous `isSuperAdmin()` gate caused a 403 for every
+  // CHAPTER_ORGANIZER who opened /admin/images, even though the page
+  // itself allowed them in. They saw the gallery mount, then immediately
+  // hit "Could not load images — Request failed with 403".
+  //
+  // Write operations (POST upload, POST select-global) below REMAIN
+  // SUPER_ADMIN-only — global brand asset writes should stay Super-Admin.
+  if (!canSeeAdminNav(user!.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

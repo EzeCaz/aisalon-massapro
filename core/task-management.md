@@ -183,7 +183,7 @@ These are the failure modes that this protocol exists to prevent. They all happe
 
 ## Current Task
 
-> **TSK-0025 DONE** — Speaker-Intro editor: "Edit images" + "Edit sections" buttons moved from the toolbar into the canvas caption area, positioned to the LEFT of the Style 1/2/3 segmented buttons. All three canvas-interaction controls now cluster together right above the canvas. Toolbar is now leaner: [Form/JSON] [Reset] [Copy] [Download] [Save]. TypeScript clean (0 errors). Dev server picked up the change — page loads HTTP 200 at /admin/mockups/speaker-intro.
+> **TSK-0056 IN_PROGRESS** — Fix Montreal admin seeing TLV events + /admin/images 403 + AppHeader hardcoded "Tel Aviv Chapter". Root cause: `getUserScope()` failed open to global scope when a CHAPTER_ORGANIZER had missing countryId/chapterId; `/api/admin/brand-images` GET was hard-gated to SUPER_ADMIN; AppHeader hardcoded "Tel Aviv Chapter" on every page. Fixes applied: fail-closed getUserScope, canSeeAdminNav gates on brand-image APIs, chapter-aware AppHeader, v7-seed OR→AND backfill. Local only — NOT pushed (per no-push-without-confirmation policy). Follow-up: Super Admin must verify `que_qui@hotmail.com`'s User row has correct role+chapterId+countryId in production.
 
 When a new session starts, read this section first to know what's in flight. Update it before ending a session so the next agent can pick up seamlessly.
 

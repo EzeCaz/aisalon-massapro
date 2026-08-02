@@ -98,10 +98,18 @@ export async function POST() {
 
   // 3. Backfill NULLs
   // SUPER_ADMIN users keep NULL scope (global).
+  // TSK-0056: Use AND (not OR) so we ONLY backfill users whose scope is
+  // COMPLETELY unset (both countryId AND chapterId NULL). The previous
+  // OR condition would silently overwrite a partial scope — e.g. a
+  // Montreal admin (chapterId=montreal, countryId=NULL) would have BOTH
+  // fields overwritten to Israel/Tel Aviv, destroying their Montreal
+  // assignment. Now partial-scope users are left alone for the Super
+  // Admin to fix manually via /admin/members/[id].
   const userBackfill = await db.user.updateMany({
     where: {
       AND: [
-        { OR: [{ countryId: null }, { chapterId: null }] },
+        { countryId: null },
+        { chapterId: null },
         { role: { not: "SUPER_ADMIN" } },
       ],
     },

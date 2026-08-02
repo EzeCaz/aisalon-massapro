@@ -10480,3 +10480,105 @@ TSK Feature Audit Results (all PRESENT ✅):
   TSK-0053 — textStyles wiring in 4 canvases + HeroShape on meet-the-speaker Style 3 ✅
   TSK-0054 — Selected Element panel in meet-the-speaker/event-profile/agenda-profile/qr-salon ✅
   TSK-0055 — Image click-to-select in Edit-images mode (all 5 mockups) ✅
+
+---
+Task ID: TSK-0056 — montreal-scope-and-brand-image-permissions
+Agent: main
+Task: Fix three reported bugs when logging in as que_qui@hotmail.com (Montreal chapter):
+  1. Montreal admin sees TLV events on /admin/events
+  2. /admin/images returns 403 "Could not load images"
+  3. AppHeader hardcodes "Tel Aviv Chapter" on every page (Montreal admin sees TLV branding)
+
+Work Log:
+- Launched Explore subagent to audit root cause across permissions.ts, v7-seed,
+  /api/admin/brand-images, /admin/images, /api/admin/chapters/[id]/brand-images,
+  and src/components/ais/app-header.tsx. Subagent confirmed:
+    * Bug 1 root cause: getUserScope() "fails open" to global scope when
+      CHAPTER_ORGANIZER/ADMIN has missing countryId/chapterId — so a
+      misconfigured Montreal admin silently sees ALL data (TLV included).
+    * Bug 2 root cause: /api/admin/brand-images GET endpoint hard-gated
+      to isSuperAdmin() — blocks ADMIN and CHAPTER_ORGANIZER from
+      listing images, even though /admin/images page lets them in.
+      Also the chapter-scoped brand-images routes use
+      can(role, "members.view") which requires ADMIN+ rank.
+    * Bug 3 root cause: AppHeader.tsx line 70-72 hardcodes
+      "Tel Aviv Chapter" as a visible label on EVERY page. Montreal
+      admins see "Tel Aviv Chapter" in their header — direct
+      contradiction of the per-chapter brand spec.
+    * Bonus: v7-seed route has a destructive OR condition that
+      overwrites partial-scope users (chapterId=montreal, countryId=NULL)
+      back to Israel/Tel Aviv. This is the most likely concrete cause
+      of que_qui's misconfigured scope in production.
+
+- Step 1 — Fixed getUserScope fail-open → fail-closed in
+  src/lib/permissions.ts:487-515. ADMIN missing countryId now returns
+  {kind:"none"} instead of {kind:"global"}. CHAPTER_ORGANIZER missing
+  chapterId/countryId returns {kind:"none"} instead of escalating to
+  country or global. Logs a console.warn so the Super Admin can find
+  the misconfigured user via server logs.
+
+- Step 2 — Fixed v7-seed destructive OR→AND backfill in
+  src/app/api/admin/v7-seed/route.ts:99-118. Now only backfills users
+  whose scope is COMPLETELY unset (both countryId AND chapterId NULL).
+  Partial-scope users are left alone for manual fix via /admin/members/[id].
+
+- Step 3 — Loosened /api/admin/brand-images GET gate from isSuperAdmin()
+  to canSeeAdminNav() in src/app/api/admin/brand-images/route.ts:43-63.
+  POST (upload) + POST (select-global) REMAIN isSuperAdmin-only —
+  global brand asset writes stay Super-Admin. Added canSeeAdminNav
+  to the imports.
+
+- Step 4 — Loosened /admin/images page gate from
+  `can(me.role, "members.view")` to `canSeeAdminNav(me.role)` in
+  src/app/admin/images/page.tsx:59-68. Now CHAPTER_ORGANIZER can
+  reach the page; write buttons remain disabled in the gallery UI
+  via the isSuper prop.
+
+- Step 5 — Loosened chapter-scoped brand-images API gates from
+  `can(user.role, "members.view")` to `canSeeAdminNav(user.role)` in:
+    * src/app/api/admin/chapters/[id]/brand-images/route.ts:36-46 (GET)
+    * src/app/api/admin/chapters/[id]/brand-images/select/route.ts:49-61 (POST)
+  Scope (own country / own chapter) is still enforced at lines 50-61
+  and 64-74 respectively. Removed unused `can` import from both files.
+
+- Step 6 — Made AppHeader chapter-aware in
+  src/components/ais/app-header.tsx:45-77,91-99. Now:
+    * Looks up the signed-in user's chapter (name, whatsappGroupUrl,
+      linkedinUrl) and renders "{chapter.name} Chapter" in the header
+      instead of the hardcoded "Tel Aviv Chapter".
+    * Falls back to no label for users with no chapter.
+    * Prefers chapter-scoped WhatsApp/LinkedIn URLs over the global
+      defaults — so Montreal admin sees Montreal's community links.
+    * Anonymous visitors still see global defaults (unchanged).
+
+- Step 7 — Backfilled the tasks registry (docs/tasks.md) with
+  TSK-0026 → TSK-0055 (compact rows) + added the full TSK-0056 row.
+  The registry had stopped at TSK-0025 but git log showed 30 more
+  TSK-prefixed commits that were never registered — that's the
+  documentation gap the user called out. Now closed.
+
+- Verified dev server compiles after all edits:
+    GET /login → 200
+    GET /events → 200
+    GET /admin/images → 307 (auth redirect, expected)
+- No new TypeScript errors introduced in the touched files.
+- Did NOT push to origin/main. Local only — awaiting user confirmation
+  per the no-push-without-confirmation policy established earlier today.
+
+Stage Summary:
+- Bug 1 (Montreal sees TLV events): FIXED via fail-closed getUserScope.
+  Misconfigured admins now see NOTHING (not TLV) until their scope is
+  fixed — which surfaces the problem instead of hiding it.
+- Bug 2 (/admin/images 403): FIXED via canSeeAdminNav gate on GET
+  /api/admin/brand-images + chapter-scoped brand-images routes.
+- Bug 3 (hardcoded "Tel Aviv Chapter"): FIXED via chapter-aware
+  AppHeader. Montreal admins now see "Montreal Chapter" in their header.
+- Destructive v7-seed backfill: FIXED via OR→AND. Future v7-seed runs
+  will no longer wipe partial-scope users.
+- IMPORTANT FOLLOW-UP: The Super Admin must verify que_qui@hotmail.com's
+  User row in production has role=CHAPTER_ORGANIZER (or ADMIN),
+  chapterId=<montreal-id>, AND countryId=<canada-id>. If any of the
+  three is NULL/wrong, fix the row directly via /admin/members/[id].
+  The code fix prevents FUTURE scope corruption; it does not auto-repair
+  existing corrupted rows.
+- Tasks registry backfilled (TSK-0026 → TSK-0055) + TSK-0056 added.
