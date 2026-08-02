@@ -456,6 +456,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             sizeLabel="hero scale"
             containerClass="absolute inset-0"
             objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+            onSelect={() => setSelectedId("hero-image")}
           />
           </div>
 
@@ -933,6 +934,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                         onSizeChange={onSizeChange}
                         textStyles={data.textStyles}
                         showSessionTime={data.speakersLayout?.showSessionTime !== false}
+                        onSelect={() => setSelectedId(`speaker-image-${idx}`)}
                       />
                     </div>
                   );
@@ -996,6 +998,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     onPickImage={onPickImage}
                     onSizeChange={onSizeChange}
                     previewScale={previewScale}
+                    onSelect={() => setSelectedId(`sponsor-image-collaborators-${i}`)}
                   />
                 ))}
               </div>
@@ -1024,6 +1027,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                     onPickImage={onPickImage}
                     onSizeChange={onSizeChange}
                     previewScale={previewScale}
+                    onSelect={() => setSelectedId(`sponsor-image-sponsors-${i}`)}
                   />
                 ))}
               </div>
@@ -1122,6 +1126,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
                 sizeLabel="branding"
                 containerClass="absolute inset-0"
                 objectFit="contain"
+                onSelect={() => setSelectedId("branding-asset")}
               />
             </DraggablePhotoContainer>
           );
@@ -1210,6 +1215,7 @@ export function EditableImage({
   containerClass,
   objectFit,
   minZoom = 0.01,
+  onSelect,
 }: {
   slot: ImageSlot;
   src: string;
@@ -1236,6 +1242,15 @@ export function EditableImage({
    *  scrolling down below 1× does nothing visually (no shrinking, no empty
    *  space), matching the deployed version's behavior. */
   minZoom?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): called when the user CLICKS the
+   *  image body (mousedown + mouseup without significant drag). Used to
+   *  trigger the contextual "Selected Element" panel at the top of the
+   *  form column so the user can edit this specific image's properties
+   *  (Replace, URL, focus/zoom, size). Fired at mousedown — so the panel
+   *  appears immediately, even if the user then drags to pan. The Replace
+   *  button + resize handles call e.stopPropagation() so they don't
+   *  trigger this. */
+  onSelect?: () => void;
 }) {
   const { focusX, focusY, zoom } = resolvePlacement(placement);
   // PER USER SPEC 2026-08-02 (TSK-0043): clamp the rendered zoom to
@@ -1263,10 +1278,25 @@ export function EditableImage({
   } | null>(null);
 
   function handleMouseDown(e: React.MouseEvent) {
-    if (!editable || !onPlacementChange) return;
+    if (!editable || !onPlacementChange) {
+      // Even when placement-drag isn't available (e.g. sponsor logos
+      // without onPlacementChange), we still want click-to-select.
+      if (editable && onSelect) {
+        e.stopPropagation();
+        onSelect();
+      }
+      return;
+    }
     // Only start a drag on left-click outside the Replace button.
     if (e.button !== 0) return;
     e.preventDefault();
+    // PER USER SPEC 2026-08-02 (TSK-0055): fire onSelect at mousedown so
+    // the Selected Element panel appears immediately. The drag still
+    // works — onSelect just shows the panel; it doesn't change canvas
+    // state. If the user drags, both happen: panel shows + image pans.
+    if (onSelect) {
+      onSelect();
+    }
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -1542,6 +1572,7 @@ function SpeakerCard({
   onSizeChange,
   textStyles,
   showSessionTime = true,
+  onSelect,
 }: {
   speaker: Speaker;
   accentColor: string;
@@ -1560,6 +1591,10 @@ function SpeakerCard({
    *  session-time pill on speaker cards. When `false`, the pill is
    *  hidden regardless of `speaker.sessionTime`. Default `true`. */
   showSessionTime?: boolean;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): fired when the user clicks the
+   *  speaker's photo. Triggers the contextual "Selected Element" panel
+   *  for this specific speaker's photo. */
+  onSelect?: () => void;
 }) {
   // photoSize: 1 = 56px (default), 2 = 112px, 0.5 = 28px, etc.
   const photoSize = Math.max(0.01, speaker.photoSize ?? 1);
@@ -1589,6 +1624,7 @@ function SpeakerCard({
           sizeLabel="photo"
           containerClass="absolute inset-0"
           objectFit="cover"
+          onSelect={onSelect}
         />
       </div>
       {/* Text block */}
@@ -1721,6 +1757,7 @@ function SponsorLogo({
   onPickImage,
   onSizeChange,
   previewScale = 1,
+  onSelect,
 }: {
   sponsor: { name: string; logoUrl: string; logoSize?: number };
   editable?: boolean;
@@ -1728,6 +1765,10 @@ function SponsorLogo({
   onPickImage?: (slot: ImageSlot) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055): fired when the user clicks the
+   *  logo body (not the Replace button or resize handles). Used to trigger
+   *  the contextual "Selected Element" panel for this specific logo. */
+  onSelect?: () => void;
 }) {
   const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
   const heightPx = Math.round(32 * sizeMult);
@@ -1785,6 +1826,15 @@ function SponsorLogo({
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+      onMouseDown={(e) => {
+        // PER USER SPEC 2026-08-02 (TSK-0055): click-to-select for sponsor
+        // logos. Fired at mousedown so the panel appears immediately. The
+        // resize handles + Replace button call e.stopPropagation() so they
+        // don't trigger this.
+        if (editable && onSelect && e.button === 0) {
+          onSelect();
+        }
+      }}
     >
       <div className="relative w-full h-full">
         <Image

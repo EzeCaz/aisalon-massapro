@@ -91,9 +91,15 @@ export function EventProfileEditor({ events }: Props) {
 
   // PER USER SPEC 2026-08-02: reset the selected element when
   // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for per-image selections like the hero
+  // image, branding asset, sponsor logos). So we only clear `selectedId`
+  // when BOTH modes are off — turning off one mode shouldn't kill a
+  // selection made in the other.
   useEffect(() => {
-    if (!sectionsEditMode) setSelectedId(null);
-  }, [sectionsEditMode]);
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   function applyImagePick(slot: ImageSlot, url: string): EventProfileData {
     const next: EventProfileData = JSON.parse(JSON.stringify(data));
@@ -793,7 +799,13 @@ export function EventProfileEditor({ events }: Props) {
          *  of this column showing ONLY the content-specific fields for
          *  that element. The full form stays below (collapsed by default). */}
         <div className="flex flex-col gap-3">
-          {sectionsEditMode && selectedId && (
+          {/* PER USER SPEC 2026-08-02: Selected Element panel.
+           *  Renders when an element is selected AND at least one edit
+           *  mode is on. PER USER SPEC 2026-08-02 (TSK-0055-extend): now
+           *  also renders in image-edit mode — clicking a specific image
+           *  on the canvas (hero image, branding asset, sponsor logo)
+           *  triggers this panel with per-image edit fields. */}
+          {(sectionsEditMode || editMode) && selectedId && (
             <EventProfileSelectedPanel
               selectedId={selectedId}
               data={data}

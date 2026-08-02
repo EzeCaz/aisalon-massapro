@@ -79,9 +79,14 @@ export function QrSalonEditor() {
   // ─── localStorage hydration ─────────────────────────────────────
   // PER USER SPEC 2026-08-02: reset the selected element when
   // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for the per-image branding selection).
+  // So we only clear `selectedId` when BOTH modes are off — turning
+  // off one mode shouldn't kill a selection made in the other.
   useEffect(() => {
-    if (!sectionsEditMode) setSelectedId(null);
-  }, [sectionsEditMode]);
+    if (!sectionsEditMode && !editImages) setSelectedId(null);
+  }, [sectionsEditMode, editImages]);
 
   useEffect(() => {
     try {
@@ -502,9 +507,12 @@ export function QrSalonEditor() {
         </div>
 
         {/* PER USER SPEC 2026-08-02: Selected Element panel.
-           *  Sits ABOVE the form editor in the right column. Only renders
-           *  when an element is selected AND we're in section edit mode. */}
-        {sectionsEditMode && selectedId && (
+           *  Sits ABOVE the form editor in the right column. Renders when
+           *  an element is selected AND at least one edit mode is on.
+           *  PER USER SPEC 2026-08-02 (TSK-0055-extend): now also renders
+           *  in image-edit mode — clicking the brand mark in Edit-images
+           *  mode triggers this panel with per-image edit fields. */}
+        {(sectionsEditMode || editImages) && selectedId && (
           <QrSalonSelectedPanel
             selectedId={selectedId}
             data={data}

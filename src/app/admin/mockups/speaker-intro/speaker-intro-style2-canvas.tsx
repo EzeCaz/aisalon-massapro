@@ -1314,6 +1314,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
                   sizeLabel="hero scale"
                   containerClass="absolute inset-0"
                   objectFit={data.heroOverlay.fit === "contain" ? "contain" : "cover"}
+                  onSelect={() => setSelectedId("hero-image")}
                 />
               ) : (
                 <div

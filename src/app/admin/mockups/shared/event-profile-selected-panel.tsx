@@ -59,13 +59,47 @@ export function EventProfileSelectedPanel({
   const update = useUpdate(data, onChange);
 
   if (!selectedId) return null;
-  const label = ELEMENT_LABELS[selectedId] ?? selectedId;
+
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): support per-image
+  // selection. When the user clicks a specific image on the canvas (in
+  // edit-images mode), selectedId is one of:
+  //   `sponsor-image-${group}-${idx}` — a specific sponsor/collab logo
+  //   `hero-image`         — the hero background image
+  //   `branding-asset`     — the bottom-left AI Salon branding
+  // We parse these dynamically and render a focused per-image editor.
+  const sponsorImageMatch = selectedId.match(
+    /^sponsor-image-(collaborators|sponsors)-(\d+)$/,
+  );
+  if (sponsorImageMatch) {
+    const group = sponsorImageMatch[1] as "collaborators" | "sponsors";
+    const idx = parseInt(sponsorImageMatch[2], 10);
+    return (
+      <SelectedElementShell
+        label={`${group === "collaborators" ? "Collaborator" : "Sponsor"} Logo #${idx + 1}`}
+        onDeselect={onDeselect}
+      >
+        <SponsorImageFields
+          data={data}
+          update={update}
+          onPickImage={onPickImage}
+          group={group}
+          idx={idx}
+        />
+      </SelectedElementShell>
+    );
+  }
 
   return (
-    <SelectedElementShell label={label} onDeselect={onDeselect}>
+    <SelectedElementShell label={imageLabel(selectedId)} onDeselect={onDeselect}>
       {renderBody(selectedId, data, update, onPickImage)}
     </SelectedElementShell>
   );
+}
+
+function imageLabel(selectedId: string): string {
+  if (selectedId === "hero-image") return "Hero Image";
+  if (selectedId === "branding-asset") return "Branding Asset";
+  return ELEMENT_LABELS[selectedId] ?? selectedId;
 }
 
 // ----------------------------------------------------------------------------
@@ -84,6 +118,10 @@ function renderBody(
       return <SponsorsFields data={data} update={update} onPickImage={onPickImage} />;
     case "footer":
       return <FooterFields data={data} update={update} />;
+    case "hero-image":
+      return <HeroImageFields data={data} update={update} onPickImage={onPickImage} />;
+    case "branding-asset":
+      return <BrandingAssetFields data={data} update={update} onPickImage={onPickImage} />;
     default:
       return <NoFieldsHint selectedId={selectedId} />;
   }
@@ -418,6 +456,270 @@ function FooterFields({
             }
           />
         </div>
+      </MiniField>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// PER USER SPEC 2026-08-02 (TSK-0055-extend): per-image field blocks.
+// Each renders a focused editor for one specific image on the canvas
+// (hero image, branding asset, sponsor logo).
+// ----------------------------------------------------------------------------
+
+function HeroImageFields({
+  data,
+  update,
+  onPickImage,
+}: {
+  data: EventProfileData;
+  update: (recipe: (draft: EventProfileData) => void) => void;
+  onPickImage: (slot: ImageSlot) => void;
+}) {
+  const hero = data.heroOverlay;
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-black/55 leading-snug">
+        Hero background image — click <strong>Replace</strong> to swap from
+        the brand library. Drag the image on the canvas to pan; scroll to
+        zoom. Use the scale fields to resize the hero container.
+      </p>
+      <MiniField label="Hero image">
+        <ImagePreview src={hero.imageUrl} alt="Hero" />
+        <div className="flex items-center gap-1.5 mt-1">
+          <ReplaceButton
+            onClick={() => onPickImage({ kind: "hero" })}
+            label="Replace hero"
+          />
+          <MiniInput
+            type="url"
+            value={hero.imageUrl}
+            placeholder="https://..."
+            onChange={(e) => update((d) => { d.heroOverlay.imageUrl = e.target.value; })}
+            className="flex-1"
+          />
+        </div>
+      </MiniField>
+      <div className="grid grid-cols-2 gap-2">
+        <MiniField label="Scale X (×)">
+          <MiniInput
+            type="number"
+            step="0.1"
+            min="0.1"
+            value={hero.imageScale ?? 1}
+            onChange={(e) =>
+              update((d) => { d.heroOverlay.imageScale = parseFloat(e.target.value) || 1; })
+            }
+          />
+        </MiniField>
+        <MiniField label="Scale Y (×)">
+          <MiniInput
+            type="number"
+            step="0.1"
+            min="0.1"
+            value={hero.imageScaleY ?? 1}
+            onChange={(e) =>
+              update((d) => { d.heroOverlay.imageScaleY = parseFloat(e.target.value) || 1; })
+            }
+          />
+        </MiniField>
+      </div>
+      <MiniField label="Gradient opacity">
+        <MiniInput
+          type="number"
+          step="0.05"
+          min="0"
+          max="1"
+          value={hero.gradientOpacity}
+          onChange={(e) =>
+            update((d) => {
+              d.heroOverlay.gradientOpacity = parseFloat(e.target.value) || 0;
+            })
+          }
+        />
+      </MiniField>
+      {hero.imagePlacement && (
+        <button
+          type="button"
+          onClick={() =>
+            update((d) => { d.heroOverlay.imagePlacement = undefined; })
+          }
+          className="w-full rounded border border-black/15 bg-white px-2 py-1 text-[0.7rem] text-black/80 hover:bg-black/5"
+        >
+          Reset image placement
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BrandingAssetFields({
+  data,
+  update,
+  onPickImage,
+}: {
+  data: EventProfileData;
+  update: (recipe: (draft: EventProfileData) => void) => void;
+  onPickImage: (slot: ImageSlot) => void;
+}) {
+  const branding = data.brandingAsset;
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-black/55 leading-snug">
+        Branding asset (bottom-left AI Salon wordmark). Click{" "}
+        <strong>Replace</strong> to swap from the brand library.
+      </p>
+      <MiniField label="Branding">
+        <ImagePreview
+          src={
+            branding?.imageUrl ||
+            "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png"
+          }
+          alt="Branding asset"
+        />
+        <div className="flex items-center gap-1.5 mt-1">
+          <ReplaceButton
+            onClick={() => onPickImage({ kind: "branding-asset" })}
+            label="Replace"
+          />
+          <MiniInput
+            type="url"
+            value={branding?.imageUrl ?? ""}
+            placeholder="https://..."
+            onChange={(e) =>
+              update((d) => {
+                if (!d.brandingAsset) d.brandingAsset = {};
+                d.brandingAsset.imageUrl = e.target.value || undefined;
+              })
+            }
+            className="flex-1"
+          />
+        </div>
+      </MiniField>
+      <MiniField label="Height (px)">
+        <MiniInput
+          type="number"
+          step="1"
+          min="8"
+          value={branding?.height ?? 48}
+          onChange={(e) =>
+            update((d) => {
+              if (!d.brandingAsset) d.brandingAsset = {};
+              d.brandingAsset.height = parseInt(e.target.value, 10) || 48;
+            })
+          }
+        />
+      </MiniField>
+      {branding?.pos && (
+        <button
+          type="button"
+          onClick={() =>
+            update((d) => {
+              if (d.brandingAsset) d.brandingAsset.pos = undefined;
+            })
+          }
+          className="w-full rounded border border-black/15 bg-white px-2 py-1 text-[0.7rem] text-black/80 hover:bg-black/5"
+        >
+          Reset position
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SponsorImageFields({
+  data,
+  update,
+  onPickImage,
+  group,
+  idx,
+}: {
+  data: EventProfileData;
+  update: (recipe: (draft: EventProfileData) => void) => void;
+  onPickImage: (slot: ImageSlot) => void;
+  group: "collaborators" | "sponsors";
+  idx: number;
+}) {
+  const arr = group === "collaborators" ? data.collaborators : data.sponsors;
+  const sponsor = arr[idx];
+
+  if (!sponsor) {
+    return (
+      <div className="text-[0.7rem] text-black/60 italic">
+        {group === "collaborators" ? "Collaborator" : "Sponsor"} not found.
+        The list may have changed — click the logo again to re-select.
+      </div>
+    );
+  }
+
+  const updateSponsor = (recipe: (s: Sponsor) => void) =>
+    update((d) => {
+      const targetArr = group === "collaborators" ? d.collaborators : d.sponsors;
+      const target = targetArr[idx];
+      if (target) recipe(target);
+    });
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-black/55 leading-snug">
+        {group === "collaborators" ? "Collaborator" : "Sponsor"} logo — click{" "}
+        <strong>Replace</strong> to swap from the brand library. Drag the
+        corner handles on the canvas to resize.
+      </p>
+      <div className="rounded border border-black/10 bg-black/[0.02] p-2 space-y-1">
+        <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
+          {group === "collaborators" ? "Collaborator" : "Sponsor"}
+        </div>
+        <div className="text-[0.78rem] font-bold text-black truncate">
+          {sponsor.name || "Untitled"}
+        </div>
+      </div>
+      <MiniField label="Logo">
+        <ImagePreview src={sponsor.logoUrl} alt={sponsor.name} />
+        <div className="flex items-center gap-1.5 mt-1">
+          <ReplaceButton
+            onClick={() => onPickImage({ kind: "sponsor", group, index: idx })}
+            label="Replace logo"
+          />
+          <MiniInput
+            type="url"
+            value={sponsor.logoUrl}
+            placeholder="https://..."
+            onChange={(e) => updateSponsor((s) => { s.logoUrl = e.target.value; })}
+            className="flex-1"
+          />
+        </div>
+      </MiniField>
+      <div className="grid grid-cols-2 gap-2">
+        <MiniField label="Logo size (×)">
+          <MiniInput
+            type="number"
+            step="0.1"
+            min="0.1"
+            value={sponsor.logoSize ?? 1}
+            onChange={(e) =>
+              updateSponsor((s) => { s.logoSize = parseFloat(e.target.value) || 1; })
+            }
+          />
+        </MiniField>
+        <MiniField label="Name">
+          <MiniInput
+            type="text"
+            value={sponsor.name}
+            onChange={(e) => updateSponsor((s) => { s.name = e.target.value; })}
+          />
+        </MiniField>
+      </div>
+      <MiniField label="Theme">
+        <MiniSelect
+          value={sponsor.theme ?? "dark"}
+          onChange={(e) =>
+            updateSponsor((s) => { s.theme = e.target.value as "light" | "dark"; })
+          }
+        >
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </MiniSelect>
       </MiniField>
     </div>
   );

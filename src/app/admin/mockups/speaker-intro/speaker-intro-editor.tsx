@@ -233,9 +233,15 @@ export function SpeakerIntroEditor({ events }: Props) {
   // sectionsEditMode turns off, so the "Selected Element" panel disappears
   // when the user exits section-edit mode. (Mirrors the old in-canvas
   // useEffect that did the same thing locally.)
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055): the panel now ALSO appears in
+  // image-edit mode (for per-image selections like speaker photos, sponsor
+  // logos, hero image, branding asset). So we only clear `selectedId` when
+  // BOTH modes are off — turning off one mode shouldn't kill a selection
+  // made in the other.
   useEffect(() => {
-    if (!sectionsEditMode) setSelectedId(null);
-  }, [sectionsEditMode]);
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   // --- JSON textarea → data ------------------------------------------
 
@@ -840,6 +846,7 @@ export function SpeakerIntroEditor({ events }: Props) {
                 <li><strong>Replace</strong> button (top-left) — swap from brand library</li>
                 <li><strong>4 corner handles</strong> (pink squares) — drag to resize the image</li>
                 <li>Drag the image body to pan; scroll to zoom; double-click to reset</li>
+                <li><strong>Click any image</strong> (hero, speaker photo, sponsor logo, branding) to open its edit panel above</li>
               </ul>
             </>
           )}
@@ -914,9 +921,13 @@ export function SpeakerIntroEditor({ events }: Props) {
          *  The full form stays below (unchanged). */}
         <div className="flex flex-col gap-3">
           {/* PER USER SPEC 2026-08-02 (TSK-0051): Selected Element panel.
-           *  Only renders when an element is selected AND we're in section
-           *  edit mode (the canvas only sets selectedId in section edit mode). */}
-          {sectionsEditMode && selectedId && (
+           *  Renders when an element is selected AND at least one edit mode
+           *  is on. PER USER SPEC 2026-08-02 (TSK-0055): now also renders in
+           *  image-edit mode — clicking a specific image on the canvas
+           *  (speaker photo, sponsor logo, hero image, branding asset)
+           *  triggers this panel with per-image edit fields (Replace
+           *  button, URL, focus/zoom, size). */}
+          {(sectionsEditMode || editMode) && selectedId && (
             <SelectedElementPanel
               selectedId={selectedId}
               data={data}

@@ -233,6 +233,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               sizeLabel="hero scale"
               containerClass="absolute inset-0"
               objectFit="cover"
+              onSelect={() => setSelectedId("hero-image")}
             />
             </div>
 
@@ -457,6 +458,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                         onPickImage={onPickImage}
                         onSizeChange={onSizeChange}
                         previewScale={previewScale}
+                        onSelect={() => setSelectedId(`sponsor-image-collaborators-${i}`)}
                       />
                     ))}
                   </div>
@@ -485,6 +487,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                         onPickImage={onPickImage}
                         onSizeChange={onSizeChange}
                         previewScale={previewScale}
+                        onSelect={() => setSelectedId(`sponsor-image-sponsors-${i}`)}
                       />
                     ))}
                   </div>
@@ -585,6 +588,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
                   sizeLabel="branding"
                   containerClass="absolute inset-0"
                   objectFit="contain"
+                  onSelect={() => setSelectedId("branding-asset")}
                 />
               </DraggablePhotoContainer>
             );
@@ -641,6 +645,7 @@ function EditableImage({
   sizeLabel,
   containerClass,
   objectFit,
+  onSelect,
 }: {
   slot: ImageSlot;
   src: string;
@@ -655,6 +660,10 @@ function EditableImage({
   sizeLabel?: string;
   containerClass: string;
   objectFit: "cover" | "contain";
+  /** PER USER SPEC 2026-08-02 (TSK-0055-extend): fired when the user
+   *  CLICKS the image body (mousedown). Used to trigger the contextual
+   *  "Selected Element" panel for this specific image. */
+  onSelect?: () => void;
 }) {
   const { focusX, focusY, zoom } = resolvePlacement(placement);
   const dragRef = useRef<{
@@ -669,9 +678,22 @@ function EditableImage({
   const containerRef = useRef<HTMLDivElement>(null);
 
   function handleMouseDown(e: React.MouseEvent) {
-    if (!editable || !onPlacementChange) return;
+    if (!editable || !onPlacementChange) {
+      // Even when placement-drag isn't available, we still want
+      // click-to-select.
+      if (editable && onSelect) {
+        e.stopPropagation();
+        onSelect();
+      }
+      return;
+    }
     if (e.button !== 0) return;
     e.preventDefault();
+    // PER USER SPEC 2026-08-02 (TSK-0055-extend): fire onSelect at
+    // mousedown so the Selected Element panel appears immediately.
+    if (onSelect) {
+      onSelect();
+    }
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -864,6 +886,7 @@ function SponsorLogo({
   onPickImage,
   onSizeChange,
   previewScale = 1,
+  onSelect,
 }: {
   sponsor: Sponsor;
   editable?: boolean;
@@ -871,6 +894,10 @@ function SponsorLogo({
   onPickImage?: (slot: ImageSlot) => void;
   onSizeChange?: (slot: ImageSlot, newMultiplier: number) => void;
   previewScale?: number;
+  /** PER USER SPEC 2026-08-02 (TSK-0055-extend): fired when the user
+   *  clicks the logo body. Used to trigger the contextual "Selected
+   *  Element" panel for this specific logo. */
+  onSelect?: () => void;
 }) {
   const sizeMult = Math.max(0.01, sponsor.logoSize ?? 1);
   const heightPx = Math.round(36 * sizeMult);
@@ -924,6 +951,15 @@ function SponsorLogo({
         editable ? "border-[#0066FF]/70" : "border-black/10"
       }`}
       style={{ height: `${heightPx}px`, minWidth: `${minWidthPx}px` }}
+      onMouseDown={(e) => {
+        // PER USER SPEC 2026-08-02 (TSK-0055-extend): click-to-select
+        // for sponsor logos. Fired at mousedown so the panel appears
+        // immediately. The resize handles + Replace button call
+        // e.stopPropagation() so they don't trigger this.
+        if (editable && onSelect && e.button === 0) {
+          onSelect();
+        }
+      }}
     >
       <div className="relative w-full h-full">
         <Image

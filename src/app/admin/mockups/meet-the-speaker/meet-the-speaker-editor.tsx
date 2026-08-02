@@ -115,9 +115,15 @@ export function MeetTheSpeakerEditor({ events }: Props) {
 
   // PER USER SPEC 2026-08-02: reset the selected element when
   // sectionsEditMode turns off, so the "Selected Element" panel disappears.
+  //
+  // PER USER SPEC 2026-08-02 (TSK-0055-extend): the panel now ALSO
+  // appears in image-edit mode (for per-image selections like the
+  // speaker photo, graphic, branding asset, sponsor logos, hero image).
+  // So we only clear `selectedId` when BOTH modes are off — turning off
+  // one mode shouldn't kill a selection made in the other.
   useEffect(() => {
-    if (!sectionsEditMode) setSelectedId(null);
-  }, [sectionsEditMode]);
+    if (!sectionsEditMode && !editMode) setSelectedId(null);
+  }, [sectionsEditMode, editMode]);
 
   const applyData = useCallback((next: MeetTheSpeakerData) => {
     setData(next);
@@ -914,9 +920,13 @@ export function MeetTheSpeakerEditor({ events }: Props) {
          *  that element. The full form stays below (collapsed by default). */}
         <div className="flex flex-col gap-3">
           {/* PER USER SPEC 2026-08-02: Selected Element panel.
-           *  Only renders when an element is selected AND we're in section
-           *  edit mode (the canvas only sets selectedId in section edit mode). */}
-          {sectionsEditMode && selectedId && (
+           *  Renders when an element is selected AND at least one edit
+           *  mode is on. PER USER SPEC 2026-08-02 (TSK-0055-extend): now
+           *  also renders in image-edit mode — clicking a specific image
+           *  on the canvas (speaker photo, graphic, branding asset,
+           *  sponsor logo, hero image) triggers this panel with per-image
+           *  edit fields (Replace button, URL, focus/zoom, size). */}
+          {(sectionsEditMode || editMode) && selectedId && (
             <MeetTheSpeakerSelectedPanel
               selectedId={selectedId}
               data={data}

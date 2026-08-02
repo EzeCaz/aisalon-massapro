@@ -48,6 +48,7 @@ import { useCallback, useState, type ReactNode } from "react";
 import { Plus, Trash2, ChevronDown, X, ImageIcon, MousePointerClick } from "lucide-react";
 import type { SpeakerIntroData, ImageSlot, Speaker } from "../speaker-intro/types";
 import { GradientColorPicker } from "./gradient-color-picker";
+import { SelectedElementShell } from "./selected-element-shell";
 
 // ----------------------------------------------------------------------------
 // Props
@@ -102,6 +103,51 @@ export function SelectedElementPanel({
   );
 
   if (!selectedId) return null;
+
+  // PER USER SPEC 2026-08-02 (TSK-0055): support per-image selection.
+  // When the user clicks a specific image on the canvas (in edit-images
+  // mode), selectedId is one of:
+  //   `speaker-image-${idx}`   — a specific speaker's photo (sorted idx)
+  //   `sponsor-image-${group}-${idx}` — a specific sponsor/collab logo
+  // We parse these dynamically and render a focused per-image editor.
+  const speakerImageMatch = selectedId.match(/^speaker-image-(\d+)$/);
+  if (speakerImageMatch) {
+    const idx = parseInt(speakerImageMatch[1], 10);
+    return (
+      <SelectedElementShell
+        label={`Speaker Photo #${idx + 1}`}
+        onDeselect={onDeselect}
+      >
+        <SpeakerImageFields
+          data={data}
+          update={update}
+          onPickImage={onPickImage}
+          sortedIdx={idx}
+        />
+      </SelectedElementShell>
+    );
+  }
+  const sponsorImageMatch = selectedId.match(
+    /^sponsor-image-(collaborators|sponsors)-(\d+)$/,
+  );
+  if (sponsorImageMatch) {
+    const group = sponsorImageMatch[1] as "collaborators" | "sponsors";
+    const idx = parseInt(sponsorImageMatch[2], 10);
+    return (
+      <SelectedElementShell
+        label={`${group === "collaborators" ? "Collaborator" : "Sponsor"} Logo #${idx + 1}`}
+        onDeselect={onDeselect}
+      >
+        <SponsorImageFields
+          data={data}
+          update={update}
+          onPickImage={onPickImage}
+          group={group}
+          idx={idx}
+        />
+      </SelectedElementShell>
+    );
+  }
 
   const label = ELEMENT_LABELS[selectedId] ?? selectedId;
 
@@ -1118,6 +1164,217 @@ function BrandingAssetFields({
           >
             Reset to corner
           </button>
+        </MiniField>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// PER USER SPEC 2026-08-02 (TSK-0055): per-image field blocks. These render
+// when the user clicks a SPECIFIC image on the canvas (in edit-images mode)
+// rather than a section. They show ONLY the edit fields relevant to that
+// specific image: Replace button, URL, photo size / focus / zoom, visible
+// toggle for speakers; Replace + URL + logo size for sponsor logos.
+// ----------------------------------------------------------------------------
+
+function SpeakerImageFields({
+  data,
+  update,
+  onPickImage,
+  sortedIdx,
+}: {
+  data: SpeakerIntroData;
+  update: (recipe: (draft: SpeakerIntroData) => void) => void;
+  onPickImage: (slot: ImageSlot) => void;
+  /** Position of this speaker in the SORTED-by-order array (matches the
+   *  index the canvas passes to slot.kind === "speaker"). */
+  sortedIdx: number;
+}) {
+  // The canvas sorts speakers by `order` then indexes — replicate that
+  // here so the index matches the photo the user clicked.
+  const sortedSpeakers = [...data.speakers].sort((a, b) => a.order - b.order);
+  const speaker = sortedSpeakers[sortedIdx];
+  // Find the original (unsorted) index so update recipes can target the
+  // right object in `data.speakers`.
+  const origIdx = speaker ? data.speakers.indexOf(speaker) : -1;
+
+  if (!speaker || origIdx < 0) {
+    return (
+      <div className="text-[0.7rem] text-black/60 italic">
+        Speaker not found. The speaker list may have changed — click the
+        image again to re-select.
+      </div>
+    );
+  }
+
+  // Helper: apply a recipe to just this speaker.
+  const updateSpeaker = (recipe: (s: Speaker) => void) =>
+    update((d) => {
+      const target = d.speakers[origIdx];
+      if (target) recipe(target);
+    });
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-black/55 leading-snug">
+        Speaker photo — click <strong>Replace</strong> to swap from the brand
+        library. Drag the photo on the canvas to pan; scroll to zoom.
+      </p>
+      <div className="rounded border border-black/10 bg-black/[0.02] p-2 space-y-1">
+        <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
+          Speaker
+        </div>
+        <div className="text-[0.78rem] font-bold text-black truncate">
+          #{speaker.order} · {speaker.fullName || "Untitled"}
+        </div>
+        {(speaker.title || speaker.company) && (
+          <div className="text-[0.65rem] text-black/60 truncate">
+            {speaker.title}
+            {speaker.title && speaker.company ? ", " : ""}
+            {speaker.company}
+          </div>
+        )}
+      </div>
+      <MiniField label="Photo">
+        <ImagePreview src={speaker.photoUrl} alt={speaker.fullName} />
+        <div className="flex items-center gap-1.5 mt-1">
+          <ReplaceButton
+            onClick={() => onPickImage({ kind: "speaker", index: sortedIdx })}
+            label="Replace photo"
+          />
+          <MiniInput
+            type="url"
+            value={speaker.photoUrl}
+            placeholder="https://..."
+            onChange={(e) => updateSpeaker((s) => { s.photoUrl = e.target.value; })}
+            className="flex-1"
+          />
+        </div>
+      </MiniField>
+      <div className="grid grid-cols-2 gap-2">
+        <MiniField label="Photo size (×)">
+          <MiniInput
+            type="number"
+            step="0.1"
+            min="0.1"
+            value={speaker.photoSize ?? 1}
+            onChange={(e) =>
+              updateSpeaker((s) => { s.photoSize = parseFloat(e.target.value) || 1; })
+            }
+          />
+        </MiniField>
+        <MiniField label="Visible">
+          <MiniSelect
+            value={speaker.visible === false ? "false" : "true"}
+            onChange={(e) =>
+              updateSpeaker((s) => { s.visible = e.target.value === "true"; })
+            }
+          >
+            <option value="true">Yes</option>
+            <option value="false">No (hidden)</option>
+          </MiniSelect>
+        </MiniField>
+      </div>
+      {(speaker.photoPlacement || speaker.photoSize !== undefined) && (
+        <button
+          type="button"
+          onClick={() =>
+            updateSpeaker((s) => {
+              s.photoPlacement = undefined;
+              s.photoSize = undefined;
+            })
+          }
+          className="w-full rounded border border-black/15 bg-white px-2 py-1 text-[0.7rem] text-black/80 hover:bg-black/5"
+        >
+          Reset photo placement &amp; size
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SponsorImageFields({
+  data,
+  update,
+  onPickImage,
+  group,
+  idx,
+}: {
+  data: SpeakerIntroData;
+  update: (recipe: (draft: SpeakerIntroData) => void) => void;
+  onPickImage: (slot: ImageSlot) => void;
+  group: "collaborators" | "sponsors";
+  idx: number;
+}) {
+  const arr = group === "collaborators" ? data.collaborators : data.sponsors;
+  const sponsor = arr[idx];
+
+  if (!sponsor) {
+    return (
+      <div className="text-[0.7rem] text-black/60 italic">
+        {group === "collaborators" ? "Collaborator" : "Sponsor"} not found.
+        The list may have changed — click the logo again to re-select.
+      </div>
+    );
+  }
+
+  const updateSponsor = (recipe: (s: { name: string; logoUrl: string; logoSize?: number }) => void) =>
+    update((d) => {
+      const targetArr = group === "collaborators" ? d.collaborators : d.sponsors;
+      const target = targetArr[idx];
+      if (target) recipe(target);
+    });
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[0.62rem] text-black/55 leading-snug">
+        {group === "collaborators" ? "Collaborator" : "Sponsor"} logo — click{" "}
+        <strong>Replace</strong> to swap from the brand library. Drag the
+        corner handles on the canvas to resize.
+      </p>
+      <div className="rounded border border-black/10 bg-black/[0.02] p-2 space-y-1">
+        <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/55">
+          {group === "collaborators" ? "Collaborator" : "Sponsor"}
+        </div>
+        <div className="text-[0.78rem] font-bold text-black truncate">
+          {sponsor.name || "Untitled"}
+        </div>
+      </div>
+      <MiniField label="Logo">
+        <ImagePreview src={sponsor.logoUrl} alt={sponsor.name} />
+        <div className="flex items-center gap-1.5 mt-1">
+          <ReplaceButton
+            onClick={() => onPickImage({ kind: "sponsor", group, index: idx })}
+            label="Replace logo"
+          />
+          <MiniInput
+            type="url"
+            value={sponsor.logoUrl}
+            placeholder="https://..."
+            onChange={(e) => updateSponsor((s) => { s.logoUrl = e.target.value; })}
+            className="flex-1"
+          />
+        </div>
+      </MiniField>
+      <div className="grid grid-cols-2 gap-2">
+        <MiniField label="Logo size (×)">
+          <MiniInput
+            type="number"
+            step="0.1"
+            min="0.1"
+            value={sponsor.logoSize ?? 1}
+            onChange={(e) =>
+              updateSponsor((s) => { s.logoSize = parseFloat(e.target.value) || 1; })
+            }
+          />
+        </MiniField>
+        <MiniField label="Name">
+          <MiniInput
+            type="text"
+            value={sponsor.name}
+            onChange={(e) => updateSponsor((s) => { s.name = e.target.value; })}
+          />
         </MiniField>
       </div>
     </div>

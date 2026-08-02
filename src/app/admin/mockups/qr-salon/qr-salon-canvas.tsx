@@ -329,10 +329,23 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
           >
             <button
               type="button"
+              onMouseDown={(e) => {
+                // PER USER SPEC 2026-08-02 (TSK-0055-extend): in Edit-images
+                // mode, clicking the brand mark selects it (fires the
+                // contextual Selected Element panel). The Replace button
+                // inside that panel then opens the picker modal.
+                if (editable && e.button === 0) {
+                  e.stopPropagation();
+                  setSelectedId("branding");
+                }
+              }}
               onClick={
                 editable && !sectionsEditable
                   ? (e) => {
                       e.stopPropagation();
+                      // Legacy behavior: in Edit-images mode the click
+                      // also opens the picker directly (for users who
+                      // don't notice the new Selected Element panel).
                       onPickBranding?.();
                     }
                   : undefined

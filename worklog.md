@@ -10160,3 +10160,170 @@ Stage Summary:
   - shared/event-profile-selected-panel.tsx
   - shared/agenda-profile-selected-panel.tsx
   - shared/qr-salon-selected-panel.tsx
+
+---
+Task ID: TSK-0055-extend
+Agent: subagent
+Task: Replicate the speaker-intro image-click-to-select pattern to 4 other
+  mockups (meet-the-speaker, event-profile, agenda-profile, qr-salon).
+
+PER USER SPEC 2026-08-02 (TSK-0055): When "Edit images" mode is ON and the
+user clicks any image on the canvas (hero, speaker photo, sponsor logo,
+branding asset, QR code, etc.), the contextual "Selected Element" panel
+at the top of the form column should appear with that specific image's
+edit properties (Replace button, URL, focus/zoom, size).
+
+Work Log:
+- Read the reference implementation in speaker-intro (canvas's EditableImage
+  handleMouseDown + onSelect prop wiring, shared/selected-element-panel.tsx
+  regex per-image matching, speaker-intro-editor.tsx (sectionsEditMode ||
+  editMode) panel render + clear-on-both-off useEffect).
+- meet-the-speaker (3 files):
+  * meet-the-speaker-canvas.tsx:
+    - Added `onSelect?: () => void` prop to local `EditableImage` (with
+      the early-return + fire-on-mousedown pattern from speaker-intro).
+    - Added `onSelect?: () => void` prop to local `SponsorLogo` (with
+      onMouseDown handler on the wrapper div that calls onSelect when
+      editable + left-click).
+    - Added `onSelect?: () => void` prop to `DraggableHeroStyle2Image`
+      wrapper; forwarded to its inner EditableImage.
+    - Wired onSelect for each image usage:
+      · Speaker portrait → setSelectedId("speaker-photo")
+      · Meerkat graphic  → setSelectedId("graphic")
+      · Branding asset   → setSelectedId("branding-asset")
+      · Style 2 hero     → setSelectedId("hero-style2")
+      · Collaborator logos → setSelectedId(`sponsor-image-collaborators-${i}`)
+      · Sponsor logos      → setSelectedId(`sponsor-image-sponsors-${i}`)
+  * meet-the-speaker-editor.tsx:
+    - Changed useEffect from `if (!sectionsEditMode) setSelectedId(null)`
+      to `if (!sectionsEditMode && !editMode) setSelectedId(null)` with
+      `[sectionsEditMode, editMode]` deps.
+    - Changed panel render condition from `sectionsEditMode && selectedId`
+      to `(sectionsEditMode || editMode) && selectedId`.
+  * shared/meet-the-speaker-selected-panel.tsx:
+    - Added regex match for `^sponsor-image-(collaborators|sponsors)-(\d+)$`
+      BEFORE the static switch; renders SponsorImageFields (Replace, URL,
+      logo size, name, theme).
+    - Added static switch cases for the new per-image IDs: speaker-photo,
+      graphic, branding-asset, hero-style2.
+    - Added `imageLabel()` helper to map per-image IDs to human labels.
+    - Added 4 new field components at the bottom: SpeakerPhotoFields
+      (Replace, URL, photo size, rotation, reset placement), GraphicFields
+      (Replace, URL, scale, rotation, reset placement), BrandingAssetFields
+      (Replace, URL, height, reset position), HeroStyle2Fields (Replace,
+      URL, scale, rotation, reset placement), SponsorImageFields (Replace,
+      URL, logo size, name, theme).
+- event-profile (3 files):
+  * event-profile-canvas.tsx:
+    - Added onSelect prop to local EditableImage + SponsorLogo (same
+      pattern as meet-the-speaker).
+    - Wired onSelect for hero image → setSelectedId("hero-image"),
+      branding asset → setSelectedId("branding-asset"), collaborator
+      logos → setSelectedId(`sponsor-image-collaborators-${i}`),
+      sponsor logos → setSelectedId(`sponsor-image-sponsors-${i}`).
+    - NOTE: event-profile canvas does NOT render a speakers grid (per
+      types.ts comment: "intentionally minimal — no agenda / speakers
+      grid rendered on the canvas"); no per-speaker-photo wiring needed.
+  * event-profile-editor.tsx: same useEffect + render-condition changes.
+  * shared/event-profile-selected-panel.tsx:
+    - Added regex match for sponsor-image IDs.
+    - Added static switch cases for hero-image + branding-asset.
+    - Added imageLabel() helper.
+    - Added 3 new field components: HeroImageFields (Replace, URL,
+      scale X/Y, gradient opacity, reset placement), BrandingAssetFields
+      (Replace, URL, height, reset position), SponsorImageFields (Replace,
+      URL, logo size, name, theme).
+- agenda-profile (3 files):
+  * agenda-profile-canvas.tsx:
+    - Added onSelect prop to local EditableImage + SponsorLogo + SpeakerCard
+      wrapper.
+    - Wired onSelect for hero → setSelectedId("hero-image"), speakers →
+      setSelectedId(`speaker-image-${idx}`) where idx is the
+      visible-speakers array index (matches slot.kind === "speaker"
+      index), collaborator/sponsor logos → setSelectedId(`sponsor-image-
+      ${group}-${i}`), branding asset → setSelectedId("branding-asset").
+    - NOTE: agenda-profile filters speakers via `data.speakers.filter(s =>
+      s.visible !== false)` before indexing, so the per-image ID matches
+      the visible-speaker index (not the original array index). The panel
+      reverses this lookup so updates target the right object.
+  * agenda-profile-editor.tsx: same useEffect + render-condition changes.
+  * shared/agenda-profile-selected-panel.tsx:
+    - Added regex matches for speaker-image-${idx} AND sponsor-image-${group}-${idx}.
+    - Added static switch cases for hero-image + branding-asset.
+    - Added imageLabel() helper.
+    - Added 4 new field components: HeroImageFields, BrandingAssetFields,
+      SpeakerImageFields (with visible-speaker lookup + original-index
+      resolution for updates), SponsorImageFields.
+- qr-salon (3 files):
+  * qr-salon-canvas.tsx:
+    - Added onMouseDown handler to the branding SectionBox's inner button
+      so that in Edit-images mode (editable && !sectionsEditable),
+      clicking the brand mark fires setSelectedId("branding"). Kept the
+      existing onClick handler that opens the picker directly (legacy
+      behavior — preserves the "click brand mark = open picker" UX for
+      users who don't notice the new Selected Element panel).
+    - NOTE: qr-salon has only ONE image (the branding asset); the QR
+      code is generated dynamically (not a picked image). The SectionBox
+      already had onSelect={() => setSelectedId("branding")} for sections
+      mode; the new code adds image-mode selection.
+  * qr-salon-editor.tsx:
+    - NOTE: qr-salon uses `editImages` (not `editMode`) as its state name.
+    - Changed useEffect to `if (!sectionsEditMode && !editImages)
+      setSelectedId(null)` with `[sectionsEditMode, editImages]` deps.
+    - Changed panel render condition to `(sectionsEditMode || editImages)
+      && selectedId`.
+  * shared/qr-salon-selected-panel.tsx: NO CHANGES — the existing panel
+    already had a BrandingFields component that renders Replace button +
+    URL input + height input for the "branding" selectedId. This same
+    body now serves both sections-mode and image-mode selections.
+- Verified all 4 mockup pages return HTTP 200:
+  * http://localhost:3000/admin/mockups/meet-the-speaker → 200
+  * http://localhost:3000/admin/mockups/event-profile → 200
+  * http://localhost:3000/admin/mockups/agenda-profile → 200
+  * http://localhost:3000/admin/mockups/qr-salon → 200
+- TypeScript check: zero new errors in any file I touched. Pre-existing
+  errors in the stale duplicate file
+  `agenda-profile/event-profile-canvas.tsx` (which I did NOT touch per
+  the constraints) and unrelated files (dashboard, scripts, skills)
+  remain unchanged.
+
+Stage Summary:
+- All 5 mockup editors (speaker-intro + 4 new ones) now support the
+  image-click-to-select pattern: in "Edit images" mode, clicking any
+  image on the canvas (hero, speaker photo, graphic, sponsor logo,
+  branding asset) triggers the Selected Element panel with a focused
+  per-image editor (Replace button, URL, focus/zoom, size, etc.).
+- The panel uses the same sleek pink-gradient chrome (SelectedElementShell)
+  as the existing section-selection panels.
+- The new image-mode selection is ADDITIVE — section-edit mode clicks
+  still work as before; image-edit mode clicks add per-image selection
+  on top. The panel clears `selectedId` only when BOTH modes are off.
+- Per-image field blocks were designed per-image-kind:
+  * Hero image: Replace, URL, scale X/Y, gradient opacity, reset placement
+  * Speaker photo: Replace, URL, photo size, rotation, visible toggle,
+    reset placement (agenda-profile) / reset placement (meet-the-speaker)
+  * Brand graphic (meet-the-speaker only): Replace, URL, scale, rotation
+  * Style 2 hero (meet-the-speaker only): Replace, URL, scale, rotation
+  * Branding asset: Replace, URL, height, reset position
+  * Sponsor/collaborator logo: Replace, URL, logo size, name, theme
+- For per-image IDs that are dynamic (speaker-image-${idx},
+  sponsor-image-${group}-${idx}), the panel parses them via regex BEFORE
+  the static switch and resolves the index back to the original data
+  array (handling the visible-speaker filter in agenda-profile).
+- Files modified (10):
+  - meet-the-speaker/meet-the-speaker-canvas.tsx
+  - meet-the-speaker/meet-the-speaker-editor.tsx
+  - shared/meet-the-speaker-selected-panel.tsx
+  - event-profile/event-profile-canvas.tsx
+  - event-profile/event-profile-editor.tsx
+  - shared/event-profile-selected-panel.tsx
+  - agenda-profile/agenda-profile-canvas.tsx
+  - agenda-profile/agenda-profile-editor.tsx
+  - shared/agenda-profile-selected-panel.tsx
+  - qr-salon/qr-salon-canvas.tsx
+  - qr-salon/qr-salon-editor.tsx
+- Files NOT modified (intentionally):
+  - shared/qr-salon-selected-panel.tsx (existing BrandingFields already
+    served both modes).
+  - agenda-profile/event-profile-canvas.tsx + event-profile-editor.tsx
+    (stale duplicate files per the constraints).
