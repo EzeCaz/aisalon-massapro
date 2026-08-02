@@ -142,7 +142,7 @@ export default async function LoginPage({
 
         {/* Center: dynamic brand hero image + chapter tagline */}
         <div className="relative z-10 text-white max-w-md">
-          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white">
+          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10">
             <Image
               src={heroUrl}
               alt={`AI Salon ${chapterName} — brand image`}

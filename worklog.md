@@ -11298,3 +11298,59 @@ Stage Summary:
 - TypeScript clean — no new errors introduced. 3 pre-existing errors
   in unrelated files (email-audiences/route.ts, simulate/route.ts,
   meta-capi.ts) remain unchanged.
+
+---
+Task ID: login-bg-fix-and-onboarding-form
+Agent: main
+Task: Two-part request from user:
+  1. Fix transparent PNG showing white background on /login page brand image container.
+  2. Generate an example onboarding form (DOCX) covering all chapter {} placeholders, default
+     settings, images, logos, banners, names, languages, audience, etc., for new chapter leads.
+
+Work Log:
+- Located the offending code in /home/z/my-project/src/app/login/page.tsx line 145:
+  `<div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10 bg-white">`
+  The `bg-white` class forced a white background behind the transparent brand PNG on the
+  dark left brand panel.
+- Removed `bg-white` from the container div. The transparent PNG now composites correctly
+  over the dark AIS poly background (ais-poly-bg).
+- Inventoried ALL chapter-related fields, brand assets, placeholders, and gaps in the
+  codebase via Explore subagent. Confirmed:
+  * Existing schema fields: name, slug, countryId, city, timezone, whatsappGroupUrl,
+    linkedinUrl, heroImageUrl, isActive (Chapter model)
+  * Brand image override slots: favicon, loginHero, loginBanner (ChapterSetting)
+  * Email placeholder: only {{chapter_name}}/{{chapterName}} exists (no {{chapter_slug}},
+    {{chapter_email}}, {{chapter_city}}, etc.)
+  * Gaps (no schema support): languages/locales, target audience, Instagram/Telegram/X,
+    per-chapter sender email
+- Wrote /home/z/my-project/scripts/generate-chapter-onboarding-form.ts (~700 lines):
+  * Cover page with chapter lead name + chapter name placeholders
+  * 10 sections: Instructions, Chapter Basics, Languages & Audience, Brand Assets,
+    Social/Community, Email Config, Chapter Lead/Admin Team, Launch Plan, Additional
+    Notes, Sign-off
+  * Each section uses fieldRow() helper — 2-column table with bold label + fillable
+    line under empty cell. textArea() for multi-line. checkbox() for multi-select.
+  * Cover style: dark slate primary + AIS cyan (#00E6FF) accent + AIS magenta (#820A7D)
+    section number marker.
+  * Header on body pages: "AI Salon · Chapter Onboarding Form | Confidential"
+  * Footer: "Page N · AI Salon Global · aisalon.massapro.com"
+  * Explicitly documents the new fields user requested: Primary language, Secondary
+    language(s), Audience multi-select (Founders, Investors, CMOs, etc.), Audience
+    seniority, Chapter tagline, Chapter description.
+  * Marks which schema gaps require manual handling (Instagram/Telegram, per-chapter
+    sender email) with hint() notes.
+- Generated /home/z/my-project/download/AI-Salon-Chapter-Onboarding-Form.docx (19.4 KB)
+- Ran docx postcheck: 8/9 passed, 0 errors, 1 warning (line-spacing variance — expected
+  for a form with mixed elements: headings, hints, checkboxes, fillable lines).
+
+Stage Summary:
+- Login page transparent image fix: DONE. Removed `bg-white` from /login page brand
+  image container at /home/z/my-project/src/app/login/page.tsx line 145.
+- Chapter onboarding form: DONE. Saved to
+  /home/z/my-project/download/AI-Salon-Chapter-Onboarding-Form.docx.
+- Form covers all existing chapter fields PLUS new requested fields (languages,
+  audience). Notes explicitly call out which fields are not yet in the schema and
+  will require manual configuration by the global team.
+- The form is reusable — chapter leads fill it once per new chapter. Global team
+  uses it as the source of truth when creating the Chapter record, uploading
+  brand assets, and configuring email templates.
