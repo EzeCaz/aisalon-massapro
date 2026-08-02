@@ -69,18 +69,24 @@ export const ALL_KEYS: ReadonlySet<string> = new Set([
  * Sensible defaults used when no SiteSetting row exists yet (e.g. before
  * the Super Admin makes any selection, or if a row is deleted).
  *
- * PER USER SPEC 2026-08-02: the global defaults now point to the canonical
- * AI Salon brand assets on Vercel Blob:
- *   - favicon  → 1782393850874-uwkddr.webp (applies to all chapters/countries)
- *   - loginHero → 1785654449284-sqq083.png (global login hero; per-chapter
- *                 overrides exist for Tel Aviv etc. via ChapterSetting)
- *   - loginBanner → falafel-meerkat.jpg (kept as the historical fallback;
- *                   chapters set their own via ChapterSetting)
+ * PER USER SPEC 2026-08-02 (corrected 2026-08-02): the global defaults
+ * point to the canonical AI Salon brand assets on Vercel Blob:
+ *   - favicon     → 1782393850874-uwkddr.webp (global, applies to all
+ *                   chapters/countries)
+ *   - loginHero   → 1785654449284-sqq083.png  (global login hero; per-
+ *                   chapter overrides exist for Tel Aviv etc. via
+ *                   ChapterSetting)
+ *   - loginBanner → 1785668808200-0fdrda.png  (GLOBAL hero banner — the
+ *                   wide hero image used as the login page background / OG
+ *                   image. PER USER SPEC 2026-08-02: this is now a global
+ *                   default, NOT per-chapter; chapters may still override
+ *                   via ChapterSetting if needed, but the global default
+ *                   is the canonical banner.)
  *
- * These match the values hard-coded in layout.tsx and login/page.tsx prior
- * to V4.2, so behaviour is unchanged until the admin actively selects a
- * different image — except that the favicon + loginHero now default to the
- * canonical brand assets instead of the local /images/ paths.
+ * If the production SiteSetting table already has rows for these keys,
+ * those rows take precedence over these defaults. The Super Admin can
+ * one-click re-sync the DB to these defaults by calling POST
+ * /api/admin/v7-seed (which upserts all three).
  */
 export const DEFAULTS: Record<string, string> = {
   // PER USER SPEC 2026-08-02: global favicon — applies to all chapters
@@ -90,13 +96,12 @@ export const DEFAULTS: Record<string, string> = {
   // chapters/countries unless overridden per-chapter (Tel Aviv has its own
   // override seeded via /api/admin/v7-seed).
   [K_LOGIN_HERO]: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785654449284-sqq083.png",
-  // The pre-V4.2 login banner was the broken /images/falafel-tlv-ai-salon.png
-  // — we keep that here as a fallback marker so the admin can see in the
-  // UI that no banner is selected, but the runtime code falls back to the
-  // favicon's meerkat instead of 404'ing. PER USER SPEC 2026-08-02: each
-  // chapter sets its own loginBanner via ChapterSetting (Tel Aviv defaults
-  // to 1782393696779-dr4rkl.jpg, seeded via /api/admin/v7-seed).
-  [K_LOGIN_BANNER]: "/images/falafel-meerkat.jpg",
+  // PER USER SPEC 2026-08-02 (corrected): GLOBAL hero banner — the canonical
+  // wide hero image used as the login page background / OG image. Applies
+  // to all chapters/countries unless a chapter-level override exists in
+  // ChapterSetting. (Previously defaulted to /images/falafel-meerkat.jpg
+  // which was a placeholder; this is now the real canonical banner.)
+  [K_LOGIN_BANNER]: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png",
   // Default WhatsApp group invite link — the AI Salon TLV community group.
   // Admin can override at /admin/images (no redeploy needed).
   [K_WHATSAPP_GROUP_URL]: "https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3",

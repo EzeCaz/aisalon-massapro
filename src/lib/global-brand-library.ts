@@ -40,8 +40,25 @@
  * used to decide which images to SHOW in the /admin/images gallery
  * for non-super-admin callers; it does NOT affect access control
  * on the image bytes themselves.
+ *
+ * PER USER SPEC 2026-08-02 (corrected): the 3 canonical global
+ * defaults (favicon, loginHero, loginBanner) are ALSO listed here
+ * as a safety net — even if the Super Admin later changes the
+ * selected default away from these canonical URLs, chapter admins
+ * will still be able to see + pick them for their chapter overrides.
  */
 export const GLOBAL_BRAND_LIBRARY_URLS: readonly string[] = [
+  // --- Canonical global defaults (also auto-included by the filter
+  // when they're the currently-selected default, but listed here
+  // so they remain visible even if the default changes) ---
+  // Global favicon (PER USER SPEC 2026-08-02)
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393850874-uwkddr.webp",
+  // Global login hero (PER USER SPEC 2026-08-02)
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785654449284-sqq083.png",
+  // Global hero banner (PER USER SPEC 2026-08-02, corrected)
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png",
+  // --- Additional curated brand library images (logos, mascots,
+  // alternate banners) that chapter admins can pick from ---
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782594029026-zvxyvy.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782594043413-3dqork.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782594046759-11e840.png",
@@ -53,7 +70,6 @@ export const GLOBAL_BRAND_LIBRARY_URLS: readonly string[] = [
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782930012297-7qhk8m.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782940769382-r2twkn.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1783707737806-k0s0bs.png",
-  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785654449284-sqq083.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png",
 ];
 

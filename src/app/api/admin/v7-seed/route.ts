@@ -7,6 +7,13 @@ import {
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
 } from "@/lib/chapter-brand-images";
+import {
+  setSetting,
+  K_FAVICON,
+  K_LOGIN_HERO as K_GLOBAL_LOGIN_HERO,
+  K_LOGIN_BANNER as K_GLOBAL_LOGIN_BANNER,
+  DEFAULTS,
+} from "@/lib/site-settings";
 
 // ============================================================================
 // POST /api/admin/v7-seed
@@ -95,6 +102,31 @@ export async function POST() {
   // Note: favicon is NOT overridden at the chapter level — Tel Aviv uses
   // the global favicon default (1782393850874-uwkddr.webp). Per user spec:
   // "For global and all chapters and countries: This is the main favicon".
+
+  // 2c. PER USER SPEC 2026-08-02 (corrected): Upsert the 3 GLOBAL
+  // SiteSetting rows for favicon, loginHero, and loginBanner so the
+  // production DB stores the canonical AI Salon brand assets — not
+  // the placeholder /images/falafel-meerkat.jpg that was the previous
+  // loginBanner default. Idempotent: re-calling just re-writes the same
+  // values.
+  //
+  // This is critical because:
+  //   - If the SiteSetting table has NO row for a key, getPublicSettings()
+  //     falls back to DEFAULTS (which are now correct after this commit).
+  //   - But if the table has a STALE row from an earlier admin click
+  //     (e.g. loginBanner = /images/falafel-meerkat.jpg), that stale row
+  //     takes precedence over DEFAULTS. This upsert overwrites the stale
+  //     row with the canonical brand-asset URL.
+  //   - After this seed runs, the deployed app will use the correct
+  //     global favicon / loginHero / loginBanner regardless of what was
+  //     previously stored in the DB.
+  const GLOBAL_FAVICON = DEFAULTS[K_FAVICON];
+  const GLOBAL_LOGIN_HERO = DEFAULTS[K_GLOBAL_LOGIN_HERO];
+  const GLOBAL_LOGIN_BANNER = DEFAULTS[K_GLOBAL_LOGIN_BANNER];
+
+  await setSetting(K_FAVICON, GLOBAL_FAVICON, user.id);
+  await setSetting(K_GLOBAL_LOGIN_HERO, GLOBAL_LOGIN_HERO, user.id);
+  await setSetting(K_GLOBAL_LOGIN_BANNER, GLOBAL_LOGIN_BANNER, user.id);
 
   // 3. Backfill NULLs
   // SUPER_ADMIN users keep NULL scope (global).
@@ -212,6 +244,14 @@ export async function POST() {
         loginHero: TLV_LOGIN_HERO,
         loginBanner: TLV_LOGIN_BANNER,
       },
+    },
+    // PER USER SPEC 2026-08-02 (corrected): report the seeded GLOBAL brand
+    // image settings so the caller can verify the canonical AI Salon brand
+    // assets are now stored in the SiteSetting table.
+    globalBrandSettings: {
+      favicon: GLOBAL_FAVICON,
+      loginHero: GLOBAL_LOGIN_HERO,
+      loginBanner: GLOBAL_LOGIN_BANNER,
     },
     updates,
     verification: {

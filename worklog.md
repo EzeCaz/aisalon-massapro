@@ -10968,3 +10968,55 @@ Stage Summary:
   the page header (A), events subtitle (B), and footer copyright (C).
   Anonymous visitors see "Tel Aviv" as the fallback.
 - Ready to push to origin/main for Vercel auto-deploy.
+
+---
+Task ID: TSK-0061 — Fix global default brand images (favicon/hero/loginHero)
+Agent: main
+Task: User clarified the 3 canonical global default brand images:
+  1. Global Favicon     → 1782393850874-uwkddr.webp
+  2. Global Hero banner → 1785668808200-0fdrda.png
+  3. Global Login Hero  → 1785654449284-sqq083.png
+The code default for K_LOGIN_BANNER was wrong (/images/falafel-meerkat.jpg),
+and the production SiteSetting DB table may have stale rows from earlier
+admin clicks that override the (now-correct) code defaults.
+
+Work Log:
+- Step 1 — Updated /src/lib/site-settings.ts DEFAULTS:
+  * [K_FAVICON]     → 1782393850874-uwkddr.webp  (unchanged, was already correct)
+  * [K_LOGIN_HERO]  → 1785654449284-sqq083.png   (unchanged, was already correct)
+  * [K_LOGIN_BANNER] → 1785668808200-0fdrda.png  (CHANGED from /images/falafel-meerkat.jpg)
+  * Updated the docstring to reflect the corrected spec.
+
+- Step 2 — Updated /api/admin/v7-seed/route.ts to also upsert the 3
+  GLOBAL SiteSetting rows (in addition to the existing chapter-level
+  overrides for Tel Aviv). This lets the Super Admin one-click re-sync
+  the production DB to the canonical defaults by calling
+  POST /api/admin/v7-seed. Idempotent — re-calling just re-writes the
+  same values. Added a `globalBrandSettings` field to the response so
+  the caller can verify the seeded values.
+
+- Step 3 — Updated /src/lib/global-brand-library.ts to also list the
+  3 canonical global defaults (favicon, loginHero, loginBanner) as a
+  safety net. They're auto-included by the filter when they're the
+  currently-selected default, but listing them in the library ensures
+  chapter admins can still see + pick them even if the Super Admin
+  later changes the selected default away from these canonical URLs.
+
+- Verification:
+  * `npx tsc --noEmit` — no new errors in modified files.
+  * `npx next build` — succeeded with no errors.
+
+Stage Summary:
+- The code default for the global hero banner is now the canonical
+  AI Salon brand asset (1785668808200-0fdrda.png) instead of the
+  placeholder /images/falafel-meerkat.jpg.
+- The Super Admin can one-click fix the production DB by calling
+  POST /api/admin/v7-seed — this upserts all 3 global SiteSetting
+  rows (favicon, loginHero, loginBanner) to the canonical values,
+  overwriting any stale rows from earlier admin clicks.
+- The 3 canonical global defaults are now also in the curated
+  GLOBAL_BRAND_LIBRARY_URLS so chapter admins can always see + pick
+  them for their chapter overrides.
+- Ready to push to origin/main for Vercel auto-deploy. After deploy,
+  the Super Admin should call POST /api/admin/v7-seed once to sync
+  the production DB.
