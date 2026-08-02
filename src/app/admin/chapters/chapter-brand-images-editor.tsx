@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
   AlertTriangle,
   BadgeCheck,
-  ExternalLink,
   Images,
   Loader2,
   Star,
@@ -94,6 +93,9 @@ export function ChapterBrandImagesEditor({
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showGallery, setShowGallery] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load the image list + chapter overrides in parallel on mount.
   const load = async () => {
@@ -118,6 +120,53 @@ export function ChapterBrandImagesEditor({
   useEffect(() => {
     load();
   }, [chapterId]);
+
+  /** Upload a new image to this chapter's brand-image storage. */
+  async function handleUploadFile(file: File) {
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif"];
+    if (!allowed.includes(file.type)) {
+      toast.error("Unsupported file type", {
+        description: `${file.type} — use JPG, PNG, WebP, GIF, or AVIF.`,
+      });
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("File too large", { description: "Max 8MB." });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(
+        `/api/admin/chapters/${chapterId}/brand-images/upload`,
+        { method: "POST", body: fd }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Upload failed (${res.status})`);
+      }
+      const json = (await res.json()) as {
+        ok: boolean;
+        image: { name: string; url: string; size: number; mimeType: string };
+      };
+      toast.success("Image uploaded", {
+        description: `${json.image.name} is now available in the gallery below. Click "Set as favicon/loginHero/loginBanner" to use it.`,
+      });
+      // Reload the gallery to pick up the new image
+      await load();
+    } catch (e) {
+      toast.error("Upload failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setUploading(false);
+      // Reset the file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   const images = data?.images ?? [];
 
@@ -358,11 +407,72 @@ export function ChapterBrandImagesEditor({
             </button>
           </div>
 
+          {/* Upload zone — lets the chapter admin upload their own
+              chapter-scoped brand image. Stored at chapter-brand/<chapterId>/
+              so it doesn't pollute the global brand-assets/ library. */}
+          {canEdit && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleUploadFile(file);
+              }}
+              className={`rounded-md border-2 border-dashed px-4 py-4 text-center transition-colors ${
+                dragOver
+                  ? "border-[#820A7D] bg-[#820A7D]/5"
+                  : "border-black/15 bg-white hover:border-[#820A7D]/40"
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadFile(file);
+                }}
+                disabled={uploading}
+              />
+              {uploading ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-[#820A7D]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading…
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-[#820A7D] hover:underline"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload an image for {chapterName}
+                  <span className="text-black/50 font-normal">
+                    (or drag &amp; drop — JPG/PNG/WebP/GIF/AVIF, max 8MB)
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+
           {images.length === 0 ? (
             <div className="rounded-md bg-white border border-black/10 px-4 py-6 text-center text-xs text-black/60">
               <Images className="h-6 w-6 mx-auto text-black/30 mb-2" />
-              No images available. Ask a Super Admin to upload brand images
-              via /admin/images first.
+              No images available yet. Upload one above, or ask a Super Admin
+              to add images to the global brand library at{" "}
+              <Link
+                href="/admin/images"
+                className="text-[#FF005A] hover:underline font-semibold"
+              >
+                /admin/images
+              </Link>
+              .
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -466,8 +576,8 @@ export function ChapterBrandImagesEditor({
 
           {/* Helper text */}
           <p className="text-[0.7rem] text-black/50">
-            Only images you have permission to use are shown. Super Admins
-            can upload new images at{" "}
+            Upload your own chapter images above, or pick from the global
+            brand library. Super Admins can manage the global library at{" "}
             <Link
               href="/admin/images"
               className="text-[#FF005A] hover:underline font-semibold"

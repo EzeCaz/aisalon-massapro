@@ -243,7 +243,8 @@ export default async function ChaptersPage() {
                 </h2>
                 <p className="text-xs text-black/70 mt-0.5">
                   Click your chapter pin below to open its edit page, where you
-                  can set the favicon, login hero, and login banner{" "}
+                  can <strong>upload your own images</strong> and set the
+                  favicon, login hero, and login banner{" "}
                   <strong>for your chapter only</strong> (overriding the global
                   defaults when visitors are on your chapter&rsquo;s landing
                   page). Global brand images are managed by the Super Admin.
