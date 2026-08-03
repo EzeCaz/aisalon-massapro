@@ -52,7 +52,8 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
   }
 
-  const existing = await db.emailStageTemplate.findUnique({ where: { id } });
+  // TSK-0074: was db.emailStageTemplate (legacy). Now reads EmailTemplate2.
+  const existing = await db.emailTemplate2.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const updateData: Record<string, unknown> = { updatedBy: auth.userId };
@@ -67,7 +68,9 @@ export async function PATCH(
   }
   if (body.htmlBody !== undefined) {
     if (!body.htmlBody.trim()) return NextResponse.json({ error: "htmlBody cannot be empty" }, { status: 400 });
-    updateData.htmlBody = body.htmlBody;
+    // TSK-0074: API contract uses `htmlBody` for backward compat; maps to
+    // the renamed EmailTemplate2.bodyHtml field.
+    updateData.bodyHtml = body.htmlBody;
   }
   if (body.stopIfNotOpenedHours !== undefined) {
     updateData.stopIfNotOpenedHours = body.stopIfNotOpenedHours;
@@ -95,7 +98,8 @@ export async function PATCH(
   }
 
   try {
-    const updated = await db.emailStageTemplate.update({
+    // TSK-0074: was db.emailStageTemplate (legacy). Now updates EmailTemplate2.
+    const updated = await db.emailTemplate2.update({
       where: { id },
       data: updateData,
     });
@@ -117,7 +121,8 @@ export async function DELETE(
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const existing = await db.emailStageTemplate.findUnique({ where: { id } });
+  // TSK-0074: was db.emailStageTemplate (legacy). Now reads EmailTemplate2.
+  const existing = await db.emailTemplate2.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   // Cannot delete the seeded defaults — only deactivate them.
@@ -133,6 +138,7 @@ export async function DELETE(
     where: { templateId: id },
     data: { templateId: null },
   });
-  await db.emailStageTemplate.delete({ where: { id } });
+  // TSK-0074: was db.emailStageTemplate (legacy). Now deletes from EmailTemplate2.
+  await db.emailTemplate2.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

@@ -36,11 +36,10 @@ import { db } from "@/lib/db";
 import { STAGES, getStage, scheduledFor, nextStage } from "./stages";
 import {
   buildContext,
-  renderTemplate,
-  renderSubject,
-  DEFAULT_TEMPLATES,
   buildLogoBlock,
+  DEFAULT_TEMPLATES,
 } from "./templates";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 import { sendEmail } from "./sender";
 
 export type WorkerResult = {
@@ -297,7 +296,9 @@ async function sendStageEmail(
   const rsvp = row.rsvp;
 
   // Load the template (from DB if seeded, else from defaults).
-  const tplRow = await db.emailStageTemplate.findUnique({
+  // TSK-0074: now reads from the unified EmailTemplate2 table (was
+  // db.emailStageTemplate before the email-unification migration).
+  const tplRow = await db.emailTemplate2.findUnique({
     where: { stage: row.stage },
   });
   const tpl = tplRow ?? null;
@@ -310,9 +311,10 @@ async function sendStageEmail(
   const subject = hasNoCode
     ? (tpl?.noCodeSubject ?? tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`)
     : (tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`);
+  // TSK-0074: field renamed htmlBody → bodyHtml on EmailTemplate2.
   const htmlTemplate = hasNoCode
-    ? (tpl?.noCodeHtmlBody ?? tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>")
-    : (tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>");
+    ? (tpl?.noCodeHtmlBody ?? tpl?.bodyHtml ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>")
+    : (tpl?.bodyHtml ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>");
 
   // Load speakers + agenda for the event.
   const [speakers, agenda] = await Promise.all([
@@ -339,9 +341,19 @@ async function sendStageEmail(
   });
 
   // ─── Feature 2: inject brand logo (top-right) at render time ─────
+  // TSK-0074: now calls renderUnifiedEmail directly (was renderTemplate).
+  // The unified renderer merges the orchestrator + campaign render paths
+  // into one. logoHtml is injected idempotently (data-brand-logo marker).
   const logoHtml = buildLogoBlock(tpl?.logoUrl);
-  const renderedHtml = renderTemplate(htmlTemplate, ctx, { logoHtml });
-  const renderedSubject = renderSubject(subject, ctx);
+  const renderedHtml = renderUnifiedEmail({
+    html: htmlTemplate,
+    ctx,
+    logoHtml,
+    clickWrapFn: ctx.wrapLink,
+    openPixelUrl: ctx.openPixelUrl,
+    chapterName: ctx.chapterName,
+  });
+  const renderedSubject = renderUnifiedSubject(subject, ctx);
 
   const sendResult = await sendEmail({
     to: row.email,
@@ -437,7 +449,7 @@ async function processAltResends(result: WorkerResult): Promise<void> {
       // excludes them, but guard anyway.
       if (!row.rsvp) continue;
 
-      const tpl = await db.emailStageTemplate.findUnique({
+      const tpl = await db.emailTemplate2.findUnique({
         where: { stage: row.stage },
       });
       if (!tpl?.altSubject || !tpl.altNotOpenedHours) continue;
@@ -515,14 +527,17 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         chapterName: altChapterName,
       });
       const logoHtml = buildLogoBlock(tpl.logoUrl);
-      const altRenderedHtml = renderTemplate(tpl.htmlBody, ctx, { logoHtml });
-      const altRenderedSubject = tpl.altSubject
-        .replace(/{{eventTitle}}/g, ctx.eventTitle)
-        .replace(/{{firstName}}/g, ctx.firstName)
-        .replace(/{{chapter_name}}/g, ctx.chapterName)
-        .replace(/{{chapterName}}/g, ctx.chapterName)
-        .replace(/{{eventDate}}/g, ctx.eventDate)
-        .replace(/{{eventVenue}}/g, ctx.eventVenue);
+      // TSK-0074: renderUnifiedEmail + renderUnifiedSubject (was renderTemplate +
+      // inline .replace chain). Field renamed htmlBody → bodyHtml.
+      const altRenderedHtml = renderUnifiedEmail({
+        html: tpl.bodyHtml,
+        ctx,
+        logoHtml,
+        clickWrapFn: ctx.wrapLink,
+        openPixelUrl: ctx.openPixelUrl,
+        chapterName: ctx.chapterName,
+      });
+      const altRenderedSubject = renderUnifiedSubject(tpl.altSubject, ctx);
 
       const sendResult = await sendEmail({
         to: row.email,

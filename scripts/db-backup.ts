@@ -52,8 +52,11 @@ const MODELS = [
   "emailFlowStep",
   "emailQueue",
   "emailRecipient",
-  "emailStageTemplate",
-  "emailTemplate",
+  // TSK-0074: legacy tables preserved via @@map (read-only).
+  "emailStageTemplateLegacy",
+  "emailTemplateLegacy",
+  // TSK-0074: new unified table.
+  "emailTemplate2",
   // Community chat
   "chatRoom",
   "chatRoomMember",

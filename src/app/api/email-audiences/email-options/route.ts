@@ -39,10 +39,12 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   // ── Templates ────────────────────────────────────────────────────────────
-  // All EmailStageTemplates (default stages + custom). For each, include the
-  // number of EmailQueue rows that were SENT for this template, so the user
-  // has a hint of how much tracking data exists.
-  const templates = await db.emailStageTemplate.findMany({
+  // TSK-0074: was db.emailStageTemplate (legacy, now EmailStageTemplateLegacy).
+  // Now reads from the unified EmailTemplate2 table. All EmailTemplate2 rows
+  // (default stages + custom). For each, include the number of EmailQueue
+  // rows that were SENT for this template, so the user has a hint of how
+  // much tracking data exists.
+  const templates = await db.emailTemplate2.findMany({
     where: { isActive: true },
     select: {
       id: true,

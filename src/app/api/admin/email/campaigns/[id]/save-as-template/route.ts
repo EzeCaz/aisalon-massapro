@@ -55,7 +55,14 @@ export async function POST(
     .slice(0, 40);
   const slug = `${slugBase || "template"}-${randomUUID().slice(0, 8)}`;
 
-  const template = await db.emailTemplate.create({
+  // TSK-0074: was db.emailTemplate (legacy campaign-side table). Now writes
+  // to the unified EmailTemplate2 table so the saved template is immediately
+  // available in both the campaign composer AND the flow step editor.
+  // Note: EmailTemplate2.createdBy is a plain String? (no User relation) —
+  // matches the legacy EmailStageTemplate convention. The `creator` include
+  // is no longer possible (no relation); the API response now returns just
+  // the createdBy user ID string.
+  const template = await db.emailTemplate2.create({
     data: {
       name,
       slug,
@@ -65,9 +72,6 @@ export async function POST(
       bodyText: campaign.bodyTextSnapshot,
       signatureHtml: campaign.signatureHtmlSnapshot,
       createdBy: admin.id,
-    },
-    include: {
-      creator: { select: { id: true, email: true, name: true } },
     },
   });
 

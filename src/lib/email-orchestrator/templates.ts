@@ -26,6 +26,7 @@
  */
 
 import type { Event, EventRsvp, Speaker, EventAgendaItem } from "@prisma/client";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 
 // ----------------------------------------------------------------------------
 // Brand logo (top-right of every email)
@@ -168,94 +169,45 @@ function formatTime(d: Date): string {
  *
  *  Supported chapter tokens:
  *    {{chapter_name}}   — chapter display name (snake_case, user-facing)
- *    {{chapterName}}    — same value (camelCase, for parity with other tokens) */
+ *    {{chapterName}}    — same value (camelCase, for parity with other tokens)
+ *
+ *  TSK-0074: now delegates to the unified renderer at
+ *  `src/lib/email/render-unified.ts:renderUnifiedEmail`. The unified
+ *  renderer merges the three previously-bifurcated render paths into one
+ *  and adds support for: (a) BOTH camelCase + snake_case tokens, (b) the
+ *  new `mobileOverridesHtml` field (appended inside a `@media (max-width:
+ *  600px)` block), (c) idempotent logo + mobile-override injection
+ *  (safe to call twice on the same HTML), (d) skip already-wrapped links
+ *  (so re-rendering a template doesn't double-wrap).
+ *
+ *  The signature + behavior are preserved for backward compat with all
+ *  existing callers (worker.ts, flow-worker.ts, force-send-stage route). */
 export function renderTemplate(
   html: string,
   ctx: TemplateContext,
   opts?: { logoHtml?: string },
 ): string {
-  let out = html
-    // {{name}} and {{firstName}} are aliases — both resolve to the same value.
-    .replace(/{{firstName}}/g, escapeHtml(ctx.firstName))
-    .replace(/{{name}}/g, escapeHtml(ctx.firstName))
-    .replace(/{{chapter_name}}/g, escapeHtml(ctx.chapterName))
-    .replace(/{{chapterName}}/g, escapeHtml(ctx.chapterName))
-    .replace(/{{eventTitle}}/g, escapeHtml(ctx.eventTitle))
-    .replace(/{{eventDate}}/g, escapeHtml(ctx.eventDate))
-    .replace(/{{eventVenue}}/g, escapeHtml(ctx.eventVenue))
-    .replace(/{{eventAddress}}/g, escapeHtml(ctx.eventAddress))
-    .replace(/{{eventUrl}}/g, escapeHtml(ctx.eventUrl))
-    // {{myCodeUrl}} and {{event.myCodeUrl}} are aliases — both resolve to
-    // the mobile-first /e/<slug>/my-code page.
-    .replace(/{{event\.myCodeUrl}}/g, escapeHtml(ctx.myCodeUrl))
-    .replace(/{{myCodeUrl}}/g, escapeHtml(ctx.myCodeUrl))
-    .replace(/{{checkInCode}}/g, escapeHtml(ctx.checkInCode))
-    .replace(/{{speakers}}/g, escapeHtml(ctx.speakers))
-    .replace(/{{agenda}}/g, escapeHtml(ctx.agenda).replace(/\n/g, "<br/>"));
-
-  // Inject the brand logo immediately after the opening <body> tag (or after
-  // the first <div> if no <body>). The logo floats right; the email's first
-  // heading wraps around it. We only inject if the template hasn't already
-  // placed a logo manually (look for our marker `data-brand-logo`).
-  if (opts?.logoHtml && !/data-brand-logo/.test(out)) {
-    if (/<div[^>]*max-width:560px[^>]*>/i.test(out)) {
-      // The SHELL wrapper uses a 560px inner div — inject right after it.
-      out = out.replace(
-        /(<div[^>]*max-width:560px[^>]*>)/i,
-        `$1${opts.logoHtml}`,
-      );
-    } else if (/<body[^>]*>/i.test(out)) {
-      out = out.replace(/(<body[^>]*>)/i, `$1${opts.logoHtml}`);
-    } else {
-      out = opts.logoHtml + out;
-    }
-  }
-
-  // Wrap all href="http..." links with the click-redirect.
-  // (Skip mailto: and tel: and already-wrapped links.)
-  out = out.replace(
-    /href="(https?:\/\/[^"]+)"/g,
-    (_, url) => `href="${ctx.wrapLink(url)}"`,
-  );
-
-  // Inject the open-tracking pixel right before </body>. If no </body>,
-  // append at the end.
-  const pixel = `<img src="${ctx.openPixelUrl}" width="1" height="1" alt="" style="display:none;max-height:1px;max-width:1px;opacity:0;overflow:hidden;border:0;"/>`;
-  if (/<\/body>/i.test(out)) {
-    out = out.replace(/<\/body>/i, `${pixel}</body>`);
-  } else {
-    out = out + pixel;
-  }
-
-  return out;
+  // Delegate to the unified renderer. The orchestrator's TemplateContext
+  // is a superset of UnifiedRenderContext (it has `wrapLink` and
+  // `openPixelUrl` which the unified renderer uses for click-wrap + pixel).
+  return renderUnifiedEmail({
+    html,
+    ctx,
+    logoHtml: opts?.logoHtml,
+    clickWrapFn: ctx.wrapLink,
+    openPixelUrl: ctx.openPixelUrl,
+    chapterName: ctx.chapterName,
+  });
 }
 
-/** Replace {{tokens}} in a subject line (no HTML escaping — subjects are plain text). */
+/** Replace {{tokens}} in a subject line (no HTML escaping — subjects are plain text).
+ *
+ *  TSK-0074: now delegates to `renderUnifiedSubject` in the unified renderer.
+ *  Supports both camelCase + snake_case tokens (the legacy version only
+ *  supported camelCase). For templates that don't use snake_case tokens,
+ *  the behavior is identical. */
 export function renderSubject(subject: string, ctx: TemplateContext): string {
-  return subject
-    .replace(/{{firstName}}/g, ctx.firstName)
-    .replace(/{{name}}/g, ctx.firstName)
-    .replace(/{{chapter_name}}/g, ctx.chapterName)
-    .replace(/{{chapterName}}/g, ctx.chapterName)
-    .replace(/{{eventTitle}}/g, ctx.eventTitle)
-    .replace(/{{eventDate}}/g, ctx.eventDate)
-    .replace(/{{eventVenue}}/g, ctx.eventVenue)
-    .replace(/{{eventAddress}}/g, ctx.eventAddress)
-    .replace(/{{eventUrl}}/g, ctx.eventUrl)
-    .replace(/{{event\.myCodeUrl}}/g, ctx.myCodeUrl)
-    .replace(/{{myCodeUrl}}/g, ctx.myCodeUrl)
-    .replace(/{{checkInCode}}/g, ctx.checkInCode)
-    .replace(/{{speakers}}/g, ctx.speakers)
-    .replace(/{{agenda}}/g, ctx.agenda);
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+  return renderUnifiedSubject(subject, ctx);
 }
 
 // ----------------------------------------------------------------------------

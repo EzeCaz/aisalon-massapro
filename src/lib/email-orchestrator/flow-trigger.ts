@@ -83,7 +83,8 @@ export async function triggerFlowsForRsvp(input: TriggerInput): Promise<TriggerR
     include: {
       flow: { select: { id: true, name: true } },
       audience: { select: { id: true, emailsJson: true } },
-      template: { select: { id: true, subject: true, htmlBody: true } },
+      // TSK-0074: EmailTemplate2 field renamed htmlBody → bodyHtml.
+      template: { select: { id: true, subject: true, bodyHtml: true } },
     },
   });
 

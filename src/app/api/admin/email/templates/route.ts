@@ -19,12 +19,15 @@ export async function GET(req: NextRequest) {
   const category = url.searchParams.get("category");
 
   const where = category && category !== "all" ? { category } : {};
-  const templates = await db.emailTemplate.findMany({
+  // TSK-0074: was db.emailTemplate (legacy, now EmailTemplateLegacy).
+  // Now reads from the unified EmailTemplate2 table. The `creator` include
+  // is no longer possible (EmailTemplate2.createdBy is a plain String?, no
+  // User relation — matches the legacy EmailStageTemplate convention).
+  const templates = await db.emailTemplate2.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { campaigns: true } },
-      creator: { select: { id: true, email: true, name: true } },
     },
   });
 
@@ -81,7 +84,8 @@ export async function POST(req: NextRequest) {
     .slice(0, 40);
   const slug = `${slugBase || "template"}-${randomUUID().slice(0, 8)}`;
 
-  const template = await db.emailTemplate.create({
+  // TSK-0074: was db.emailTemplate (legacy). Now writes to EmailTemplate2.
+  const template = await db.emailTemplate2.create({
     data: {
       name,
       slug,
@@ -91,9 +95,6 @@ export async function POST(req: NextRequest) {
       bodyText: bodyText,
       signatureHtml: signatureHtml,
       createdBy: admin.id,
-    },
-    include: {
-      creator: { select: { id: true, email: true, name: true } },
     },
   });
 

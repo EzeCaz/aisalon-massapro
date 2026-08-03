@@ -45,11 +45,10 @@ import { can } from "@/lib/permissions";
 import { STAGES, scheduledFor, nextStage } from "@/lib/email-orchestrator/stages";
 import {
   buildContext,
-  renderTemplate,
-  renderSubject,
   DEFAULT_TEMPLATES,
   buildLogoBlock,
 } from "@/lib/email-orchestrator/templates";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 import { sendEmail } from "@/lib/email-orchestrator/sender";
 
 export const dynamic = "force-dynamic";
@@ -253,7 +252,9 @@ async function sendStageEmailDirect(
   const rsvp = row.rsvp;
 
   // Load template
-  const tplRow = await db.emailStageTemplate.findUnique({
+  // TSK-0074: now reads from the unified EmailTemplate2 table (was
+  // db.emailStageTemplate before the email-unification migration).
+  const tplRow = await db.emailTemplate2.findUnique({
     where: { stage: row.stage },
   });
   const tpl = tplRow ?? null;
@@ -263,9 +264,10 @@ async function sendStageEmailDirect(
   const subject = hasNoCode
     ? (tpl?.noCodeSubject ?? tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`)
     : (tpl?.subject ?? DEFAULT_TEMPLATES[row.stage]?.subject ?? `AI Salon — stage ${row.stage}`);
+  // TSK-0074: field renamed htmlBody → bodyHtml on EmailTemplate2.
   const htmlTemplate = hasNoCode
-    ? (tpl?.noCodeHtmlBody ?? tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>")
-    : (tpl?.htmlBody ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>");
+    ? (tpl?.noCodeHtmlBody ?? tpl?.bodyHtml ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>")
+    : (tpl?.bodyHtml ?? DEFAULT_TEMPLATES[row.stage]?.html ?? "<p>{{eventTitle}}</p>");
 
   // Speakers + agenda
   const [speakers, agenda] = await Promise.all([
@@ -292,8 +294,17 @@ async function sendStageEmailDirect(
   });
 
   const logoHtml = buildLogoBlock(tpl?.logoUrl);
-  const renderedHtml = renderTemplate(htmlTemplate, ctx, { logoHtml });
-  const renderedSubject = renderSubject(subject, ctx);
+  // TSK-0074: now calls renderUnifiedEmail + renderUnifiedSubject directly
+  // (was renderTemplate + renderSubject, which now delegate here anyway).
+  const renderedHtml = renderUnifiedEmail({
+    html: htmlTemplate,
+    ctx,
+    logoHtml,
+    clickWrapFn: ctx.wrapLink,
+    openPixelUrl: ctx.openPixelUrl,
+    chapterName: ctx.chapterName,
+  });
+  const renderedSubject = renderUnifiedSubject(subject, ctx);
 
   const sendResult = await sendEmail({
     to: row.email,

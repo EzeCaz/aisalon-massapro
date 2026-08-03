@@ -57,7 +57,8 @@ export async function GET(
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const template = await db.emailStageTemplate.findUnique({ where: { id } });
+  // TSK-0074: was db.emailStageTemplate (legacy). Now reads EmailTemplate2.
+  const template = await db.emailTemplate2.findUnique({ where: { id } });
   if (!template) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   // Find all EmailQueue rows whose flowStep uses this template.

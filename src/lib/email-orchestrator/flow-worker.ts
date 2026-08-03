@@ -29,7 +29,8 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { sendEmail, type SendResult } from "./sender";
-import { buildContext, renderTemplate, renderSubject } from "./templates";
+import { buildContext, buildLogoBlock } from "./templates";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 
 export type WorkerResult = {
   sent: number;
@@ -86,7 +87,10 @@ export async function runFlowWorker(): Promise<WorkerResult> {
       },
       flowStep: {
         include: {
-          template: { select: { id: true, subject: true, htmlBody: true, name: true } },
+          // TSK-0074: now selects from EmailTemplate2 (was EmailStageTemplate).
+          // Field renamed htmlBody → bodyHtml. Added logoUrl so we can fix
+          // the brand-logo bug (flow-sent emails were missing the logo).
+          template: { select: { id: true, subject: true, bodyHtml: true, name: true, logoUrl: true } },
           audience: { select: { id: true, name: true } },
           flow: { select: { id: true, name: true, status: true } },
         },
@@ -142,7 +146,7 @@ type DueQueueRow = Prisma.EmailQueueGetPayload<{
     };
     flowStep: {
       include: {
-        template: { select: { id: true; subject: true; htmlBody: true; name: true } };
+        template: { select: { id: true; subject: true; bodyHtml: true; name: true; logoUrl: true } };
         audience: { select: { id: true; name: true } };
         flow: { select: { id: true; name: true; status: true } };
       };
@@ -250,8 +254,21 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
     chapterName,
   });
 
-  const htmlBody = renderTemplate(step.template.htmlBody, ctx);
-  const renderedSubject = renderSubject(subjectSource, ctx);
+  // TSK-0074: FIX THE LOGO BUG. Previously `renderTemplate(step.template.htmlBody, ctx)`
+  // was called with NO `opts.logoHtml` — flow-sent emails got NO brand logo.
+  // Now we use the unified renderer + pass `logoHtml: buildLogoBlock(step.template.logoUrl)`
+  // so flow-sent emails get the same top-right brand mark as stage-based sends.
+  //
+  // Also: field renamed htmlBody → bodyHtml on EmailTemplate2.
+  const htmlBody = renderUnifiedEmail({
+    html: step.template.bodyHtml,
+    ctx,
+    logoHtml: buildLogoBlock(step.template.logoUrl),
+    clickWrapFn: ctx.wrapLink,
+    openPixelUrl: ctx.openPixelUrl,
+    chapterName: ctx.chapterName,
+  });
+  const renderedSubject = renderUnifiedSubject(subjectSource, ctx);
 
   // Send via the configured provider (gmail if env set + creds present,
   // smtp if SMTP_* set, mock otherwise).

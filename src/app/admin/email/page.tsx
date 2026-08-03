@@ -90,12 +90,16 @@ export default async function EmailTabPage({
         _count: { select: { recipients: true, events: true } },
       },
     }),
-    db.emailTemplate.findMany({
+    // TSK-0074: was db.emailTemplate (legacy campaign-side table, now
+    // EmailTemplateLegacy). Now reads from the unified EmailTemplate2 table
+    // so the campaign composer's template picker shows the same unified
+    // set that the flow step editor uses. The legacy table is preserved
+    // for read-only historical access but no longer feeds any UI.
+    db.emailTemplate2.findMany({
       where: emailModelWhere,
       orderBy: { createdAt: "desc" },
       include: {
         _count: { select: { campaigns: true } },
-        creator: { select: { id: true, email: true, name: true } },
         chapter: { select: { id: true, name: true, slug: true } },
       },
     }),
@@ -126,7 +130,7 @@ export default async function EmailTabPage({
         _count: { select: { flowSteps: true } },
       },
     }),
-    db.emailStageTemplate.findMany({
+    db.emailTemplate2.findMany({
       where: emailModelWhere,
       orderBy: [{ stage: "asc" }, { name: "asc" }],
       select: {

@@ -16,7 +16,7 @@
  */
 
 import { db } from "@/lib/db";
-import { sendMail } from "@/lib/email";
+import { sendCampaignEmail } from "@/lib/email-orchestrator/sender";
 import { renderEmail } from "./render";
 import { randomBytes } from "node:crypto";
 
@@ -133,32 +133,68 @@ export async function sendCampaignBatch(
         ...(eventCtx ? { event: eventCtx } : {}),
       });
 
-      const result = await sendMail({
+      // TSK-0074: was `sendMail` from @/lib/email (SMTP-only, ignored the
+      // global pause flag). Now uses `sendCampaignEmail` from the unified
+      // sender — honors EMAIL_SEND_ENABLED + SiteSetting[emailSendPaused].
+      // Mock/paused sends are marked SKIPPED (not SENT) so the admin UI is
+      // honest about what actually left the server.
+      const result = await sendCampaignEmail({
         to: rendered.to,
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,
         from: rendered.from,
+        replyTo: replyTo,
+        campaignId,
+        recipientId: recipient.id,
       });
 
       if (result.ok) {
-        await db.emailRecipient.update({
-          where: { id: recipient.id },
-          data: {
-            status: "SENT",
-            sentAt: new Date(),
-            messageId: rendered.messageId,
-          },
-        });
-        await db.emailEvent.create({
-          data: {
-            campaignId,
-            recipientId: recipient.id,
-            email: recipient.email,
-            type: "SENT",
-          },
-        });
-        sent++;
+        // Mock / paused sends: mark SKIPPED with a clear error message so
+        // the admin can see in the queue panel that no email was actually
+        // delivered. The rendered HTML is preserved on the recipient for
+        // preview (via the EmailEvent row's `details` field).
+        if (result.mock) {
+          await db.emailRecipient.update({
+            where: { id: recipient.id },
+            data: {
+              status: "FAILED",
+              errorReason: result.skipped
+                ? `Skipped — global email sending is paused (SiteSetting[emailSendPaused]=true). Resume sending in /admin/email to deliver.`
+                : `Mock send — provider=${result.provider}. No email was delivered. Configure SMTP_* or EMAIL_PROVIDER=gmail + Google OAuth2 creds to send for real.`,
+            },
+          });
+          await db.emailEvent.create({
+            data: {
+              campaignId,
+              recipientId: recipient.id,
+              email: recipient.email,
+              type: "SKIPPED",
+              details: result.skipped
+                ? "Paused (admin toggle)"
+                : `Mock send (provider=${result.provider})`,
+            },
+          });
+          failed++;
+        } else {
+          await db.emailRecipient.update({
+            where: { id: recipient.id },
+            data: {
+              status: "SENT",
+              sentAt: new Date(),
+              messageId: rendered.messageId,
+            },
+          });
+          await db.emailEvent.create({
+            data: {
+              campaignId,
+              recipientId: recipient.id,
+              email: recipient.email,
+              type: "SENT",
+            },
+          });
+          sent++;
+        }
       } else {
         await db.emailRecipient.update({
           where: { id: recipient.id },

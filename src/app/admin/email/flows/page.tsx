@@ -44,7 +44,9 @@ export default async function FlowBuilderPage() {
 
   // Load templates + events + audiences for the dropdowns.
   const [templates, events, audiences] = await Promise.all([
-    db.emailStageTemplate.findMany({
+    // TSK-0074: was db.emailStageTemplate (legacy, now EmailStageTemplateLegacy).
+    // Now reads from the unified EmailTemplate2 table.
+    db.emailTemplate2.findMany({
       orderBy: [{ stage: "asc" }, { name: "asc" }],
       select: {
         id: true,

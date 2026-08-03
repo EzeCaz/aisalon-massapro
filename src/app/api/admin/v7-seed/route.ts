@@ -167,12 +167,18 @@ export async function POST() {
   });
   updates.speakers = speakerBackfill.count;
 
+  // TSK-0074: was ["emailTemplate", "emailStageTemplate"] — both renamed
+  // in the Prisma schema (to EmailTemplateLegacy / EmailStageTemplateLegacy,
+  // preserved via @@map). The unified EmailTemplate2 table replaces both for
+  // new writes. We backfill chapterId on the active unified table + the
+  // legacy tables (for historical consistency).
   const emailTables = [
     "emailQueue",
     "emailRecipient",
     "emailCampaign",
-    "emailTemplate",
-    "emailStageTemplate",
+    "emailTemplate2",
+    "emailTemplateLegacy",
+    "emailStageTemplateLegacy",
     "emailFlow",
     "emailAudience",
   ] as const;

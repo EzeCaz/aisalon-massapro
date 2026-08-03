@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
-import { sendMail, emailConfigured } from "@/lib/email";
+import { sendCampaignEmail, isSmtpConfigured, isGmailConfigured } from "@/lib/email-orchestrator/sender";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 import { randomUUID } from "crypto";
+import { htmlToText } from "@/lib/email-campaign/render";
 
 /**
  * POST /api/admin/email/campaigns/[id]/send
@@ -46,9 +48,13 @@ export async function POST(
     );
   }
 
-  if (!emailConfigured()) {
+  // TSK-0074: was `emailConfigured()` (SMTP-only check). Now accepts Gmail
+  // OAuth2 as a valid provider too. If neither is configured, returns 503
+  // so the admin sees the misconfiguration before any recipient rows are
+  // created (otherwise every recipient would be marked SKIPPED/mock).
+  if (!isSmtpConfigured() && !isGmailConfigured()) {
     return NextResponse.json(
-      { error: "SMTP is not configured on the server. Set SMTP_HOST, SMTP_USER, SMTP_PASS env vars." },
+      { error: "No email provider is configured on the server. Set SMTP_HOST, SMTP_USER, SMTP_PASS env vars (or EMAIL_PROVIDER=gmail + GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN)." },
       { status: 503 }
     );
   }
@@ -139,59 +145,102 @@ export async function POST(
       },
     });
 
-    // Personalize the body — replace merge fields. {{name}}/{{email}} are
-    // always available; {{chapter_name}}/{{chapterName}} resolve to the
-    // campaign's chapter display name (default "Tel Aviv");
-    // {{eventUrl}}, {{myCodeUrl}}, {{event.myCodeUrl}}, {{eventTitle}},
-    // {{eventVenue}}, {{eventAddress}} only resolve when the campaign
-    // targets an event (otherwise stripped to "").
-    const personalizedHtml = campaign.bodyHtmlSnapshot
-      .replace(/\{\{name\}\}/g, r.name || "there")
-      .replace(/\{\{email\}\}/g, r.email)
-      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
-      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName)
-      .replace(/\{\{\s*first_name\s*\}\}/g, (r.name || "there").split(" ")[0])
-      .replace(/\{\{\s*full_name\s*\}\}/g, r.name || "")
-      .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
-      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
-      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
-      .replace(/\{\{\s*eventTitle\s*\}\}/g, eventCtx?.title || "")
-      .replace(/\{\{\s*eventVenue\s*\}\}/g, eventCtx?.venue || "")
-      .replace(/\{\{\s*eventAddress\s*\}\}/g, eventCtx?.address || "");
-    const personalizedSubject = campaign.subjectSnapshot
-      .replace(/\{\{name\}\}/g, r.name || "there")
-      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
-      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName)
-      .replace(/\{\{\s*first_name\s*\}\}/g, (r.name || "there").split(" ")[0])
-      .replace(/\{\{\s*full_name\s*\}\}/g, r.name || "")
-      .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
-      .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
-      .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
-      .replace(/\{\{\s*eventTitle\s*\}\}/g, eventCtx?.title || "");
+    // TSK-0074: REPLACED the inline regex `.replace()` chain with a call
+    // to the unified renderer. The legacy code:
+    //   1. Did NOT inject the brand logo.
+    //   2. Did NOT wrap links with the click-redirect (no click tracking).
+    //   3. Did NOT append the open-tracking pixel (no open tracking).
+    //   4. Did NOT append the unsubscribe footer.
+    //   5. Had a `cc: replyTo` bug (was CC'ing the replyTo address on every send).
+    // The unified renderer fixes all 5 issues in one place.
+    const firstName = (r.name || "there").split(" ")[0];
+    const renderCtx = {
+      firstName,
+      name: r.name || "",
+      email: r.email,
+      chapterName,
+      eventTitle: eventCtx?.title ?? "",
+      eventVenue: eventCtx?.venue ?? "",
+      eventAddress: eventCtx?.address ?? "",
+      eventUrl,
+      myCodeUrl,
+    };
+    const personalizedSubject = renderUnifiedSubject(campaign.subjectSnapshot, renderCtx);
+    const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${id}`;
+    const personalizedHtml = renderUnifiedEmail({
+      html: campaign.bodyHtmlSnapshot,
+      ctx: renderCtx,
+      // No logo for campaign sends (UI subagent will add logoUrl support
+      // to EmailTemplate2 + the campaign composer in a later phase).
+      campaignId: id,
+      trackToken,
+      baseUrl,
+      unsubscribeUrl,
+      chapterName,
+    });
+    // Plain-text alternative: snapshot.bodyTextSnapshot if set, else derive
+    // from the snapshot bodyHtml (NOT the rendered HTML — we don't want
+    // tracking pixels + footers in the plain-text version).
+    const personalizedText = campaign.bodyTextSnapshot
+      ? renderUnifiedSubject(campaign.bodyTextSnapshot, renderCtx)
+      : htmlToText(campaign.bodyHtmlSnapshot);
 
-    const result = await sendMail({
+    // TSK-0074: was `sendMail({ ..., cc: replyTo })` — the `cc: replyTo` was
+    // a bug (was CC'ing the replyTo address on every send). Now passes
+    // `replyTo` as a proper Reply-To header via sendCampaignEmail.
+    const result = await sendCampaignEmail({
       to: r.email,
-      cc: undefined,
       subject: personalizedSubject,
       html: personalizedHtml,
+      text: personalizedText,
       from,
-      ...(replyTo ? { cc: replyTo } : {}),
+      replyTo,
+      campaignId: id,
+      recipientId: recipientRow.id,
     });
 
     if (result.ok) {
-      sentCount++;
-      await db.emailRecipient.update({
-        where: { id: recipientRow.id },
-        data: { status: "SENT", sentAt: new Date() },
-      });
-      await db.emailEvent.create({
-        data: {
-          campaignId: id,
-          recipientId: recipientRow.id,
-          email: r.email,
-          type: "SENT",
-        },
-      });
+      // TSK-0074: mock / paused sends are marked SKIPPED (not SENT) so the
+      // admin sees accurate counts in the campaign report. Real sends mark
+      // SENT as before.
+      if (result.mock) {
+        failedCount++;
+        await db.emailRecipient.update({
+          where: { id: recipientRow.id },
+          data: {
+            status: "FAILED",
+            errorReason: result.skipped
+              ? `Skipped — global email sending is paused (SiteSetting[emailSendPaused]=true). Resume sending in /admin/email to deliver.`
+              : `Mock send — provider=${result.provider}. No email was delivered. Configure SMTP_* or EMAIL_PROVIDER=gmail + Google OAuth2 creds to send for real.`,
+          },
+        });
+        await db.emailEvent.create({
+          data: {
+            campaignId: id,
+            recipientId: recipientRow.id,
+            email: r.email,
+            type: "SKIPPED",
+            details: result.skipped
+              ? "Paused (admin toggle)"
+              : `Mock send (provider=${result.provider})`,
+          },
+        });
+        errors.push(`${r.email}: ${result.skipped ? "paused" : "mock send"}`);
+      } else {
+        sentCount++;
+        await db.emailRecipient.update({
+          where: { id: recipientRow.id },
+          data: { status: "SENT", sentAt: new Date() },
+        });
+        await db.emailEvent.create({
+          data: {
+            campaignId: id,
+            recipientId: recipientRow.id,
+            email: r.email,
+            type: "SENT",
+          },
+        });
+      }
     } else {
       failedCount++;
       await db.emailRecipient.update({

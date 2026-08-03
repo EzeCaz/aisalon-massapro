@@ -71,8 +71,9 @@ model Chapter {
   emailQueueItems      EmailQueue[]
   emailRecipients      EmailRecipient[]
   emailCampaigns       EmailCampaign[]
-  emailTemplates       EmailTemplate[]
-  stageTemplates       EmailStageTemplate[]
+  emailTemplates       EmailTemplateLegacy[]
+  stageTemplates       EmailStageTemplateLegacy[]
+  emailTemplate2s      EmailTemplate2[]
   emailFlows           EmailFlow[]
   emailAudiences       EmailAudience[]
   referralVisits       ReferralVisit[]
@@ -106,16 +107,20 @@ model ChapterSetting {
 /// htmlBody). Resolver: ChapterEmailTemplateOverride (if active) →
 /// EmailStageTemplate (global default).
 model ChapterEmailTemplateOverride {
-  id              String             @id @default(cuid())
+  id              String                   @id @default(cuid())
   chapterId       String
-  chapter         Chapter            @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  chapter         Chapter                  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   stageTemplateId String
-  stageTemplate   EmailStageTemplate @relation(fields: [stageTemplateId], references: [id], onDelete: Cascade)
+  /// TSK-0074: still references the LEGACY EmailStageTemplate table
+  /// (preserved via @@map("EmailStageTemplate")). The override UI will
+  /// be migrated to EmailTemplate2 by the UI subagent in a later phase;
+  /// for now we keep this FK intact so existing overrides keep working.
+  stageTemplate   EmailStageTemplateLegacy @relation(fields: [stageTemplateId], references: [id], onDelete: Cascade)
   logoUrl         String? // override
   subject         String? // override
   htmlBody        String? // override
-  isActive        Boolean            @default(true)
-  updatedAt       DateTime           @updatedAt
+  isActive        Boolean                  @default(true)
+  updatedAt       DateTime                 @updatedAt
 
   @@unique([chapterId, stageTemplateId])
   @@index([chapterId])
@@ -124,41 +129,41 @@ model ChapterEmailTemplateOverride {
 // ---------------------------- Users & Members ----------------------------
 
 model User {
-  id                 String                @id @default(cuid())
-  email              String                @unique
-  name               String?
-  image              String?
+  id                         String                    @id @default(cuid())
+  email                      String                    @unique
+  name                       String?
+  image                      String?
   // ---------------- Profile fields (user-editable) ----------------
-  bio                String? // free-form short bio
-  linkedinUrl        String? // https://www.linkedin.com/in/...
-  company            String? // e.g. "MassaPro"
-  companyUrl         String? // https://...
-  portfolioUrl       String? // personal site / portfolio
-  photoUrl           String? // user-uploaded photo (overrides Google `image` when set)
-  title              String? // job title / role, e.g. "CEO", "Engineer", "Designer"
+  bio                        String? // free-form short bio
+  linkedinUrl                String? // https://www.linkedin.com/in/...
+  company                    String? // e.g. "MassaPro"
+  companyUrl                 String? // https://...
+  portfolioUrl               String? // personal site / portfolio
+  photoUrl                   String? // user-uploaded photo (overrides Google `image` when set)
+  title                      String? // job title / role, e.g. "CEO", "Engineer", "Designer"
   // ----------------------------------------------------------------
   // Email/password login: bcrypt-hashed password. Null when the user
   // signed in via Google only. Set on first email sign-up, and on
   // subsequent password resets.
-  passwordHash       String?
+  passwordHash               String?
   // ----------------------------------------------------------------
   // Imported-from-spreadsheet fields (admin-only). Captured from the
   // AI Salon TLV intake form so the admin can see who applied, what
   // they're interested in, what they applied for, and whether they
   // were invited to speak. Visible only in the admin panel.
-  mobile             String? // phone number from the intake form
-  interestedIn       String? // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
-  profileCategories  String? // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
-  appliedFor         String? // e.g. "Fast pitch", "Presentation/Lecure"
-  invitedToSpeak     String? // admin-set indicator (e.g. "Yes" / event slug)
-  importSource       String? // e.g. "excel:AI Salon TLV.xlsx"
-  importedAt         DateTime?
+  mobile                     String? // phone number from the intake form
+  interestedIn               String? // comma-separated list, e.g. "Be a guest speaker, Want to pitch my startup"
+  profileCategories          String? // comma-separated list, e.g. "I am an entrepreneur, I am an investor"
+  appliedFor                 String? // e.g. "Fast pitch", "Presentation/Lecure"
+  invitedToSpeak             String? // admin-set indicator (e.g. "Yes" / event slug)
+  importSource               String? // e.g. "excel:AI Salon TLV.xlsx"
+  importedAt                 DateTime?
   // ----------------------------------------------------------------
   // Onboarding: set to NOW() the first time a self-registered user
   // fills out the /onboarding form. Null = the user hasn't completed
   // the intake form yet. Pre-imported users (importSource set) skip
   // onboarding — they already have intake data from the spreadsheet.
-  onboardedAt        DateTime?
+  onboardedAt                DateTime?
   // ----------------------------------------------------------------
   // UTM tracking — a unique 12-char hex string generated server-side
   // on user creation. Used as the `utm_uid` query param on every
@@ -167,19 +172,19 @@ model User {
   // referring member. Stable for the lifetime of the user (never
   // regenerated). Unique at the DB level. Backfilled for all
   // pre-existing users by scripts/backfill-utm-uid.ts.
-  utmUid             String?               @unique
+  utmUid                     String?                   @unique
   // ----------------------------------------------------------------
   // Soft-delete (archive) — set when a Super Admin archives a member.
   // Archived members are excluded from the main members list and from
   // most queries, but their row is preserved for audit. Only Super
   // Admins can view the archive list at /admin/members/archive and
   // restore archived members. Null = active (not archived).
-  archivedAt         DateTime?
-  archivedBy         String?
-  archiver           User?                 @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
-  archivedUsers      User[]                @relation("UserArchiver")
+  archivedAt                 DateTime?
+  archivedBy                 String?
+  archiver                   User?                     @relation("UserArchiver", fields: [archivedBy], references: [id], onDelete: SetNull)
+  archivedUsers              User[]                    @relation("UserArchiver")
   // Chapter lead onboarding invites this user has received
-  chapterOnboardingInvites ChapterOnboardingInvite[]
+  chapterOnboardingInvites   ChapterOnboardingInvite[]
   // Chapter lead onboarding invites this user (as admin) has sent
   chapterOnboardingInvitedBy ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
   // ----------------------------------------------------------------
@@ -189,71 +194,71 @@ model User {
   //   - ADMIN: countryId set (country scope)
   //   - CHAPTER_ORGANIZER: both set (chapter scope)
   //   - MEMBER: countryId set if backfilled; chapterId null until first RSVP
-  countryId          String?
-  country            Country?              @relation(fields: [countryId], references: [id], onDelete: SetNull)
-  chapterId          String?
-  chapter            Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  countryId                  String?
+  country                    Country?                  @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  chapterId                  String?
+  chapter                    Chapter?                  @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
-  role               String                @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
-  tags               MemberTag[] // tags assigned to this member (admin-managed)
-  images             EventImage[]
-  presentations      PresentationFile[]
-  speakerMessages    SpeakerMessage[] // messages this user sent to speakers
+  role                       String                    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
+  tags                       MemberTag[] // tags assigned to this member (admin-managed)
+  images                     EventImage[]
+  presentations              PresentationFile[]
+  speakerMessages            SpeakerMessage[] // messages this user sent to speakers
   // User-to-user direct messages (community chat)
-  sentMessages       ConversationMessage[] @relation("SentMessages")
-  receivedMessages   ConversationMessage[] @relation("ReceivedMessages")
+  sentMessages               ConversationMessage[]     @relation("SentMessages")
+  receivedMessages           ConversationMessage[]     @relation("ReceivedMessages")
   // Speakers linked to this user (for in-app chat with members)
-  speakers           Speaker[]
+  speakers                   Speaker[]
   // ----------------------------------------------------------------
   // Secondary emails — admin can attach multiple emails to a single
   // user so that signing in with any of them resolves to the same
   // account. User.email itself is still the unique primary email
   // (and the value displayed in the admin table).
-  secondaryEmails    UserEmail[]
+  secondaryEmails            UserEmail[]
   // ----------------------------------------------------------------
   // Email campaigns & templates — back-relations
-  emailCampaigns     EmailCampaign[]       @relation("EmailCampaignCreator")
-  emailTemplates     EmailTemplate[]       @relation("EmailTemplateCreator")
-  emailRecipients    EmailRecipient[]      @relation("EmailRecipientUser")
-  eventRsvps         EventRsvp[]           @relation("EventRsvpUser")
-  eventCoHosts       EventCoHost[]         @relation("EventCoHostUser")
-  coHostAddedBy      EventCoHost[]         @relation("EventCoHostAdder")
+  emailCampaigns             EmailCampaign[]           @relation("EmailCampaignCreator")
+  emailTemplates             EmailTemplateLegacy[]     @relation("EmailTemplateCreator")
+  emailRecipients            EmailRecipient[]          @relation("EmailRecipientUser")
+  eventRsvps                 EventRsvp[]               @relation("EventRsvpUser")
+  eventCoHosts               EventCoHost[]             @relation("EventCoHostUser")
+  coHostAddedBy              EventCoHost[]             @relation("EventCoHostAdder")
   // ----------------------------------------------------------------
   // Event prep — suggestions this user has submitted (audit trail).
-  prepSuggestions    EventPrepSuggestion[] @relation("EventPrepSuggester")
+  prepSuggestions            EventPrepSuggestion[]     @relation("EventPrepSuggester")
   // ----------------------------------------------------------------
   // UTM referrals — visits attributed to this user's share link, and
   // signups/RSVPs that resulted from those visits. Used by the
   // /admin/analytics dashboard to show referral stats per member.
-  referralVisits     ReferralVisit[]       @relation("ReferralVisitsReferrer")
-  referredSignups    ReferralAttribution[] @relation("ReferredSignupReferrer")
+  referralVisits             ReferralVisit[]           @relation("ReferralVisitsReferrer")
+  referredSignups            ReferralAttribution[]     @relation("ReferredSignupReferrer")
   // The signup attribution row where THIS user was the new signup
   // (i.e. they signed up via someone else's share link). At most one
   // row per user (enforced by ReferralAttribution.referredUserId @unique).
-  signupAttributedTo ReferralAttribution?  @relation("ReferredSignupReferredUser")
-  referredRsvps      EventRsvp[]           @relation("ReferredRsvpReferrer")
-  approvedRsvps      EventRsvp[]           @relation("EventRsvpApprover")
+  signupAttributedTo         ReferralAttribution?      @relation("ReferredSignupReferredUser")
+  referredRsvps              EventRsvp[]               @relation("ReferredRsvpReferrer")
+  approvedRsvps              EventRsvp[]               @relation("EventRsvpApprover")
   // ----------------------------------------------------------------
   // Email orchestrator + flows — back-relations
-  emailQueueItems    EmailQueue[]          @relation("EmailQueueUser")
+  emailQueueItems            EmailQueue[]              @relation("EmailQueueUser")
   // ----------------------------------------------------------------
   // Flourishing Quiz — sessions this user is hosting + participation records
-  hostedQuizSessions QuizSession[]         @relation("QuizHost")
-  quizParticipations QuizParticipant[]
+  hostedQuizSessions         QuizSession[]             @relation("QuizHost")
+  quizParticipations         QuizParticipant[]
   // ----------------------------------------------------------------
   // Community chat — group rooms this user created + rooms they're a
   // member of + messages they've sent. DMs reuse ConversationMessage
   // (already wired above) — group chat lives in the ChatRoom family.
-  chatRoomsCreated   ChatRoom[]            @relation("ChatRoomCreator")
-  chatMemberships    ChatRoomMember[]
-  chatMessages       ChatMessage[]
+  chatRoomsCreated           ChatRoom[]                @relation("ChatRoomCreator")
+  chatMemberships            ChatRoomMember[]
+  chatMessages               ChatMessage[]
   // ----------------------------------------------------------------
   // Testimonials — authored by this user + likes this user has given.
-  testimonials       Testimonial[]         @relation("TestimonialAuthor")
-  testimonialLikes   TestimonialLike[]     @relation("TestimonialLikeUser")
+  testimonials               Testimonial[]             @relation("TestimonialAuthor")
+  testimonialLikes           TestimonialLike[]         @relation("TestimonialLikeUser")
   // ----------------------------------------------------------------
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
 
   @@index([countryId])
   @@index([chapterId])
@@ -372,7 +377,7 @@ model Event {
   chatRoom        ChatRoom?
   /// Testimonials attached to this event (optional — author picks
   /// the scope when posting).
-  testimonials    Testimonial[]        @relation("TestimonialEvent")
+  testimonials    Testimonial[]         @relation("TestimonialEvent")
 
   @@index([chapterId])
   @@index([isCrossChapter])
@@ -605,33 +610,119 @@ model PresentationFile {
 
 // ---------------------------- Email Campaigns & Templates ----------------------------
 
-/// A reusable email template. Created by an admin via the "Create template"
-/// button on the Email tab, or by cloning an existing sent campaign via the
-/// "Save as template" button. Templates are picked from the campaign
-/// composer's template picker, which loads their subject + bodyHtml into the
-/// composer as a starting point.
-model EmailTemplate {
-  id            String          @id @default(cuid())
+/// LEGACY — superseded by `EmailTemplate2` (the unified template model).
+///
+/// Originally a reusable email template on the campaign side. Created by an
+/// admin via the "Create template" button on the Email tab, or by cloning an
+/// existing sent campaign via the "Save as template" button. Templates were
+/// picked from the campaign composer's template picker, which loaded their
+/// subject + bodyHtml into the composer as a starting point.
+///
+/// As of TSK-0074 (email unification Phase 1-3), all campaign + flow
+/// template logic uses the merged `EmailTemplate2` model. This legacy
+/// table is preserved for read-only historical access — no new code paths
+/// write to it. The underlying DB table is still named "EmailTemplate"
+/// (preserved via `@@map`) so any out-of-band SQL queries keep working.
+model EmailTemplateLegacy {
+  id            String   @id @default(cuid())
   name          String
   slug          String?
-  category      String          @default("general")
+  category      String   @default("general")
   subject       String
   bodyHtml      String
   bodyText      String?
   signatureHtml String?
   thumbnailUrl  String?
   createdBy     String
-  creator       User            @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  campaigns     EmailCampaign[]
+  creator       User     @relation("EmailTemplateCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   // ---- V7: chapter scoping (nullable = global template available to all chapters) ----
   chapterId     String?
-  chapter       Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  chapter       Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([createdBy])
   @@index([category])
   @@index([chapterId])
+  @@map("EmailTemplate")
+}
+
+/// UNIFIED EMAIL TEMPLATE — the single source of truth for all email
+/// templates as of TSK-0074 (email unification Phase 1-3).
+///
+/// Merges the fields of the legacy `EmailTemplate` (campaign-side) +
+/// `EmailStageTemplate` (flow-side) into one model. New rows are written
+/// here by the template editor + flow step editor + "Save as template"
+/// button. Existing rows were migrated from both legacy tables by the
+/// `20260804120000_email_unify_backend` migration SQL (IDs preserved so
+/// existing FK references on EmailCampaign.templateId + EmailFlowStep.templateId
+/// still resolve after the FKs are repointed).
+///
+/// Field origins:
+///   - From EmailTemplate:     name, slug, category, subject, bodyHtml,
+///                             bodyText, signatureHtml, thumbnailUrl, createdBy,
+///                             chapterId
+///   - From EmailStageTemplate: stage, stopIfNotOpenedHours, isActive,
+///                             isDefault, altSubject, altNotOpenedHours,
+///                             noCodeHtmlBody, noCodeSubject, logoUrl, updatedBy
+///   - NEW (TSK-0074):         mobileOverridesHtml (CSS/HTML appended inside
+///                             a `@media (max-width: 600px) { ... }` block
+///                             by the unified renderer at send/preview time)
+///
+/// `stage` is kept as a unique-when-set field so the 5 seeded orchestrator
+/// stage defaults (Awareness / Reminder / Final Prep / Day-Of / Recap) can
+/// still be looked up by stage number. Custom/admin templates have stage=null.
+model EmailTemplate2 {
+  id                   String  @id @default(cuid())
+  name                 String
+  slug                 String?
+  category             String  @default("general")
+  /// 1..5 for the seeded stage defaults; null for admin-created custom templates.
+  /// Unique when set (partial unique index in the migration SQL).
+  stage                Int?    @unique
+  subject              String
+  bodyHtml             String
+  bodyText             String?
+  signatureHtml        String?
+  /// NEW (TSK-0074): optional mobile-only overrides. The unified renderer
+  /// wraps this content inside `<style>@media (max-width: 600px) { ... }</style>`
+  /// and prepends it right after `<head>` (or at the start of the body).
+  /// Lets the admin add per-template mobile tweaks without forking the
+  /// bodyHtml into a separate field.
+  mobileOverridesHtml  String?
+  thumbnailUrl         String?
+  logoUrl              String?
+  stopIfNotOpenedHours Int?
+  isActive             Boolean @default(true)
+  isDefault            Boolean @default(false)
+
+  // ─── Alt-subject re-send feature (migrated from EmailStageTemplate) ───
+  altSubject        String?
+  altNotOpenedHours Int?
+
+  // ─── No-check-in-code variant body (migrated from EmailStageTemplate) ─
+  noCodeHtmlBody String?
+  noCodeSubject  String?
+
+  // ─── Audit + scoping ──────────────────────────────────────────────────
+  /// Plain string (no User FK relation) — matches the legacy EmailStageTemplate
+  /// convention to avoid back-relation churn on User. May be null.
+  createdBy String?
+  updatedBy String?
+  chapterId String?
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ─── Back-relations ──────────────────────────────────────────────────
+  flowSteps EmailFlowStep[]
+  campaigns EmailCampaign[]
+
+  @@index([stage])
+  @@index([isActive])
+  @@index([chapterId])
+  @@index([category])
 }
 
 /// An email campaign — a single send-out to a list of recipients.
@@ -642,7 +733,7 @@ model EmailCampaign {
   id                    String           @id @default(cuid())
   name                  String
   templateId            String?
-  template              EmailTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template              EmailTemplate2?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   subjectSnapshot       String
   bodyHtmlSnapshot      String
   bodyTextSnapshot      String?
@@ -657,6 +748,15 @@ model EmailCampaign {
   fromName              String?
   fromEmail             String?
   replyTo               String?
+  /// TSK-0074: 1:1 link to an EmailFlow. When a flow is saved as ACTIVE,
+  /// a linked EmailCampaign is auto-created/updated and its snapshots are
+  /// refreshed from the flow's first step's template. Legacy campaigns
+  /// (created before this field existed) have flowId = null. The unique
+  /// constraint is enforced via a partial unique index in the migration SQL
+  /// (so multiple nulls are allowed — PostgreSQL unique indexes treat NULL
+  /// as distinct by default, but we add the partial WHERE clause for clarity).
+  flowId                String?          @unique
+  flow                  EmailFlow?       @relation("EmailFlowCampaign", fields: [flowId], references: [id], onDelete: SetNull)
   createdBy             String
   creator               User             @relation("EmailCampaignCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   recipients            EmailRecipient[]
@@ -1110,21 +1210,25 @@ model EmailQueue {
   @@index([chapterId])
 }
 
-/// Admin-editable email templates. Originally tied 1:1 to the 5
-/// orchestrator stages (Awareness, Reminder, Final Prep, Day-Of, Recap),
-/// now also supports admin-created custom templates (stage = null) that
-/// can be picked in the flow step editor alongside the stage defaults.
+/// LEGACY — superseded by `EmailTemplate2` (the unified template model).
 ///
-/// Each template has a subject + HTML body with {{eventTitle}},
-/// {{firstName}}, etc. tokens. The stopIfNotOpenedHours rule lets the
-/// orchestrator halt the chain if a stage isn't opened in time.
-model EmailStageTemplate {
+/// Originally the flow-side email template table: tied 1:1 to the 5
+/// orchestrator stages (Awareness, Reminder, Final Prep, Day-Of, Recap),
+/// also supporting admin-created custom templates (stage = null) that
+/// could be picked in the flow step editor alongside the stage defaults.
+///
+/// As of TSK-0074 (email unification Phase 1-3), all template logic uses
+/// the merged `EmailTemplate2` model. This legacy table is preserved for
+/// read-only historical access — no new code paths write to it. The
+/// underlying DB table is still named "EmailStageTemplate" (preserved via
+/// `@@map`) so any out-of-band SQL queries keep working. The
+/// `ChapterEmailTemplateOverride` relation is preserved as-is so the
+/// existing override UI doesn't break until the UI subagent migrates it.
+model EmailStageTemplateLegacy {
   id                   String  @id @default(cuid())
   /// 1..5 for the seeded stage defaults; null for admin-created custom templates.
   stage                Int?    @unique
-  /// Display name — unique across all templates. For seeded defaults this is
-  /// "Awareness" | "Reminder" | "Final Prep" | "Day-Of" | "Recap". Custom
-  /// templates get a user-chosen name (e.g. "TLV promo — early bird").
+  /// Display name — unique across all legacy stage templates.
   name                 String  @unique
   subject              String
   htmlBody             String // HTML template with {{eventTitle}}, {{firstName}}, etc.
@@ -1135,26 +1239,14 @@ model EmailStageTemplate {
   isDefault            Boolean @default(false)
 
   // ─── Feature: Alternative subject line re-send ───────────────────────────
-  // If set: when this template's primary send isn't OPENED within
-  // `altNotOpenedHours` hours, the worker creates a new EmailQueue row
-  // (isAltResend=true) with the SAME body but `altSubject`. The recipient
-  // sees a fresh subject line in their inbox — same content, new hook.
   altSubject        String?
   altNotOpenedHours Int?
 
   // ─── Feature: No-check-in-code variant body ──────────────────────────────
-  // If set AND the RSVP has no checkInCode (checkInCode IS NULL), the worker
-  // sends this body instead of `htmlBody`. Used for stages 3 (Final Prep) and
-  // 4 (Day-Of) where the code is normally displayed. The variant should
-  // prompt the user to open the event page and generate their personal,
-  // non-transferrable code.
   noCodeHtmlBody String?
   noCodeSubject  String?
 
   // ─── Feature: Brand logo override per template ───────────────────────────
-  // If set: this URL is used as the top-right logo. If null, falls back to
-  // the EMAIL_BRAND_LOGO_URL env var, then to the hardcoded default
-  // (the small AI Salon mark hosted on Vercel Blob).
   logoUrl String?
 
   updatedAt        DateTime                       @updatedAt
@@ -1163,12 +1255,12 @@ model EmailStageTemplate {
   chapterId        String?
   chapter          Chapter?                       @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   // --- back-relations ---
-  flowSteps        EmailFlowStep[] // flow steps that use this template
   chapterOverrides ChapterEmailTemplateOverride[]
 
   @@index([stage])
   @@index([isActive])
   @@index([chapterId])
+  @@map("EmailStageTemplate")
 }
 
 /// Per-event audit log for email opens + clicks. Also stores the
@@ -1204,6 +1296,10 @@ model EmailFlow {
   status      String          @default("DRAFT") // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
   // --- relations ---
   steps       EmailFlowStep[]
+  /// TSK-0074: 1:1 back-relation to the EmailCampaign auto-created when
+  /// this flow is saved as ACTIVE. Null for DRAFT/PAUSED/ARCHIVED flows
+  /// or for flows created before the unification (legacy).
+  campaign    EmailCampaign?  @relation("EmailFlowCampaign")
   // ---- V7: chapter scoping (nullable = global flow available to all chapters) ----
   chapterId   String?
   chapter     Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
@@ -1223,27 +1319,29 @@ model EmailFlow {
 ///   - email: template + subject A (+ optional subject B for A/B test)
 ///   - delay: optional wait after trigger before sending
 model EmailFlowStep {
-  id              String              @id @default(cuid())
+  id              String          @id @default(cuid())
   flowId          String
-  flow            EmailFlow           @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  flow            EmailFlow       @relation(fields: [flowId], references: [id], onDelete: Cascade)
   position        Int // 1..8 (max 8 per flow)
   // --- A. audience — who receives this step's email ---
   audienceId      String?
-  audience        EmailAudience?      @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+  audience        EmailAudience?  @relation(fields: [audienceId], references: [id], onDelete: SetNull)
   // --- B. trigger — entry event that fires this step ---
   triggerKind     String? // "RSVP_GOING" | "DOOR_CHECKED_IN" | "MARKED_ATTENDED" | "MARKED_NO_SHOW" | "MANUAL"
   triggerEventId  String? // null = all events (only meaningful for RSVP-based triggers)
   // --- C. email content ---
+  /// TSK-0074: now references the unified EmailTemplate2 model (was
+  /// EmailStageTemplate before the email-unification migration).
   templateId      String? // null = wait-only step (no email sent)
-  template        EmailStageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template        EmailTemplate2? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   subjectVariantA String? // Subject A (if null, uses template.subject)
   subjectVariantB String? // Subject B (if set, 50/50 A/B test; if null, only A is used)
   // --- delay after trigger event before sending ---
-  delayValue      Int                 @default(0)
-  delayUnit       String              @default("MINUTES") // "MINUTES" | "HOURS" | "DAYS"
+  delayValue      Int             @default(0)
+  delayUnit       String          @default("MINUTES") // "MINUTES" | "HOURS" | "DAYS"
   // --- meta ---
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   // --- back-relations ---
   queueItems      EmailQueue[]
 
@@ -1595,34 +1693,34 @@ model ChatMessage {
 //   - Like and share counts are denormalized for fast reads
 
 model Testimonial {
-  id           String             @id @default(cuid())
+  id           String            @id @default(cuid())
   authorId     String
-  author       User               @relation("TestimonialAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  body         String             // the quote (3–2000 chars; validated in API)
-  rating       Int                @default(5) // 1–5 stars; clamped in API
-  imageUrl     String?            // optional photo (Vercel Blob URL)
-  eventDate    DateTime           @default(now()) // when the testimonial is "about"
+  author       User              @relation("TestimonialAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body         String // the quote (3–2000 chars; validated in API)
+  rating       Int               @default(5) // 1–5 stars; clamped in API
+  imageUrl     String? // optional photo (Vercel Blob URL)
+  eventDate    DateTime          @default(now()) // when the testimonial is "about"
   // Optional attachment — exactly one of these is usually set:
   //   - eventId:     testimonial about a specific event
   //   - speakerId:   testimonial about a specific speaker
   //   - agendaItemId: testimonial about a specific session
   // All three null = "community" testimonial (no specific attachment).
   eventId      String?
-  event        Event?             @relation("TestimonialEvent", fields: [eventId], references: [id], onDelete: SetNull)
+  event        Event?            @relation("TestimonialEvent", fields: [eventId], references: [id], onDelete: SetNull)
   speakerId    String?
-  speaker      Speaker?           @relation("TestimonialSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
+  speaker      Speaker?          @relation("TestimonialSpeaker", fields: [speakerId], references: [id], onDelete: SetNull)
   agendaItemId String?
-  agendaItem   EventAgendaItem?   @relation("TestimonialAgendaItem", fields: [agendaItemId], references: [id], onDelete: SetNull)
+  agendaItem   EventAgendaItem?  @relation("TestimonialAgendaItem", fields: [agendaItemId], references: [id], onDelete: SetNull)
   // Admin moderation flags
-  featured     Boolean            @default(false)
-  hidden       Boolean            @default(false)
+  featured     Boolean           @default(false)
+  hidden       Boolean           @default(false)
   // Denormalized counters (kept in sync by the like / share API routes)
-  likeCount    Int                @default(0)
-  shareCount   Int                @default(0)
+  likeCount    Int               @default(0)
+  shareCount   Int               @default(0)
   // Per-user like rows (m:1 back-relation)
   likes        TestimonialLike[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@index([authorId, createdAt])
   @@index([eventId])
@@ -1657,19 +1755,19 @@ model TestimonialLike {
 /// The admin can then review the submission at /admin/chapter-onboarding
 /// and one-click apply it (create the chapter + update the user's chapterId).
 model ChapterOnboardingInvite {
-  id              String    @id @default(cuid())
+  id                 String    @id @default(cuid())
   /// Unguessable token used in the public URL. CUID-based, 32+ chars.
-  token           String    @unique
+  token              String    @unique
   /// The user (chapter lead) who received the invite. Optional — an admin
   /// can send an invite to an email that doesn't yet have a user account;
   /// in that case we link the user once they sign up. For now we require
   /// a user record (the button is on the EditMemberDialog, so the user
   /// already exists).
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// The admin who sent the invite.
-  invitedById     String?
-  invitedBy       User?      @relation("ChapterOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedById        String?
+  invitedBy          User?     @relation("ChapterOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
   /// Optional pre-filled chapter name (e.g. when admin already knows the
   /// chapter name and wants to pre-fill it on the form).
   prefillChapterName String?
@@ -1677,30 +1775,30 @@ model ChapterOnboardingInvite {
   prefillChapterSlug String?
   /// The chapter lead's email at the time the invite was sent. Captured
   /// in case the user's email changes later.
-  inviteeEmail    String
+  inviteeEmail       String
   /// Status: PENDING (sent, not yet submitted) | SUBMITTED (form filled)
   /// | EXPIRED (past expiresAt) | REVOKED (admin manually revoked).
-  status          String    @default("PENDING")
+  status             String    @default("PENDING")
   /// When the invite email was sent.
-  sentAt          DateTime  @default(now())
+  sentAt             DateTime  @default(now())
   /// When the lead opened the form (first GET of /chapter-onboarding/[token]).
-  openedAt        DateTime?
+  openedAt           DateTime?
   /// When the lead submitted the form.
-  submittedAt     DateTime?
+  submittedAt        DateTime?
   /// Auto-expire after 30 days. The form page shows "expired" if past this.
-  expiresAt       DateTime
+  expiresAt          DateTime
   /// The full form submission as a JSON blob. Structure mirrors the
   /// ChapterOnboardingFormData type in src/lib/chapter-onboarding-types.ts.
   /// Null until the form is submitted.
-  submissionJson  String?
+  submissionJson     String?
   /// Optional admin notes (visible only on /admin/chapter-onboarding).
-  adminNotes      String?
+  adminNotes         String?
   /// After the admin applies the submission (creates the chapter +
   /// updates the user), we record the resulting chapterId here.
-  appliedChapterId String?
-  appliedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  appliedChapterId   String?
+  appliedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([userId])
   @@index([status])

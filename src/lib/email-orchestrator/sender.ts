@@ -57,6 +57,49 @@ export type SendResult =
   | { ok: false; error: string };
 
 /**
+ * TSK-0074: Extended send args for campaign sends (both real campaign sends
+ * AND test sends). Superset of SendArgs — adds `from`, `replyTo`, `text`,
+ * `campaignId`, `recipientId`, and `isTest`.
+ *
+ * `from` overrides the default EMAIL_FROM / SMTP_FROM. Format: "Name <email>".
+ * `replyTo` adds a Reply-To header (SMTP only — Gmail API doesn't support
+ *   custom Reply-To in the current raw-message implementation).
+ * `text` is the plain-text alternative body (SMTP only).
+ * `isTest: true` BYPASSES the SiteSetting[emailSendPaused] check so test
+ *   sends go through even when global sending is paused. Still honors the
+ *   EMAIL_SEND_ENABLED=false env kill switch (hard escape hatch).
+ */
+export type CampaignSendArgs = {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  from?: string;
+  replyTo?: string;
+  toName?: string;
+  campaignId?: string;
+  recipientId?: string;
+  isTest?: boolean;
+};
+
+/**
+ * TSK-0074: Result type for campaign sends. Distinguishes between:
+ *   - real send:    { ok: true, provider, messageId, mock: false, skipped: false }
+ *   - mock send:    { ok: true, provider: "mock", mock: true }  (EMAIL_SEND_ENABLED=false OR no provider configured)
+ *   - paused send:  { ok: true, provider: "mock", skipped: true, mock: true }  (SiteSetting pause, non-test only)
+ *   - failure:      { ok: false, error }
+ */
+export type CampaignSendResult =
+  | {
+      ok: true;
+      provider: "gmail" | "smtp" | "mock";
+      messageId?: string;
+      mock?: boolean;
+      skipped?: boolean;
+    }
+  | { ok: false; error: string };
+
+/**
  * Detect which email provider is configured.
  *
  * Priority:
@@ -142,6 +185,51 @@ export async function sendEmail(args: SendArgs): Promise<SendResult> {
   return sendViaMock(args);
 }
 
+/**
+ * TSK-0074: Campaign send entry point. Used by:
+ *   - `src/lib/email-campaign/sender.ts:sendCampaignBatch` (campaign cron + continue route)
+ *   - `src/app/api/admin/email/campaigns/[id]/send/route.ts` (the live "Send Now" button)
+ *   - `src/app/api/admin/email/campaigns/[id]/test-send/route.ts` (the new test-send modal)
+ *
+ * Replaces the direct `sendMail` calls that previously bypassed the global
+ * pause flag. Now ALL campaign sends honor:
+ *   1. EMAIL_SEND_ENABLED="false" env kill switch (hard escape hatch — even
+ *      test sends are blocked when this is "false").
+ *   2. SiteSetting[emailSendPaused]="true" admin toggle — UNLESS `isTest: true`
+ *      is passed (test sends bypass the pause so admins can verify rendering
+ *      even while production sends are paused).
+ *
+ * Provider chain: same as `sendEmail` (gmail → smtp → mock). The `from`,
+ * `replyTo`, and `text` args are passed through to the SMTP provider (and
+ * `from` is used by the Gmail provider to override EMAIL_FROM).
+ *
+ * Returns:
+ *   - { ok: true, provider, messageId, mock: false } on real send
+ *   - { ok: true, provider: "mock", mock: true, skipped: true } when paused (non-test)
+ *   - { ok: true, provider: "mock", mock: true } when EMAIL_SEND_ENABLED=false OR no provider configured
+ *   - { ok: false, error } on failure
+ */
+export async function sendCampaignEmail(
+  args: CampaignSendArgs,
+): Promise<CampaignSendResult> {
+  // Hard env kill switch — blocks ALL sends (including test sends).
+  if (process.env.EMAIL_SEND_ENABLED === "false") {
+    return campaignMockResult(args, { skipped: false });
+  }
+  // DB pause flag — bypassed by test sends.
+  if (!args.isTest) {
+    const { isEmailSendPaused } = await import("@/lib/site-settings");
+    if (await isEmailSendPaused()) {
+      return campaignMockResult(args, { skipped: true });
+    }
+  }
+
+  const provider = getProvider();
+  if (provider === "gmail") return sendViaGmail(args);
+  if (provider === "smtp") return sendViaSmtp(args);
+  return sendViaMock(args);
+}
+
 function pausedResult(args: SendArgs): SendResult {
   console.log(
     `[email-paused] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}`,
@@ -154,15 +242,44 @@ function pausedResult(args: SendArgs): SendResult {
   };
 }
 
+/**
+ * Build a mock/skipped result for `sendCampaignEmail`. Logs the would-be
+ * send to stdout for audit. `opts.skipped` distinguishes "paused" (skipped)
+ * from "EMAIL_SEND_ENABLED=false or no provider" (mock).
+ */
+function campaignMockResult(
+  args: CampaignSendArgs,
+  opts: { skipped: boolean },
+): CampaignSendResult {
+  const label = opts.skipped ? "email-paused" : "email-mock";
+  console.log(
+    `[${label}] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}${
+      args.campaignId ? ` | CAMPAIGN: ${args.campaignId}` : ""
+    }${args.isTest ? " | TEST" : ""}`,
+  );
+  return {
+    ok: true,
+    provider: "mock",
+    messageId: `${opts.skipped ? "paused" : "mock"}_${Date.now()}`,
+    mock: true,
+    skipped: opts.skipped,
+  };
+}
+
 // ----------------------------------------------------------------------------
 // SMTP sender — reuses the shared nodemailer transport from @/lib/email
 // ----------------------------------------------------------------------------
 
-async function sendViaSmtp(args: SendArgs): Promise<SendResult> {
+async function sendViaSmtp(args: CampaignSendArgs): Promise<CampaignSendResult> {
   const result = await sendMail({
     to: args.to,
     subject: args.subject,
     html: args.html,
+    text: args.text,
+    from: args.from,
+    // TSK-0074: pass replyTo through as a proper Reply-To header (not cc).
+    // The legacy `cc: replyTo` bug in /campaigns/[id]/send/route.ts is gone.
+    replyTo: args.replyTo,
   });
   if (result.ok) {
     return {
@@ -178,11 +295,13 @@ async function sendViaSmtp(args: SendArgs): Promise<SendResult> {
 // Mock sender
 // ----------------------------------------------------------------------------
 
-async function sendViaMock(args: SendArgs): Promise<SendResult> {
+async function sendViaMock(args: CampaignSendArgs): Promise<CampaignSendResult> {
   // Simulate small latency so the UI feels real.
   await new Promise((r) => setTimeout(r, 50 + Math.random() * 100));
   console.log(
-    `[email-mock] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}`,
+    `[email-mock] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}${
+      args.campaignId ? ` | CAMPAIGN: ${args.campaignId}` : ""
+    }${args.isTest ? " | TEST" : ""}`,
   );
   return {
     ok: true,
@@ -241,23 +360,29 @@ async function getGmailAccessToken(): Promise<string> {
   return json.access_token;
 }
 
-async function sendViaGmail(args: SendArgs): Promise<SendResult> {
+async function sendViaGmail(args: CampaignSendArgs): Promise<CampaignSendResult> {
   try {
     const accessToken = await getGmailAccessToken();
-    const from = process.env.EMAIL_FROM || "AI Salon <noreply@aisalon.massapro.com>";
+    // TSK-0074: campaign sends can override the From header (per-campaign
+    // fromName + fromEmail). Falls back to EMAIL_FROM for orchestrator sends.
+    const from = args.from || process.env.EMAIL_FROM || "AI Salon <noreply@aisalon.massapro.com>";
     const toHeader = args.toName
       ? `${encodeHeader(args.toName)} <${args.to}>`
       : args.to;
 
-    const rawMessage = [
+    // TSK-0074: include Reply-To header when provided (campaigns).
+    const headers: string[] = [
       `From: ${from}`,
       `To: ${toHeader}`,
       `Subject: ${encodeHeader(args.subject)}`,
       "MIME-Version: 1.0",
       "Content-Type: text/html; charset=utf-8",
-      "",
-      args.html,
-    ].join("\r\n");
+    ];
+    if (args.replyTo) {
+      headers.push(`Reply-To: ${args.replyTo}`);
+    }
+    headers.push("", args.html);
+    const rawMessage = headers.join("\r\n");
 
     // Gmail API requires base64url-encoded raw message.
     const encoded = Buffer.from(rawMessage, "utf-8")

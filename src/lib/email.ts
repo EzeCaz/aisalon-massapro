@@ -46,6 +46,11 @@ export const emailConfigured = () => getTransport() !== null;
 export async function sendMail(opts: {
   to: string;
   cc?: string;
+  /** TSK-0074: optional Reply-To header (proper header, not a CC). Used by
+   *  campaign sends via sendCampaignEmail — replaces the legacy `cc: replyTo`
+   *  bug in /campaigns/[id]/send/route.ts that was incorrectly CC'ing the
+   *  replyTo address on every send. */
+  replyTo?: string;
   subject: string;
   text?: string;
   html?: string;
@@ -67,7 +72,7 @@ export async function sendMail(opts: {
     // must set SMTP_* env vars for real delivery.
     console.log(
       "[email] (no SMTP configured — logging instead)\n" +
-        `From: ${from}\nTo: ${opts.to}${opts.cc ? `\nCc: ${opts.cc}` : ""}\nSubject: ${opts.subject}\n` +
+        `From: ${from}\nTo: ${opts.to}${opts.cc ? `\nCc: ${opts.cc}` : ""}${opts.replyTo ? `\nReply-To: ${opts.replyTo}` : ""}\nSubject: ${opts.subject}\n` +
         `----\n${opts.text || opts.html}\n----`
     );
     return { ok: true };
@@ -78,6 +83,7 @@ export async function sendMail(opts: {
       from,
       to: opts.to,
       cc: opts.cc,
+      replyTo: opts.replyTo,
       subject: opts.subject,
       text: opts.text,
       html: opts.html,

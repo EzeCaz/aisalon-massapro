@@ -13,6 +13,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 
 export type RenderInput = {
   campaignId: string;
@@ -207,19 +208,64 @@ export function renderEmail(input: RenderInput): RenderedEmail {
     ? { slug: event.slug, title: event.title, venue: event.venue, address: event.address, baseUrl }
     : undefined;
 
-  const subject = applyMergeTags(snapshot.subject, recipient, eventCtx, chapterName);
-  let html = applyMergeTags(snapshot.bodyHtml, recipient, eventCtx, chapterName);
+  // ── TSK-0074: delegate to the unified renderer ──────────────────────
+  // The unified renderer handles: token replacement (camelCase + snake_case),
+  // brand-logo injection (no-op here since campaigns have no logo concept
+  // yet — the UI subagent will add logoUrl to EmailTemplate2 in a later
+  // phase; for now campaigns send without a logo, same as before), click-
+  // wrap, tracking pixel, and unsubscribe footer.
+  //
+  // The signature HTML is appended to the body BEFORE rendering so the
+  // link-wrap + pixel apply to it too (matches the legacy behavior).
+  const eventUrl = event ? `${baseUrl}/e/${event.slug}` : "";
+  const myCodeUrl = event ? `${eventUrl}/my-code` : "";
+  const firstName = recipient.name?.split(" ")[0] || "";
+
+  const ctx = {
+    firstName,
+    name: recipient.name ?? "",
+    email: recipient.email,
+    chapterName: chapterName ?? "Tel Aviv",
+    eventTitle: event?.title ?? "",
+    eventVenue: event?.venue ?? "",
+    eventAddress: event?.address ?? "",
+    eventUrl,
+    myCodeUrl,
+  };
+
+  // Subject: use the unified subject renderer (no HTML escaping).
+  const subject = renderUnifiedSubject(snapshot.subject, ctx);
+
+  // Plain-text body: apply merge tags via the legacy path (the unified
+  // renderer doesn't have a text variant — text is just the HTML minus
+  // tags, which we do via htmlToText below).
   const text = snapshot.bodyText
     ? applyMergeTags(snapshot.bodyText, recipient, eventCtx, chapterName)
     : htmlToText(snapshot.bodyHtml);
 
-  if (snapshot.signatureHtml) {
-    const sig = applyMergeTags(snapshot.signatureHtml, recipient, eventCtx, chapterName);
-    html = html + `\n<div style="margin-top: 24px;">${sig}</div>`;
-  }
+  // Build the combined HTML body (body + signature) before rendering.
+  const bodyWithSig = snapshot.signatureHtml
+    ? `${snapshot.bodyHtml}\n<div style="margin-top: 24px;">${snapshot.signatureHtml}</div>`
+    : snapshot.bodyHtml;
 
-  html = wrapClickLinks(html, campaignId, trackToken, baseUrl);
-  html = appendTrackingPixel(html, campaignId, trackToken, baseUrl, chapterName);
+  const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${campaignId}`;
+
+  const html = renderUnifiedEmail({
+    html: bodyWithSig,
+    ctx,
+    // No logo for campaign sends — the UI subagent will add logoUrl
+    // support to EmailTemplate2 + the campaign composer in a later phase.
+    // For now, campaigns send without a brand logo (same as before).
+    mobileOverridesHtml: undefined,
+    // No clickWrapFn — the unified renderer will build a campaign-style
+    // click URL from (campaignId, trackToken, baseUrl).
+    // No openPixelUrl — same; built from (campaignId, trackToken, baseUrl).
+    campaignId,
+    trackToken,
+    baseUrl,
+    unsubscribeUrl,
+    chapterName: chapterName ?? "Tel Aviv",
+  });
 
   const domain = baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const messageId = generateMessageId(domain);

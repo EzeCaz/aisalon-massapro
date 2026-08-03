@@ -476,7 +476,9 @@ async function resolveReceivedEmails(target: { kind: "template" | "campaign"; id
 
   if (target.kind === "template") {
     // Look up the template to get its stage (for default templates).
-    const template = await db.emailStageTemplate.findUnique({
+    // TSK-0074: now reads from the unified EmailTemplate2 table (was
+    // db.emailStageTemplate before the email-unification migration).
+    const template = await db.emailTemplate2.findUnique({
       where: { id: target.id },
       select: { stage: true, name: true },
     });
@@ -532,7 +534,7 @@ async function resolveOpenedEmails(target: { kind: "template" | "campaign"; id: 
   const out = new Set<string>();
 
   if (target.kind === "template") {
-    const template = await db.emailStageTemplate.findUnique({
+    const template = await db.emailTemplate2.findUnique({
       where: { id: target.id },
       select: { stage: true },
     });
@@ -584,7 +586,7 @@ async function resolveClickedEmails(target: { kind: "template" | "campaign"; id:
   const out = new Set<string>();
 
   if (target.kind === "template") {
-    const template = await db.emailStageTemplate.findUnique({
+    const template = await db.emailTemplate2.findUnique({
       where: { id: target.id },
       select: { stage: true },
     });

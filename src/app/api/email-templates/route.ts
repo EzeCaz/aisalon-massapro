@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   const auth = await checkAuth(req);
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const templates = await db.emailStageTemplate.findMany({
+  // TSK-0074: was db.emailStageTemplate (legacy, now EmailStageTemplateLegacy).
+  // Now reads from the unified EmailTemplate2 table.
+  const templates = await db.emailTemplate2.findMany({
     orderBy: [{ stage: "asc" }, { name: "asc" }],
     include: {
       _count: { select: { flowSteps: true } },
@@ -44,7 +46,9 @@ export async function GET(req: NextRequest) {
       stage: t.stage,
       name: t.name,
       subject: t.subject,
-      htmlBody: t.htmlBody,
+      // TSK-0074: API contract keeps `htmlBody` for backward compat with
+      // the existing UI; maps from the renamed EmailTemplate2.bodyHtml field.
+      htmlBody: t.bodyHtml,
       stopIfNotOpenedHours: t.stopIfNotOpenedHours,
       // Feature 1: no-code variant
       noCodeSubject: t.noCodeSubject,
@@ -97,11 +101,13 @@ export async function POST(req: NextRequest) {
   const stage = body.stage === null || body.stage === undefined ? null : null;
 
   try {
-    const template = await db.emailStageTemplate.create({
+    // TSK-0074: was db.emailStageTemplate (legacy). Now writes to EmailTemplate2.
+    // Field renamed htmlBody → bodyHtml.
+    const template = await db.emailTemplate2.create({
       data: {
         name,
         subject: body.subject,
-        htmlBody: body.htmlBody,
+        bodyHtml: body.htmlBody,
         stopIfNotOpenedHours: body.stopIfNotOpenedHours ?? null,
         noCodeSubject: body.noCodeSubject?.trim() || null,
         noCodeHtmlBody: body.noCodeHtmlBody?.trim() || null,

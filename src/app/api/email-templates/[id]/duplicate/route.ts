@@ -32,14 +32,20 @@ export async function POST(
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const existing = await db.emailStageTemplate.findUnique({ where: { id } });
+  // TSK-0074: was db.emailStageTemplate (legacy). Now reads EmailTemplate2.
+  const existing = await db.emailTemplate2.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   // Generate a unique name: try "Name (copy)", then "Name (copy 2)", etc.
+  // TSK-0074: EmailTemplate2.name is NOT @unique (unlike the legacy
+  // EmailStageTemplate.name which was). We use findFirst instead of
+  // findUnique to check for clashes — the uniqueness check is for UX
+  // (avoid duplicate-looking names in the admin UI), not enforced at
+  // the DB level.
   let attempt = 0;
   let newName = `${existing.name} (copy)`;
   while (true) {
-    const clash = await db.emailStageTemplate.findUnique({ where: { name: newName } });
+    const clash = await db.emailTemplate2.findFirst({ where: { name: newName } });
     if (!clash) break;
     attempt++;
     newName = `${existing.name} (copy ${attempt + 1})`;
@@ -49,11 +55,13 @@ export async function POST(
   }
 
   try {
-    const copy = await db.emailStageTemplate.create({
+    // TSK-0074: was db.emailStageTemplate (legacy). Now creates in EmailTemplate2.
+    // Field renamed htmlBody → bodyHtml.
+    const copy = await db.emailTemplate2.create({
       data: {
         name: newName,
         subject: existing.subject,
-        htmlBody: existing.htmlBody,
+        bodyHtml: existing.bodyHtml,
         stopIfNotOpenedHours: existing.stopIfNotOpenedHours,
         stage: null, // custom template — no stage
         isActive: true,

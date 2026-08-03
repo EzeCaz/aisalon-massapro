@@ -84,8 +84,10 @@ export async function POST(req: NextRequest) {
   }
 
   // If templateId provided, validate it exists
+  // TSK-0074: was db.emailTemplate (legacy, now EmailTemplateLegacy).
+  // Now looks up the unified EmailTemplate2 table.
   if (templateId) {
-    const tpl = await db.emailTemplate.findUnique({ where: { id: templateId } });
+    const tpl = await db.emailTemplate2.findUnique({ where: { id: templateId } });
     if (!tpl) {
       return NextResponse.json({ error: "Template not found" }, { status: 404 });
     }

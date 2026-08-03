@@ -2,7 +2,7 @@
  * Seed for the email orchestrator.
  *
  * Creates (idempotently):
- *   - 5 EmailStageTemplate rows (one per stage) with default subjects + HTML
+ *   - 5 EmailTemplate2 rows (one per stage) with default subjects + HTML
  *   - 1 built-in "Test" EmailAudience with the admin test emails
  *
  * The old demo seed (6 mock users + 1 demo event + 6 RSVPs) has been
@@ -13,7 +13,11 @@
  *
  * clearSeed() deletes ALL orchestrator demo/test artifacts: EmailQueue rows
  * tied to flow steps, TrackingLog rows, EmailFlowStep, EmailFlow, and
- * EmailStageTemplate rows. It preserves real users, events, and RSVPs.
+ * EmailTemplate2 rows. It preserves real users, events, and RSVPs.
+ *
+ * TSK-0074: previously wrote to the legacy EmailStageTemplate table; now
+ * writes to the unified EmailTemplate2 table (field renamed htmlBody →
+ * bodyHtml). The legacy table is preserved for read-only access.
  */
 
 import { db } from "@/lib/db";
@@ -61,7 +65,7 @@ export async function runSeed(): Promise<SeedResult> {
 
   // ── Templates ──────────────────────────────────────────────────────────
   for (const stageCfg of STAGES) {
-    const existing = await db.emailStageTemplate.findUnique({
+    const existing = await db.emailTemplate2.findUnique({
       where: { stage: stageCfg.stage },
     });
     if (existing) {
@@ -99,8 +103,8 @@ export async function runSeed(): Promise<SeedResult> {
         !!s && (s.includes("The AI Salon Tel Aviv team") ||
                 s.includes("AI Salon Tel Aviv · Empowering AI Connections") ||
                 s.includes("AI Salon Tel Aviv ·"));
-      if (existing.htmlBody && hasOldChapterText(existing.htmlBody) && def?.html) {
-        patch.htmlBody = def.html;
+      if (existing.bodyHtml && hasOldChapterText(existing.bodyHtml) && def?.html) {
+        patch.bodyHtml = def.html;
       }
       if (existing.noCodeHtmlBody && hasOldChapterText(existing.noCodeHtmlBody) && noCode) {
         patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
@@ -113,7 +117,7 @@ export async function runSeed(): Promise<SeedResult> {
       }
 
       if (Object.keys(patch).length > 0) {
-        await db.emailStageTemplate.update({
+        await db.emailTemplate2.update({
           where: { id: existing.id },
           data: patch,
         });
@@ -124,12 +128,12 @@ export async function runSeed(): Promise<SeedResult> {
     const def = DEFAULT_TEMPLATES[stageCfg.stage];
     const noCode = DEFAULT_NO_CODE_TEMPLATES[stageCfg.stage];
     const alt = DEFAULT_ALT_SUBJECTS[stageCfg.stage];
-    await db.emailStageTemplate.create({
+    await db.emailTemplate2.create({
       data: {
         stage: stageCfg.stage,
         name: def.name,
         subject: def.subject,
-        htmlBody: def.html,
+        bodyHtml: def.html,
         stopIfNotOpenedHours: stageCfg.stopIfNotOpenedHours,
         // Feature 1: no-check-in-code variant body (only stages 3 & 4)
         noCodeSubject: noCode?.subject ?? null,
@@ -229,8 +233,9 @@ export async function clearSeed(): Promise<{
   // 3. EmailFlow
   const flows = await db.emailFlow.deleteMany({}).then((r) => r.count);
 
-  // 4. EmailStageTemplate (the 5 stage templates — re-seed to restore).
-  const templates = await db.emailStageTemplate
+  // 4. EmailTemplate2 (the 5 stage templates — re-seed to restore).
+  // TSK-0074: was db.emailStageTemplate (now EmailTemplate2 after unification).
+  const templates = await db.emailTemplate2
     .deleteMany({})
     .then((r) => r.count);
 

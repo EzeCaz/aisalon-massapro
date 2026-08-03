@@ -1,0 +1,530 @@
+/**
+ * Unified email renderer — the single source of truth for rendering an
+ * email body + subject for send/preview.
+ *
+ * TSK-0074 (email unification Phase 2): merges the THREE previously
+ * bifurcated render paths into one:
+ *
+ *   1. `src/lib/email-orchestrator/templates.ts:renderTemplate`
+ *      — used by the flow worker + legacy stage worker + force-send route.
+ *      Replaces tokens (camelCase only), injects brand logo (if provided),
+ *      wraps all `href="http..."` links with the click-redirect, appends
+ *      an open-tracking pixel before `</body>`. HTML-escapes token values.
+ *
+ *   2. `src/lib/email-campaign/render.ts:renderEmail`
+ *      — used by the campaign cron + continue route. Replaces tokens
+ *      (snake_case + camelCase), wraps `href` links, appends an open pixel
+ *      + an unsubscribe footer.
+ *
+ *   3. INLINE regex replaces in
+ *      `src/app/api/admin/email/campaigns/[id]/send/route.ts`
+ *      — the live "Send Now" button. Replaced tokens (snake_case only),
+ *      did NOT inject a logo, did NOT wrap links, did NOT add a tracking
+ *      pixel. Was BROKEN (sent plain merged HTML with no tracking).
+ *
+ * This file replaces all three. The old functions (`renderTemplate` in
+ * templates.ts and `renderEmail` in render.ts) are kept exported for
+ * backward compat but now internally delegate to `renderUnifiedEmail`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Behavior of `renderUnifiedEmail`:
+ *
+ *   1. Replace tokens. Supports BOTH camelCase (`{{firstName}}`) AND
+ *      snake_case (`{{first_name}}`) for backward compat with all
+ *      historical templates. The full token set:
+ *        {{firstName}}       {{first_name}}     → ctx.firstName
+ *        {{name}}            {{full_name}}      → ctx.firstName (alias)
+ *        {{email}}                               → ctx.email
+ *        {{chapterName}}    {{chapter_name}}     → ctx.chapterName
+ *        {{eventTitle}}                          → ctx.eventTitle
+ *        {{eventDate}}                           → ctx.eventDate
+ *        {{eventVenue}}                          → ctx.eventVenue
+ *        {{eventAddress}}                        → ctx.eventAddress
+ *        {{eventUrl}}                            → ctx.eventUrl
+ *        {{myCodeUrl}}       {{event.myCodeUrl}} → ctx.myCodeUrl
+ *        {{checkInCode}}                         → ctx.checkInCode
+ *        {{speakers}}                            → ctx.speakers
+ *        {{agenda}}                              → ctx.agenda (newlines → <br/>)
+ *
+ *   2. Inject brand logo (idempotent — only if `data-brand-logo` marker
+ *      is not already present in the HTML and `logoHtml` is provided).
+ *      Injection point priority: after the first `<div style="max-width:
+ *      560px...">` (the SHELL wrapper), else after `<body>`, else at the
+ *      start.
+ *
+ *   3. Prepend mobile overrides (if `mobileOverridesHtml` is provided).
+ *      The overrides are wrapped inside `<style>@media (max-width: 600px)
+ *      { ... }</style>` and injected right after `<head>` (or at the
+ *      start of the HTML if no `<head>` is present). Idempotent via
+ *      `data-mobile-overrides` marker.
+ *
+ *   4. Click-wrap all `href="http..."` links (skip mailto:, tel:, and
+ *      already-wrapped links containing `/api/email/click` or
+ *      `/api/track/email-click`).
+ *
+ *   5. Append tracking pixel before `</body>` (or at the end). Uses
+ *      `openPixelUrl` directly when provided (orchestrator path), or
+ *      derives it from `(campaignId, trackToken, baseUrl)` (campaign path).
+ *
+ *   6. Append unsubscribe footer (the existing footer from
+ *      `email-campaign/render.ts:appendTrackingPixel`). Only appended
+ *      when `unsubscribeUrl` is provided (campaign path). Orchestrator
+ *      sends (which use queue-row-based tracking, not campaign-based)
+ *      do not pass an unsubscribe URL — no footer is added.
+ *
+ * Token escaping: HTML-escape all token values EXCEPT `agenda` (which
+ * is allowed to contain `\n` → converted to `<br/>`) and `email`/
+ * `eventUrl` (which are URLs that should not be escaped).
+ */
+
+// ----------------------------------------------------------------------------
+// Types
+// ----------------------------------------------------------------------------
+
+/**
+ * The merged context type. Superset of:
+ *   - `TemplateContext` (orchestrator) — has wrapLink, openPixelUrl,
+ *     speakers, agenda, checkInCode, myCodeUrl, etc.
+ *   - `RenderInput`    (campaign)      — has email, recipient name, etc.
+ *
+ * All fields are optional so callers can pass a partial context (e.g.
+ * test-send uses only firstName + email). The renderer gracefully
+ * resolves missing tokens to empty strings.
+ */
+export type UnifiedRenderContext = {
+  // Recipient
+  firstName?: string;
+  /** Alias for firstName — used by {{name}} and {{full_name}} tokens. */
+  name?: string;
+  email?: string;
+  // Chapter
+  chapterName?: string;
+  // Event
+  eventTitle?: string;
+  eventDate?: string;
+  eventVenue?: string;
+  eventAddress?: string;
+  eventUrl?: string;
+  myCodeUrl?: string;
+  checkInCode?: string;
+  speakers?: string;
+  agenda?: string;
+  // Tracking — orchestrator path provides these directly
+  openPixelUrl?: string;
+  wrapLink?: (url: string) => string;
+};
+
+/**
+ * Arguments for `renderUnifiedEmail`.
+ *
+ * Either `openPixelUrl` (orchestrator path) or `(campaignId, trackToken,
+ * baseUrl)` (campaign path) must be provided for the tracking pixel.
+ * If neither is provided, no tracking pixel is appended.
+ *
+ * Either `wrapLink` (orchestrator path) or `baseUrl` + `campaignId` +
+ * `trackToken` (campaign path) must be provided for click-wrapping.
+ * If neither is provided, links are not wrapped.
+ *
+ * `unsubscribeUrl` is optional — only the campaign path provides it.
+ */
+export type RenderUnifiedEmailArgs = {
+  /** The raw HTML template body with {{tokens}}. */
+  html: string;
+  /** Token values to substitute. */
+  ctx: UnifiedRenderContext;
+  /** Optional pre-built logo <img> HTML block (orchestrator path). */
+  logoHtml?: string;
+  /** Optional mobile-only CSS/HTML — wrapped in `@media (max-width: 600px)`. */
+  mobileOverridesHtml?: string;
+  /**
+   * Click-wrap function. If provided, every `href="http..."` link is
+   * replaced with `href="${clickWrapFn(url)}"`. If absent, the renderer
+   * falls back to building a campaign-style click URL from
+   * `(campaignId, trackToken, baseUrl)`.
+   */
+  clickWrapFn?: (url: string) => string;
+  /** Open-pixel URL. If absent, the renderer builds one from
+   *  `(campaignId, trackToken, baseUrl)` if all three are provided. */
+  openPixelUrl?: string;
+  /** Unsubscribe URL — appended in the footer (campaign path only). */
+  unsubscribeUrl?: string;
+  /** Chapter display name — used in the unsubscribe footer text.
+   *  Defaults to "Tel Aviv" for backward compat. */
+  chapterName?: string;
+  // Campaign-path fallbacks (used when clickWrapFn / openPixelUrl are absent)
+  campaignId?: string;
+  trackToken?: string;
+  baseUrl?: string;
+};
+
+// ----------------------------------------------------------------------------
+// Token replacement
+// ----------------------------------------------------------------------------
+
+/**
+ * Replace all {{tokens}} in `text` using values from `ctx`.
+ *
+ * Supports BOTH camelCase (`{{firstName}}`) AND snake_case (`{{first_name}}`)
+ * for backward compatibility with all historical templates.
+ *
+ * Token values are HTML-escaped EXCEPT:
+ *   - `agenda` — its `\n` characters are converted to `<br/>` first, then
+ *     the rest of the string is HTML-escaped (so agenda content stays
+ *     line-broken but is still safe from XSS).
+ *   - `email`, `eventUrl`, `myCodeUrl`, `openPixelUrl`, `wrapLink(url)` —
+ *     URLs that should not be HTML-escaped (would break the URL).
+ */
+export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
+  const firstName = ctx.firstName ?? ctx.name ?? "";
+  const fullName = ctx.name ?? ctx.firstName ?? "";
+  const email = ctx.email ?? "";
+  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "Tel Aviv";
+  const eventTitle = ctx.eventTitle ?? "";
+  const eventDate = ctx.eventDate ?? "";
+  const eventVenue = ctx.eventVenue ?? "";
+  const eventAddress = ctx.eventAddress ?? "";
+  const eventUrl = ctx.eventUrl ?? "";
+  const myCodeUrl = ctx.myCodeUrl ?? "";
+  const checkInCode = ctx.checkInCode ?? "";
+  const speakers = ctx.speakers ?? "";
+  const agenda = ctx.agenda ?? "";
+
+  // HTML-escape agenda newlines first → <br/>, then escape the rest.
+  const agendaHtml = escapeHtml(agenda).replace(/\n/g, "<br/>");
+
+  return text
+    // camelCase tokens
+    .replace(/{{firstName}}/g, escapeHtml(firstName))
+    .replace(/{{name}}/g, escapeHtml(firstName))
+    .replace(/{{email}}/g, escapeHtml(email))
+    .replace(/{{chapterName}}/g, escapeHtml(chapter))
+    .replace(/{{eventTitle}}/g, escapeHtml(eventTitle))
+    .replace(/{{eventDate}}/g, escapeHtml(eventDate))
+    .replace(/{{eventVenue}}/g, escapeHtml(eventVenue))
+    .replace(/{{eventAddress}}/g, escapeHtml(eventAddress))
+    .replace(/{{eventUrl}}/g, escapeHtml(eventUrl))
+    .replace(/{{event\.myCodeUrl}}/g, escapeHtml(myCodeUrl))
+    .replace(/{{myCodeUrl}}/g, escapeHtml(myCodeUrl))
+    .replace(/{{checkInCode}}/g, escapeHtml(checkInCode))
+    .replace(/{{speakers}}/g, escapeHtml(speakers))
+    .replace(/{{agenda}}/g, agendaHtml)
+    // snake_case tokens (backward compat with campaign-side templates)
+    .replace(/\{\{\s*first_name\s*\}\}/g, escapeHtml(firstName))
+    .replace(/\{\{\s*full_name\s*\}\}/g, escapeHtml(fullName))
+    .replace(/\{\{\s*email\s*\}\}/g, escapeHtml(email))
+    .replace(/\{\{\s*chapter_name\s*\}\}/g, escapeHtml(chapter))
+    .replace(/\{\{\s*eventTitle\s*\}\}/g, escapeHtml(eventTitle))
+    .replace(/\{\{\s*eventDate\s*\}\}/g, escapeHtml(eventDate))
+    .replace(/\{\{\s*eventVenue\s*\}\}/g, escapeHtml(eventVenue))
+    .replace(/\{\{\s*eventAddress\s*\}\}/g, escapeHtml(eventAddress))
+    .replace(/\{\{\s*eventUrl\s*\}\}/g, escapeHtml(eventUrl))
+    .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, escapeHtml(myCodeUrl))
+    .replace(/\{\{\s*myCodeUrl\s*\}\}/g, escapeHtml(myCodeUrl))
+    .replace(/\{\{\s*checkInCode\s*\}\}/g, escapeHtml(checkInCode))
+    .replace(/\{\{\s*speakers\s*\}\}/g, escapeHtml(speakers))
+    .replace(/\{\{\s*agenda\s*\}\}/g, agendaHtml);
+}
+
+/**
+ * Replace {{tokens}} in a subject line. Same token set as `replaceTokens`,
+ * but NO HTML escaping (subjects are plain text). Newlines in `agenda`
+ * are kept as-is (most subject lines don't use {{agenda}} anyway).
+ */
+export function renderUnifiedSubject(
+  subject: string,
+  ctx: UnifiedRenderContext,
+): string {
+  const firstName = ctx.firstName ?? ctx.name ?? "";
+  const fullName = ctx.name ?? ctx.firstName ?? "";
+  const email = ctx.email ?? "";
+  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "Tel Aviv";
+  const eventTitle = ctx.eventTitle ?? "";
+  const eventDate = ctx.eventDate ?? "";
+  const eventVenue = ctx.eventVenue ?? "";
+  const eventAddress = ctx.eventAddress ?? "";
+  const eventUrl = ctx.eventUrl ?? "";
+  const myCodeUrl = ctx.myCodeUrl ?? "";
+  const checkInCode = ctx.checkInCode ?? "";
+  const speakers = ctx.speakers ?? "";
+  const agenda = ctx.agenda ?? "";
+
+  return subject
+    .replace(/{{firstName}}/g, firstName)
+    .replace(/{{name}}/g, firstName)
+    .replace(/{{email}}/g, email)
+    .replace(/{{chapterName}}/g, chapter)
+    .replace(/{{eventTitle}}/g, eventTitle)
+    .replace(/{{eventDate}}/g, eventDate)
+    .replace(/{{eventVenue}}/g, eventVenue)
+    .replace(/{{eventAddress}}/g, eventAddress)
+    .replace(/{{eventUrl}}/g, eventUrl)
+    .replace(/{{event\.myCodeUrl}}/g, myCodeUrl)
+    .replace(/{{myCodeUrl}}/g, myCodeUrl)
+    .replace(/{{checkInCode}}/g, checkInCode)
+    .replace(/{{speakers}}/g, speakers)
+    .replace(/{{agenda}}/g, agenda)
+    .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
+    .replace(/\{\{\s*full_name\s*\}\}/g, fullName)
+    .replace(/\{\{\s*email\s*\}\}/g, email)
+    .replace(/\{\{\s*chapter_name\s*\}\}/g, chapter)
+    .replace(/\{\{\s*eventTitle\s*\}\}/g, eventTitle)
+    .replace(/\{\{\s*eventDate\s*\}\}/g, eventDate)
+    .replace(/\{\{\s*eventVenue\s*\}\}/g, eventVenue)
+    .replace(/\{\{\s*eventAddress\s*\}\}/g, eventAddress)
+    .replace(/\{\{\s*eventUrl\s*\}\}/g, eventUrl)
+    .replace(/\{\{\s*event\.myCodeUrl\s*\}\}/g, myCodeUrl)
+    .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
+    .replace(/\{\{\s*checkInCode\s*\}\}/g, checkInCode)
+    .replace(/\{\{\s*speakers\s*\}\}/g, speakers)
+    .replace(/\{\{\s*agenda\s*\}\}/g, agenda);
+}
+
+// ----------------------------------------------------------------------------
+// Logo injection
+// ----------------------------------------------------------------------------
+
+/**
+ * Inject the brand-logo HTML block at the top of the email.
+ *
+ * Idempotent: if the HTML already contains the `data-brand-logo` marker,
+ * no injection happens (so calling this twice on the same HTML is safe).
+ *
+ * Injection point priority:
+ *   1. After the first `<div style="...max-width:560px...">` (the SHELL
+ *      wrapper used by the orchestrator's default templates).
+ *   2. After the first `<body>` tag.
+ *   3. At the very start of the HTML.
+ */
+export function injectLogo(html: string, logoHtml: string | undefined): string {
+  if (!logoHtml) return html;
+  // Idempotency: don't double-inject.
+  if (/data-brand-logo/.test(html)) return html;
+  // Tag the logo block with the marker so we can detect it on subsequent calls.
+  const tagged = logoHtml.replace(/<img /, '<img data-brand-logo ');
+
+  if (/<div[^>]*max-width:560px[^>]*>/i.test(html)) {
+    return html.replace(
+      /(<div[^>]*max-width:560px[^>]*>)/i,
+      `$1${tagged}`,
+    );
+  }
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/(<body[^>]*>)/i, `$1${tagged}`);
+  }
+  return tagged + html;
+}
+
+// ----------------------------------------------------------------------------
+// Mobile overrides injection
+// ----------------------------------------------------------------------------
+
+/**
+ * Inject the mobile-only overrides CSS block.
+ *
+ * The `mobileOverridesHtml` content is wrapped inside
+ * `<style>@media (max-width: 600px) { ... }</style>` and prepended right
+ * after `<head>` (or at the start of the HTML if no `<head>` is present).
+ *
+ * Idempotent: if the HTML already contains the `data-mobile-overrides`
+ * marker, no injection happens.
+ */
+export function injectMobileOverrides(
+  html: string,
+  mobileOverridesHtml: string | undefined,
+): string {
+  if (!mobileOverridesHtml || !mobileOverridesHtml.trim()) return html;
+  if (/data-mobile-overrides/.test(html)) return html;
+
+  const styleBlock = `<style data-mobile-overrides>@media (max-width: 600px) { ${mobileOverridesHtml} }</style>`;
+
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1${styleBlock}`);
+  }
+  return styleBlock + html;
+}
+
+// ----------------------------------------------------------------------------
+// Click-wrap
+// ----------------------------------------------------------------------------
+
+/**
+ * Wrap all `href="http..."` links with the click-redirect.
+ *
+ * Skips:
+ *   - mailto: and tel: links (not http(s))
+ *   - already-wrapped links (containing `/api/email/click` or
+ *     `/api/track/email-click`)
+ *
+ * If `clickWrapFn` is provided (orchestrator path), it's used directly.
+ * Otherwise, if `(campaignId, trackToken, baseUrl)` are all provided
+ * (campaign path), a campaign-style click URL is built:
+ *   `${baseUrl}/api/email/click?t=${trackToken}&c=${campaignId}&u=${base64url(url)}`
+ *
+ * If neither is provided, the HTML is returned unchanged (no click-wrap).
+ */
+export function clickWrapLinks(
+  html: string,
+  args: {
+    clickWrapFn?: (url: string) => string;
+    campaignId?: string;
+    trackToken?: string;
+    baseUrl?: string;
+  },
+): string {
+  const { clickWrapFn, campaignId, trackToken, baseUrl } = args;
+
+  // Determine which wrap function to use.
+  let wrap: ((url: string) => string) | undefined = clickWrapFn;
+  if (!wrap && campaignId && trackToken && baseUrl) {
+    wrap = (url: string) => {
+      const encoded = Buffer.from(url, "utf8").toString("base64url");
+      return `${baseUrl}/api/email/click?t=${trackToken}&c=${campaignId}&u=${encoded}`;
+    };
+  }
+  if (!wrap) return html;
+
+  return html.replace(
+    /href="(https?:\/\/[^"]+)"/gi,
+    (match, url: string) => {
+      // Skip already-wrapped links.
+      if (url.includes("/api/email/click")) return match;
+      if (url.includes("/api/track/email-click")) return match;
+      return `href="${wrap!(url)}"`;
+    },
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Tracking pixel + unsubscribe footer
+// ----------------------------------------------------------------------------
+
+/**
+ * Append the open-tracking pixel + (optionally) the unsubscribe footer.
+ *
+ * The pixel is `<img src="${pixelUrl}" width="1" height="1" .../>` injected
+ * right before `</body>` (or at the end if no `</body>`).
+ *
+ * The footer is the existing campaign-style unsubscribe footer with the
+ * chapter name. Only appended when `unsubscribeUrl` is provided.
+ *
+ * `pixelUrl` resolution:
+ *   - If `openPixelUrl` is provided (orchestrator path), use it.
+ *   - Else if `(campaignId, trackToken, baseUrl)` are all provided
+ *     (campaign path), build `${baseUrl}/api/email/open?t=${trackToken}&c=${campaignId}`.
+ *   - Else: no pixel is appended.
+ */
+export function appendTrackingAndFooter(
+  html: string,
+  args: {
+    openPixelUrl?: string;
+    campaignId?: string;
+    trackToken?: string;
+    baseUrl?: string;
+    unsubscribeUrl?: string;
+    chapterName?: string;
+  },
+): string {
+  const {
+    openPixelUrl,
+    campaignId,
+    trackToken,
+    baseUrl,
+    unsubscribeUrl,
+    chapterName,
+  } = args;
+
+  // Resolve pixel URL.
+  let pixelUrl: string | undefined = openPixelUrl;
+  if (!pixelUrl && campaignId && trackToken && baseUrl) {
+    pixelUrl = `${baseUrl}/api/email/open?t=${trackToken}&c=${campaignId}`;
+  }
+
+  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
+
+  // Build the footer block (pixel + optional unsubscribe).
+  const footerParts: string[] = [];
+  if (unsubscribeUrl) {
+    footerParts.push(
+      `<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">`,
+      `  <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon ${escapeHtml(chapter)}.</p>`,
+      `  <p style="margin: 0;"><a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a></p>`,
+      `</div>`,
+    );
+  }
+  if (pixelUrl) {
+    footerParts.push(
+      `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:none; visibility:hidden; position:absolute; left:-9999px;" />`,
+    );
+  }
+  if (footerParts.length === 0) return html;
+
+  const footer = `\n${footerParts.join("\n")}\n`;
+
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${footer}</body>`);
+  }
+  return `${html}${footer}`;
+}
+
+// ----------------------------------------------------------------------------
+// Main entry point
+// ----------------------------------------------------------------------------
+
+/**
+ * Render an email HTML body using the unified pipeline.
+ *
+ * See the file-level docstring for the full algorithm.
+ */
+export function renderUnifiedEmail(args: RenderUnifiedEmailArgs): string {
+  const {
+    html,
+    ctx,
+    logoHtml,
+    mobileOverridesHtml,
+    clickWrapFn,
+    openPixelUrl,
+    unsubscribeUrl,
+    chapterName,
+    campaignId,
+    trackToken,
+    baseUrl,
+  } = args;
+
+  // 1. Replace tokens.
+  let out = replaceTokens(html, ctx);
+
+  // 2. Inject brand logo (idempotent).
+  out = injectLogo(out, logoHtml);
+
+  // 3. Inject mobile overrides (idempotent).
+  out = injectMobileOverrides(out, mobileOverridesHtml);
+
+  // 4. Click-wrap all http(s) links.
+  out = clickWrapLinks(out, { clickWrapFn, campaignId, trackToken, baseUrl });
+
+  // 5. Append tracking pixel + optional unsubscribe footer.
+  out = appendTrackingAndFooter(out, {
+    openPixelUrl,
+    campaignId,
+    trackToken,
+    baseUrl,
+    unsubscribeUrl,
+    chapterName: chapterName ?? ctx.chapterName,
+  });
+
+  return out;
+}
+
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
