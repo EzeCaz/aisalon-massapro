@@ -11588,3 +11588,87 @@ Stage Summary:
   pending items for the user to prioritize next.
 - Artifacts: download/BACKUP-README.md (Drive setup instructions),
   docs/tasks.md (registry updated).
+
+---
+Task ID: TSK-0070 — email-sender-fix-smtp-fallthrough
+Agent: main
+Task: User reports "When i test the email i dont receive them, can you
+check the emails are being sent correctly from the orchestrator and the
+template?"
+
+Work Log:
+- Subagent audit (Explore) found the root cause: TWO completely separate
+  email pipelines that don't share a transport. The orchestrator
+  (src/lib/email-orchestrator/sender.ts) had only Gmail OAuth2 + Mock as
+  providers — it NEVER checked the SMTP_* env vars that the transactional
+  email pipeline (src/lib/email.ts) uses. Three compounding issues:
+  1. EMAIL_PROVIDER env var not set → getProvider() returns "mock" →
+     sendViaMock() only console.logs, returns ok:true
+  2. isEmailSendPaused site setting defaults to "true" → short-circuits
+     with pausedResult() before even picking a provider
+  3. GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN / EMAIL_FROM
+     all unset → even EMAIL_PROVIDER=gmail would crash
+- Fix 1 — Refactored src/lib/email-orchestrator/sender.ts:
+  * Added SMTP as a third provider (sendViaSmtp) that reuses the shared
+    nodemailer transport from @/lib/email — unifies both pipelines.
+  * New getProvider() priority: explicit EMAIL_PROVIDER=mock →
+    EMAIL_PROVIDER=gmail + GOOGLE_* creds → SMTP_* set → mock fallback.
+  * Added isSmtpConfigured() + isGmailConfigured() exports for the admin UI.
+  * Added `mock: true` flag to SendResult so callers can distinguish real
+    vs mock sends.
+- Fix 2 — Updated worker.ts and flow-worker.ts:
+  * When sendResult.mock === true, mark the queue row SKIPPED (not SENT)
+    with a clear errorMessage explaining what to configure.
+  * Worker counters: mock sends bump result.skipped (not result.sent) so
+    admin sees accurate "N sent · M skipped" stats.
+  * flow-worker: refactored processQueueRow to return Promise<ProcessOutcome>
+    ("sent" | "mock" | "skipped") for cleaner caller logic.
+- Fix 3 — Added /api/email-orchestrator/run to vercel.json cron at
+  */10 * * * * (every 10 min). Was missing entirely — the orchestrator
+  only fired on manual admin clicks.
+- Fix 4 — New API endpoint GET /api/admin/email/provider-status:
+  * Returns { provider, smtpConfigured, gmailConfigured, paused, hardKill,
+    willActuallySend, configHints[] }
+  * New banner at the top of orchestrator-panel.tsx (always visible):
+    green when willActuallySend=true, red otherwise. Shows provider name
+    + which creds are present/missing + actionable hints.
+- Fix 5 — Updated .env.example:
+  * Documented new EMAIL_PROVIDER, EMAIL_FROM, EMAIL_SEND_ENABLED, CRON_SECRET
+    env vars.
+  * Added SendGrid + AWS SES SMTP examples alongside the existing Gmail
+    SMTP example.
+  * Explained the auto-resolve priority (gmail → smtp → mock).
+- Smoke test (scripts/test-email-sender.ts):
+  * 14 tests covering every provider combination — all pass.
+  * Verified: explicit EMAIL_PROVIDER=mock override, SMTP fallthrough,
+    Gmail creds missing fallback, both-providers-configured resolution.
+- TypeScript: 0 new errors from my changes. The 1 remaining error in
+  src/lib/email-campaign/sender.ts(282,9) is pre-existing (confirmed via
+  git stash) and unrelated.
+
+Stage Summary:
+- ROOT CAUSE: orchestrator never shared a transport with the SMTP-based
+  transactional email pipeline. Mock sender silently returned ok:true and
+  the worker marked rows SENT — admin UI showed green but no email left
+  the server.
+- FIX: orchestrator now falls through to SMTP when SMTP_* env vars are set,
+  unifying the two pipelines. Mock/paused sends are now marked SKIPPED
+  with a clear error message, and a red status banner surfaces the
+  misconfiguration in the admin UI.
+- DEPLOYMENT: code is ready locally. To activate real email delivery on
+  production:
+  1. Commit + push to origin/main (Vercel auto-deploys)
+  2. Set SMTP_* env vars on Vercel (Gmail App Password, SendGrid, AWS SES,
+     Postmark, Mailgun, or Brevo — see .env.example for examples)
+  3. Set CRON_SECRET on Vercel (so the new /api/email-orchestrator/run
+     cron job can authenticate)
+  4. Click "Resume sending" in /admin/email (unpause the site setting)
+  5. The red banner will turn green and emails will actually deliver
+- Artifacts: src/lib/email-orchestrator/sender.ts (refactored),
+  src/lib/email-orchestrator/worker.ts (SKIPPED + mock counting),
+  src/lib/email-orchestrator/flow-worker.ts (SKIPPED + ProcessOutcome),
+  vercel.json (cron entry added),
+  src/app/api/admin/email/provider-status/route.ts (new),
+  src/app/admin/email/orchestrator-panel.tsx (status banner),
+  .env.example (documented new vars + examples),
+  scripts/test-email-sender.ts (new — 14 passing tests).

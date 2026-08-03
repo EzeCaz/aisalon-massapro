@@ -213,8 +213,16 @@ async function processDuePending(result: WorkerResult): Promise<void> {
       // ── Send the email ──
       const sent = await sendStageEmail(row);
       if (sent.ok) {
-        result.sent++;
-        // Create the next stage's PENDING row (if any).
+        // Mock/paused sends don't actually deliver — count them as
+        // skipped so the admin sees accurate "N sent · M skipped" stats.
+        // The row itself is marked SKIPPED inside sendStageEmail().
+        if (sent.mock) {
+          result.skipped++;
+        } else {
+          result.sent++;
+        }
+        // Create the next stage's PENDING row (if any) — even on mock
+        // sends, so the admin can preview the full sequence.
         const next = nextStage(row.stage);
         if (next != null) {
           const nextFireTime = scheduledFor(row.rsvp.event.startsAt, next);
@@ -278,7 +286,7 @@ async function sendStageEmail(
       };
     } | null;
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; mock?: boolean } | { ok: false; error: string }> {
   // The legacy stage-based orchestrator only ever creates rows for real
   // RSVPs (bootstrapped from GOING RSVPs), so rsvp should always be set.
   // If a null-rsvp row slips through (e.g. a flow row that lost its
@@ -346,6 +354,25 @@ async function sendStageEmail(
     return sendResult;
   }
 
+  // Mock / paused sends: keep the row SKIPPED (NOT SENT) so the admin UI
+  // is honest about what actually left the server. htmlBody is still
+  // populated so the admin can preview the rendered HTML in the queue
+  // panel. errorMessage records why it didn't actually send.
+  if (sendResult.mock) {
+    await db.emailQueue.update({
+      where: { id: row.id },
+      data: {
+        status: "SKIPPED",
+        subject: renderedSubject,
+        htmlBody: renderedHtml,
+        attemptCount: { increment: 1 },
+        errorMessage: `Mock/paused send — provider=${sendResult.provider}. No email was delivered. Configure SMTP_* or EMAIL_PROVIDER=gmail + Google OAuth2 creds to send for real.`,
+        usedNoCodeVariant: hasNoCode,
+      },
+    });
+    return { ok: true, mock: true };
+  }
+
   // Mark SENT + store the rendered HTML for replay/preview.
   await db.emailQueue.update({
     where: { id: row.id },
@@ -360,7 +387,7 @@ async function sendStageEmail(
     },
   });
 
-  return { ok: true };
+  return { ok: true, mock: false };
 }
 
 // ----------------------------------------------------------------------------

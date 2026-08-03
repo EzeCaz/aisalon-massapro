@@ -33,10 +33,14 @@ import { buildContext, renderTemplate, renderSubject } from "./templates";
 
 export type WorkerResult = {
   sent: number;
+  skipped: number; // mock / paused sends (no real delivery)
   failed: number;
   processed: number;
   errorDetails: { queueId: string; error: string }[];
 };
+
+/** Outcome of processing a single queue row. */
+type ProcessOutcome = "sent" | "mock" | "skipped";
 
 const MAX_ATTEMPTS = 3;
 
@@ -45,6 +49,7 @@ export async function runFlowWorker(): Promise<WorkerResult> {
   const now = new Date();
   const result: WorkerResult = {
     sent: 0,
+    skipped: 0,
     failed: 0,
     processed: 0,
     errorDetails: [],
@@ -93,8 +98,12 @@ export async function runFlowWorker(): Promise<WorkerResult> {
   for (const row of dueRows) {
     result.processed++;
     try {
-      await processQueueRow(row);
-      result.sent++;
+      const outcome = await processQueueRow(row);
+      if (outcome === "sent") {
+        result.sent++;
+      } else if (outcome === "mock" || outcome === "skipped") {
+        result.skipped++;
+      }
     } catch (err) {
       result.failed++;
       result.errorDetails.push({
@@ -141,7 +150,7 @@ type DueQueueRow = Prisma.EmailQueueGetPayload<{
   };
 }>;
 
-async function processQueueRow(row: DueQueueRow) {
+async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
   const step = row.flowStep;
   if (!step) throw new Error(`queue row ${row.id} has no flowStep`);
   if (!step.template) throw new Error(`step ${step.id} has no template`);
@@ -152,7 +161,7 @@ async function processQueueRow(row: DueQueueRow) {
       where: { id: row.id },
       data: { status: "SKIPPED", errorMessage: `flow status is ${step.flow.status}` },
     });
-    return;
+    return "skipped";
   }
 
   // ── Resolve recipient fields ────────────────────────────────────────
@@ -244,7 +253,8 @@ async function processQueueRow(row: DueQueueRow) {
   const htmlBody = renderTemplate(step.template.htmlBody, ctx);
   const renderedSubject = renderSubject(subjectSource, ctx);
 
-  // Send via the configured provider (mock by default, gmail if env set).
+  // Send via the configured provider (gmail if env set + creds present,
+  // smtp if SMTP_* set, mock otherwise).
   const sendResult: SendResult = await sendEmail({
     to: recipientEmail,
     subject: renderedSubject,
@@ -253,6 +263,20 @@ async function processQueueRow(row: DueQueueRow) {
 
   if (!sendResult.ok) {
     throw new Error(`send failed: ${sendResult.error}`);
+  }
+
+  // Mock / paused sends: keep the row SKIPPED so the admin UI is honest.
+  if (sendResult.mock) {
+    await db.emailQueue.update({
+      where: { id: row.id },
+      data: {
+        status: "SKIPPED",
+        subject: renderedSubject,
+        htmlBody,
+        errorMessage: `Mock/paused send — provider=${sendResult.provider}. No email was delivered. Configure SMTP_* or EMAIL_PROVIDER=gmail + Google OAuth2 creds to send for real.`,
+      },
+    });
+    return "mock";
   }
 
   // Mark SENT + store subject + htmlBody for replay.
@@ -266,6 +290,7 @@ async function processQueueRow(row: DueQueueRow) {
       htmlBody,
     },
   });
+  return "sent";
 }
 
 async function markRowFailed(row: DueQueueRow, err: unknown) {

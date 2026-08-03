@@ -39,6 +39,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   Search,
+  AlertTriangle,
 } from "lucide-react";
 import { STAGES, statusLabel } from "@/lib/email-orchestrator/stages";
 
@@ -167,6 +168,17 @@ export function OrchestratorPanel() {
   const [paused, setPaused] = React.useState<boolean | null>(null); // null = loading
   const [togglingPause, setTogglingPause] = React.useState(false);
 
+  // Provider status (mock / smtp / gmail) — fetched once on mount.
+  const [providerStatus, setProviderStatus] = React.useState<{
+    provider: "gmail" | "smtp" | "mock";
+    smtpConfigured: boolean;
+    gmailConfigured: boolean;
+    paused: boolean;
+    hardKill: boolean;
+    willActuallySend: boolean;
+    configHints: string[];
+  } | null>(null);
+
   // Cleanup synthetic RSVPs (created by the old "Send to Audience" path)
   const [cleanupBusy, setCleanupBusy] = useStateWithLabel(false);
   const [cleanupReport, setCleanupReport] = React.useState<any | null>(null);
@@ -288,6 +300,22 @@ export function OrchestratorPanel() {
         }
       } catch {
         /* leave paused as-is on error */
+      }
+    })();
+
+    // Fetch provider status (mock / smtp / gmail) — best-effort.
+    void (async () => {
+      try {
+        const r = await fetch("/api/admin/email/provider-status", {
+          cache: "no-store",
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setProviderStatus(d);
+          setPaused(Boolean(d.paused));
+        }
+      } catch {
+        /* leave providerStatus as-is on error */
       }
     })();
   }, [statusFilter, stageFilter, eventFilter, search]);
@@ -619,6 +647,57 @@ export function OrchestratorPanel() {
 
   return (
     <div className="space-y-6">
+      {/* ── Provider status banner (always shown — surface misconfigurations) ── */}
+      {providerStatus && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm flex items-start gap-3 ${
+            providerStatus.willActuallySend
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+              : "border-rose-300 bg-rose-50 text-rose-900"
+          }`}
+        >
+          {providerStatus.willActuallySend ? (
+            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          )}
+          <div className="space-y-1">
+            <div>
+              <strong className="font-semibold">
+                Active email provider: {providerStatus.provider.toUpperCase()}
+              </strong>{" "}
+              {providerStatus.willActuallySend ? (
+                <span>— emails are being delivered.</span>
+              ) : (
+                <span>— emails are <strong>NOT</strong> being delivered.</span>
+              )}
+              {" "}
+              <span className="text-xs opacity-70">
+                (SMTP: {providerStatus.smtpConfigured ? "configured" : "missing"} ·
+                 Gmail: {providerStatus.gmailConfigured ? "configured" : "missing"} ·
+                 Paused: {providerStatus.paused ? "yes" : "no"}
+                 {providerStatus.hardKill ? " · EMAIL_SEND_ENABLED=false" : ""})
+              </span>
+            </div>
+            {providerStatus.configHints.length > 0 && (
+              <ul className="list-disc pl-5 space-y-0.5 text-xs">
+                {providerStatus.configHints.map((hint, i) => (
+                  <li key={i}>{hint}</li>
+                ))}
+              </ul>
+            )}
+            {providerStatus.provider === "mock" && (
+              <div className="text-xs mt-1">
+                Need SMTP creds? See <code className="bg-white/60 px-1 rounded">.env.example</code>{" "}
+                section "Email (SMTP)" — works with Gmail App Passwords, SendGrid,
+                AWS SES, Postmark, Mailgun, Brevo, etc. After updating env vars on
+                Vercel, redeploy and this banner will turn green.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Pause banner (only shown when paused) ── */}
       {paused && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3">

@@ -1,20 +1,48 @@
 /**
- * Email sender — Gmail OAuth2 or mock, controlled by `EMAIL_PROVIDER` env var.
+ * Email sender — provider priority: Gmail OAuth2 → SMTP → mock.
  *
- * Production (real Gmail):
+ * Provider selection (auto):
+ *   1. EMAIL_PROVIDER=gmail AND GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET +
+ *      GOOGLE_REFRESH_TOKEN are set → Gmail OAuth2 API.
+ *   2. SMTP_HOST + SMTP_USER + SMTP_PASS are set → SMTP via nodemailer
+ *      (shares the same transport as transactional emails in @/lib/email).
+ *   3. Otherwise → mock (logs to stdout, no network call).
+ *
+ * Optional kill switches (checked before provider selection):
+ *   - EMAIL_SEND_ENABLED="false"  (hard env escape hatch)
+ *   - SiteSetting[emailSendPaused]="true"  (admin UI toggle, default "true"
+ *     — admin must click "Resume sending" in /admin/email before real
+ *     sends go out, even if a provider is configured).
+ *
+ * When the result is a mock or paused send, `mock: true` is set on the
+ * result. Callers (worker.ts, flow-worker.ts) should mark the queue row
+ * SKIPPED (not SENT) in that case, so the admin UI is honest about what
+ * actually left the server.
+ *
+ * ── Configuration cheatsheet ──────────────────────────────────────────
+ *
+ * Gmail OAuth2 (recommended for high volume, ~250 emails/day per account):
  *   EMAIL_PROVIDER=gmail
  *   GOOGLE_CLIENT_ID=...
  *   GOOGLE_CLIENT_SECRET=...
- *   GOOGLE_REFRESH_TOKEN=...  (offline refresh token for the sender account)
- *   EMAIL_FROM=organizer@aisalon.massapro.com
+ *   GOOGLE_REFRESH_TOKEN=...  (one-time offline token via OAuth playground)
+ *   EMAIL_FROM="AI Salon <organizer@aisalon.massapro.com>"
  *
- * Mock (default):
- *   EMAIL_PROVIDER not set, or = "mock"
- *   → logs the email to stdout + writes to EmailQueue.htmlBody for in-app preview
+ * SMTP (recommended for low-medium volume; works with any provider —
+ * Gmail App Password, SendGrid, AWS SES, Postmark, Mailgun, Brevo, etc.):
+ *   SMTP_HOST=smtp.gmail.com         (or smtp.sendgrid.net, email-smtp.us-east-1.amazonaws.com, ...)
+ *   SMTP_PORT=465                    (SSL) or 587 (STARTTLS)
+ *   SMTP_SECURE=true                 (true for 465, false for 587)
+ *   SMTP_USER=your-account@gmail.com (or "apikey" for SendGrid, your SES SMTP username, etc.)
+ *   SMTP_PASS=your-16-char-app-password
+ *   SMTP_FROM="AI Salon <no-reply@aisalon.massapro.com>"
  *
- * The refresh-token → access-token exchange uses Google's OAuth2 token
- * endpoint. Access tokens live ~1h; we refresh on every send (cheap).
+ * Mock (default — no env vars needed):
+ *   → emails are logged to stdout + written to EmailQueue.htmlBody for
+ *     in-app preview, but no email is actually sent.
  */
+
+import { sendMail } from "@/lib/email";
 
 export type SendArgs = {
   to: string;
@@ -25,12 +53,72 @@ export type SendArgs = {
 };
 
 export type SendResult =
-  | { ok: true; provider: "gmail" | "mock"; messageId?: string }
+  | { ok: true; provider: "gmail" | "smtp" | "mock"; messageId?: string; mock?: boolean }
   | { ok: false; error: string };
 
-function getProvider(): "gmail" | "mock" {
+/**
+ * Detect which email provider is configured.
+ *
+ * Priority:
+ *   1. `gmail` — only if EMAIL_PROVIDER=gmail AND all 3 Google creds set.
+ *      (We don't auto-pick gmail just because the creds happen to be set —
+ *      the user must explicitly opt in, because Gmail OAuth2 is more
+ *      fragile than SMTP and shouldn't surprise the operator.)
+ *   2. `smtp` — if SMTP_HOST + SMTP_USER + SMTP_PASS are set.
+ *   3. `mock` — fallback. Logs to stdout, no network call.
+ */
+export function getProvider(): "gmail" | "smtp" | "mock" {
   const p = process.env.EMAIL_PROVIDER?.toLowerCase();
-  return p === "gmail" ? "gmail" : "mock";
+  // Explicit "mock" override — always wins (for dev/staging).
+  if (p === "mock") return "mock";
+  if (p === "gmail") {
+    if (
+      process.env.GOOGLE_CLIENT_ID &&
+      process.env.GOOGLE_CLIENT_SECRET &&
+      process.env.GOOGLE_REFRESH_TOKEN
+    ) {
+      return "gmail";
+    }
+    // Misconfiguration: EMAIL_PROVIDER=gmail but creds missing.
+    // Fall through to smtp/mock rather than crashing — the user will see
+    // the misconfiguration banner in the admin UI.
+    console.warn(
+      "[email-sender] EMAIL_PROVIDER=gmail but GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN not all set — falling through to SMTP/mock.",
+    );
+  }
+  if (
+    process.env.SMTP_HOST &&
+    process.env.SMTP_USER &&
+    process.env.SMTP_PASS
+  ) {
+    return "smtp";
+  }
+  return "mock";
+}
+
+/**
+ * True if SMTP_* env vars are set (i.e. SMTP would actually send).
+ * Exposed for the admin UI to display provider status.
+ */
+export function isSmtpConfigured(): boolean {
+  return (
+    !!process.env.SMTP_HOST &&
+    !!process.env.SMTP_USER &&
+    !!process.env.SMTP_PASS
+  );
+}
+
+/**
+ * True if Gmail OAuth2 creds are set (i.e. Gmail would actually send).
+ * Exposed for the admin UI to display provider status.
+ */
+export function isGmailConfigured(): boolean {
+  return (
+    process.env.EMAIL_PROVIDER?.toLowerCase() === "gmail" &&
+    !!process.env.GOOGLE_CLIENT_ID &&
+    !!process.env.GOOGLE_CLIENT_SECRET &&
+    !!process.env.GOOGLE_REFRESH_TOKEN
+  );
 }
 
 export async function sendEmail(args: SendArgs): Promise<SendResult> {
@@ -49,9 +137,8 @@ export async function sendEmail(args: SendArgs): Promise<SendResult> {
   }
 
   const provider = getProvider();
-  if (provider === "gmail") {
-    return sendViaGmail(args);
-  }
+  if (provider === "gmail") return sendViaGmail(args);
+  if (provider === "smtp") return sendViaSmtp(args);
   return sendViaMock(args);
 }
 
@@ -63,7 +150,28 @@ function pausedResult(args: SendArgs): SendResult {
     ok: true,
     provider: "mock",
     messageId: `paused_${Date.now()}`,
+    mock: true,
   };
+}
+
+// ----------------------------------------------------------------------------
+// SMTP sender — reuses the shared nodemailer transport from @/lib/email
+// ----------------------------------------------------------------------------
+
+async function sendViaSmtp(args: SendArgs): Promise<SendResult> {
+  const result = await sendMail({
+    to: args.to,
+    subject: args.subject,
+    html: args.html,
+  });
+  if (result.ok) {
+    return {
+      ok: true,
+      provider: "smtp",
+      messageId: `smtp_${Date.now()}`,
+    };
+  }
+  return { ok: false, error: result.error || "SMTP send failed" };
 }
 
 // ----------------------------------------------------------------------------
@@ -76,7 +184,12 @@ async function sendViaMock(args: SendArgs): Promise<SendResult> {
   console.log(
     `[email-mock] TO: ${args.to} | SUBJECT: ${args.subject} | HTML_LEN: ${args.html.length}`,
   );
-  return { ok: true, provider: "mock", messageId: `mock_${Date.now()}` };
+  return {
+    ok: true,
+    provider: "mock",
+    messageId: `mock_${Date.now()}`,
+    mock: true,
+  };
 }
 
 // ----------------------------------------------------------------------------
