@@ -741,7 +741,7 @@ model EmailCampaign {
   listSource            String // "ALL_MEMBERS" | "TAG:Speaker" | "EVENT:abc123" | "MANUAL:list@x.com,..." etc.
   listConfigJson        String // JSON payload describing the recipient list filter
   recipientCount        Int              @default(0)
-  status                String           @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED
+  status                String           @default("DRAFT") // DRAFT | SCHEDULED | SENDING | SENT | FAILED | PAUSED
   scheduledAt           DateTime?
   startedAt             DateTime?
   completedAt           DateTime?

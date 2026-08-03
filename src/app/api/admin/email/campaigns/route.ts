@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
     include: {
       template: { select: { id: true, name: true, category: true } },
       creator: { select: { id: true, email: true, name: true } },
+      flow: { select: { id: true, name: true, status: true } },
       _count: {
         select: {
           recipients: true,
@@ -72,6 +73,13 @@ export async function POST(req: NextRequest) {
   const replyTo = body?.replyTo ? (body.replyTo).toString().trim() : null;
   const listSource = (body?.listSource || "ALL_MEMBERS").toString();
   const listConfigJson = (body?.listConfigJson || "{}").toString();
+  // TSK-0074 Phase 5C: optional link to a flow. When set, the campaign is
+  // "flow-backed" — flow edits will refresh its snapshots automatically
+  // (handled by PATCH /api/email-flows/[id]). If a campaign already exists
+  // for this flowId, the unique constraint on flowId will reject the create
+  // (1:1 relationship enforced at the DB level).
+  const flowId = body?.flowId ? (body.flowId).toString() : null;
+  const chapterId = body?.chapterId ? (body.chapterId).toString() : null;
 
   if (!name || name.length > 200) {
     return NextResponse.json({ error: "Name is required (max 200 chars)" }, { status: 400 });
@@ -93,6 +101,36 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // If flowId provided, validate the flow exists + is ACTIVE. Also enforce
+  // the 1:1 relationship — if a campaign already exists for this flowId,
+  // reject with a clear error rather than letting the DB unique constraint
+  // throw a generic P2002.
+  if (flowId) {
+    const flow = await db.emailFlow.findUnique({
+      where: { id: flowId },
+      select: { id: true, status: true },
+    });
+    if (!flow) {
+      return NextResponse.json({ error: "Flow not found" }, { status: 404 });
+    }
+    if (flow.status !== "ACTIVE") {
+      return NextResponse.json(
+        { error: `Cannot link to a flow in status ${flow.status}. Activate the flow first.` },
+        { status: 400 },
+      );
+    }
+    const existingForFlow = await db.emailCampaign.findUnique({
+      where: { flowId },
+      select: { id: true },
+    });
+    if (existingForFlow) {
+      return NextResponse.json(
+        { error: "A campaign already exists for this flow. Edit that campaign instead." },
+        { status: 409 },
+      );
+    }
+  }
+
   const campaign = await db.emailCampaign.create({
     data: {
       name,
@@ -107,10 +145,13 @@ export async function POST(req: NextRequest) {
       fromName,
       fromEmail,
       replyTo,
+      ...(flowId ? { flowId } : {}),
+      ...(chapterId ? { chapterId } : {}),
       createdBy: admin.id,
     },
     include: {
       template: { select: { id: true, name: true, category: true } },
+      flow: { select: { id: true, name: true, status: true } },
     },
   });
 

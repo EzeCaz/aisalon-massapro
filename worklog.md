@@ -12029,3 +12029,146 @@ Stage Summary:
 - No DB migration required (mobileOverridesHtml + logoUrl fields
   already exist on EmailTemplate2 from Phase 1).
 - No env vars required.
+
+---
+Task ID: email-unify-ui-phase5-6
+Agent: full-stack-developer
+Task: Email system unification Phase 5 + Phase 6 — campaign list unified
+  with flows + test-send modal + PAUSED status.
+
+Work Log:
+- Phase 5A — Auto-create campaign when flow is saved as ACTIVE
+  (`src/app/api/email-flows/[id]/route.ts` PATCH):
+  * Refactored `checkAuth` to return `adminUserId` (cron callers get
+    null — campaign auto-create is skipped for them, no real user to
+    set as createdBy).
+  * Fetch the PREVIOUS flow state (status + name + chapterId) before
+    updating — needed to detect ACTIVE → non-ACTIVE transitions.
+  * After saving the flow (delete + recreate steps), run best-effort
+    campaign sync (try/catch wrapped so flow-save never fails if the
+    campaign sync errors):
+    - If newStatus === "ACTIVE": look up the first step (with template
+      + audience). If no linked campaign → create one with snapshots
+      from the first step's template (status DRAFT, listSource
+      `AUDIENCE:<id>` or `ALL_MEMBERS`, createdBy = adminUserId,
+      chapterId = flow.chapterId). If a linked campaign exists →
+      refresh its snapshots but KEEP its existing status (don't reset
+      SENT → DRAFT). Only update `name` if the campaign is still DRAFT.
+    - If newStatus !== "ACTIVE": look up the linked campaign. If it
+      exists AND the flow WAS ACTIVE before AND the campaign is still
+      DRAFT → set it to PAUSED (so it doesn't appear "ready to send"
+      while the flow is inactive).
+  * Returns `linkedCampaignId: string | null` in the PATCH response.
+
+- Phase 5D — Add PAUSED to valid campaign statuses:
+  * `prisma/schema.prisma`: updated the `EmailCampaign.status` comment
+    to `// DRAFT | SCHEDULED | SENDING | SENT | FAILED | PAUSED`
+    (no migration needed — `status` is a plain String column).
+  * `src/app/api/admin/email/campaigns/[id]/route.ts` PATCH: validates
+    `body.status` against the full enum. Allows status-only patches on
+    SENDING/SENT campaigns (e.g. SENDING → PAUSED to halt an in-progress
+    send). All other field updates on frozen campaigns still rejected
+    with 409. DELETE now also accepts PAUSED. GET now includes the
+    `flow` relation (id, name, status) so the UI can show the linked
+    flow name without an extra API round-trip.
+
+- Phase 5B — Campaign list with flow column + status badges + actions
+  (`src/app/admin/email/email-tab-client.tsx` CampaignsTable):
+  * Added `flowId` + `flow` to the local `Campaign` type.
+  * `StatusBadge`: 6 colors — DRAFT (gray), SCHEDULED (blue),
+    SENDING (yellow + pulse), SENT (green), FAILED (red), PAUSED (amber).
+  * New "Flow" column showing a Workflow icon + linked flow's name
+    (links to /admin/email/flows?flow=<id>). "—" for legacy campaigns.
+  * New "Last sent" column (completedAt || startedAt).
+  * New "Refresh" button at the top of the table.
+  * Action buttons per row (state-driven visibility):
+    - Test send (always visible) → opens TestSendDialog.
+    - Send (DRAFT/FAILED) → confirm dialog with recipient count.
+    - Pause (SENDING/SCHEDULED) → PATCH with status: "PAUSED".
+    - Resume (PAUSED) → PATCH with status: "DRAFT" or "SCHEDULED".
+    - Edit (DRAFT/PAUSED) → opens CampaignComposer.
+    - View (SENT/FAILED) → read-only composer.
+    - Stats (SENT only) → toast "Stats coming soon" (placeholder).
+    - Save as template (SENT/FAILED).
+    - Delete (DRAFT/FAILED/PAUSED).
+
+- Phase 5C — CampaignComposer: choose source step
+  (`src/app/admin/email/email-tab-client.tsx` CampaignComposer):
+  * Replaced the old "Start from template" picker with a 3-option
+    "Choose source" wizard for NEW campaigns:
+    - A) "Select existing flow" — dropdown of ACTIVE flows. On select,
+      fetches /api/email-flows/[id] and pre-fills the composer from
+      the flow's first step (template.subject, template.bodyHtml,
+      listSource = `AUDIENCE:<audienceId>`). Sets `flowId` on save.
+    - B) "Create new flow" — link to /admin/email/flows with a toast
+      "Create a flow first, then come back here".
+    - C) "Start blank (no flow)" — the legacy manual template picker
+      (flowId = null).
+  * The old template picker still appears AFTER picking C, or when
+    editing an existing campaign.
+  * When editing a flow-backed campaign, shows a banner linking back
+    to the flow.
+  * Added Send now / Test send / Pause buttons to the composer footer
+    (next to Save draft / Save as template). Same endpoints + visibility
+    rules as the table row buttons.
+  * POST /api/admin/email/campaigns now accepts optional `flowId` +
+    `chapterId`. Validates flow exists + ACTIVE. Rejects duplicate
+    flowId with 409.
+
+- Phase 6 — TestSendDialog modal
+  (`src/app/admin/email/email-tab-client.tsx` TestSendDialog):
+  * New modal component rendered at the top level of EmailTabClient.
+  * Shows campaign name + subject + status badge at the top.
+  * `<Textarea>` for emails (comma/newline/semicolon-separated).
+    Placeholder: "friend@example.com, eze@massapro.com".
+  * "Send test" → POST /api/admin/email/campaigns/[id]/test-send
+    with `{ emails: text }`.
+  * Shows response: "Sent: N · Failed: M · Total: T" + collapsible
+    error list (each error: "email: reason").
+  * "Close" button.
+  * Reset state on campaign change (useEffect on campaign?.id).
+  * Opened from the "Test send" button in CampaignsTable AND in
+    CampaignComposer.
+
+- Backend plumbing (small surgical changes):
+  * `src/app/admin/email/page.tsx`: added `flow` to the
+    emailCampaign.findMany include.
+  * `src/app/api/admin/email/campaigns/route.ts` GET: added `flow` to
+    the findMany include. POST: accepts `flowId` + `chapterId`; validates
+    flow exists + ACTIVE; rejects duplicate flowId with 409.
+
+Verification:
+- `npx tsc --noEmit`: 0 new errors. Baseline 124 errors (unchanged).
+  None of the 6 modified files appear in the error list.
+- `bun run lint`: 0 new errors/warnings in my files. Pre-existing
+  baseline (4 unescaped-`'` errors in unchanged text, 1 `setTagLabel`
+  unused warning, 1 prefer-const + 2 unused-`e` warnings) was either
+  fixed or kept as pre-existing. All `any`-type errors in API routes
+  are pre-existing baseline (kept the existing `let body: any;` pattern).
+- The auto-create logic is wrapped in try/catch so a campaign sync
+  failure never fails the flow PATCH (best-effort).
+- The PAUSED status is fully round-trip: flow deactivation → PATCH
+  /api/email-flows/[id] sets campaign to PAUSED → CampaignsTable shows
+  the amber badge → "Resume" button restores to DRAFT (or SCHEDULED if
+  scheduledAt is set).
+
+Files modified:
+- prisma/schema.prisma (1-line comment update — no migration needed)
+- src/app/admin/email/page.tsx (+1 line — added `flow` to findMany include)
+- src/app/admin/email/email-tab-client.tsx (1541 → 2259 lines, +718)
+- src/app/api/admin/email/campaigns/route.ts (+60 lines)
+- src/app/api/admin/email/campaigns/[id]/route.ts (+50 lines)
+- src/app/api/email-flows/[id]/route.ts (151 → 318 lines, +167)
+
+Files NOT modified (verified, no changes needed):
+- src/app/api/admin/email/campaigns/[id]/test-send/route.ts (Phase 3)
+- src/app/api/admin/email/campaigns/[id]/send/route.ts (Phase 3)
+- src/lib/email/render-unified.ts (Phase 1)
+- src/lib/email-orchestrator/sender.ts (Phase 1)
+- src/app/admin/email/flows/flow-builder-client.tsx (the flow builder's
+  PATCH call already sends `status` in the body, so the auto-create
+  hook fires automatically when the user toggles a flow to ACTIVE —
+  no client-side changes needed there.)
+
+Commit message:
+`[TSK-0074] Email unification Phase 5-6: campaign list + flow linking + test send modal + PAUSED status`

@@ -86,6 +86,7 @@ export default async function EmailTabPage({
       include: {
         template: { select: { id: true, name: true, category: true } },
         creator: { select: { id: true, email: true, name: true } },
+        flow: { select: { id: true, name: true, status: true } },
         chapter: { select: { id: true, name: true, slug: true, country: { select: { name: true, code: true, flagEmoji: true } } } },
         _count: { select: { recipients: true, events: true } },
       },

@@ -38,6 +38,11 @@ import {
   Workflow,
   Users,
   ExternalLink,
+  RefreshCw,
+  Pause,
+  Play,
+  FlaskConical,
+  BarChart3,
 } from "lucide-react";
 import { OrchestratorPanel } from "./orchestrator-panel";
 import { EmailAdminNav, type EmailAdminTab } from "@/components/ais/email-admin-nav";
@@ -70,6 +75,8 @@ type Campaign = {
   name: string;
   templateId: string | null;
   template: { id: string; name: string; category: string } | null;
+  flowId: string | null;
+  flow: { id: string; name: string; status: string } | null;
   subjectSnapshot: string;
   bodyHtmlSnapshot: string;
   bodyTextSnapshot: string | null;
@@ -167,6 +174,10 @@ export function EmailTabClient({
     defaultName: string;
   } | null>(null);
 
+  // Test-send modal (Phase 6) — opens from row "Test send" button OR from
+  // the composer. Target is the campaign to test-send.
+  const [testSendTarget, setTestSendTarget] = React.useState<Campaign | null>(null);
+
   // Local copy of stage templates so the TemplatesClient can update it.
   const [stageTemplatesState, setStageTemplatesState] = React.useState<StageTemplateSummary[]>(stageTemplates);
 
@@ -231,9 +242,60 @@ export function EmailTabClient({
       }
       toast.success("Campaign deleted");
       await refreshCampaigns();
-    } catch (e) {
+    } catch {
       toast.error("Failed to delete campaign");
     }
+  };
+
+  // TSK-0074 Phase 5B: pause a SENDING/SCHEDULED campaign by setting its
+  // status to PAUSED. The PATCH endpoint accepts PAUSED as a valid status
+  // (Phase 5D backend change).
+  const handlePauseCampaign = async (c: Campaign) => {
+    if (!confirm(`Pause "${c.name}"? You can resume it later.`)) return;
+    try {
+      const res = await fetch(`/api/admin/email/campaigns/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PAUSED" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Failed to pause campaign");
+        return;
+      }
+      toast.success(`Campaign "${c.name}" paused`);
+      await refreshCampaigns();
+    } catch {
+      toast.error("Failed to pause campaign");
+    }
+  };
+
+  // TSK-0074 Phase 5B: resume a PAUSED campaign — if it had a scheduledAt,
+  // restore it to SCHEDULED; otherwise restore to DRAFT (editable).
+  const handleResumeCampaign = async (c: Campaign) => {
+    const nextStatus = c.scheduledAt ? "SCHEDULED" : "DRAFT";
+    try {
+      const res = await fetch(`/api/admin/email/campaigns/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Failed to resume campaign");
+        return;
+      }
+      toast.success(`Campaign "${c.name}" resumed (${nextStatus})`);
+      await refreshCampaigns();
+    } catch {
+      toast.error("Failed to resume campaign");
+    }
+  };
+
+  // TSK-0074 Phase 6: open the test-send modal. The actual send happens
+  // inside the TestSendDialog component.
+  const handleOpenTestSend = (c: Campaign) => {
+    setTestSendTarget(c);
   };
 
   const handleComposerSaved = async () => {
@@ -403,6 +465,9 @@ export function EmailTabClient({
               onDelete={handleDeleteCampaign}
               onSaveAsTemplate={handleSaveAsTemplateFromRow}
               onRefresh={refreshCampaigns}
+              onPause={handlePauseCampaign}
+              onResume={handleResumeCampaign}
+              onTestSend={handleOpenTestSend}
             />
           </section>
 
@@ -425,15 +490,17 @@ export function EmailTabClient({
                 tags={tags}
                 membersCount={membersCount}
                 adminEmail={adminEmail}
+                flows={flows}
                 onSaved={handleComposerSaved}
                 onCancel={() => {
                   setComposerOpen(false);
                   setEditingCampaign(null);
                 }}
+                onTestSend={(c) => setTestSendTarget(c)}
                 onRequestSaveAsTemplate={async (subject, bodyHtml, suggestedName) => {
                   try {
                     let campaignId = editingCampaign?.id;
-                    let campaignName = editingCampaign?.name || suggestedName || "Draft";
+                    const campaignName = editingCampaign?.name || suggestedName || "Draft";
 
                     if (!campaignId) {
                       const createRes = await fetch("/api/admin/email/campaigns", {
@@ -529,6 +596,16 @@ export function EmailTabClient({
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Test-send modal (Phase 6) — opened from the campaigns table OR
+              from the composer's "Test send" button. The dialog lives at the
+              top level so it can stay open even if the composer closes. */}
+          <TestSendDialog
+            campaign={testSendTarget}
+            onOpenChange={(open) => {
+              if (!open) setTestSendTarget(null);
+            }}
+          />
         </div>
       )}
     </div>
@@ -659,14 +736,21 @@ function CampaignsTable({
   onDelete,
   onSaveAsTemplate,
   onRefresh,
+  onPause,
+  onResume,
+  onTestSend,
 }: {
   campaigns: Campaign[];
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
   onSaveAsTemplate: (c: Campaign) => void;
   onRefresh: () => Promise<void>;
+  onPause: (c: Campaign) => Promise<void>;
+  onResume: (c: Campaign) => Promise<void>;
+  onTestSend: (c: Campaign) => void;
 }) {
   const [sending, setSending] = React.useState<string | null>(null);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
 
   const filtered = campaigns.filter((c) => {
@@ -675,17 +759,19 @@ function CampaignsTable({
     return (
       c.name.toLowerCase().includes(q) ||
       c.subjectSnapshot.toLowerCase().includes(q) ||
-      c.status.toLowerCase().includes(q)
+      c.status.toLowerCase().includes(q) ||
+      (c.flow?.name?.toLowerCase().includes(q) ?? false)
     );
   });
 
   const handleSend = async (c: Campaign) => {
-    if (
-      !confirm(
-        `Send "${c.name}" now? This will email all matching recipients immediately.`
-      )
-    )
-      return;
+    // TSK-0074 Phase 5B: confirm dialog showing recipient count.
+    const recipientCount = c._count.recipients || c.recipientCount || 0;
+    const confirmMsg =
+      recipientCount > 0
+        ? `This will send "${c.name}" to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}. Continue?`
+        : `Send "${c.name}" now? This will email all matching recipients immediately. Continue?`;
+    if (!confirm(confirmMsg)) return;
     setSending(c.id);
     try {
       const res = await fetch(`/api/admin/email/campaigns/${c.id}/send`, {
@@ -700,10 +786,20 @@ function CampaignsTable({
         `Sent: ${data.sentCount} delivered, ${data.failedCount} failed out of ${data.totalRecipients} recipients`
       );
       await onRefresh();
-    } catch (e) {
+    } catch {
       toast.error("Failed to send campaign");
     } finally {
       setSending(null);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      toast.success("Campaigns refreshed");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -721,14 +817,30 @@ function CampaignsTable({
 
   return (
     <div className="space-y-3">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/80" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search campaigns..."
-          className="pl-8"
-        />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/80" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, subject, status, or flow..."
+            className="pl-8"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="h-9"
+        >
+          {refreshing ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Refresh
+        </Button>
       </div>
       <div className="rounded-lg border border-black/10 overflow-x-auto">
         <table className="w-full text-sm">
@@ -737,51 +849,82 @@ function CampaignsTable({
               <th className="text-left font-medium px-3 py-2.5">Name</th>
               <th className="text-left font-medium px-3 py-2.5">Status</th>
               <th className="text-left font-medium px-3 py-2.5">Subject</th>
+              <th className="text-left font-medium px-3 py-2.5">Flow</th>
               <th className="text-left font-medium px-3 py-2.5">Template</th>
               <th className="text-right font-medium px-3 py-2.5">Recipients</th>
-              <th className="text-left font-medium px-3 py-2.5">Created</th>
+              <th className="text-left font-medium px-3 py-2.5">Last sent</th>
               <th className="text-right font-medium px-3 py-2.5">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((c) => (
-              <tr key={c.id} className="border-t border-black/5 hover:bg-black/[0.02]">
-                <td className="px-3 py-2.5 font-medium text-black max-w-xs truncate">
-                  {c.name}
-                </td>
-                <td className="px-3 py-2.5">
-                  <StatusBadge status={c.status} />
-                </td>
-                <td className="px-3 py-2.5 text-black/70 max-w-md truncate">
-                  {c.subjectSnapshot}
-                </td>
-                <td className="px-3 py-2.5 text-black/80 text-xs">
-                  {c.template ? (
-                    <Badge variant="outline" className="font-normal text-xs">
-                      {c.template.name}
-                    </Badge>
-                  ) : (
-                    <span className="text-black/30">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 text-right text-black/80">
-                  {c._count.recipients > 0 ? c._count.recipients : "—"}
-                </td>
-                <td className="px-3 py-2.5 text-black/80 text-xs">
-                  {new Date(c.createdAt).toLocaleDateString()}
-                </td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                  {c.status === "DRAFT" && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onEdit(c)}
-                        className="h-7 px-2"
-                        title="Edit draft"
+            {filtered.map((c) => {
+              const canSend = c.status === "DRAFT" || c.status === "FAILED";
+              const canPause = c.status === "SENDING" || c.status === "SCHEDULED";
+              const canResume = c.status === "PAUSED";
+              const canEdit = c.status === "DRAFT" || c.status === "PAUSED";
+              const canDelete = c.status === "DRAFT" || c.status === "FAILED" || c.status === "PAUSED";
+              const canViewStats = c.status === "SENT";
+              const lastSent = c.completedAt || c.startedAt;
+              return (
+                <tr key={c.id} className="border-t border-black/5 hover:bg-black/[0.02]">
+                  <td className="px-3 py-2.5 font-medium text-black max-w-xs truncate">
+                    {c.name}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <StatusBadge status={c.status} />
+                  </td>
+                  <td className="px-3 py-2.5 text-black/70 max-w-md truncate">
+                    {c.subjectSnapshot}
+                  </td>
+                  <td className="px-3 py-2.5 text-black/80 text-xs">
+                    {c.flow ? (
+                      <a
+                        href={`/admin/email/flows?flow=${c.flow.id}`}
+                        className="inline-flex items-center gap-1 text-[#FF005A] hover:underline"
+                        title={`Flow status: ${c.flow.status}`}
                       >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </Button>
+                        <Workflow className="h-3 w-3" />
+                        <span className="truncate max-w-[120px]">{c.flow.name}</span>
+                      </a>
+                    ) : (
+                      <span className="text-black/30">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-black/80 text-xs">
+                    {c.template ? (
+                      <Badge variant="outline" className="font-normal text-xs">
+                        {c.template.name}
+                      </Badge>
+                    ) : (
+                      <span className="text-black/30">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-black/80">
+                    {c._count.recipients > 0 ? c._count.recipients : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap">
+                    {lastSent ? (
+                      <span title={new Date(lastSent).toISOString()}>
+                        {new Date(lastSent).toLocaleDateString()}{" "}
+                        {new Date(lastSent).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    ) : (
+                      <span className="text-black/30">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    {/* Test send — always visible */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onTestSend(c)}
+                      className="h-7 px-2 text-[#820A7D] hover:text-[#820A7D]"
+                      title="Send a test email"
+                    >
+                      <FlaskConical className="h-3.5 w-3.5" />
+                    </Button>
+                    {/* Send — only for DRAFT or FAILED */}
+                    {canSend && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -796,19 +939,45 @@ function CampaignsTable({
                           <Send className="h-3.5 w-3.5" />
                         )}
                       </Button>
+                    )}
+                    {/* Pause — for SENDING or SCHEDULED */}
+                    {canPause && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onDelete(c)}
-                        className="h-7 px-2 text-black/80 hover:text-red-600"
-                        title="Delete draft"
+                        onClick={() => onPause(c)}
+                        className="h-7 px-2 text-amber-600 hover:text-amber-700"
+                        title="Pause"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Pause className="h-3.5 w-3.5" />
                       </Button>
-                    </>
-                  )}
-                  {(c.status === "SENT" || c.status === "FAILED") && (
-                    <>
+                    )}
+                    {/* Resume — for PAUSED */}
+                    {canResume && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onResume(c)}
+                        className="h-7 px-2 text-green-600 hover:text-green-700"
+                        title="Resume"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {/* Edit — for DRAFT or PAUSED */}
+                    {canEdit && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onEdit(c)}
+                        className="h-7 px-2"
+                        title="Edit"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {/* View — for SENT or FAILED (read-only) */}
+                    {(c.status === "SENT" || c.status === "FAILED") && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -818,6 +987,21 @@ function CampaignsTable({
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
+                    )}
+                    {/* Stats — for SENT (placeholder) */}
+                    {canViewStats && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toast.info("Stats coming soon")}
+                        className="h-7 px-2 text-[#007E72] hover:text-[#007E72]"
+                        title="View stats (coming soon)"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {/* Save as template — for SENT or FAILED */}
+                    {(c.status === "SENT" || c.status === "FAILED") && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -827,14 +1011,27 @@ function CampaignsTable({
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
-                    </>
-                  )}
-                  {c.status === "SENDING" && (
-                    <Loader2 className="h-4 w-4 animate-spin text-[#FF005A] inline-block" />
-                  )}
-                </td>
-              </tr>
-            ))}
+                    )}
+                    {/* Delete — for DRAFT, FAILED, or PAUSED */}
+                    {canDelete && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onDelete(c)}
+                        className="h-7 px-2 text-black/80 hover:text-red-600"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {/* SENDING spinner — no other actions */}
+                    {c.status === "SENDING" && (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#FF005A] inline-block ml-1" />
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -843,19 +1040,27 @@ function CampaignsTable({
 }
 
 function StatusBadge({ status }: { status: string }) {
+  // TSK-0074 Phase 5B: colored status badges.
+  // DRAFT (gray), SCHEDULED (blue), SENDING (yellow pulse),
+  // SENT (green), FAILED (red), PAUSED (amber).
   const color =
     status === "DRAFT"
       ? "bg-black/10 text-black/80"
+      : status === "SCHEDULED"
+      ? "bg-blue-100 text-blue-700"
+      : status === "SENDING"
+      ? "bg-yellow-100 text-yellow-800"
       : status === "SENT"
       ? "bg-[#007E72]/15 text-[#007E72]"
-      : status === "SENDING"
-      ? "bg-[#FF005A]/15 text-[#FF005A]"
       : status === "FAILED"
       ? "bg-red-100 text-red-700"
+      : status === "PAUSED"
+      ? "bg-amber-100 text-amber-800"
       : "bg-black/10 text-black/80";
+  const pulse = status === "SENDING";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-semibold ${color}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.7rem] font-semibold ${color} ${pulse ? "animate-pulse" : ""}`}
     >
       {status}
     </span>
@@ -872,8 +1077,10 @@ function CampaignComposer({
   tags,
   membersCount,
   adminEmail,
+  flows,
   onSaved,
   onCancel,
+  onTestSend,
   onRequestSaveAsTemplate,
 }: {
   campaign: Campaign | null;
@@ -881,8 +1088,10 @@ function CampaignComposer({
   tags: { label: string; color: string | null }[];
   membersCount: number;
   adminEmail: string;
+  flows: FlowSummary[];
   onSaved: () => void;
   onCancel: () => void;
+  onTestSend: (c: Campaign) => void;
   onRequestSaveAsTemplate: (subject: string, bodyHtml: string, suggestedName: string) => Promise<void>;
 }) {
   const isFrozen = campaign && (campaign.status === "SENT" || campaign.status === "SENDING");
@@ -902,6 +1111,27 @@ function CampaignComposer({
   const [showPreview, setShowPreview] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [savingTemplate, setSavingTemplate] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [pausing, setPausing] = React.useState(false);
+
+  // TSK-0074 Phase 5C: source-choice state for new campaigns.
+  // "flow"  → user picked an ACTIVE flow from the dropdown; flowId is set.
+  // "blank" → user opted for the legacy manual template picker (no flow link).
+  // null    → user hasn't picked yet (shows the choice UI).
+  const [sourceChoice, setSourceChoice] = React.useState<"flow" | "blank" | null>(
+    isEditing ? "blank" : null
+  );
+  const [selectedFlowId, setSelectedFlowId] = React.useState<string | null>(
+    campaign?.flowId ?? null
+  );
+  const [loadingFlow, setLoadingFlow] = React.useState(false);
+
+  // Active flows only — a campaign can only be backed by an ACTIVE flow.
+  // (A DRAFT/PAUSED/ARCHIVED flow has no live campaign.)
+  const activeFlows = React.useMemo(
+    () => flows.filter((f) => f.status === "ACTIVE"),
+    [flows]
+  );
 
   const resolvedListSource = React.useMemo(() => {
     if (listSource === "TAG" && tagLabel) return `TAG:${tagLabel}`;
@@ -928,6 +1158,46 @@ function CampaignComposer({
     setBodyHtml(tpl.bodyHtml);
     if (!name) setName(tpl.name);
     toast.success(`Loaded template "${tpl.name}"`);
+  };
+
+  // TSK-0074 Phase 5C: when a flow is selected, fetch its first step's
+  // template + audience and pre-fill the composer. Mirrors the backend
+  // auto-create logic in PATCH /api/email-flows/[id].
+  const handleSelectFlow = async (flowId: string) => {
+    setSelectedFlowId(flowId);
+    setLoadingFlow(true);
+    try {
+      const res = await fetch(`/api/email-flows/${flowId}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Failed to load flow");
+        return;
+      }
+      const data = await res.json();
+      const flow = data.flow;
+      if (!flow) return;
+      const firstStep = (flow.steps || []).sort(
+        (a: { position: number }, b: { position: number }) => a.position - b.position
+      )[0];
+      if (!firstStep) {
+        toast.warning("Flow has no steps — start blank instead");
+        return;
+      }
+      // Pre-fill from the first step's template + subject variant + audience.
+      if (firstStep.template?.subject) setSubject(firstStep.template.subject);
+      else if (firstStep.subjectVariantA) setSubject(firstStep.subjectVariantA);
+      if (firstStep.template?.bodyHtml) setBodyHtml(firstStep.template.bodyHtml);
+      if (!name) setName(`${flow.name} — campaign`);
+      if (firstStep.audienceId) {
+        setListSource(`AUDIENCE:${firstStep.audienceId}`);
+      }
+      toast.success(`Pre-filled from flow "${flow.name}" (step 1)`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to load flow details");
+    } finally {
+      setLoadingFlow(false);
+    }
   };
 
   const handleSaveDraft = async () => {
@@ -975,6 +1245,7 @@ function CampaignComposer({
             fromName,
             fromEmail,
             replyTo,
+            ...(selectedFlowId ? { flowId: selectedFlowId } : {}),
           }),
         });
         if (!res.ok) {
@@ -993,6 +1264,63 @@ function CampaignComposer({
     }
   };
 
+  // TSK-0074 Phase 5C: Send now from inside the composer (same endpoint as
+  // the row Send button). Only available when editing an existing DRAFT or
+  // FAILED campaign.
+  const handleSendNow = async () => {
+    if (!campaign) return;
+    const recipientCount = campaign._count.recipients || campaign.recipientCount || 0;
+    const confirmMsg =
+      recipientCount > 0
+        ? `This will send "${campaign.name}" to ${recipientCount} recipient${recipientCount === 1 ? "" : "s"}. Continue?`
+        : `Send "${campaign.name}" now? This will email all matching recipients immediately. Continue?`;
+    if (!confirm(confirmMsg)) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/admin/email/campaigns/${campaign.id}/send`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send campaign");
+        return;
+      }
+      toast.success(
+        `Sent: ${data.sentCount} delivered, ${data.failedCount} failed out of ${data.totalRecipients} recipients`
+      );
+      onSaved();
+    } catch {
+      toast.error("Failed to send campaign");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // TSK-0074 Phase 5C: Pause from inside the composer.
+  const handlePauseFromComposer = async () => {
+    if (!campaign) return;
+    if (!confirm(`Pause "${campaign.name}"? You can resume it later.`)) return;
+    setPausing(true);
+    try {
+      const res = await fetch(`/api/admin/email/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PAUSED" }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || "Failed to pause campaign");
+        return;
+      }
+      toast.success(`Campaign "${campaign.name}" paused`);
+      onSaved();
+    } catch {
+      toast.error("Failed to pause campaign");
+    } finally {
+      setPausing(false);
+    }
+  };
+
   const handleSaveAsTemplate = async () => {
     if (!subject.trim() || !bodyHtml.trim()) {
       toast.error("Subject and body are required to save as template");
@@ -1007,10 +1335,133 @@ function CampaignComposer({
     }
   };
 
+  // TSK-0074 Phase 5C: derive action-button visibility from the campaign
+  // state. Same conditions as the row buttons in CampaignsTable.
+  const canSendFromComposer =
+    isEditing && campaign && (campaign.status === "DRAFT" || campaign.status === "FAILED");
+  const canPauseFromComposer =
+    isEditing && campaign && (campaign.status === "SENDING" || campaign.status === "SCHEDULED");
+  const canTestSendFromComposer = isEditing && !!campaign;
+
   return (
     <div className="space-y-4 py-2">
-      {/* Template picker (only for new campaigns) */}
-      {!isEditing && templates.length > 0 && (
+      {/* TSK-0074 Phase 5C: source chooser (only for NEW campaigns).
+          Three options:
+            A) Pick an ACTIVE flow — pre-fills subject/body/audience from the
+               flow's first step. The campaign is then "flow-backed": flow
+               edits will refresh its snapshots automatically.
+            B) Create a new flow — link to /admin/email/flows with a toast.
+            C) Start blank — the legacy manual template picker (no flow link). */}
+      {!isEditing && sourceChoice === null && (
+        <div className="rounded-md border border-[#FF005A]/20 bg-[#FF005A]/[0.03] p-4 space-y-3">
+          <div>
+            <Label className="text-xs font-semibold uppercase tracking-wider text-[#FF005A]">
+              Choose source
+            </Label>
+            <p className="text-xs text-black/70 mt-0.5">
+              Pick an existing ACTIVE flow to pre-fill this campaign from its first
+              step, or start blank for a one-off send.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setSourceChoice("flow")}
+              disabled={activeFlows.length === 0}
+              className="rounded-md border border-black/10 bg-white p-3 text-left hover:border-[#FF005A]/40 hover:shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Workflow className="h-4 w-4 text-[#FF005A] mb-1.5" />
+              <div className="text-sm font-semibold text-black">Select existing flow</div>
+              <div className="text-[0.7rem] text-black/70 mt-0.5">
+                {activeFlows.length === 0
+                  ? "No ACTIVE flows yet — activate one in the Flow Builder first."
+                  : `${activeFlows.length} flow${activeFlows.length === 1 ? "" : "s"} available`}
+              </div>
+            </button>
+            <a
+              href="/admin/email/flows"
+              onClick={(e) => {
+                e.preventDefault();
+                toast.info("Create a flow first, then come back here.");
+                setTimeout(() => {
+                  if (typeof window !== "undefined") {
+                    window.location.href = "/admin/email/flows";
+                  }
+                }, 800);
+              }}
+              className="rounded-md border border-black/10 bg-white p-3 text-left hover:border-[#FF005A]/40 hover:shadow-sm transition-all"
+            >
+              <Plus className="h-4 w-4 text-[#FF005A] mb-1.5" />
+              <div className="text-sm font-semibold text-black">Create new flow</div>
+              <div className="text-[0.7rem] text-black/70 mt-0.5">
+                Open the Flow Builder to design an automated sequence.
+              </div>
+            </a>
+            <button
+              type="button"
+              onClick={() => setSourceChoice("blank")}
+              className="rounded-md border border-black/10 bg-white p-3 text-left hover:border-[#FF005A]/40 hover:shadow-sm transition-all"
+            >
+              <FileText className="h-4 w-4 text-[#820A7D] mb-1.5" />
+              <div className="text-sm font-semibold text-black">Start blank (no flow)</div>
+              <div className="text-[0.7rem] text-black/70 mt-0.5">
+                Manual template picker — one-off send with no flow link.
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Flow picker (Option A) */}
+      {!isEditing && sourceChoice === "flow" && (
+        <div className="rounded-md border border-[#FF005A]/20 bg-[#FF005A]/[0.03] p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-[#FF005A]">
+              Select an ACTIVE flow
+            </Label>
+            <button
+              type="button"
+              onClick={() => {
+                setSourceChoice(null);
+                setSelectedFlowId(null);
+              }}
+              className="text-[0.7rem] text-black/60 hover:text-black underline"
+            >
+              ← Back to source chooser
+            </button>
+          </div>
+          {loadingFlow ? (
+            <div className="flex items-center gap-2 text-sm text-black/70 py-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading flow details…
+            </div>
+          ) : (
+            <Select onValueChange={handleSelectFlow} value={selectedFlowId ?? undefined}>
+              <SelectTrigger className="bg-white">
+                <SelectValue placeholder="Pick an ACTIVE flow…" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeFlows.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}{" "}
+                    <span className="text-black/70 ml-1">
+                      ({f._count?.steps ?? 0} steps)
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {selectedFlowId && (
+            <p className="text-[0.7rem] text-[#FF005A]">
+              ✓ Campaign will be linked to this flow. Saving the flow in the Flow
+              Builder will refresh this campaign&apos;s snapshots automatically.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Template picker (Option C — start blank, OR when editing) */}
+      {(sourceChoice === "blank" || isEditing) && templates.length > 0 && (
         <div className="rounded-md border border-[#820A7D]/20 bg-[#820A7D]/[0.03] p-3">
           <Label className="text-xs font-semibold uppercase tracking-wider text-[#820A7D]">
             Start from template (optional)
@@ -1027,6 +1478,23 @@ function CampaignComposer({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {/* If editing a flow-backed campaign, show a banner linking back to the flow. */}
+      {isEditing && campaign?.flow && (
+        <div className="rounded-md border border-[#FF005A]/20 bg-[#FF005A]/[0.04] px-3 py-2 text-xs text-black/80 flex items-center gap-2">
+          <Workflow className="h-3.5 w-3.5 text-[#FF005A]" />
+          <span>
+            Linked to flow{" "}
+            <a
+              href={`/admin/email/flows?flow=${campaign.flow.id}`}
+              className="font-semibold text-[#FF005A] hover:underline"
+            >
+              {campaign.flow.name}
+            </a>
+            . Saving the flow as ACTIVE refreshes this campaign&apos;s snapshots automatically.
+          </span>
         </div>
       )}
 
@@ -1113,8 +1581,19 @@ function CampaignComposer({
         <div>
           <Label>Recipient list</Label>
           <Select
-            value={listSource}
-            onValueChange={setListSource}
+            value={listSource.startsWith("AUDIENCE:") ? "AUDIENCE" : listSource}
+            onValueChange={(v) => {
+              // TSK-0074 Phase 5C: when the user picks a different option
+              // while a flow's AUDIENCE: listSource is active, switch to
+              // ALL_MEMBERS (the user is explicitly overriding the flow's
+              // audience). The flow's listSource is restored next time
+              // the user re-selects the flow.
+              if (v === "AUDIENCE") {
+                // Keep the existing AUDIENCE:... value (already in listSource).
+                return;
+              }
+              setListSource(v);
+            }}
             disabled={!!isFrozen}
           >
             <SelectTrigger className="mt-1 bg-white">
@@ -1130,8 +1609,19 @@ function CampaignComposer({
                 </SelectItem>
               ))}
               <SelectItem value="MANUAL">Manual email list</SelectItem>
+              {listSource.startsWith("AUDIENCE:") && (
+                <SelectItem value="AUDIENCE" disabled>
+                  Audience from flow (locked)
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
+          {listSource.startsWith("AUDIENCE:") && (
+            <p className="text-[0.7rem] text-[#FF005A] mt-1">
+              Audience set by the linked flow&apos;s first step. Pick All members /
+              Tag / Manual above to override.
+            </p>
+          )}
         </div>
         {listSource === "MANUAL" && (
           <div>
@@ -1201,6 +1691,54 @@ function CampaignComposer({
         >
           Close
         </Button>
+
+        {/* Test send — only available once the campaign exists (need an id). */}
+        {canTestSendFromComposer && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => campaign && onTestSend(campaign)}
+            className="border-[#820A7D]/30 text-[#820A7D] hover:bg-[#820A7D]/5"
+          >
+            <FlaskConical className="h-4 w-4 mr-1.5" />
+            Test send
+          </Button>
+        )}
+
+        {/* Pause — only for SENDING/SCHEDULED */}
+        {canPauseFromComposer && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handlePauseFromComposer}
+            disabled={pausing}
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+          >
+            {pausing ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Pause className="h-4 w-4 mr-1.5" />
+            )}
+            Pause
+          </Button>
+        )}
+
+        {/* Send now — only for DRAFT/FAILED */}
+        {canSendFromComposer && (
+          <Button
+            type="button"
+            onClick={handleSendNow}
+            disabled={sending}
+            className="bg-[#FF005A] hover:bg-[#d8004d] text-white"
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4 mr-1.5" />
+            )}
+            Send now
+          </Button>
+        )}
 
         {/* Save as template — always available (in-composer button #3) */}
         <Button
@@ -1413,7 +1951,7 @@ function TemplateEditor({
         </div>
         <p className="text-xs text-black/50 mt-1 text-center">
           Email-safe width: 600px · Merge field <code>{"{{name}}"}</code> resolves
-          to recipient's name when sent.
+          to recipient&apos;s name when sent.
         </p>
       </div>
 
@@ -1537,5 +2075,184 @@ function SaveAsTemplateForm({
         </Button>
       </DialogFooter>
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// TestSendDialog (Phase 6) — modal for sending a test email to a free-typed
+// list of email addresses. Calls POST /api/admin/email/campaigns/[id]/test-send.
+// ----------------------------------------------------------------------------
+
+function TestSendDialog({
+  campaign,
+  onOpenChange,
+}: {
+  campaign: Campaign | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [emails, setEmails] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const [result, setResult] = React.useState<{
+    sent: number;
+    failed: number;
+    total: number;
+    errors?: string[];
+  } | null>(null);
+
+  const open = !!campaign;
+
+  // Reset state when the dialog opens for a new campaign.
+  React.useEffect(() => {
+    if (campaign) {
+      setEmails("");
+      setResult(null);
+      setSending(false);
+    }
+  }, [campaign?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSend = async () => {
+    if (!campaign) return;
+    const trimmed = emails.trim();
+    if (!trimmed) {
+      toast.error("Enter at least one email address");
+      return;
+    }
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch(
+        `/api/admin/email/campaigns/${campaign.id}/test-send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emails: trimmed }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Failed to send test email");
+        return;
+      }
+      setResult({
+        sent: data.sent ?? 0,
+        failed: data.failed ?? 0,
+        total: data.total ?? 0,
+        errors: data.errors,
+      });
+      if (data.sent > 0) {
+        toast.success(`Test sent: ${data.sent} email${data.sent === 1 ? "" : "s"}`);
+      } else if (data.failed > 0) {
+        toast.error("All test sends failed — see details below");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to send test email");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-[#820A7D]" />
+            Test send
+          </DialogTitle>
+          <DialogDescription>
+            Send a test email to a free-typed list of addresses. Bypasses the
+            audience — no recipient rows are created, no events are logged.
+          </DialogDescription>
+        </DialogHeader>
+
+        {campaign && (
+          <div className="space-y-3 py-1">
+            <div className="rounded-md bg-black/[0.03] p-3 text-xs space-y-1">
+              <div className="font-semibold text-black">{campaign.name}</div>
+              <div className="text-black/70">
+                <span className="font-medium">Subject:</span>{" "}
+                {campaign.subjectSnapshot || "(empty)"}
+              </div>
+              <div className="text-black/70">
+                <span className="font-medium">Status:</span>{" "}
+                <StatusBadge status={campaign.status} />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="ts-emails">
+                Email addresses
+              </Label>
+              <Textarea
+                id="ts-emails"
+                value={emails}
+                onChange={(e) => setEmails(e.target.value)}
+                rows={4}
+                placeholder="friend@example.com, eze@massapro.com"
+                className="mt-1 font-mono text-xs"
+                disabled={sending}
+              />
+              <p className="text-[0.7rem] text-black/50 mt-1">
+                Comma-separated, newline-separated, or one per line. Invalid
+                entries are silently dropped (listed in the result below).
+              </p>
+            </div>
+
+            {result && (
+              <div
+                className={`rounded-md p-3 text-xs space-y-1 ${
+                  result.failed > 0
+                    ? "border border-amber-200 bg-amber-50 text-amber-900"
+                    : "border border-[#007E72]/30 bg-[#007E72]/[0.04] text-[#007E72]"
+                }`}
+              >
+                <div className="font-semibold">
+                  Sent: {result.sent} · Failed: {result.failed} · Total: {result.total}
+                </div>
+                {result.errors && result.errors.length > 0 && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer font-medium">
+                      Show {result.errors.length} error{result.errors.length === 1 ? "" : "s"}
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                      {result.errors.map((err, i) => (
+                        <li key={i} className="font-mono text-[0.7rem] break-all">
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={sending}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSend}
+                disabled={sending || !emails.trim()}
+                className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white"
+              >
+                {sending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <FlaskConical className="h-4 w-4 mr-1.5" />
+                )}
+                Send test
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
