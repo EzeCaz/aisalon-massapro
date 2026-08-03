@@ -9,10 +9,24 @@
  *
  * Connection URL: io("/?XTransformPort=3003")
  * (Caddy routes the request to mini-services/quiz-service on port 3003)
+ *
+ * Env gating: set NEXT_PUBLIC_REALTIME_ENABLED="false" to disable the
+ * socket entirely (e.g. on Vercel where there's no Caddy + quiz-service).
+ * The quiz UI already degrades to polling /api/quiz/[sessionId]/state
+ * when the socket isn't connected.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
+
+/**
+ * Whether the realtime WebSocket services are available in this
+ * deployment. Defaults to true (self-hosted with Caddy in front).
+ * On Vercel, set NEXT_PUBLIC_REALTIME_ENABLED="false" to suppress the
+ * repeated `WebSocket connection failed` console errors.
+ */
+const REALTIME_ENABLED =
+  process.env.NEXT_PUBLIC_REALTIME_ENABLED !== "false";
 
 export type QuizStatus =
   | "DRAFT"
@@ -97,6 +111,11 @@ export function useQuizSocket({
 
   useEffect(() => {
     if (!sessionId || !userId) return;
+    // If realtime is disabled for this deployment (e.g. on Vercel where
+    // there's no Caddy + quiz-service), bail out BEFORE constructing the
+    // socket — io() would immediately try to upgrade to wss:// and fail
+    // every second, flooding the console with WebSocket errors.
+    if (!REALTIME_ENABLED) return;
 
     const socket = io("/?XTransformPort=3003", {
       transports: ["websocket", "polling"],

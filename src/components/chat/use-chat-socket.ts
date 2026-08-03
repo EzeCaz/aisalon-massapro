@@ -17,10 +17,29 @@
  *
  * Connection URL: io("/?XTransformPort=3004")
  * (Caddy routes the request to mini-services/chat-service on port 3004)
+ *
+ * Env gating: set NEXT_PUBLIC_REALTIME_ENABLED="false" to disable the
+ * socket entirely (e.g. on Vercel where there's no Caddy + chat-service).
+ * When disabled, the hook becomes a no-op — no WebSocket attempts, no
+ * console errors. The app falls back to the polling already in place
+ * (InboxButton refreshes unread count every 20s when the WS is down).
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
+
+/**
+ * Whether the realtime WebSocket services are available in this
+ * deployment. Defaults to true (self-hosted with Caddy in front).
+ * On Vercel, set NEXT_PUBLIC_REALTIME_ENABLED="false" to suppress the
+ * repeated `WebSocket connection failed` console errors that happen
+ * because there's no Caddy reverse_proxy to route /socket.io/ to the
+ * chat-service on port 3004.
+ *
+ * Inline-evaluated at module load so it's stable across renders.
+ */
+const REALTIME_ENABLED =
+  process.env.NEXT_PUBLIC_REALTIME_ENABLED !== "false";
 
 export interface ChatMessagePayload {
   id: string;
@@ -117,6 +136,11 @@ export function useChatSocket({
   // ── Connection lifecycle (depends only on userId) ───────────────
   useEffect(() => {
     if (!userId) return;
+    // If realtime is disabled for this deployment (e.g. on Vercel where
+    // there's no Caddy + chat-service), bail out BEFORE constructing the
+    // socket — io() would immediately try to upgrade to wss:// and fail
+    // every 5s, flooding the console with WebSocket errors.
+    if (!REALTIME_ENABLED) return;
 
     const socket = io("/?XTransformPort=3004", {
       transports: ["websocket", "polling"],
