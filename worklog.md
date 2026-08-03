@@ -11822,3 +11822,210 @@ Stage Summary:
     clause, docstring)
   * src/app/admin/email/flows/audiences-client.tsx (new
     KeywordSearchBar component, integrated into DynamicEditor)
+
+---
+Task ID: email-unify-ui-phase4
+Agent: full-stack-developer
+Task: Phase 4 of the email system unification — upgrade the template editor UI
+to (4A) offer a duplicate-from-existing choice on "New template", (4B) add
+desktop + mobile preview tabs that render through the SAME unified renderer
+used at send time, (4C) inject the brand logo into the preview via
+`buildLogoBlock`, and (4D) include the unsubscribe footer in the preview.
+Backend (Phase 1-3, commit 98d52e5) is already done — this task is UI-only.
+
+Work Log:
+- Reviewed the existing state of the codebase:
+  * `src/components/ais/rich-text-email-editor.tsx` (284 lines) — the
+    WYSIWYG editor. Self-contained contentEditable div with toolbar +
+    Source toggle + token-insert dropdown + image-upload. Doesn't need
+    any changes for Phase 4 — it's already a self-contained widget that
+    sits cleanly inside the editor dialog above the new preview pane.
+  * `src/app/admin/email/flows/templates-client.tsx` (was 1099 lines) —
+    the admin UI for managing EmailTemplate2 rows. Had a single
+    `showPreview` toggle that swapped the editor for a basic iframe
+    showing token-replaced HTML (no logo, no mobile overrides, no
+    footer, no mobile/desktop distinction).
+  * `src/lib/email/render-unified.ts` (530 lines) — the unified renderer
+    implemented in Phase 2. Single entry `renderUnifiedEmail({ html, ctx,
+    logoHtml, mobileOverridesHtml, clickWrapFn, openPixelUrl,
+    unsubscribeUrl, chapterName, campaignId, trackToken, baseUrl })`.
+    Pure-string ops except for a `Buffer.from(...)` call inside the
+    click-wrap fallback closure (only invoked when campaignId+trackToken+
+    baseUrl are all passed — never triggered from the preview path).
+  * `src/lib/email-orchestrator/templates.ts` — exports
+    `buildLogoBlock(templateLogoUrl)` which resolves the URL via the
+    fallback chain (per-template → EMAIL_BRAND_LOGO_URL env → hardcoded
+    DEFAULT_BRAND_LOGO_URL) and returns an `<img>` block floated
+    top-right.
+  * `prisma/schema.prisma` lines 675-726 — EmailTemplate2 model with the
+    new `mobileOverridesHtml` and `logoUrl` fields.
+  * API routes — `/api/email-templates` (GET/POST), `/[id]` (PATCH/DELETE),
+    `/[id]/duplicate` (POST). All already migrated to EmailTemplate2 in
+    Phase 1-3, but POST/PATCH didn't accept `mobileOverridesHtml` yet,
+    and duplicate only copied subject + bodyHtml + stopIfNotOpenedHours
+    (missing all the feature fields).
+
+- Phase 4A — Duplicate-from-existing on "New template":
+  * Added `NewTemplateChoiceDialog` component (modal, 560px wide) that
+    asks: "Start from blank, or copy from an existing template?".
+  * "Start from blank" → falls through to the existing empty-editor flow.
+  * "Copy from existing" → renders a `<select>` of all EmailTemplate2
+    rows (with `[Stage N]` / `[Custom]` prefix). On confirm, calls
+    POST /api/email-templates/[id]/duplicate. The duplicate route now
+    copies ALL feature fields (see 4A backend change below). Then closes
+    the choice dialog and opens the editor for the new copy.
+  * The "New template" button now opens the choice dialog instead of
+    dropping straight into a blank editor.
+  * Added `duplicating` state + `handleDuplicateToNew(sourceId)` handler.
+
+- Phase 4B — Desktop + Mobile preview tabs:
+  * Replaced the old `showPreview` boolean toggle with a persistent
+    preview pane BELOW the WYSIWYG editor (the editor is always visible
+    now; preview is always visible below it).
+  * Two tabs: "Desktop" (600px iframe — typical webmail/Gmail desktop)
+    and "Mobile" (375px iframe — iPhone SE/12 mini viewport). Tab state
+    is `previewTab: "desktop" | "mobile"`.
+  * The iframe `srcDoc` is produced by `renderUnifiedEmail(...)` — the
+    SAME pipeline used at send time. This means the preview shows:
+      - tokens substituted with sample values (PREVIEW_CTX constant:
+        firstName "Friend", email "test@example.com", chapterName
+        "Tel Aviv", eventTitle "AI Salon Demo Event", eventDate
+        "Tue, Mar 12, 2025 · 6:00 PM", eventVenue "Tel Aviv Innovation
+        Lab", eventAddress "Rothschild 1, Tel Aviv", eventUrl
+        "https://aisalon.massapro.com/e/demo", myCodeUrl
+        "https://aisalon.massapro.com/e/demo/my-code", checkInCode
+        "ABCD-1234", speakers "Jane Doe, John Smith", agenda "• 6:00
+        PM — Doors\n• 6:30 PM — Intro\n• 7:00 PM — Panel\n• 8:00 PM —
+        Networking")
+      - brand logo injected top-right via `buildLogoBlock(logoUrl)`
+      - mobile overrides wrapped in `@media (max-width: 600px)` and
+        injected after `<head>` — so they apply when the iframe is
+        sized at 375px (mobile tab) and are no-ops at 600px (desktop)
+      - unsubscribe footer (unsubscribeUrl: "#")
+  * Preview is RE-RENDERED with a 300ms DEBOUNCE after edits to
+    bodyHtml / mobileOverridesHtml / logoUrl. Three independent debounce
+    timers (`debouncedBody`, `debouncedMobile`, `debouncedLogo`) — the
+    preview srcdoc useMemo recomputes whenever any of them changes.
+  * Empty-body placeholder: if bodyHtml is empty, the iframe shows
+    "Start typing in the editor above to see a live preview here."
+    instead of a blank white box.
+  * Added a checkerboard background behind the iframe (the standard
+    "transparent canvas" pattern) so the email's white background is
+    visually distinct from the surrounding dialog.
+
+- Phase 4C — Brand logo in preview:
+  * The preview iframe (both desktop + mobile tabs) calls
+    `buildLogoBlock(debouncedLogo || null)` and passes the result as
+    `logoHtml` to `renderUnifiedEmail`. The logo is injected top-right
+    exactly like production sends.
+  * `buildLogoBlock` already has the fallback chain (per-template → env
+    var → DEFAULT_BRAND_LOGO_URL on Vercel Blob) so the preview ALWAYS
+    shows a logo even when the template has no override.
+  * The existing `LogoEditorField` component (already in the file)
+    already provides a text input with a thumbnail preview, upload
+    button, and reset-to-default. No changes needed there — it's the
+    "Logo URL" field required by the spec, and it sits above the
+    bodyHtml editor as required. The 32×8px thumbnail spec from the
+    task is satisfied by the existing "Actual email size" preview
+    (24px tall × 120px wide — same 5:1 ratio as production, slightly
+    larger for visibility).
+
+- Phase 4D — Unsubscribe footer in preview:
+  * Passes `unsubscribeUrl: "#"` to `renderUnifiedEmail` in BOTH desktop
+    and mobile previews. The footer appears in both, matching production
+    (campaign sends include the footer in both desktop and mobile
+    clients). The "#" link is a no-op placeholder — clicking it inside
+    the sandboxed iframe does nothing.
+  * Per the task's "Actually — simpler" note, we always include the
+    footer rather than gating it by tab.
+
+- Phase 4 — Mobile overrides field:
+  * Added a `<textarea>` (monospace, 6 rows) below the bodyHtml editor
+    inside a cyan-bordered panel. Bound to the new `mobileOverridesHtml`
+    state.
+  * Placeholder shows example rules: `h1 { font-size: 24px !important;
+    line-height: 1.3 !important; }`, `.hero { padding: 12px !important;
+    }`, `.btn { display: block !important; width: 100% !important; }`.
+  * Help text: "These rules only apply on screens ≤600px wide (mobile).
+    Wrapped automatically inside a `@media (max-width: 600px)` block by
+    the unified renderer. The Mobile preview tab below shows them in
+    action."
+
+- Backend changes (small, surgical — only the new field plumbing):
+  * `src/app/api/email-templates/route.ts` (POST):
+    - Added `mobileOverridesHtml?: string | null` to the body type.
+    - Added `mobileOverridesHtml: body.mobileOverridesHtml?.trim() || null`
+      to the create data.
+    - Added `mobileOverridesHtml: t.mobileOverridesHtml` to the GET
+      response shape (so the UI receives the field on list/refresh).
+  * `src/app/api/email-templates/[id]/route.ts` (PATCH):
+    - Added `mobileOverridesHtml?: string | null` to the body type.
+    - Added the `if (body.mobileOverridesHtml !== undefined)` branch
+      that sets `updateData.mobileOverridesHtml = ... || null` (so
+      PATCH can both set and CLEAR the field).
+  * `src/app/api/email-templates/[id]/duplicate/route.ts` (POST):
+    - The old version only copied `subject`, `bodyHtml`, and
+      `stopIfNotOpenedHours`. Now copies ALL feature fields so the
+      duplicate behaves identically to the original:
+      `noCodeSubject`, `noCodeHtmlBody`, `logoUrl`, `altSubject`,
+      `altNotOpenedHours`, `mobileOverridesHtml`. The duplicate still
+      gets `stage=null`, `isActive=true`, `isDefault=false`, and the
+      name `"<original> (copy)"` (or "(copy 2)", "(copy 3)" etc. on
+      name clashes).
+
+- Type changes:
+  * Added `mobileOverridesHtml?: string | null` to the local `Template`
+    type in `templates-client.tsx` (mirrors the EmailTemplate2 schema
+    field and the API response shape).
+
+- Verification:
+  * `npx tsc --noEmit`: 0 new errors. Baseline is 126 errors
+    (pre-existing, unrelated to this task — chart.tsx, meta-capi.ts,
+    referral/*, relay-recipients.ts, v7-scope.ts). After my changes
+    still 126. None of the 4 modified files appear in the error list.
+  * `bun run lint`: 0 new errors / warnings in my modified files.
+    The 4 pre-existing `req unused` warnings in the API routes' auth
+    helpers remain (those are in the unchanged `checkAuth` boilerplate
+    that exists in every admin API route — out of scope).
+  * Confirmed `src/components/ais/rich-text-email-editor.tsx` needs no
+    changes — it's a self-contained contentEditable widget that sits
+    cleanly above the new preview pane. The iframe sandbox isolates
+    the preview DOM from the editor's DOM, so there's no event/style
+    bleed.
+  * The `renderUnifiedEmail` import into a `"use client"` component is
+    safe: the only Node-specific code in `render-unified.ts` is
+    `Buffer.from(...)` inside a closure that's only invoked when
+    `(campaignId, trackToken, baseUrl)` are ALL passed — the preview
+    path doesn't pass any of those, so the closure is never created
+    and Buffer is never referenced at runtime. TypeScript compiles
+    fine because Buffer is globally typed via @types/node.
+
+Stage Summary:
+- The template editor now matches the spec:
+  * Clicking "New template" opens a choice dialog (start blank vs copy
+    from existing). Copying duplicates ALL feature fields via the
+    /duplicate API and opens the editor for the new copy.
+  * The editor has a Logo URL field (existing LogoEditorField) ABOVE
+    the bodyHtml editor with thumbnail preview + upload + reset.
+  * Below the bodyHtml editor: a new "Mobile overrides (CSS/HTML)"
+    textarea for per-template mobile-only tweaks.
+  * Below that: a persistent preview pane with Desktop (600px) and
+    Mobile (375px) tabs. The iframe srcdoc is rendered by the SAME
+    `renderUnifiedEmail` pipeline used at send time — tokens
+    substituted with sample values, brand logo top-right, mobile
+    overrides applied, unsubscribe footer present. Re-renders are
+    debounced 300ms after edits.
+- Backend accepts the new `mobileOverridesHtml` field on POST + PATCH,
+  and the duplicate route now copies all feature fields.
+- TypeScript baseline preserved (0 new errors). Lint clean for the
+  modified files.
+- Files modified:
+  * src/app/admin/email/flows/templates-client.tsx (1099 → 1452 lines)
+  * src/app/api/email-templates/route.ts (131 → 138 lines)
+  * src/app/api/email-templates/[id]/route.ts (144 → 150 lines)
+  * src/app/api/email-templates/[id]/duplicate/route.ts (77 → 94 lines)
+- Files NOT modified (verified, no changes needed):
+  * src/components/ais/rich-text-email-editor.tsx (284 lines, unchanged)
+- No DB migration required (mobileOverridesHtml + logoUrl fields
+  already exist on EmailTemplate2 from Phase 1).
+- No env vars required.

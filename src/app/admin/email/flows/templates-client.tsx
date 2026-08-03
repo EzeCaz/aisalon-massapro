@@ -12,21 +12,38 @@
  *     + by-flow breakdown + recent sends list.
  *   - Live preview of the rendered HTML (iframe srcdoc).
  *
+ * TSK-0074 Phase 4 — template editor upgrade:
+ *   - "New template" opens a choice dialog: start blank OR copy from an
+ *     existing template (calls /duplicate, then opens the editor for the
+ *     new copy).
+ *   - Editor has a Logo URL field (with thumbnail preview) ABOVE the body.
+ *   - Below the body WYSIWYG: a "Mobile overrides (CSS/HTML)" textarea for
+ *     per-template mobile-only tweaks (wrapped in @media (max-width:600px)
+ *     by the unified renderer).
+ *   - Below the editor: a persistent preview pane with Desktop (600px) and
+ *     Mobile (375px) tabs. The iframe srcdoc is produced by the SAME
+ *     `renderUnifiedEmail` pipeline used at send time, so the preview
+ *     matches production rendering 1:1 (logo top-right, mobile overrides
+ *     applied, unsubscribe footer present, tokens substituted with sample
+ *     values). Re-renders are debounced 300ms after edits.
+ *
  * Embedded as a tab on the /admin/email/flows page.
  */
 
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  Plus, Loader2, Trash2, Save, Eye, X, Copy, Pencil,
+  Plus, Loader2, Trash2, X, Copy, Pencil,
   AlertCircle, FileText, BarChart3, Power, Save as SaveIcon, FilePlus2,
-  Upload, RotateCcw,
+  Upload, RotateCcw, Monitor, Smartphone,
 } from "lucide-react";
 import { RichTextEmailEditor } from "@/components/ais/rich-text-email-editor";
 import {
   DEFAULT_BRAND_LOGO_URL,
   resolveLogoUrl,
+  buildLogoBlock,
 } from "@/lib/email-orchestrator/templates";
+import { renderUnifiedEmail, type UnifiedRenderContext } from "@/lib/email/render-unified";
 
 // Full template type — fetched from /api/email-templates (not the
 // minimal FlowTemplate shape used by the flow builder).
@@ -45,6 +62,9 @@ type Template = {
   // Feature 3: alt-subject re-send
   altSubject?: string | null;
   altNotOpenedHours?: number | null;
+  // TSK-0074 Phase 4: mobile-only CSS/HTML overrides (wrapped in
+  // @media (max-width:600px) by the unified renderer).
+  mobileOverridesHtml?: string | null;
   isActive: boolean;
   isDefault?: boolean;
   flowStepsCount: number;
@@ -66,6 +86,12 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
   const [editing, setEditing] = React.useState<Template | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [metricsFor, setMetricsFor] = React.useState<Template | null>(null);
+  // TSK-0074 Phase 4: "New template" choice dialog (start blank vs copy
+  // from existing). When the user picks "copy from existing" + a source
+  // template, we POST /api/email-templates/[id]/duplicate and open the
+  // editor for the freshly-created copy.
+  const [choiceOpen, setChoiceOpen] = React.useState(false);
+  const [duplicating, setDuplicating] = React.useState(false);
 
   // Keep the latest onTemplatesChange callback in a ref so we don't have to
   // depend on its identity in the sync effect below. The parent passes an
@@ -130,6 +156,34 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
     }
   };
 
+  // TSK-0074 Phase 4: duplicate-from-existing on "New template" →
+  // POST /duplicate for the chosen source, then open the editor for
+  // the freshly-created copy. The duplicate route copies ALL feature
+  // fields (logo, mobile overrides, no-code variant, alt-subject) so
+  // the admin can tweak the copy without rebuilding everything.
+  const handleDuplicateToNew = async (sourceId: string) => {
+    setDuplicating(true);
+    try {
+      const r = await fetch(`/api/email-templates/${sourceId}/duplicate`, { method: "POST" });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to duplicate");
+      }
+      const data = await r.json();
+      const copy: Template = data.template;
+      await refresh();
+      setChoiceOpen(false);
+      toast.success("Created from copy — edit below", {
+        description: copy.name,
+      });
+      setEditing(copy);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to duplicate template");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   const handleDelete = async (t: Template) => {
     if (t.isDefault) {
       toast.error("Seeded templates cannot be deleted. Deactivate instead.");
@@ -184,7 +238,7 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
           </p>
         </div>
         <button
-          onClick={() => setCreating(true)}
+          onClick={() => setChoiceOpen(true)}
           disabled={loading}
           className="inline-flex items-center gap-2 rounded bg-[#FF005A] px-3 py-2 text-sm font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
         >
@@ -307,6 +361,20 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
         />
       )}
 
+      {/* New template — choice dialog (start blank vs copy from existing) */}
+      {choiceOpen && (
+        <NewTemplateChoiceDialog
+          templates={list}
+          duplicating={duplicating}
+          onClose={() => !duplicating && setChoiceOpen(false)}
+          onStartBlank={() => {
+            setChoiceOpen(false);
+            setCreating(true);
+          }}
+          onCopyFromExisting={(sourceId) => handleDuplicateToNew(sourceId)}
+        />
+      )}
+
       {/* New template dialog */}
       {creating && (
         <TemplateEditorDialog
@@ -326,6 +394,184 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New template — choice dialog (start blank vs copy from existing)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * NewTemplateChoiceDialog — TSK-0074 Phase 4.
+ *
+ * When the admin clicks "New template", we no longer drop them straight into
+ * a blank editor. Instead, this modal asks: "Start from blank, or copy from
+ * an existing template?".
+ *
+ *   - "Start from blank" → falls through to the existing empty-editor flow
+ *     (TemplateEditorDialog with template=null).
+ *   - "Copy from existing" → calls POST /api/email-templates/[id]/duplicate,
+ *     which copies ALL feature fields (subject, body, logo, mobile overrides,
+ *     no-code variant, alt-subject). The duplicate route already names the
+ *     copy "<original> (copy)" and sets stage=null, isActive=true. We then
+ *     close this dialog and open the editor for the new copy.
+ *
+ * The dropdown shows id + name + stage for every template in the system
+ * (custom templates are tagged "Custom", seeded defaults tagged "Stage N").
+ */
+function NewTemplateChoiceDialog({
+  templates,
+  duplicating,
+  onClose,
+  onStartBlank,
+  onCopyFromExisting,
+}: {
+  templates: Template[];
+  duplicating: boolean;
+  onClose: () => void;
+  onStartBlank: () => void;
+  onCopyFromExisting: (sourceId: string) => void;
+}) {
+  const [sourceId, setSourceId] = React.useState<string>(
+    templates[0]?.id ?? "",
+  );
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[560px] max-w-[95vw] flex-col bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
+          <h3 className="text-lg font-bold">New template</h3>
+          <button
+            onClick={onClose}
+            disabled={duplicating}
+            className="text-neutral-400 hover:text-neutral-700 disabled:opacity-30"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <p className="mb-5 text-sm text-neutral-600">
+            Choose how to start. You can always tweak everything after.
+          </p>
+
+          {/* Option A: Start from blank */}
+          <button
+            type="button"
+            onClick={onStartBlank}
+            disabled={duplicating}
+            className="group mb-3 flex w-full items-start gap-3 rounded-lg border border-neutral-300 bg-white p-4 text-left hover:border-[#FF005A] hover:bg-[#FFF1F5]/40 disabled:opacity-50"
+          >
+            <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#FF005A]/10 text-[#FF005A]">
+              <FilePlus2 className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-bold text-neutral-900">Start from blank</div>
+              <div className="mt-0.5 text-xs text-neutral-500">
+                Empty body, default logo, no mobile overrides. Best when you
+                want to author from scratch.
+              </div>
+            </div>
+          </button>
+
+          {/* Option B: Copy from existing */}
+          <div className="rounded-lg border border-neutral-300 bg-white p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#00E6FF]/30 text-black">
+                <Copy className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-neutral-900">
+                  Copy from an existing template
+                </div>
+                <div className="mt-0.5 text-xs text-neutral-500">
+                  Pre-fills the new template with the chosen template&rsquo;s
+                  subject, body, logo, mobile overrides, no-code variant, and
+                  alt-subject settings. The copy gets <code>stage=null</code>,
+                  <code>isDefault=false</code>, and the name{" "}
+                  <code>&ldquo;&lt;original&gt; (copy)&rdquo;</code>.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-semibold text-neutral-700">
+                Source template
+              </label>
+              <select
+                value={sourceId}
+                onChange={(e) => setSourceId(e.target.value)}
+                disabled={duplicating || templates.length === 0}
+                className="w-full rounded border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {templates.length === 0 ? (
+                  <option value="">No templates available</option>
+                ) : (
+                  templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.stage ? `[Stage ${t.stage}] ` : "[Custom] "}
+                      {t.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => sourceId && onCopyFromExisting(sourceId)}
+              disabled={duplicating || !sourceId}
+              className="mt-3 inline-flex items-center gap-2 rounded bg-[#FF005A] px-4 py-2 text-sm font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
+            >
+              {duplicating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              {duplicating ? "Duplicating…" : "Duplicate & edit"}
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-neutral-200 px-6 py-4">
+          <button
+            onClick={onClose}
+            disabled={duplicating}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preview context — sample values used by the Desktop/Mobile preview iframe.
+// Same shape the orchestrator's buildContext() produces at send time, but
+// filled with realistic placeholder data so the admin sees the email exactly
+// as a recipient would (tokens substituted, logo top-right, footer present).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PREVIEW_CTX: UnifiedRenderContext = {
+  firstName: "Friend",
+  name: "Friend",
+  email: "test@example.com",
+  chapterName: "Tel Aviv",
+  eventTitle: "AI Salon Demo Event",
+  eventDate: "Tue, Mar 12, 2025 · 6:00 PM",
+  eventVenue: "Tel Aviv Innovation Lab",
+  eventAddress: "Rothschild 1, Tel Aviv",
+  eventUrl: "https://aisalon.massapro.com/e/demo",
+  myCodeUrl: "https://aisalon.massapro.com/e/demo/my-code",
+  checkInCode: "ABCD-1234",
+  speakers: "Jane Doe, John Smith",
+  agenda:
+    "• 6:00 PM — Doors\n• 6:30 PM — Intro\n• 7:00 PM — Panel\n• 8:00 PM — Networking",
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Template editor dialog (also handles "create new")
@@ -353,10 +599,16 @@ function TemplateEditorDialog({
   // Feature 3: alt-subject re-send
   const [altSubject, setAltSubject] = React.useState<string>(template?.altSubject ?? "");
   const [altNotOpenedHours, setAltNotOpenedHours] = React.useState<number | null>(template?.altNotOpenedHours ?? null);
+  // TSK-0074 Phase 4: mobile-only CSS/HTML overrides (wrapped in
+  // @media (max-width:600px) by the unified renderer).
+  const [mobileOverridesHtml, setMobileOverridesHtml] = React.useState<string>(template?.mobileOverridesHtml ?? "");
 
   const [saving, setSaving] = React.useState(false);
   const [savingAs, setSavingAs] = React.useState(false);
-  const [showPreview, setShowPreview] = React.useState(false);
+  // TSK-0074 Phase 4: persistent preview pane BELOW the editor with
+  // Desktop (600px) / Mobile (375px) tabs. Replaces the old toggle that
+  // hid the editor while previewing.
+  const [previewTab, setPreviewTab] = React.useState<"desktop" | "mobile">("desktop");
 
   // Save (in-place) or Create (new template).
   // `mode: "save"` → PATCH existing; `mode: "saveAs"` → POST new with prompted name.
@@ -392,6 +644,9 @@ function TemplateEditorDialog({
         logoUrl: logoUrl.trim() || null,
         altSubject: altSubject.trim() || null,
         altNotOpenedHours,
+        // TSK-0074 Phase 4: mobile-only overrides (sent as null when empty
+        // so the API can clear the field on PATCH).
+        mobileOverridesHtml: mobileOverridesHtml.trim() || null,
       };
       const r = await fetch(url, {
         method,
@@ -411,22 +666,61 @@ function TemplateEditorDialog({
     }
   };
 
-  // Render a sample context for the preview iframe.
-  const previewHtml = React.useMemo(() => {
-    return htmlBody
-      .replace(/{{firstName}}/g, "Eze")
-      .replace(/{{name}}/g, "Eze")
-      .replace(/{{eventTitle}}/g, "AI Salon TLV — July Demo Day")
-      .replace(/{{eventDate}}/g, "Tue, Jul 15, 2026 · 6:00 PM")
-      .replace(/{{eventVenue}}/g, "Massa TLV")
-      .replace(/{{eventAddress}}/g, "Ahad Ha'am 34, Tel Aviv")
-      .replace(/{{eventUrl}}/g, "https://aisalon.massapro.com/e/demo-day")
-      .replace(/{{event\.myCodeUrl}}/g, "https://aisalon.massapro.com/e/demo-day/my-code")
-      .replace(/{{myCodeUrl}}/g, "https://aisalon.massapro.com/e/demo-day/my-code")
-      .replace(/{{checkInCode}}/g, "ABCD-1234")
-      .replace(/{{speakers}}/g, "Eze Schloss, Sarah Chen")
-      .replace(/{{agenda}}/g, "• 6:00 PM — Doors open<br/>• 6:30 PM — Welcome<br/>• 7:00 PM — Demos<br/>• 8:30 PM — Networking");
+  // ─── Preview rendering ───────────────────────────────────────────────────
+  //
+  // TSK-0074 Phase 4: the preview iframe srcdoc is produced by the SAME
+  // `renderUnifiedEmail` pipeline used at send time, so what the admin sees
+  // here matches production rendering 1:1:
+  //   - tokens substituted with sample values (PREVIEW_CTX)
+  //   - brand logo injected top-right via `buildLogoBlock(logoUrl)` (which
+  //     falls back to EMAIL_BRAND_LOGO_URL → DEFAULT_BRAND_LOGO_URL when
+  //     the per-template override is empty)
+  //   - mobile overrides wrapped in `@media (max-width:600px)` and injected
+  //     after <head> (so they apply when the iframe is sized at the mobile
+  //     width of 375px, and are no-ops at the desktop width of 600px)
+  //   - unsubscribe footer with `unsubscribeUrl: "#"` (matches production —
+  //     the real URL is per-recipient, but the footer text is identical)
+  //
+  // We DON'T pass clickWrapFn or (campaignId, trackToken, baseUrl) → the
+  // renderer skips click-wrapping (links stay as raw hrefs, which is fine
+  // for preview). No tracking pixel either (no openPixelUrl).
+  //
+  // Re-renders are debounced 300ms after edits to bodyHtml /
+  // mobileOverridesHtml / logoUrl — avoids re-running the full pipeline on
+  // every keystroke.
+  const [debouncedBody, setDebouncedBody] = React.useState(htmlBody);
+  const [debouncedMobile, setDebouncedMobile] = React.useState(mobileOverridesHtml);
+  const [debouncedLogo, setDebouncedLogo] = React.useState(logoUrl);
+
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedBody(htmlBody), 300);
+    return () => window.clearTimeout(h);
   }, [htmlBody]);
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedMobile(mobileOverridesHtml), 300);
+    return () => window.clearTimeout(h);
+  }, [mobileOverridesHtml]);
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedLogo(logoUrl), 300);
+    return () => window.clearTimeout(h);
+  }, [logoUrl]);
+
+  const previewSrcDoc = React.useMemo(() => {
+    // Don't run the pipeline on empty bodies — render a friendly placeholder
+    // instead so the iframe never shows a blank white box on a fresh new
+    // template.
+    if (!debouncedBody.trim()) {
+      return `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;padding:32px;color:#999;font-size:14px;text-align:center;">Start typing in the editor above to see a live preview here.</body></html>`;
+    }
+    return renderUnifiedEmail({
+      html: debouncedBody,
+      ctx: PREVIEW_CTX,
+      logoHtml: buildLogoBlock(debouncedLogo || null),
+      mobileOverridesHtml: debouncedMobile || undefined,
+      unsubscribeUrl: "#",
+      chapterName: PREVIEW_CTX.chapterName,
+    });
+  }, [debouncedBody, debouncedMobile, debouncedLogo]);
 
   return (
     <>
@@ -568,28 +862,88 @@ function TemplateEditorDialog({
           {/* Feature 2: Logo override with visual preview + upload */}
           <LogoEditorField value={logoUrl} onChange={setLogoUrl} />
 
-          <div className="mb-3 flex items-center justify-between">
-            <label className="text-xs font-semibold text-neutral-700">Email body (WYSIWYG)</label>
-            <button
-              onClick={() => setShowPreview((v) => !v)}
-              className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
-            >
-              <Eye className="h-3 w-3" /> {showPreview ? "Edit" : "Preview"}
-            </button>
+          <div className="mb-3">
+            <label className="mb-1 block text-xs font-semibold text-neutral-700">Email body (WYSIWYG)</label>
+            <RichTextEmailEditor value={htmlBody} onChange={setHtmlBody} height={420} />
           </div>
 
-          {showPreview ? (
-            <div className="h-[420px] overflow-hidden rounded border border-neutral-300">
+          {/* TSK-0074 Phase 4: Mobile overrides (CSS/HTML) */}
+          <div className="mb-4 rounded border border-cyan-200 bg-cyan-50/30 p-3">
+            <label className="mb-1 block text-xs font-semibold text-cyan-900">
+              Mobile overrides (CSS/HTML)
+            </label>
+            <textarea
+              value={mobileOverridesHtml}
+              onChange={(e) => setMobileOverridesHtml(e.target.value)}
+              rows={6}
+              spellCheck={false}
+              placeholder={`h1 { font-size: 24px !important; line-height: 1.3 !important; }\n.hero { padding: 12px !important; }\n.btn { display: block !important; width: 100% !important; }`}
+              className="w-full rounded border border-neutral-300 bg-white p-2 font-mono text-xs leading-relaxed"
+            />
+            <p className="mt-1 text-[10px] text-cyan-800">
+              These rules only apply on screens ≤600px wide (mobile). Wrapped
+              automatically inside a <code>@media (max-width: 600px)</code>{" "}
+              block by the unified renderer. The Mobile preview tab below shows
+              them in action.
+            </p>
+          </div>
+
+          {/* TSK-0074 Phase 4: Desktop / Mobile preview pane (always visible
+              below the editor). srcdoc is rendered via the same pipeline as
+              production sends. */}
+          <div className="rounded border border-neutral-300 bg-neutral-50">
+            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-2">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("desktop")}
+                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+                    previewTab === "desktop"
+                      ? "bg-[#FF005A] text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  <Monitor className="h-3.5 w-3.5" />
+                  Desktop
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTab("mobile")}
+                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+                    previewTab === "mobile"
+                      ? "bg-[#FF005A] text-white"
+                      : "text-neutral-600 hover:bg-neutral-100"
+                  }`}
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                  Mobile
+                </button>
+              </div>
+              <span className="text-[10px] text-neutral-500">
+                Rendered via <code>renderUnifiedEmail</code> · matches production sends
+              </span>
+            </div>
+            <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
               <iframe
-                srcDoc={previewHtml}
-                className="h-full w-full bg-white"
+                srcDoc={previewSrcDoc}
                 title="Email preview"
                 sandbox="allow-same-origin"
+                style={{
+                  width: previewTab === "desktop" ? 600 : 375,
+                  maxWidth: "100%",
+                  height: 520,
+                  background: "#ffffff",
+                  border: "1px solid #e5e5e5",
+                  borderRadius: 4,
+                }}
               />
             </div>
-          ) : (
-            <RichTextEmailEditor value={htmlBody} onChange={setHtmlBody} height={420} />
-          )}
+            <div className="border-t border-neutral-200 bg-white px-3 py-1.5 text-center text-[10px] text-neutral-500">
+              {previewTab === "desktop"
+                ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
+                : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

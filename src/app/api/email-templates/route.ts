@@ -49,6 +49,9 @@ export async function GET(req: NextRequest) {
       // TSK-0074: API contract keeps `htmlBody` for backward compat with
       // the existing UI; maps from the renamed EmailTemplate2.bodyHtml field.
       htmlBody: t.bodyHtml,
+      // TSK-0074 Phase 4: mobile-only CSS overrides (sent to UI for the
+      // mobile preview tab + the Mobile overrides textarea).
+      mobileOverridesHtml: t.mobileOverridesHtml,
       stopIfNotOpenedHours: t.stopIfNotOpenedHours,
       // Feature 1: no-code variant
       noCodeSubject: t.noCodeSubject,
@@ -85,6 +88,9 @@ export async function POST(req: NextRequest) {
     // Feature 3: alt-subject re-send
     altSubject?: string | null;
     altNotOpenedHours?: number | null;
+    // TSK-0074 Phase 4: mobile-only CSS/HTML overrides (wrapped inside
+    // @media (max-width: 600px) by the unified renderer at send/preview time).
+    mobileOverridesHtml?: string | null;
   };
   try {
     body = await req.json();
@@ -114,6 +120,7 @@ export async function POST(req: NextRequest) {
         logoUrl: body.logoUrl?.trim() || null,
         altSubject: body.altSubject?.trim() || null,
         altNotOpenedHours: body.altNotOpenedHours ?? null,
+        mobileOverridesHtml: body.mobileOverridesHtml?.trim() || null,
         stage,
         isActive: true,
         isDefault: false,

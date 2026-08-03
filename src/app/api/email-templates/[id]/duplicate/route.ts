@@ -57,12 +57,29 @@ export async function POST(
   try {
     // TSK-0074: was db.emailStageTemplate (legacy). Now creates in EmailTemplate2.
     // Field renamed htmlBody → bodyHtml.
+    //
+    // TSK-0074 Phase 4: duplicate now copies ALL feature fields (was only
+    // copying subject + bodyHtml + stopIfNotOpenedHours). This brings logo
+    // override, mobile overrides, no-code variant, and alt-subject re-send
+    // settings into the copy so the duplicated template behaves identically
+    // to the original. The admin can then tweak the copy without rebuilding
+    // all the feature config from scratch.
     const copy = await db.emailTemplate2.create({
       data: {
         name: newName,
         subject: existing.subject,
         bodyHtml: existing.bodyHtml,
         stopIfNotOpenedHours: existing.stopIfNotOpenedHours,
+        // Feature 1: no-code variant (stages 3 & 4)
+        noCodeSubject: existing.noCodeSubject,
+        noCodeHtmlBody: existing.noCodeHtmlBody,
+        // Feature 2: per-template logo override
+        logoUrl: existing.logoUrl,
+        // Feature 3: alt-subject re-send
+        altSubject: existing.altSubject,
+        altNotOpenedHours: existing.altNotOpenedHours,
+        // TSK-0074 Phase 4: mobile-only CSS/HTML overrides
+        mobileOverridesHtml: existing.mobileOverridesHtml,
         stage: null, // custom template — no stage
         isActive: true,
         isDefault: false,

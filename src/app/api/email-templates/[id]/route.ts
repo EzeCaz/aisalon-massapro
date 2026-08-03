@@ -45,6 +45,8 @@ export async function PATCH(
     // Feature 3: alt-subject re-send
     altSubject?: string | null;
     altNotOpenedHours?: number | null;
+    // TSK-0074 Phase 4: mobile-only CSS/HTML overrides.
+    mobileOverridesHtml?: string | null;
   };
   try {
     body = await req.json();
@@ -95,6 +97,10 @@ export async function PATCH(
   }
   if (body.altNotOpenedHours !== undefined) {
     updateData.altNotOpenedHours = body.altNotOpenedHours;
+  }
+  // TSK-0074 Phase 4: mobile-only overrides (null/empty clears the field).
+  if (body.mobileOverridesHtml !== undefined) {
+    updateData.mobileOverridesHtml = body.mobileOverridesHtml?.trim() || null;
   }
 
   try {
