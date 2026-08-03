@@ -232,7 +232,9 @@ export function RegistrantsTabClient({
       return (
         r.email.toLowerCase().includes(q) ||
         (r.name || "").toLowerCase().includes(q) ||
-        r.event.title.toLowerCase().includes(q)
+        r.event.title.toLowerCase().includes(q) ||
+        (r.user?.email || "").toLowerCase().includes(q) ||
+        (r.user?.name || "").toLowerCase().includes(q)
       );
     });
   }, [rsvps, search, eventFilter, statusFilter, linkFilter, scopeFilter]);
@@ -598,29 +600,35 @@ export function RegistrantsTabClient({
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, event…"
-            className="w-full rounded-md border border-black/15 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
-          />
+      <div className="flex flex-col gap-2 mb-4">
+        {/* Row 1: search (50%) + event selector (50%) — same 50/50 split
+            the members page uses for its search row. */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative sm:flex-1 sm:basis-1/2 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email, event…"
+              className="w-full rounded-md border border-black/15 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+            />
+          </div>
+          <select
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+            className="sm:flex-1 sm:basis-1/2 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          >
+            <option value="ALL">All events</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.title} ({ev._count.rsvps})
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          value={eventFilter}
-          onChange={(e) => setEventFilter(e.target.value)}
-          className="rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
-        >
-          <option value="ALL">All events</option>
-          {events.map((ev) => (
-            <option key={ev.id} value={ev.id}>
-              {ev.title} ({ev._count.rsvps})
-            </option>
-          ))}
-        </select>
+        {/* Row 2: status / link filters + action buttons */}
+        <div className="flex flex-wrap gap-2">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -680,11 +688,12 @@ export function RegistrantsTabClient({
           type="button"
           onClick={() => setAdding(true)}
           disabled={events.length === 0}
-          className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-2 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="inline-flex items-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-2 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap ml-auto"
         >
           <Plus className="h-4 w-4" />
           Add registrant
         </button>
+        </div>
       </div>
 
       {/* V7 scope filter (Super Admin only) */}

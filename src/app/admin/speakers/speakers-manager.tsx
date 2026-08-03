@@ -102,7 +102,11 @@ export function SpeakersManager({ speakers, events, allCountries, allChapters, i
         (s.role || "").toLowerCase().includes(q) ||
         (s.company || "").toLowerCase().includes(q) ||
         (s.topic || "").toLowerCase().includes(q) ||
-        (s.contactEmail || "").toLowerCase().includes(q)
+        (s.bio || "").toLowerCase().includes(q) ||
+        (s.contactEmail || "").toLowerCase().includes(q) ||
+        (s.user?.email || "").toLowerCase().includes(q) ||
+        (s.user?.name || "").toLowerCase().includes(q) ||
+        s.event.title.toLowerCase().includes(q)
       );
     });
   }, [list, search, eventFilter, scopeFilter, allCountries, allChapters]);
@@ -179,7 +183,7 @@ export function SpeakersManager({ speakers, events, allCountries, allChapters, i
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-black/80" />
             <Input
-              placeholder="Search by name, role, company, topic, email…"
+              placeholder="Search by name, role, company, topic, bio, email, event…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8"

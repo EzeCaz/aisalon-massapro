@@ -7,10 +7,16 @@ import { can, isSuperAdmin } from "@/lib/permissions";
 /**
  * GET /api/admin/members/search?q=<query>&limit=<n>&excludeEventId=<id>
  *
- * Search platform members by name OR email OR company OR secondary email.
- * Used by the autocomplete co-host picker in the EventEditor — instead
- * of typing a bare email, the admin types a name/email fragment and gets
- * back matching users.
+ * Search platform members by keyword across all intake-form text fields:
+ * name, email, company, title, bio, mobile, companyUrl, linkedinUrl,
+ * portfolioUrl, interestedIn, profileCategories, appliedFor,
+ * invitedToSpeak, and secondary emails.
+ *
+ * Used by the autocomplete co-host picker in the EventEditor AND by the
+ * audience builder's "Quick keyword search" feature — instead of typing
+ * a bare email, the admin types any keyword (e.g. "sponsor") and gets
+ * back matching users (e.g. anyone whose `interestedIn` contains
+ * "Sponsor a specific event").
  *
  * - `q`: minimum 1 character. Empty/missing returns 400.
  * - `limit`: default 10, max 50.
@@ -49,13 +55,26 @@ export async function GET(req: NextRequest) {
   }
   const limit = Math.min(Math.max(parseInt(limitParam || "10", 10) || 10, 1), 50);
 
-  // Build the WHERE clause — match name OR email OR company OR secondary email.
-  // Use case-insensitive contains for Postgres.
+  // Build the WHERE clause — match across all intake-form text fields so
+  // admins can find members by typing fragments of their interests,
+  // bio, title, etc. (e.g. "sponsor" matches a user whose
+  // `interestedIn` contains "Sponsor a specific event").
+  // Uses case-insensitive contains for Postgres / SQLite.
   const where = {
     OR: [
       { name: { contains: q, mode: "insensitive" as const } },
       { email: { contains: q, mode: "insensitive" as const } },
       { company: { contains: q, mode: "insensitive" as const } },
+      { title: { contains: q, mode: "insensitive" as const } },
+      { bio: { contains: q, mode: "insensitive" as const } },
+      { mobile: { contains: q, mode: "insensitive" as const } },
+      { companyUrl: { contains: q, mode: "insensitive" as const } },
+      { linkedinUrl: { contains: q, mode: "insensitive" as const } },
+      { portfolioUrl: { contains: q, mode: "insensitive" as const } },
+      { interestedIn: { contains: q, mode: "insensitive" as const } },
+      { profileCategories: { contains: q, mode: "insensitive" as const } },
+      { appliedFor: { contains: q, mode: "insensitive" as const } },
+      { invitedToSpeak: { contains: q, mode: "insensitive" as const } },
       { secondaryEmails: { some: { email: { contains: q, mode: "insensitive" as const } } } },
     ],
   };

@@ -11672,3 +11672,153 @@ Stage Summary:
   src/app/admin/email/orchestrator-panel.tsx (status banner),
   .env.example (documented new vars + examples),
   scripts/test-email-sender.ts (new — 14 passing tests).
+
+---
+Task ID: TSK-0071 — search-and-audience-uplift
+Agent: main
+Task: User reported 4 admin-UX issues:
+  1. Edit Member dialog has horizontal scroll — adjust width so it doesn't.
+  2. /admin/registrants search box too narrow — split search + event
+     selector 50/50 (like members page search).
+  3. Members/Speakers/Registrants search broken for keywords like
+     "sponsor" — only matches `company` field, not `interestedIn`
+     (which contains "Sponsor a specific event" / "Host an event in
+     our offices" / "Be a guest speaker"). Gabriele Manasse was
+     invisible for "sponsor" searches despite having the word in
+     interestedIn.
+  4. Email Flow audience builder needs a keyword-driven audience
+     creator — type "Sponsor" and/or "host", see preview of matches,
+     save as a dynamic audience (e.g. "Sponsors Leads") to drive a
+     flow of emails.
+
+Work Log:
+- Subagent (Explore) audited the relevant files and produced a full
+  findings report identifying:
+  * EditMemberDialog at admin-members-table.tsx:2200 — used
+    `max-w-3xl max-h-[92vh] overflow-y-auto` with NO `overflow-x-hidden`,
+    so long `<code>` URLs + grid-cols-2 forms produced horizontal scroll.
+  * registrants-tab-client.tsx:601 — search input + event selector on
+    same row but `flex-1` + unstyled `<select>`, so search took all
+    space and selector took only its natural width — NOT 50/50.
+  * Members client-side filter (admin-members-table.tsx:199–224)
+    searched only: email, name, company, tags, secondaryEmails.
+  * Speakers client-side filter (speakers-manager.tsx:83–108) searched
+    only: name, role, company, topic, contactEmail.
+  * Backend route /api/admin/members/search (route.ts:54–61) searched
+    only: name, email, company, secondaryEmails.
+  * Audience filter spec already supported `interestedIn contains X`
+    via audience-filter.ts USER_FIELDS catalog — but the UX required
+    manually adding 13 rules to search across all fields.
+
+- Fix 1 — EditMemberDialog width:
+  * Changed `max-w-3xl` → `max-w-4xl` (more breathing room).
+  * Added `overflow-x-hidden` to suppress the horizontal scrollbar.
+  * (Long `<code>` URLs already had `break-all`; grid-cols-1/sm:grid-
+    cols-2 with w-full inputs already shrink correctly.)
+
+- Fix 2 — Registrants toolbar 50/50 split:
+  * Refactored the single-row `flex-col sm:flex-row gap-2` toolbar into
+    two stacked rows:
+      Row 1: search input (`sm:flex-1 sm:basis-1/2 min-w-0`) + event
+             selector (`sm:flex-1 sm:basis-1/2 w-full`) — true 50/50.
+      Row 2: status filter + link filter + CSV/Look-for-members/Import/
+             Add-registrant action buttons (with `ml-auto` on the
+             primary CTA for visual rhythm).
+  * Also expanded the registrant search filter to include the linked
+    user's email + name (if any) — `rsvp.user?.email` and
+    `rsvp.user?.name` were previously not searched.
+
+- Fix 3a — Members client-side search:
+  * Added 9 more fields to the `matchSearch` predicate in
+    admin-members-table.tsx:199: title, bio, interestedIn,
+    profileCategories, appliedFor, invitedToSpeak, mobile,
+    linkedinUrl, portfolioUrl, companyUrl.
+  * Updated placeholder text to "Search by name, email, company, title,
+    bio, interests, tag…".
+
+- Fix 3b — Speakers client-side search:
+  * Added bio + linked user's email/name + event title to the
+    `matchSearch` predicate in speakers-manager.tsx:99.
+  * Updated placeholder to "Search by name, role, company, topic, bio,
+    email, event…".
+
+- Fix 3c — Backend /api/admin/members/search route:
+  * Expanded the WHERE OR clause from 4 fields (name/email/company/
+    secondaryEmails) to 14 fields — added title, bio, mobile,
+    companyUrl, linkedinUrl, portfolioUrl, interestedIn,
+    profileCategories, appliedFor, invitedToSpeak.
+  * This is the same backend route used by the co-host picker AND by
+    the new Quick Keyword Search bar (Fix 4), so the keyword
+    "sponsor" will now find Gabriele Manasse (whose interestedIn
+    contains "Sponsor a specific event").
+  * Updated the docstring at the top of the route to reflect the
+    expanded search semantics.
+
+- Fix 4 — Quick Keyword Search bar in audience builder:
+  * Added a new `KeywordSearchBar` component to
+    audiences-client.tsx, rendered at the top of the DynamicEditor
+    (only when source includes Users; returns null for rsvps-only).
+  * The bar:
+    - Accepts a keyword (e.g. "Sponsor", "host", "investor").
+    - Debounces 350ms then calls GET /api/admin/members/search?q=…&limit=50.
+    - Shows a live preview of matching members (name · email · company)
+      in a scrollable list capped at 50.
+    - "Build audience from keyword" button (or press Enter) converts
+      the keyword into a persisted OR filter group containing 13
+      `contains` rules — one per text field on the User model — and
+      merges it as the first group of the current filter spec.
+      Placeholder groups with no real values are dropped; existing
+      real groups are preserved so the admin can AND in additional
+      constraints (e.g. country = IL).
+    - Toast confirms: "Added keyword filter for 'Sponsor' — N members
+      currently match".
+  * The resulting audience is DYNAMIC (not a one-shot snapshot) — new
+    users matching the keyword are picked up automatically on every
+    flow run because the filter spec is persisted as OR-contains rules
+    that the server-side audience-filter.ts evaluator runs against the
+    live User table at send time.
+  * Added `Wand2`, `Sparkles`, `Search` to lucide-react imports.
+  * Added KEYWORD_USER_FIELDS constant + buildKeywordGroup() helper.
+  * Component is visually distinct (pink #FF005A border + light pink
+    background + "Beta" badge) so admins can find it.
+  * Complies with React Rules of Hooks — the early `return null` for
+    rsvps-only source is placed AFTER all hooks (useState, useRef,
+    useEffect) so hook order is preserved across renders.
+
+- Verification:
+  * `npx tsc --noEmit`: 0 new errors. Baseline was 147 errors
+    (pre-existing, unrelated to this task); after my changes still 147.
+    None of the 5 modified files appear in the error list.
+  * `npx eslint` on the 5 modified files: 0 errors, 0 NEW warnings.
+    (Pre-existing 'useRef unused' / 'Role unused' / apostrophe warnings
+    in unchanged code remain — out of scope.)
+
+Stage Summary:
+- 4 user-reported admin-UX issues all resolved.
+- Edit Member dialog: max-w-4xl + overflow-x-hidden — no more
+  horizontal scroll.
+- Registrants toolbar: true 50/50 split between search and event
+  selector; secondary action buttons moved to row 2 for cleaner layout.
+- Members/Speakers/Registrants search: now searches 14 text fields
+  (was 4-5). "Sponsor" finds anyone whose interestedIn / bio / company
+  / title / etc. contains the word.
+- Audience builder: new "Quick keyword search" bar lets admins type a
+  keyword, see live match count, and one-click convert it into a
+  persisted OR filter group. The audience stays live (re-evaluated
+  every flow run), so new matching users are picked up automatically.
+- All changes are code-complete and typecheck clean. To deploy:
+  1. Commit + push to origin/main (Vercel auto-deploys).
+  2. No DB migration required (no schema changes).
+  3. No env vars required (uses existing /api/admin/members/search
+     route).
+- Files modified:
+  * src/app/admin/admin-members-table.tsx (EditMemberDialog width,
+    members search filter, placeholder)
+  * src/app/admin/registrants/registrants-tab-client.tsx (toolbar
+    50/50, registrant search filter)
+  * src/app/admin/speakers/speakers-manager.tsx (speakers search
+    filter, placeholder)
+  * src/app/api/admin/members/search/route.ts (backend WHERE OR
+    clause, docstring)
+  * src/app/admin/email/flows/audiences-client.tsx (new
+    KeywordSearchBar component, integrated into DynamicEditor)

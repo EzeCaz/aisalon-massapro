@@ -204,6 +204,16 @@ export function AdminMembersTable({
         m.email.toLowerCase().includes(q) ||
         (m.name || "").toLowerCase().includes(q) ||
         (m.company || "").toLowerCase().includes(q) ||
+        (m.title || "").toLowerCase().includes(q) ||
+        (m.bio || "").toLowerCase().includes(q) ||
+        (m.interestedIn || "").toLowerCase().includes(q) ||
+        (m.profileCategories || "").toLowerCase().includes(q) ||
+        (m.appliedFor || "").toLowerCase().includes(q) ||
+        (m.invitedToSpeak || "").toLowerCase().includes(q) ||
+        (m.mobile || "").toLowerCase().includes(q) ||
+        (m.linkedinUrl || "").toLowerCase().includes(q) ||
+        (m.portfolioUrl || "").toLowerCase().includes(q) ||
+        (m.companyUrl || "").toLowerCase().includes(q) ||
         m.tags.some((t) => t.label.toLowerCase().includes(q)) ||
         m.secondaryEmails.some((e) => e.email.toLowerCase().includes(q));
       const matchApplied = !filterApplied || m.appliedFor === filterApplied;
@@ -575,7 +585,7 @@ export function AdminMembersTable({
         <div className="relative flex-1 min-w-[240px] max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/30" />
           <Input
-            placeholder="Search by name, email, company, tag…"
+            placeholder="Search by name, email, company, title, bio, interests, tag…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8"
@@ -2197,7 +2207,7 @@ function EditMemberDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit3 className="h-4 w-4 text-[#FF005A]" />

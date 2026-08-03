@@ -24,7 +24,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   Plus, Loader2, Trash2, Save, Users, Filter, Eye, X, Copy,
-  AlertCircle, ListChecks,
+  AlertCircle, ListChecks, Search, Sparkles, Wand2,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,6 +239,65 @@ function fieldsForSource(
     }
   }
   return merged;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick keyword search
+//
+// Lets the admin type a single keyword (e.g. "Sponsor" or "host") and
+// instantly preview how many members match across ALL text fields
+// (name, email, company, title, bio, interestedIn, profileCategories,
+// appliedFor, invitedToSpeak, mobile, URLs, secondary emails). Then one
+// click turns that keyword into a persisted OR filter group so the
+// audience stays live — new users/RSVPs matching the keyword are
+// picked up automatically on every flow run.
+//
+// The keyword search hits the same backend route that the co-host
+// picker uses (GET /api/admin/members/search), so the match semantics
+// are identical to the members page search.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Text fields on User that the keyword search should look at.
+ *  When the audience's `source` is `users` or `users_and_rsvps`, the
+ *  keyword is converted into an OR group containing `contains` rules
+ *  for every field in this list. For `rsvps`-only audiences, the
+ *  keyword bar is hidden (the component returns null) because the
+ *  RSVP model only exposes email + name (no free-text fields). */
+const KEYWORD_USER_FIELDS = [
+  "name",
+  "email",
+  "company",
+  "title",
+  "bio",
+  "mobile",
+  "companyUrl",
+  "linkedinUrl",
+  "portfolioUrl",
+  "interestedIn",
+  "profileCategories",
+  "appliedFor",
+  "invitedToSpeak",
+];
+
+type KeywordPreviewUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  company: string | null;
+};
+
+/** Build an OR filter group containing `contains <keyword>` rules for every
+ *  field in the given list. Returns null if the list is empty. */
+function buildKeywordGroup(
+  fields: string[],
+  keyword: string,
+): FilterGroup | null {
+  const trimmed = keyword.trim();
+  if (!trimmed || fields.length === 0) return null;
+  return {
+    combinator: "OR",
+    rules: fields.map((field) => ({ field, op: "contains" as FilterOp, value: trimmed })),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -675,6 +734,187 @@ function StaticEditor({
 // Dynamic editor — filter builder
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Quick keyword search bar.
+ *
+ * Lets the admin type a single keyword (e.g. "Sponsor", "host", "investor")
+ * and instantly see how many existing members match across ALL text fields.
+ * One click turns the keyword into a persisted OR filter group so the
+ * audience stays live — new users matching the keyword are picked up
+ * automatically on every flow run.
+ *
+ * Backend: GET /api/admin/members/search?q=<keyword>&limit=50 — same route
+ * the co-host picker uses, so match semantics are identical to the members
+ * page search.
+ */
+function KeywordSearchBar({
+  filters,
+  setFilters,
+}: {
+  filters: FilterSpec;
+  setFilters: (f: FilterSpec) => void;
+}) {
+  const [keyword, setKeyword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [preview, setPreview] = React.useState<KeywordPreviewUser[] | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Debounced live preview — fire when the admin stops typing for 350ms.
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = keyword.trim();
+    if (!q) {
+      setPreview(null);
+      setError(null);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await fetch(
+          `/api/admin/members/search?q=${encodeURIComponent(q)}&limit=50`,
+        );
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err?.error || `HTTP ${r.status}`);
+        }
+        const data = await r.json();
+        setPreview((data.users || []) as KeywordPreviewUser[]);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Search failed");
+        setPreview([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [keyword]);
+
+  // Only show this bar for sources that include Users — the keyword
+  // search hits the User table, so it doesn't make sense for rsvps-only.
+  // (Early return placed AFTER all hooks to comply with the Rules of Hooks.)
+  if (filters.source === "rsvps") return null;
+
+  /** Build a persisted OR filter group from the keyword and merge it into
+   *  the current filter spec. */
+  function applyKeywordToFilter() {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      toast.error("Type a keyword first");
+      return;
+    }
+    const group = buildKeywordGroup(KEYWORD_USER_FIELDS, trimmed);
+    if (!group) {
+      toast.error("Could not build filter from keyword");
+      return;
+    }
+    // Replace the entire filter spec with a single keyword-driven group.
+    // The existing combinator + source are preserved so the admin can
+    // still add more groups later (e.g. AND with country = IL).
+    setFilters({
+      ...filters,
+      combinator: "AND",
+      groups: [group, ...filters.groups.filter((g) => {
+        // Drop placeholder groups that have no real rules (the default
+        // `{field: email, op: equals, value: ""}` group that ships with a
+        // fresh audience).
+        return g.rules.some((r) => r.value && r.value.trim().length > 0);
+      })],
+    });
+    toast.success(
+      `Added keyword filter for "${trimmed}" — ${preview?.length ?? 0} members currently match`,
+    );
+  }
+
+  const matchCount = preview?.length ?? 0;
+
+  return (
+    <section className="rounded-lg border border-[#FF005A]/30 bg-[#FF005A]/[0.03] p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Wand2 className="h-4 w-4 text-[#FF005A]" />
+        <h3 className="text-sm font-bold text-neutral-800">Quick keyword search</h3>
+        <span className="rounded bg-[#FF005A]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#FF005A]">
+          Beta
+        </span>
+      </div>
+      <p className="mb-3 text-[11px] text-neutral-600 leading-relaxed">
+        Type any keyword (e.g. <code className="bg-white px-1 rounded border border-neutral-200">Sponsor</code>,{" "}
+        <code className="bg-white px-1 rounded border border-neutral-200">host</code>,{" "}
+        <code className="bg-white px-1 rounded border border-neutral-200">investor</code>) to preview
+        how many members match across <strong>all text fields</strong> — name, email, company, title,
+        bio, <em>interested in</em>, profile categories, applied for, mobile, URLs. Then click
+        &ldquo;Build audience from keyword&rdquo; to turn it into a live OR filter group.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyKeywordToFilter();
+              }
+            }}
+            placeholder="Type a keyword and press Enter…"
+            className="w-full rounded border border-neutral-300 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={applyKeywordToFilter}
+          disabled={!keyword.trim() || loading}
+          className="inline-flex items-center gap-1.5 rounded bg-[#FF005A] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          title="Replace the filter with a keyword-driven OR group"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Build audience from keyword
+        </button>
+      </div>
+      {/* Live preview */}
+      {loading && (
+        <div className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
+          <Loader2 className="h-3 w-3 animate-spin" /> Searching members…
+        </div>
+      )}
+      {error && (
+        <div className="mt-2 flex items-center gap-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+          <AlertCircle className="h-3 w-3" /> {error}
+        </div>
+      )}
+      {!loading && preview && preview.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-xs text-neutral-700">
+            <span className="font-bold text-[#FF005A]">{matchCount}</span> member{matchCount === 1 ? "" : "s"} match
+            {matchCount > 50 ? " (showing first 50)" : ""}:
+          </div>
+          <ul className="divide-y divide-neutral-100 rounded border border-neutral-200 bg-white max-h-40 overflow-y-auto">
+            {preview.slice(0, 50).map((u) => (
+              <li key={u.id} className="px-2 py-1 text-xs">
+                <span className="font-semibold text-neutral-900">{u.name || "(no name)"}</span>
+                <span className="text-neutral-500"> · {u.email}</span>
+                {u.company && <span className="text-neutral-400"> · {u.company}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!loading && preview && preview.length === 0 && keyword.trim() && (
+        <div className="mt-2 rounded border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-neutral-500">
+          No members match this keyword yet. New members matching it will be picked up
+          automatically once the filter is saved.
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DynamicEditor({
   filters,
   setFilters,
@@ -790,6 +1030,10 @@ function DynamicEditor({
           </div>
         </div>
       </section>
+
+      {/* Quick keyword search — only shown when source includes Users
+          (the component itself returns null for rsvps-only). */}
+      <KeywordSearchBar filters={filters} setFilters={setFilters} />
 
       {/* Filter groups */}
       {filters.groups.map((group, gIdx) => (
