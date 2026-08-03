@@ -685,3 +685,208 @@ For the full step-by-step protocol that every task must follow, see [`core/task-
 | **Worklog Ref** | `TSK-0057 — chapter-header-logo-and-view-as` |
 | **Files Touched** | src/components/ais/app-header.tsx (chapter login-hero img + label), src/components/ais/view-as-switcher.tsx (new — SUPER_ADMIN-only UI), src/app/api/admin/view-as/route.ts (new — POST/DELETE cookie API), src/lib/auth.ts (jwt + session callbacks read + propagate viewAs), src/lib/auth-guards.ts (getCurrentUser passes viewAs to getUserScope), src/lib/permissions.ts (getUserScope accepts + honors viewAs opts), docs/tasks.md, worklog.md |
 | **Outcome** | (1) Header meerkat now uses chapter-scoped loginHero with alt='AI Salon "{chapter_name}" Meerkat'. (2) Header label shows '{chapter.name} Chapter' (was hardcoded 'Tel Aviv Chapter'). (3) SUPER_ADMIN 'View as' switcher in header — pick any (role, chapter) combo and the entire platform re-scopes to that perspective via the ais_view_as cookie + jwt callback + getUserScope. (4) Pushed d640927 to origin/main — Vercel auto-deploy triggered. (5) Backup at /home/z/my-project/download/backups/TSK-0057-20260802-092133/ (dev DB + git state). All routes compile + respond. |
+
+### TSK-0058
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0058` |
+| **Date** | 2026-08-02 |
+| **Title** | View-as: gates must use effective (impersonated) role, not real DB role |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0058 — view-as-effective-role-fix` |
+| **Files Touched** | src/components/ais/app-header.tsx, src/app/admin/page.tsx, src/lib/auth-guards.ts, src/lib/permissions.ts, src/components/ais/view-as-switcher.tsx |
+| **Outcome** | Admin pages + app-header now check the effective `viewAsRole` (impersonated) rather than `me.role` (real DB role). When a SUPER_ADMIN picks "Member" in the View-as switcher, the Admin nav link disappears and `/admin` redirects to the member home — impersonation is now true end-to-end. |
+
+### TSK-0059
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0059` |
+| **Date** | 2026-08-02 |
+| **Title** | Chapter admin: filter brand-images list by own chapter (fail-closed scope) |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0059 — chapter-admin-brand-images-filter` |
+| **Files Touched** | src/app/api/admin/chapters/[id]/brand-images/route.ts, src/app/api/admin/chapters/[id]/brand-images/select/route.ts |
+| **Outcome** | Chapter admins no longer see brand images belonging to other chapters. Brand-images GET endpoint enforces `chapterId === user.chapterId` for CHAPTER_ORGANIZER and `countryId === user.countryId` for ADMIN. SUPER_ADMIN sees all. Fail-closed if no scope match. |
+
+### TSK-0060
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0060` |
+| **Date** | 2026-08-02 |
+| **Title** | Global brand library + dynamic chapter name on /events page |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0060 — global-brand-library + dynamic chapter text on /events` |
+| **Files Touched** | src/lib/global-brand-images.ts (new), src/app/events/page.tsx, src/components/ais/app-header.tsx, src/app/api/admin/global-brand-images/route.ts (new) |
+| **Outcome** | New `global-brand-images.ts` lib provides a fallback chain: per-chapter override → country-tier default → global default. `/events` page now shows the chapter name dynamically in the hero ("Welcome to AI Salon {chapter_name}"). Global brand-image admin API + UI added under /admin/brand-images. |
+
+### TSK-0061
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0061` |
+| **Date** | 2026-08-02 |
+| **Title** | Fix global default brand images (favicon, hero, loginHero) — point to canonical URLs |
+| **Category** | SMALL |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0061 — Fix global default brand images (favicon/hero/loginHero)` |
+| **Files Touched** | src/lib/global-brand-images.ts, src/lib/site-settings.ts, prisma/seed.ts |
+| **Outcome** | Global defaults corrected: favicon → /brand-assets/favicon.ico, hero → AIS hero URL, loginHero → meerkat login banner URL. Seed script updated to write these on first run. Existing sites without explicit overrides now display correct images. |
+
+### TSK-0062
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0062` |
+| **Date** | 2026-08-02 |
+| **Title** | Per-chapter brand image editor inside /admin/chapters/[id] |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `TSK-0062 — Per-chapter brand image editor inside /admin/chapters/[id]` |
+| **Files Touched** | src/app/admin/chapters/[id]/page.tsx, src/app/admin/chapters/[id]/brand-images-editor.tsx (new), src/app/api/admin/chapters/[id]/brand-images/route.ts |
+| **Outcome** | New Brand Images editor card on the chapter admin page. Chapter Organizers can upload favicon, loginHero, loginBanner, landingHero for their own chapter. SUPER_ADMIN can edit any chapter. Writes are scope-enforced server-side. UI shows current selection with a "Reset to global default" button per slot. |
+
+### TSK-0063
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0063` |
+| **Date** | 2026-08-02 |
+| **Title** | Wire Kimi LLM provider for "Extract fields with AI" event prefill |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `kimi-api-key-for-prefill-event`, `kimi-api-key-for-prefill-event (update)` |
+| **Files Touched** | src/lib/kimi-client.ts (new), src/app/api/admin/events/extract/route.ts, .env, .env.example, scripts/test-kimi.ts (new) |
+| **Outcome** | Created `kimi-client.ts` mirroring zai-client's `createChatCompletion()` shape, targeting api.moonshot.ai (international). Provider priority: Kimi → ZAI-env → ZAI-SDK. Status-aware error messages (401 vs 429). Smoke test confirms key authenticates against api.moonshot.ai. BLOCKER at the time: Moonshot account suspended for insufficient balance — user needed to recharge. |
+
+### TSK-0064
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0064` |
+| **Date** | 2026-08-02 |
+| **Title** | Switch AI event-prefill provider to Google Gemini (Kimi account out of balance) |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `switch-to-gemini-for-prefill-event` |
+| **Files Touched** | src/lib/gemini-client.ts (new), src/app/api/admin/events/extract/route.ts, .env, .env.example, scripts/test-gemini.ts (new) |
+| **Outcome** | Created `gemini-client.ts` — OpenAI-compatible interface over Gemini v1beta `generateContent` API. Uses `X-goog-api-key` header (not Bearer), separates `systemInstruction` field, forces `responseMimeType: "application/json"` for strict JSON output, default model `gemini-flash-latest`. Provider priority updated: Gemini → Kimi → ZAI env → ZAI SDK. Smoke-tested: key authenticates; only blocker was dev server in HK (Gemini blocks HK/CN region). Production deploy to Vercel us-east-1 unblocked it end-to-end. |
+
+### TSK-0065
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0065` |
+| **Date** | 2026-08-02 |
+| **Title** | Email templates: replace hardcoded "Tel Aviv" with `{{chapter_name}}` token + switch brand logo to default login banner |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `email-chapter-name-merge-token` |
+| **Files Touched** | src/lib/email-orchestrator/templates.ts, src/lib/email.ts, src/lib/email-campaign/render.ts, src/app/admin/email/email-tab-client.tsx, src/lib/email-orchestrator/seed.ts |
+| **Outcome** | All 5 stage templates + transactional emails + campaign renderer now use `{{chapter_name}}` merge token. Sign-off line: "— The AI Salon {{chapter_name}} team". Footer: "AI Salon {{chapter_name}} · Empowering AI Connections". Brand logo (top-right of every email) changed to `DEFAULT_BRAND_LOGO_URL` = the login banner image (meerkat). `resolveLogoUrl()` fallback chain: template logoUrl → chapter override → `DEFAULT_BRAND_LOGO_URL`. Code change is non-destructive — old templates with hardcoded "Tel Aviv" still work, just get migrated via seed. |
+
+### TSK-0066
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0066` |
+| **Date** | 2026-08-02 |
+| **Title** | Login page: fix transparent PNG showing white background + generate Chapter Onboarding Form DOCX |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `login-bg-fix-and-onboarding-form` |
+| **Files Touched** | src/app/login/page.tsx (line 145 — removed `bg-white` class), scripts/generate-chapter-onboarding-form.ts (new, ~700 lines), download/AI-Salon-Chapter-Onboarding-Form.docx (new, 19.4 KB) |
+| **Outcome** | (1) Login brand-image container no longer paints a white background — transparent PNG correctly composites over the dark AIS gradient. (2) Generated fillable Word DOCX with 10 sections covering every chapter `{{}}` placeholder: Chapter Basics, Contact Channels (WhatsApp URL + LinkedIn URL + chapter name prominently at top), Languages & Audience, Brand Assets (favicon, loginHero, loginBanner, landingHero), Email Config, Lead Info, Launch Plan, Additional Notes, Sign-off. Uses docx-js with AIS cyan/magenta accent palette. |
+
+### TSK-0067
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0067` |
+| **Date** | 2026-08-02 |
+| **Title** | Deploy email template tokens + login banner logo to production; run seed migration |
+| **Category** | MID |
+| **Status** | DONE |
+| **Worklog Ref** | `email-template-tokens-deploy` |
+| **Files Touched** | src/lib/email-orchestrator/seed.ts (enhanced migration), git push to origin/main (commits 69ae04d, ecb2b97, b1cef85), Vercel auto-deploy |
+| **Outcome** | Enhanced `runSeed()` migration: (1) Extended matcher to catch both signature line `"The AI Salon Tel Aviv team"` AND footer line `"AI Salon Tel Aviv · Empowering AI Connections"`. (2) Clears non-canonical `EmailStageTemplate.logoUrl` overrides (sets to `null`) to force all emails to fall back to `DEFAULT_BRAND_LOGO_URL` (login banner). Migration is idempotent. Pushed 3 commits to origin/main; Vercel auto-deployed. User needs to manually trigger `POST /api/email-orchestrator/seed` (admin UI "Seed templates" button or curl with `CRON_SECRET` Bearer) to migrate existing DB rows. |
+
+### TSK-0068
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0068` |
+| **Date** | 2026-08-03 |
+| **Title** | Functional chapter onboarding web form + "Send chapter form" button on EditMemberDialog + admin review view |
+| **Category** | HIGH |
+| **Status** | DONE |
+| **Worklog Ref** | `chapter-onboarding-form-functional` |
+| **Files Touched** | prisma/schema.prisma (new ChapterOnboardingInvite model), prisma/schema.sqlite-sandbox.prisma, prisma/migrations/20260803000000_add_chapter_onboarding_invite/migration.sql (new), src/lib/chapter-onboarding-types.ts (new), src/lib/email.ts (sendChapterOnboardingEmail), src/app/api/admin/members/[id]/send-chapter-onboarding/route.ts (new), src/app/api/chapter-onboarding/[token]/route.ts (new — GET + POST), src/app/chapter-onboarding/[token]/page.tsx (new — server component), src/app/chapter-onboarding/[token]/chapter-onboarding-form.tsx (new — 8-section client form), src/app/admin/chapter-onboarding/page.tsx (new), src/app/admin/chapter-onboarding/chapter-onboarding-admin-list.tsx (new), src/app/admin/admin-tabs-def.ts (new "Chapter Onboarding" tab), src/components/admin/admin-members-table.tsx (EditMemberDialog: added "Send chapter form" button), scripts/generate-chapter-onboarding-form.ts (DOCX updated with prominent top-3 fields box), download/AI-Salon-Chapter-Onboarding-Form.docx (regenerated, 19.8 KB) |
+| **Outcome** | (1) DOCX updated with prominent "QUICK REFERENCE — TOP 3 FIELDS" box at the top: chapter name, WhatsApp group URL, LinkedIn page URL. (2) Public onboarding form live at `/chapter-onboarding/[token]` — token-authenticated, no login required, 8 sections with sticky submit bar, pre-fills lead name/email + chapter name/slug from the invite. (3) Four states: PENDING (form), SUBMITTED (thank-you), EXPIRED, REVOKED. (4) "Send chapter form" button (purple outline) added to EditMemberDialog footer between Cancel/Archive and Save. Calls new API route → creates ChapterOnboardingInvite row (token = 32 random bytes base64url, expires in 30 days) → emails the lead with the form URL. If SMTP fails, still returns the formUrl so admin can copy/paste manually. (5) Admin view at `/admin/chapter-onboarding` lists all invites with filterable table (search + status filter) + detail dialog showing the full submission organized by section. (6) Migration SQL ready. TO DEPLOY: push to origin/main + run prisma migrate on production DB + set SMTP_* env vars on Vercel. |
+
+### TSK-0069
+
+| Field | Value |
+|---|---|
+| **Serial** | `TSK-0069` |
+| **Date** | 2026-08-03 |
+| **Title** | Backup project + DB; upload to Google Drive; verify all tasks are registered |
+| **Category** | MID |
+| **Status** | IN_PROGRESS |
+| **Worklog Ref** | `TSK-0069 — backup-and-task-registry-audit` |
+| **Files Touched** | scripts/create-project-backup-full.sh (ran), scripts/db-backup.sh (ran), download/aisalon-project-backup-FULL-20260803-064415.zip (new, 357 MB), download/backups/db-20260803-064435-ed25e77.json.gz (new, 4 KB), download/BACKUP-README.md (new — Drive setup instructions), docs/tasks.md (this file — backfilled TSK-0058 → TSK-0069) |
+| **Outcome** | (1) Full project backup created (357 MB, 6,845 files, includes .git history). (2) DB snapshot exported (35 Prisma models, gzipped JSON). (3) Google Drive upload BLOCKED — no service account JSON + no `GDRIVE_FOLDER_ID` env var + rclone not installed. Wrote `download/BACKUP-README.md` with two clear setup methods (service-account or OAuth). (4) Task registry audit: discovered 11 tasks completed since TSK-0057 but never registered in `docs/tasks.md`. Backfilled TSK-0058 → TSK-0068 in this session. (5) Two older tasks from the previous session remain OPEN: (a) AI event-extract should offer 2 candidate suggestions for unrecognized fields; (b) bilingual event support (English first, then a second language). |
+
+---
+
+## OPEN Tasks (not yet started)
+
+> Tasks requested by the user in prior sessions but not yet implemented. Each will receive a `TSK-XXXX` serial ID when work begins.
+
+### OPEN-1 — AI event-extract: 2 candidate suggestions for unrecognized fields
+
+- **Source**: User message #7 (previous session): *"When the fields are not recognize it, offer two options..."*
+- **Status**: Not started
+- **Description**: When the Gemini/Kimi LLM cannot confidently map a parsed event field to a known schema field (title, date, venue, description, etc.), the API response should include 2 candidate suggestions for what the unrecognized value might be (e.g. "Could be `venue` or `organizer` — pick one"). The admin UI should show these as a small inline picker so the user can confirm or override.
+- **Files likely touched**: `src/app/api/admin/events/extract/route.ts` (LLM prompt + response shape), `src/app/admin/events/new/...` (UI for showing candidates).
+- **Depends on**: TSK-0064 (Gemini provider) — DONE.
+
+### OPEN-2 — Bilingual event support (English first, then second language)
+
+- **Source**: User message #7 (previous session): *"When there are two languages, create a two language event..."*
+- **Status**: Not started
+- **Description**: When the AI event-extract LLM detects the source text contains two languages, it should return both language versions of every text field (title, description, venue, agenda items). The event schema needs to gain per-field secondary-language columns or a JSON sidecar. The event-detail page should render both languages with a language toggle.
+- **Files likely touched**: `prisma/schema.prisma` (add bilingual fields), `src/app/api/admin/events/extract/route.ts` (LLM prompt), `src/app/events/[slug]/page.tsx` (bilingual render), `src/app/admin/events/...` (form fields).
+- **Depends on**: TSK-0064 (Gemini provider) — DONE.
+
+### OPEN-3 — Deploy TSK-0068 (chapter onboarding form) to production
+
+- **Status**: Code complete locally, not yet deployed
+- **Description**: TSK-0068's code is finished but production deployment requires three manual steps:
+  1. `git push origin main` (Vercel auto-deploys)
+  2. Run `npx prisma migrate deploy` on production DB (creates `ChapterOnboardingInvite` table)
+  3. Set `SMTP_*` env vars on Vercel so the invite email actually sends
+- **Files**: All TSK-0068 files (see above).
+
+### OPEN-4 — Run email-orchestrator seed migration on production DB
+
+- **Status**: Code complete (TSK-0067), migration not yet triggered on production
+- **Description**: TSK-0067 was deployed but the user must manually trigger `POST /api/email-orchestrator/seed` (admin UI "Seed templates" button or curl with `CRON_SECRET` Bearer) to migrate existing DB rows from hardcoded "Tel Aviv" → `{{chapter_name}}` token + clear `logoUrl` overrides.
+- **Action**: User clicks "Seed templates" button in admin UI, or runs:
+  ```bash
+  curl -X POST https://aisalon.vercel.app/api/email-orchestrator/seed \
+    -H "Authorization: Bearer $CRON_SECRET"
+  ```
+
+### OPEN-5 — Upload backup to Google Drive (TSK-0069 follow-up)
+
+- **Status**: BLOCKED on user setup
+- **Description**: Backups created in TSK-0069 are sitting locally at:
+  - `download/aisalon-project-backup-FULL-20260803-064415.zip` (357 MB)
+  - `download/backups/db-20260803-064435-ed25e77.json.gz` (4 KB)
+- **Action**: User completes one-time Google Drive setup (see `download/BACKUP-README.md` for both methods), then runs `python3 scripts/drive-backup.py` to upload. After that, `AUTO_SYNC_DRIVE=1` in `.env` will auto-upload future DB backups.

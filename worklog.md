@@ -11519,3 +11519,72 @@ Stage Summary:
   2. Run prisma migration on production DB (the migration SQL is at
      prisma/migrations/20260803000000_add_chapter_onboarding_invite/)
   3. Set SMTP_* env vars on Vercel (so the invite email actually sends)
+
+---
+Task ID: TSK-0069 — backup-and-task-registry-audit
+Agent: main
+Task: User request (2 parts):
+  1. Backup, upload backup to drive
+  2. Make sure all tasks are registered
+
+Work Log:
+- Read /home/z/my-project/worklog.md (11,521 lines, last entry TSK-0068) to
+  identify all completed work since the docs/tasks.md registry was last
+  synced.
+- Read /home/z/my-project/docs/tasks.md — registry was at TSK-0057 (last
+  sync). Discovered 11 tasks completed since (TSK-0058 → TSK-0068 + 4
+  non-numbered ones) but never registered in the canonical task registry.
+- Ran scripts/create-project-backup-full.sh → produced
+  download/aisalon-project-backup-FULL-20260803-064415.zip (357 MB,
+  6,845 files including .git/ history).
+- Ran scripts/db-backup.sh → produced
+  download/backups/db-20260803-064435-ed25e77.json.gz (4 KB, 35 Prisma
+  models dumped — local dev sqlite, 2 users).
+- Attempted Google Drive upload:
+  * Checked .gdrive-token.json → not present
+  * Checked .gcp-service-account.json → not present
+  * Checked .env for GDRIVE_FOLDER_ID / GCP_SERVICE_ACCOUNT_PATH /
+    GDRIVE_CLIENT_ID / GDRIVE_CLIENT_SECRET → none set
+  * Checked rclone install → not installed
+  * Installed Python google libs (google-api-python-client, google-auth,
+    google-auth-oauthlib) for /usr/bin/python3 (3.13)
+  * Confirmed upload scripts are present + ready (drive-backup.py,
+    upload-to-drive.py) — just need credentials
+- Wrote download/BACKUP-README.md documenting:
+  * The two backups produced
+  * Drive upload status (BLOCKED on credentials)
+  * Method A: Service Account (recommended for cron)
+  * Method B: OAuth (one-shot browser flow)
+  * Full inventory of backup scripts
+- Backfilled docs/tasks.md with TSK-0058 → TSK-0068 (11 entries):
+  * TSK-0058 — view-as effective role fix
+  * TSK-0059 — chapter admin brand-images filter
+  * TSK-0060 — global brand library + dynamic chapter text on /events
+  * TSK-0061 — fix global default brand images
+  * TSK-0062 — per-chapter brand image editor
+  * TSK-0063 — Kimi LLM provider wiring
+  * TSK-0064 — Switch to Gemini provider
+  * TSK-0065 — Email templates {{chapter_name}} token + login banner logo
+  * TSK-0066 — Login bg fix + Chapter Onboarding DOCX v1
+  * TSK-0067 — Deploy email template tokens + seed migration
+  * TSK-0068 — Functional chapter onboarding web form + Send button
+- Added TSK-0069 (this task) to the registry.
+- Added a new "OPEN Tasks" section at the end of docs/tasks.md listing 5
+  tasks not yet started:
+  * OPEN-1: AI event-extract 2 candidate suggestions for unrecognized fields
+  * OPEN-2: Bilingual event support
+  * OPEN-3: Deploy TSK-0068 (chapter onboarding) to production
+  * OPEN-4: Run email-orchestrator seed migration on production
+  * OPEN-5: Upload backup to Google Drive (BLOCKED on user setup)
+
+Stage Summary:
+- Backups produced locally:
+  * download/aisalon-project-backup-FULL-20260803-064415.zip (357 MB)
+  * download/backups/db-20260803-064435-ed25e77.json.gz (4 KB)
+- Drive upload: BLOCKED — user must complete one-time Google Cloud setup
+  (see download/BACKUP-README.md, two methods documented).
+- Task registry: audited and synced. TSK-0001 → TSK-0069 now all
+  registered in docs/tasks.md, plus an OPEN tasks section listing 5
+  pending items for the user to prioritize next.
+- Artifacts: download/BACKUP-README.md (Drive setup instructions),
+  docs/tasks.md (registry updated).
