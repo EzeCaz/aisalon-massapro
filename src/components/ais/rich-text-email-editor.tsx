@@ -37,6 +37,7 @@ type Props = {
 const TOKENS = [
   { label: "First name", token: "{{firstName}}" },
   { label: "Name (alias)", token: "{{name}}" },
+  { label: "Chapter name", token: "{{chapterName}}" },
   { label: "Event title", token: "{{eventTitle}}" },
   { label: "Event date", token: "{{eventDate}}" },
   { label: "Venue", token: "{{eventVenue}}" },
