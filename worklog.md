@@ -12172,3 +12172,31 @@ Files NOT modified (verified, no changes needed):
 
 Commit message:
 `[TSK-0074] Email unification Phase 5-6: campaign list + flow linking + test send modal + PAUSED status`
+
+---
+Task ID: edit-template-width-and-logo-fix
+Agent: main
+Task: Two UI fixes from user:
+  1. Make the Edit Template dialog double the current width
+  2. Fix the brand logo (top-right of every email) that looked squished vertically — wrong aspect ratio
+
+Work Log:
+- Read `src/app/admin/email/email-tab-client.tsx` to find both the Edit Campaign and Edit Template dialog wrappers (both `max-w-5xl w-[95vw]`)
+- Found the actual TemplateEditor slide-out panel in `src/app/admin/email/flows/templates-client.tsx:730` uses `w-[900px] max-w-[95vw]` (a right-side slide-out, not the wrapper Dialog)
+- Doubled the slide-out width: `w-[900px]` → `w-[1800px]` (the existing `max-w-[95vw]` cap protects smaller viewports)
+- Diagnosed the logo squish: `buildLogoBlock` in `src/lib/email-orchestrator/templates.ts:65-69` was forcing `width="160" height="40"` HTML attrs AND `width:160px;height:40px;max-height:40px` inline styles — this stretched any source image wider than 4:1 into a 4:1 box, causing the vertical squish the user reported
+- Fixed `buildLogoBlock` to use only `width="160"` HTML attr + `width:160px;height:auto;display:block;` inline styles — image's natural aspect ratio is now preserved
+- Verified all email-send paths use `buildLogoBlock` (campaign send, test-send, force-send-stage, flow-worker, regular worker, email-tab-client preview) — single fix propagates everywhere
+- Updated `LogoEditorField` preview in `templates-client.tsx:1345-1395` to match the actual email render: was showing at 24×120 (5:1 forced) which didn't match the old 160×40 (4:1) actual render, and definitely doesn't match the new 160×auto render
+  - "Actual email size" preview: now renders at 160px wide × auto height (max 60px) — exactly what shows up in sent emails
+  - "Enlarged" preview: now 320px wide × auto height (max 120px), 2× the email render size (was 4× of an incorrect 24px-tall box)
+  - Updated description text from "24px tall, 120px wide" → "160px wide, height auto — preserves the image's natural aspect ratio"
+- Ran `npx tsc --noEmit --skipLibCheck` — no errors in the two modified files (pre-existing errors in non-member-dashboard.tsx and skills/ are unrelated)
+
+Stage Summary:
+- Edit Template dialog width doubled from 900px to 1800px (`max-w-[95vw]` cap remains for smaller viewports)
+- Brand logo in all emails now renders at 160px wide with `height:auto` — image's natural aspect ratio is preserved, no more vertical squish
+- LogoEditorField preview now WYSIWYG with the actual email render (160px wide × auto height) — what admin sees in the editor is what recipients get
+- Files modified:
+  - `src/app/admin/email/flows/templates-client.tsx` (slide-out width + LogoEditorField preview)
+  - `src/lib/email-orchestrator/templates.ts` (buildLogoBlock aspect-ratio fix)

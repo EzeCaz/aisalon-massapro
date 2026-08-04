@@ -39,9 +39,9 @@ import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-uni
  *  Override per-template via `EmailStageTemplate.logoUrl`, or globally via
  *  the `EMAIL_BRAND_LOGO_URL` env var.
  *
- *  Spec: banner-proportioned (~3.5:1), anchored top-right of the 560px-wide
- *  email body. Sized at 160×40px to fit comfortably without dominating the
- *  heading. */
+ *  Spec: banner-proportioned, anchored top-right of the 560px-wide email
+ *  body. Rendered at 160px wide with `height:auto` so the image's natural
+ *  aspect ratio is preserved (no vertical squish). */
 export const DEFAULT_BRAND_LOGO_URL =
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
 
@@ -59,13 +59,22 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
  *  if someone explicitly sets `EMAIL_BRAND_LOGO_URL=""` and the per-template
  *  override is also empty).
  *
- *  The default logo is the wide login banner image — we render it at 160×40
- *  (banner-proportioned, ~3.5:1) so it reads as a brand mark rather than a
- *  tiny glyph. Floated right with a small margin so body text wraps cleanly. */
+ *  The logo is rendered at a fixed 160px width with `height:auto` so the
+ *  image's natural aspect ratio is preserved — this prevents the vertical
+ *  squishing that happened with the previous forced `height:40px` style
+ *  (which stretched any image wider than 4:1 into a squished 4:1 box).
+ *
+ *  We omit the `height` HTML attribute intentionally: most email clients
+ *  (Gmail, Apple Mail, Yahoo, all mobile clients) will then compute the
+ *  height proportionally from the intrinsic image dimensions, giving a
+ *  correctly-proportioned render. The inline `height:auto` reinforces this
+ *  for clients that honor inline styles over HTML attributes.
+ *
+ *  Floated right with a small margin so body text wraps cleanly. */
 export function buildLogoBlock(templateLogoUrl: string | null | undefined): string {
   const url = resolveLogoUrl(templateLogoUrl);
   if (!url) return "";
-  return `<img src="${url}" alt="AI Salon" width="160" height="40" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:160px;height:40px;max-height:40px;"/>`;
+  return `<img src="${url}" alt="AI Salon" width="160" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:160px;height:auto;display:block;"/>`;
 }
 
 // ----------------------------------------------------------------------------

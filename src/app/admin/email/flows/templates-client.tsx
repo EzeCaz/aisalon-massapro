@@ -727,7 +727,7 @@ function TemplateEditorDialog({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[900px] max-w-[95vw] flex-col bg-white shadow-2xl">
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[1800px] max-w-[95vw] flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
           <h3 className="text-lg font-bold">
@@ -1344,13 +1344,14 @@ export function LogoEditorField({
 
       {/* Image preview — actual email size + enlarged */}
       <div className="mb-3 flex items-center gap-4 rounded border border-cyan-100 bg-white p-3">
-        {/* Actual email render size (24px tall, 120px wide) — exactly what
-            shows up in the sent email. */}
+        {/* Actual email render — matches the production render exactly:
+            160px wide, height auto (preserves the image's natural aspect
+            ratio, same as buildLogoBlock outputs). */}
         <div className="flex flex-col items-center gap-1">
           {imgError ? (
             <div
               className="flex items-center justify-center text-[9px] text-red-500"
-              style={{ height: "24px", width: "120px" }}
+              style={{ height: "60px", width: "160px" }}
             >
               failed to load
             </div>
@@ -1359,24 +1360,23 @@ export function LogoEditorField({
             <img
               src={resolvedUrl}
               alt="Logo at email size"
-              height={24}
-              width={120}
-              style={{ height: "24px", width: "120px", objectFit: "contain" }}
+              width={160}
+              style={{ width: "160px", height: "auto", maxHeight: "60px", objectFit: "contain" }}
               onError={() => setImgError(true)}
             />
           )}
-          <span className="text-[9px] text-neutral-500">Actual email size</span>
+          <span className="text-[9px] text-neutral-500">Actual email size · 160px wide</span>
         </div>
 
         <div className="h-12 w-px bg-neutral-200" />
 
         {/* Enlarged preview so the source image is actually visible.
-            Scaled up proportionally (4x the email height). */}
+            Scaled up proportionally (2× the email width). */}
         <div className="flex flex-col items-center gap-1">
           {imgError ? (
             <div
               className="flex items-center justify-center text-[9px] text-red-500"
-              style={{ height: "96px", width: "200px" }}
+              style={{ height: "120px", width: "320px" }}
             >
               failed to load
             </div>
@@ -1385,11 +1385,11 @@ export function LogoEditorField({
             <img
               src={resolvedUrl}
               alt="Logo enlarged"
-              style={{ height: "96px", width: "auto", maxWidth: "240px", objectFit: "contain" }}
+              style={{ width: "320px", height: "auto", maxHeight: "120px", objectFit: "contain" }}
               onError={() => setImgError(true)}
             />
           )}
-          <span className="text-[9px] text-neutral-500">Enlarged (4×)</span>
+          <span className="text-[9px] text-neutral-500">Enlarged (2×)</span>
         </div>
 
         <div className="flex-1" />
@@ -1445,9 +1445,10 @@ export function LogoEditorField({
       />
       <p className="mt-1 text-[10px] text-cyan-800">
         The logo is injected at the top-right of every email at render time
-        (24px tall, 120px wide). Upload a new image above, paste a custom URL,
-        or leave empty to use the default. The default can also be overridden
-        globally via the <code>EMAIL_BRAND_LOGO_URL</code> env var.
+        (160px wide, height auto — preserves the image&rsquo;s natural aspect
+        ratio). Upload a new image above, paste a custom URL, or leave empty
+        to use the default. The default can also be overridden globally via
+        the <code>EMAIL_BRAND_LOGO_URL</code> env var.
       </p>
     </div>
   );
