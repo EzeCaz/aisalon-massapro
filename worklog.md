@@ -12293,3 +12293,22 @@ Stage Summary:
 - Backup: `/home/z/my-project/.env.broken-backup` (the broken SQLite .env, kept for reference)
 - Script: `/home/z/my-project/scripts/check-login.cjs` (persisted for future use)
 
+
+---
+Task ID: fix-nextauth-jwt-decryption-error
+Agent: main
+Task: User reported console error [next-auth][error][JWT_SESSION_ERROR] "decryption operation failed" on the events page.
+
+Work Log:
+- Root cause: `/home/z/my-project/.env` was missing both `NEXTAUTH_SECRET` and `NEXTAUTH_URL`. Without a stable secret, NextAuth generates a new random secret on every server restart, so any session cookie in the user's browser (encrypted with a previous secret) fails to decrypt → "decryption operation failed"
+- The dev log showed the warning `[next-auth][warn][NO_SECRET]` immediately after server start — confirming the missing secret
+- Copied `NEXTAUTH_SECRET` and `NEXTAUTH_URL` from `/tmp/my-project/.env.production-verbatim` (the production env saved from a prior session) into `/home/z/my-project/.env`
+- Restarted dev server (killed PID 5016, started PID 5341) so the new env vars take effect
+- Verified the `[next-auth][warn][NO_SECRET]` warning no longer appears in the dev log
+
+Stage Summary:
+- NextAuth now uses a stable secret → session cookies encrypted with this secret will decrypt successfully on subsequent requests and across server restarts
+- Dev server running on PID 5341, port 3000, Caddy :81 → :3000
+- User may still need to clear the existing (undecryptable) session cookie from their browser, since it was encrypted with a previous random secret — but new logins will work and persist correctly
+- Files modified: `/home/z/my-project/.env` (appended NEXTAUTH_SECRET + NEXTAUTH_URL lines)
+
