@@ -1425,8 +1425,70 @@ function CampaignComposer({
     });
   }, [debouncedBody, debouncedMobile, debouncedLogo]);
 
+  // Preview pane — extracted so it can be rendered in two places:
+  //   1. Inline (below the editor) on small screens — visible below xl breakpoint
+  //   2. Sticky right sidebar on xl+ screens — always visible while scrolling
+  // The iframe srcDoc is the same in both cases (single memoized value above).
+  const renderPreviewPane = () => (
+    <div className="rounded-md border border-black/15 bg-neutral-50">
+      <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPreviewTab("desktop")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+              previewTab === "desktop"
+                ? "bg-[#FF005A] text-white"
+                : "text-black/60 hover:bg-black/5"
+            }`}
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            Desktop
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewTab("mobile")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+              previewTab === "mobile"
+                ? "bg-[#FF005A] text-white"
+                : "text-black/60 hover:bg-black/5"
+            }`}
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            Mobile
+          </button>
+        </div>
+        <span className="text-[0.7rem] text-black/50">
+          Rendered via <code>renderUnifiedEmail</code> · matches production sends
+        </span>
+      </div>
+      <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
+        <iframe
+          srcDoc={previewSrcDoc}
+          title="Email preview"
+          sandbox="allow-same-origin"
+          style={{
+            width: previewTab === "desktop" ? 600 : 375,
+            maxWidth: "100%",
+            height: 520,
+            background: "#ffffff",
+            border: "1px solid #e5e5e5",
+            borderRadius: 4,
+          }}
+        />
+      </div>
+      <div className="border-t border-black/10 bg-white px-3 py-1.5 text-center text-[0.7rem] text-black/50">
+        {previewTab === "desktop"
+          ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
+          : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-4 py-2">
+    <div className="py-2">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_680px] gap-6 items-start">
+        <div className="space-y-4 min-w-0">
       {/* TSK-0074 Phase 5C: source chooser (only for NEW campaigns).
           Three options:
             A) Pick an ACTIVE flow — pre-fills subject/body/audience from the
@@ -1647,61 +1709,10 @@ function CampaignComposer({
         </p>
       </div>
 
-      {/* Desktop / Mobile preview pane (always visible below the editor).
-          srcdoc is rendered via the same pipeline as production sends. */}
-      <div className="rounded-md border border-black/15 bg-neutral-50">
-        <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setPreviewTab("desktop")}
-              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
-                previewTab === "desktop"
-                  ? "bg-[#FF005A] text-white"
-                  : "text-black/60 hover:bg-black/5"
-              }`}
-            >
-              <Monitor className="h-3.5 w-3.5" />
-              Desktop
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreviewTab("mobile")}
-              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
-                previewTab === "mobile"
-                  ? "bg-[#FF005A] text-white"
-                  : "text-black/60 hover:bg-black/5"
-              }`}
-            >
-              <Smartphone className="h-3.5 w-3.5" />
-              Mobile
-            </button>
-          </div>
-          <span className="text-[0.7rem] text-black/50">
-            Rendered via <code>renderUnifiedEmail</code> · matches production sends
-          </span>
-        </div>
-        <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
-          <iframe
-            srcDoc={previewSrcDoc}
-            title="Email preview"
-            sandbox="allow-same-origin"
-            style={{
-              width: previewTab === "desktop" ? 600 : 375,
-              maxWidth: "100%",
-              height: 520,
-              background: "#ffffff",
-              border: "1px solid #e5e5e5",
-              borderRadius: 4,
-            }}
-          />
-        </div>
-        <div className="border-t border-black/10 bg-white px-3 py-1.5 text-center text-[0.7rem] text-black/50">
-          {previewTab === "desktop"
-            ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
-            : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
-        </div>
-      </div>
+      {/* Desktop / Mobile preview — inline on small screens (below the editor).
+          On xl+ screens, the preview moves to a sticky right sidebar (see
+          the right column below). The srcDoc is the same in both cases. */}
+      <div className="xl:hidden">{renderPreviewPane()}</div>
 
       {/* Recipient list selector */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1809,8 +1820,18 @@ function CampaignComposer({
         </div>
       )}
 
-      {/* Footer actions */}
-      <DialogFooter className="gap-2 flex flex-row flex-wrap justify-end items-center">
+      </div>
+      {/* Sticky preview sidebar — visible on xl+ screens alongside the editor.
+          The preview stays in view while scrolling through the form fields. */}
+      <div className="hidden xl:block">
+        <div className="sticky top-4">
+          {renderPreviewPane()}
+        </div>
+      </div>
+      </div>
+
+      {/* Footer actions — full width, below both columns */}
+      <DialogFooter className="mt-4 gap-2 flex flex-row flex-wrap justify-end items-center">
         <Button
           type="button"
           variant="outline"
