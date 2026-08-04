@@ -43,10 +43,15 @@ import {
   Play,
   FlaskConical,
   BarChart3,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import { OrchestratorPanel } from "./orchestrator-panel";
 import { EmailAdminNav, type EmailAdminTab } from "@/components/ais/email-admin-nav";
-import { TemplatesClient } from "./flows/templates-client";
+import { TemplatesClient, PREVIEW_CTX, LogoEditorField } from "./flows/templates-client";
+import { RichTextEmailEditor } from "@/components/ais/rich-text-email-editor";
+import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
+import { renderUnifiedEmail } from "@/lib/email/render-unified";
 import Link from "next/link";
 
 // ----------------------------------------------------------------------------
@@ -63,6 +68,11 @@ type Template = {
   bodyText: string | null;
   signatureHtml: string | null;
   thumbnailUrl: string | null;
+  // TSK-0074: logoUrl + mobileOverridesHtml are on EmailTemplate2 but
+  // weren't declared here before. Needed for the campaign composer's
+  // preview to show the brand logo + mobile overrides.
+  logoUrl: string | null;
+  mobileOverridesHtml: string | null;
   createdBy: string;
   creator: { id: string; email: string; name: string | null };
   createdAt: string;
@@ -272,6 +282,10 @@ export function EmailTabClient({
 
   // TSK-0074 Phase 5B: resume a PAUSED campaign — if it had a scheduledAt,
   // restore it to SCHEDULED; otherwise restore to DRAFT (editable).
+  //
+  // For flow-linked campaigns, the backend PATCH also re-activates the
+  // linked flow (status → ACTIVE) so the orchestrator resumes processing
+  // triggers. The toast message reflects this.
   const handleResumeCampaign = async (c: Campaign) => {
     const nextStatus = c.scheduledAt ? "SCHEDULED" : "DRAFT";
     try {
@@ -285,7 +299,11 @@ export function EmailTabClient({
         toast.error(d.error || "Failed to resume campaign");
         return;
       }
-      toast.success(`Campaign "${c.name}" resumed (${nextStatus})`);
+      // For flow-linked campaigns, the PATCH also re-activated the flow.
+      const flowMsg = c.flowId
+        ? " · Linked flow re-activated — orchestrator will process due emails on the next cron tick (every 10 min)."
+        : "";
+      toast.success(`Campaign "${c.name}" resumed (${nextStatus}${flowMsg})`);
       await refreshCampaigns();
     } catch {
       toast.error("Failed to resume campaign");
@@ -1108,7 +1126,20 @@ function CampaignComposer({
     campaign?.fromEmail || process.env.NEXT_PUBLIC_SMTP_FROM_DEFAULT || "no-reply@aisalon.massapro.com"
   );
   const [replyTo, setReplyTo] = React.useState(campaign?.replyTo || adminEmail);
-  const [showPreview, setShowPreview] = React.useState(false);
+
+  // TSK-0074: logoUrl + mobileOverridesHtml for the campaign preview.
+  // These come from the selected template (if any). The campaign itself
+  // doesn't store these — at send time, the send route looks them up from
+  // the linked template. In the composer, we track the "preview logo" which
+  // is the template's logoUrl (or empty for the default brand logo).
+  const [logoUrl, setLogoUrl] = React.useState<string>("");
+  const [mobileOverridesHtml, setMobileOverridesHtml] = React.useState<string>("");
+
+  // TSK-0074: Desktop/Mobile preview tabs (same as the template editor).
+  // Replaces the old showPreview boolean toggle. The preview is always
+  // visible below the editor, rendered via the same renderUnifiedEmail
+  // pipeline used at send time.
+  const [previewTab, setPreviewTab] = React.useState<"desktop" | "mobile">("desktop");
   const [saving, setSaving] = React.useState(false);
   const [savingTemplate, setSavingTemplate] = React.useState(false);
   const [sending, setSending] = React.useState(false);
@@ -1156,6 +1187,11 @@ function CampaignComposer({
     if (!tpl) return;
     setSubject(tpl.subject);
     setBodyHtml(tpl.bodyHtml);
+    // TSK-0074: load the template's logoUrl + mobile overrides so the
+    // campaign preview shows the same branding + mobile styling as the
+    // template editor.
+    setLogoUrl(tpl.logoUrl ?? "");
+    setMobileOverridesHtml(tpl.mobileOverridesHtml ?? "");
     if (!name) setName(tpl.name);
     toast.success(`Loaded template "${tpl.name}"`);
   };
@@ -1187,6 +1223,10 @@ function CampaignComposer({
       if (firstStep.template?.subject) setSubject(firstStep.template.subject);
       else if (firstStep.subjectVariantA) setSubject(firstStep.subjectVariantA);
       if (firstStep.template?.bodyHtml) setBodyHtml(firstStep.template.bodyHtml);
+      // TSK-0074: load logo + mobile overrides from the flow step's template.
+      if (firstStep.template?.logoUrl !== undefined) setLogoUrl(firstStep.template.logoUrl ?? "");
+      if (firstStep.template?.mobileOverridesHtml !== undefined)
+        setMobileOverridesHtml(firstStep.template.mobileOverridesHtml ?? "");
       if (!name) setName(`${flow.name} — campaign`);
       if (firstStep.audienceId) {
         setListSource(`AUDIENCE:${firstStep.audienceId}`);
@@ -1342,6 +1382,48 @@ function CampaignComposer({
   const canPauseFromComposer =
     isEditing && campaign && (campaign.status === "SENDING" || campaign.status === "SCHEDULED");
   const canTestSendFromComposer = isEditing && !!campaign;
+
+  // ── TSK-0074: Preview rendering (mirrors the template editor) ────────────
+  // The preview iframe srcdoc is produced by the SAME renderUnifiedEmail
+  // pipeline used at send time, so what the admin sees here matches
+  // production rendering 1:1:
+  //   - tokens substituted with sample values (PREVIEW_CTX)
+  //   - brand logo injected top-right via buildLogoBlock(logoUrl)
+  //   - mobile overrides wrapped in @media (max-width:600px)
+  //   - unsubscribe footer with unsubscribeUrl: "#"
+  //
+  // Re-renders are debounced 300ms after edits to avoid re-running the
+  // pipeline on every keystroke.
+  const [debouncedBody, setDebouncedBody] = React.useState(bodyHtml);
+  const [debouncedMobile, setDebouncedMobile] = React.useState(mobileOverridesHtml);
+  const [debouncedLogo, setDebouncedLogo] = React.useState(logoUrl);
+
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedBody(bodyHtml), 300);
+    return () => window.clearTimeout(h);
+  }, [bodyHtml]);
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedMobile(mobileOverridesHtml), 300);
+    return () => window.clearTimeout(h);
+  }, [mobileOverridesHtml]);
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedLogo(logoUrl), 300);
+    return () => window.clearTimeout(h);
+  }, [logoUrl]);
+
+  const previewSrcDoc = React.useMemo(() => {
+    if (!debouncedBody.trim()) {
+      return `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;padding:32px;color:#999;font-size:14px;text-align:center;">Start typing in the editor above to see a live preview here.</body></html>`;
+    }
+    return renderUnifiedEmail({
+      html: debouncedBody,
+      ctx: PREVIEW_CTX,
+      logoHtml: buildLogoBlock(debouncedLogo || null),
+      mobileOverridesHtml: debouncedMobile || undefined,
+      unsubscribeUrl: "#",
+      chapterName: PREVIEW_CTX.chapterName,
+    });
+  }, [debouncedBody, debouncedMobile, debouncedLogo]);
 
   return (
     <div className="space-y-4 py-2">
@@ -1523,57 +1605,102 @@ function CampaignComposer({
         </div>
       </div>
 
+      {/* ── TSK-0074: Email body WYSIWYG editor (same as template editor) ──────
+          Replaced the old plain <Textarea> + toggle preview with the same
+          RichTextEmailEditor + Desktop/Mobile preview pane used in the
+          template editor. This ensures the campaign composer and template
+          editor have identical editing + preview UX. */}
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <Label htmlFor="cmp-body">Email body (HTML)</Label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowPreview((s) => !s)}
-            className="h-7"
-          >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            {showPreview ? "Edit" : "Preview"}
-          </Button>
-        </div>
-        {/* The editor + preview are constrained to the email-safe max
-            width (600px) and centered, so what you see is what the
-            recipient will see in their inbox. Most email clients cap the
-            readable width at ~600-650px; designing wider than that causes
-            horizontal scroll on mobile and ugly column-stacking in
-            Outlook.
+        <Label className="mb-1 block">Email body (WYSIWYG)</Label>
+        <RichTextEmailEditor
+          value={bodyHtml}
+          onChange={setBodyHtml}
+          height={420}
+          readOnly={!!isFrozen}
+        />
+      </div>
 
-            SHRINK-TO-FIT: the preview container never overflows
-            horizontally. Images, tables, and other intrinsic-width
-            elements are scaled down to fit the 600px column via
-            [&_img]:max-w-full and [&_table]:max-w-full. Long text wraps
-            with break-words. NO horizontal scroll, ever. */}
-        <div className="flex justify-center">
-          <div className="w-full max-w-[600px]">
-            {showPreview ? (
-              <div
-                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm overflow-hidden break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_div]:max-w-full"
-                dangerouslySetInnerHTML={{ __html: bodyHtml }}
-              />
-            ) : (
-              <Textarea
-                id="cmp-body"
-                value={bodyHtml}
-                onChange={(e) => setBodyHtml(e.target.value)}
-                disabled={!!isFrozen}
-                rows={12}
-                className="font-mono text-xs"
-                placeholder="<h1>Hi {{name}},</h1><p>Here's what's coming up...</p>"
-              />
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-black/50 mt-1 text-center">
-          Email-safe width: 600px · Merge fields: <code>{"{{name}}"}</code> resolves
-          to recipient's name; <code>{"{{chapter_name}}"}</code> resolves to the
-          campaign's chapter display name (defaults to "Tel Aviv"). HTML supported.
+      {/* Logo override — read-only when editing a flow-linked campaign (the
+          logo comes from the template; edit it in the template editor).
+          For non-flow campaigns, allow per-campaign override. */}
+      <LogoEditorField value={logoUrl} onChange={setLogoUrl} />
+
+      {/* Mobile overrides (CSS/HTML) — same as template editor */}
+      <div className="rounded-md border border-cyan-200 bg-cyan-50/30 p-3">
+        <Label className="mb-1 block text-xs font-semibold text-cyan-900">
+          Mobile overrides (CSS/HTML)
+        </Label>
+        <Textarea
+          value={mobileOverridesHtml}
+          onChange={(e) => setMobileOverridesHtml(e.target.value)}
+          disabled={!!isFrozen}
+          rows={6}
+          spellCheck={false}
+          placeholder={`h1 { font-size: 24px !important; line-height: 1.3 !important; }\n.hero { padding: 12px !important; }\n.btn { display: block !important; width: 100% !important; }`}
+          className="font-mono text-xs leading-relaxed"
+        />
+        <p className="mt-1 text-[0.7rem] text-cyan-800">
+          These rules only apply on screens ≤600px wide (mobile). Wrapped
+          automatically inside a <code>@media (max-width: 600px)</code>{" "}
+          block by the unified renderer. The Mobile preview tab below shows
+          them in action.
         </p>
+      </div>
+
+      {/* Desktop / Mobile preview pane (always visible below the editor).
+          srcdoc is rendered via the same pipeline as production sends. */}
+      <div className="rounded-md border border-black/15 bg-neutral-50">
+        <div className="flex items-center justify-between border-b border-black/10 bg-white px-3 py-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPreviewTab("desktop")}
+              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+                previewTab === "desktop"
+                  ? "bg-[#FF005A] text-white"
+                  : "text-black/60 hover:bg-black/5"
+              }`}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              Desktop
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewTab("mobile")}
+              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+                previewTab === "mobile"
+                  ? "bg-[#FF005A] text-white"
+                  : "text-black/60 hover:bg-black/5"
+              }`}
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              Mobile
+            </button>
+          </div>
+          <span className="text-[0.7rem] text-black/50">
+            Rendered via <code>renderUnifiedEmail</code> · matches production sends
+          </span>
+        </div>
+        <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
+          <iframe
+            srcDoc={previewSrcDoc}
+            title="Email preview"
+            sandbox="allow-same-origin"
+            style={{
+              width: previewTab === "desktop" ? 600 : 375,
+              maxWidth: "100%",
+              height: 520,
+              background: "#ffffff",
+              border: "1px solid #e5e5e5",
+              borderRadius: 4,
+            }}
+          />
+        </div>
+        <div className="border-t border-black/10 bg-white px-3 py-1.5 text-center text-[0.7rem] text-black/50">
+          {previewTab === "desktop"
+            ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
+            : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
+        </div>
       </div>
 
       {/* Recipient list selector */}

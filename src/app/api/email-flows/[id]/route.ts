@@ -47,7 +47,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         orderBy: { position: "asc" },
         include: {
           audience: { select: { id: true, name: true, isTest: true } },
-          template: { select: { id: true, name: true, subject: true, stage: true } },
+          // TSK-0074: include bodyHtml + logoUrl + mobileOverridesHtml so the
+          // campaign composer can pre-fill + preview from the flow's first step.
+          template: {
+            select: {
+              id: true,
+              name: true,
+              subject: true,
+              stage: true,
+              bodyHtml: true,
+              bodyText: true,
+              signatureHtml: true,
+              logoUrl: true,
+              mobileOverridesHtml: true,
+            },
+          },
         },
       },
       // Recent queue items for this flow's steps (for the report + history).
@@ -216,7 +230,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       } else {
         // Existing campaign — refresh snapshots from the flow's first step.
-        // Keep the existing status (don't reset SENT → DRAFT).
+        //
+        // TSK-0074: When the flow is RE-ACTIVATED (previousStatus !== "ACTIVE"
+        // && newStatus === "ACTIVE"), restore a PAUSED campaign to DRAFT so
+        // it shows as "ready / running" in the admin UI. Previously the code
+        // kept the existing status, which meant a re-activated flow's campaign
+        // stayed PAUSED forever — the admin had to manually Resume it, and
+        // even then the flow wasn't re-activated.
+        //
+        // We do NOT touch SENT / SENDING / FAILED campaigns — those are
+        // either completed or in-progress, and resetting them would lose
+        // audit history.
+        const wasActive = previousStatus === "ACTIVE";
+        const isReactivation = !wasActive && newStatus === "ACTIVE";
+        const shouldRestorePaused =
+          isReactivation && existingCampaign.status === "PAUSED";
+
         const updatePayload: Record<string, unknown> = {};
         if (firstStep?.templateId !== undefined) {
           updatePayload.templateId = firstStep.templateId ?? null;
@@ -249,6 +278,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         // — don't rename a SENT campaign's audit record).
         if (existingCampaign.status === "DRAFT" && body.name !== undefined) {
           updatePayload.name = `${body.name} — campaign`;
+        }
+        // TSK-0074: restore PAUSED → DRAFT on flow re-activation.
+        if (shouldRestorePaused) {
+          updatePayload.status = "DRAFT";
         }
         if (Object.keys(updatePayload).length > 0) {
           await db.emailCampaign.update({

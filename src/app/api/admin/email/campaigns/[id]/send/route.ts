@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { sendCampaignEmail, isSmtpConfigured, isGmailConfigured } from "@/lib/email-orchestrator/sender";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
+import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
 import { randomUUID } from "crypto";
 import { htmlToText } from "@/lib/email-campaign/render";
 
@@ -36,7 +37,23 @@ export async function POST(
   }
 
   const { id } = await params;
-  const campaign = await db.emailCampaign.findUnique({ where: { id } });
+  const campaign = await db.emailCampaign.findUnique({
+    where: { id },
+    include: {
+      // TSK-0074: load the linked template's logoUrl + mobileOverridesHtml
+      // so campaign sends render the brand logo + mobile overrides (same
+      // as flow-sent emails via the orchestrator worker). Previously
+      // campaign sends had NO logo (the renderer was called without
+      // logoHtml, and the comment said "UI subagent will add logoUrl
+      // support in a later phase" — this is that phase).
+      template: {
+        select: {
+          logoUrl: true,
+          mobileOverridesHtml: true,
+        },
+      },
+    },
+  });
   if (!campaign) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
@@ -170,8 +187,12 @@ export async function POST(
     const personalizedHtml = renderUnifiedEmail({
       html: campaign.bodyHtmlSnapshot,
       ctx: renderCtx,
-      // No logo for campaign sends (UI subagent will add logoUrl support
-      // to EmailTemplate2 + the campaign composer in a later phase).
+      // TSK-0074: pass the linked template's logoUrl + mobileOverridesHtml
+      // so campaign sends get the same brand logo + mobile styling as
+      // flow-sent emails. buildLogoBlock falls back to the default brand
+      // logo when logoUrl is null/empty.
+      logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null),
+      mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
       campaignId: id,
       trackToken,
       baseUrl,

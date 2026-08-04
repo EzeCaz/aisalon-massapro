@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { sendCampaignEmail } from "@/lib/email-orchestrator/sender";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
+import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
 import { htmlToText } from "@/lib/email-campaign/render";
 
 /**
@@ -51,7 +52,20 @@ export async function POST(
   const { id } = await params;
 
   // ── Load campaign ────────────────────────────────────────────────────────
-  const campaign = await db.emailCampaign.findUnique({ where: { id } });
+  // TSK-0074: include the linked template's logoUrl + mobileOverridesHtml
+  // so test sends render the brand logo + mobile overrides (same as
+  // production sends).
+  const campaign = await db.emailCampaign.findUnique({
+    where: { id },
+    include: {
+      template: {
+        select: {
+          logoUrl: true,
+          mobileOverridesHtml: true,
+        },
+      },
+    },
+  });
   if (!campaign) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
@@ -167,8 +181,11 @@ export async function POST(
   const renderedHtml = renderUnifiedEmail({
     html: campaign.bodyHtmlSnapshot,
     ctx: renderCtx,
-    // No logo for campaign test sends (same as production campaign sends —
-    // UI subagent will add logoUrl support in a later phase).
+    // TSK-0074: pass the linked template's logoUrl + mobileOverridesHtml
+    // so test sends match production rendering (brand logo top-right,
+    // mobile overrides applied).
+    logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null),
+    mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
     campaignId: id,
     trackToken: syntheticTrackToken,
     baseUrl,

@@ -555,8 +555,10 @@ function NewTemplateChoiceDialog({
 // filled with realistic placeholder data so the admin sees the email exactly
 // as a recipient would (tokens substituted, logo top-right, footer present).
 // ─────────────────────────────────────────────────────────────────────────────
-
-const PREVIEW_CTX: UnifiedRenderContext = {
+// TSK-0074: exported so the CampaignComposer can reuse the same preview
+// context (ensures the campaign preview and template preview show identical
+// sample data).
+export const PREVIEW_CTX: UnifiedRenderContext = {
   firstName: "Friend",
   name: "Friend",
   email: "test@example.com",
@@ -1275,7 +1277,7 @@ function MetricCard({
  * hardcoded DEFAULT_BRAND_LOGO_URL. The preview reflects that resolved URL,
  * so what you see here is exactly what shows up in the sent email.
  */
-function LogoEditorField({
+export function LogoEditorField({
   value,
   onChange,
 }: {

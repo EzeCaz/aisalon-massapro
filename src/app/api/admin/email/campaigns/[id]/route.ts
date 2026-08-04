@@ -130,6 +130,38 @@ export async function PATCH(
   if (body.templateId !== undefined) data.templateId = body.templateId ? (body.templateId).toString() : null;
   if (body.status !== undefined) data.status = body.status;
 
+  // ── TSK-0074: flow-linked campaign status sync ───────────────────────────
+  // When a flow-linked campaign is resumed (status → DRAFT or SCHEDULED),
+  // also re-activate the linked flow so the orchestrator starts processing
+  // triggers again. Conversely, when a flow-linked campaign is paused
+  // (status → PAUSED), also pause the linked flow so the orchestrator stops
+  // sending. This keeps the campaign status and flow status in sync — the
+  // admin only needs to act on the campaign, and the flow follows.
+  //
+  // This is bidirectional: PATCH /api/email-flows/[id] also syncs the
+  // campaign status (see the flow PATCH route).
+  if (body.status !== undefined && existing.flowId) {
+    const FLOW_STATUS_MAP: Record<string, string> = {
+      DRAFT: "ACTIVE",
+      SCHEDULED: "ACTIVE",
+      SENDING: "ACTIVE",
+      PAUSED: "PAUSED",
+      // SENT / FAILED don't change the flow (campaign is done).
+    };
+    const targetFlowStatus = FLOW_STATUS_MAP[body.status];
+    if (targetFlowStatus) {
+      try {
+        await db.emailFlow.update({
+          where: { id: existing.flowId },
+          data: { status: targetFlowStatus },
+        });
+      } catch (e) {
+        // Best-effort — don't fail the campaign PATCH if the flow sync errors.
+        console.error("[campaigns PATCH] flow status sync failed:", e);
+      }
+    }
+  }
+
   const campaign = await db.emailCampaign.update({
     where: { id },
     data,

@@ -32,6 +32,9 @@ type Props = {
   onChange: (html: string) => void;
   /** Height of the editor in pixels (default 420). */
   height?: number;
+  /** TSK-0074: when true, the editor is read-only (no toolbar, content not editable).
+   *  Used for SENT / SENDING campaigns where the snapshot is frozen. */
+  readOnly?: boolean;
 };
 
 const TOKENS = [
@@ -49,7 +52,7 @@ const TOKENS = [
   { label: "Agenda", token: "{{agenda}}" },
 ];
 
-export function RichTextEmailEditor({ value, onChange, height = 420 }: Props) {
+export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = false }: Props) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [showSource, setShowSource] = React.useState(false);
@@ -195,7 +198,8 @@ export function RichTextEmailEditor({ value, onChange, height = 420 }: Props) {
 
   return (
     <div className="rounded border border-neutral-300">
-      {/* Toolbar */}
+      {/* Toolbar — hidden when readOnly */}
+      {!readOnly && (
       <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200 bg-neutral-50 p-1.5">
         <Btn title="Bold" onClick={() => exec("bold")}><Bold className="h-4 w-4" /></Btn>
         <Btn title="Italic" onClick={() => exec("italic")}><Italic className="h-4 w-4" /></Btn>
@@ -250,9 +254,10 @@ export function RichTextEmailEditor({ value, onChange, height = 420 }: Props) {
           {showSource ? "Visual" : "Source"}
         </button>
       </div>
+      )}
 
       {/* Editor / Source area */}
-      {showSource ? (
+      {showSource && !readOnly ? (
         <textarea
           value={sourceDraft}
           onChange={(e) => setSourceDraft(e.target.value)}
@@ -263,12 +268,12 @@ export function RichTextEmailEditor({ value, onChange, height = 420 }: Props) {
       ) : (
         <div
           ref={editorRef}
-          contentEditable
+          contentEditable={!readOnly}
           onInput={handleInput}
           onBlur={handleInput}
           suppressContentEditableWarning
           style={{ height, minHeight: 280 }}
-          className="w-full overflow-y-auto rounded-b bg-white p-4 text-sm leading-relaxed text-neutral-800 focus:outline-none [&_a]:text-[#FF005A] [&_a]:underline [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-6"
+          className={`w-full overflow-y-auto rounded-b bg-white p-4 text-sm leading-relaxed text-neutral-800 focus:outline-none [&_a]:text-[#FF005A] [&_a]:underline [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mb-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mb-2 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-6${readOnly ? " cursor-default" : ""}`}
         />
       )}
 
