@@ -12672,3 +12672,60 @@ Stage Summary:
 - This unblocks deployment of all recent features: emailLogo picker (commit 99d6774), logo two-column layout (917ebf8), Copy/Paste style fix (6544c96), Show logo checkbox (50fcdba), font editing (86c470c).
 - The destructive `prisma db push --accept-data-loss` fallback is removed — it was dangerous and could have caused data loss on a real schema drift. Real schema changes are applied separately via `npx prisma db execute --file` (see worklog entry for logoHidden migration).
 - User should see the new Vercel deployment go green within ~3-5 minutes of commit 1338cbd being pushed.
+
+---
+Task ID: unified-email-layout-aisalon-branding
+Agent: main
+Task: User provided a reference HTML layout and asked to apply it to ALL emails. Requirements: (1) "aisalon" branding div at top-left, (2) two <br> line breaks, (3) h1 "Empowering AI Connections" below the breaks, (4) "Dear Community Member," paragraph DIRECTLY below the h1, (5) logo image at top-right, top-aligned with the "aisalon" text (same horizontal line). Show preview before deploying.
+
+Work Log:
+- Generated fixed HTML preview at /home/z/my-project/download/email-layout-preview.html using the user's exact reference HTML, with 3 fixes:
+  * Added the <img> tag inside the previously-empty right <td> (logo was missing)
+  * Added margin-bottom:0 to <h1> and margin-top:0 to <p> so "Dear Community Member" sits directly below the h1 with no gap
+  * Both <td> cells have valign="top" so the logo's top edge aligns with the "aisalon" div's top edge
+- Screenshotted the preview (desktop + mobile) via Playwright at /home/z/my-project/download/email-layout-preview-{desktop,mobile}.png
+- VLM-verified the preview: all 5 requirements confirmed (logo top-right, branding top-left, h1 below with 2 breaks, body directly below h1, logo top-aligned with branding)
+- User approved: "perfect, use that format for all emails"
+- Applied the layout to ALL emails via 2 code changes:
+
+1. src/lib/email-orchestrator/templates.ts:
+   * SHELL wrapper now opens with `<div data-brand-header style="font-weight:700;font-size:24px;margin-bottom:10px;">aisalon</div>` followed by `<br><br>` before the inner content (h1 + body). The `data-brand-header` attribute is the marker that injectLogo() looks for.
+   * <hr> separator color changed from #eee → #000 per user reference HTML
+   * buildLogoBlock() img width reduced from 160px → 150px to match user reference
+   * All 5 DEFAULT_TEMPLATES and the NO_CODE_BODY variant use the same SHELL, so they automatically inherit the new layout
+
+2. src/lib/email/render-unified.ts → injectLogo():
+   * NEW Strategy 1: regex matches `<div data-brand-header>...</div>` + whitespace + `<br>` + whitespace + `<br>` + whitespace + `<h1>...</h1>` as a single block, wraps it in a two-column table:
+     - Left <td valign="top">: branding div + br/br + h1
+     - Right <td valign="top" width="150" align="right">: logo <img>
+   * Both cells have valign="top" so logo's top edge aligns horizontally with "aisalon" text's top edge (per user spec)
+   * Right cell fixed at 150px wide with align="right" so logo sticks to right edge
+   * Strategy 2 (legacy): wraps just the first <h1> in a two-column table — used when template has h1 but no data-brand-header div
+   * Strategy 3 (fallback): floated img with float:right — used when no h1 at all
+   * Idempotent via data-brand-logo marker
+
+- Generated rendered previews of all 5 stage templates (Awareness, Reminder, Final Prep, Day-Of, Recap) using the ACTUAL pipeline (inlined SHELL + injectLogo):
+  * HTML: /home/z/my-project/download/email-stage-{1..5}.html
+  * Desktop PNG: /home/z/my-project/download/email-stage-{1..5}-desktop.png
+  * Mobile PNG: /home/z/my-project/download/email-stage-{1..5}-mobile.png
+- VLM-verified all 5 stage previews — every stage passes all 5 layout checks:
+  | Stage | (1) branding top-left | (2) logo top-right | (3) h1 below w/ 2 breaks | (4) body below h1 | (5) logo aligned with branding |
+  | 1 Awareness       | ✅ | ✅ | ✅ | ✅ | ✅ |
+  | 2 Reminder        | ✅ | ✅ | ✅ | ✅ | ✅ |
+  | 3 Final Prep      | ✅ | ✅ | ✅ | ✅ | ✅ |
+  | 4 Day-Of          | ✅ | ✅ | ✅ | ✅ | ✅ |
+  | 5 Recap           | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in modified files.
+- Committed: `b562d54 feat(email): unified layout — 'aisalon' branding + 2 breaks + h1 + logo top-right aligned` (2 files, +78/-37 lines)
+- Pushed: `a2c9bfd..b562d54 main -> main` to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+
+Stage Summary:
+- ALL outgoing emails now use the user's reference layout: "aisalon" branding top-left, two line breaks, h1 below, body directly below h1, logo image top-right aligned with the branding text.
+- The layout is implemented via the SHELL wrapper (which all 5 stage templates + the NO_CODE_BODY variant use), so every email inherits it automatically — no per-template changes needed.
+- injectLogo() Strategy 1 handles the two-column table wrapping when data-brand-header is present (the new SHELL). Strategy 2 (legacy h1-only wrap) and Strategy 3 (float:right fallback) cover custom templates that don't use the standard SHELL.
+- Logo size is now 150px wide (down from 160px) to match the user's reference HTML.
+- <hr> separator is now #000 (was #eee) per the user's reference HTML.
+- Per-template logoUrl override + logoHidden toggle + global/chapter emailLogo default all continue to work — they affect WHICH logo URL is used, while the new layout affects HOW the logo is positioned.
+- Files modified (2): src/lib/email-orchestrator/templates.ts, src/lib/email/render-unified.ts
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
