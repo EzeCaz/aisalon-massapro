@@ -50,7 +50,8 @@ scripts/patch-salon-paths.py
 old-deployment/
 
 # Dev/backup directories — not deployed to Vercel
-scripts/
+scripts/*
+!scripts/baseline-migrations.cjs
 download/
 tool-results/
 agents/
