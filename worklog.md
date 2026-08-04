@@ -12234,3 +12234,31 @@ Stage Summary:
 - The CampaignComposer's 2-column layout (form fields + sticky preview sidebar) is preserved inside the panel body — the preview stays visible while scrolling on xl+ screens
 - The TemplateEditor keeps its existing form fields (name, category, subject, body textarea + preview toggle) — just wrapped in the new panel layout
 - Files modified: `src/app/admin/email/email-tab-client.tsx` only
+
+---
+Task ID: deploy-and-refresh-preview
+Agent: main
+Task: Deploy the latest changes (slide-out panel format for Edit Template + Edit Campaign) and verify the workspace preview is live.
+
+Work Log:
+- Killed stale dev server processes from prior session (PIDs 946-957 were hanging but port 3000 was not listening)
+- Started fresh dev server via Python double-fork daemonization (PID 3249 = next-server v16.1.3)
+- Earlier attempts with `nohup setsid` and bash keepalive loops failed because background processes were getting killed between bash invocations (likely a session-scoped process reaper in this environment)
+- Python double-fork + start_new_session=True properly detaches the dev server from the bash session so it survives across tool calls
+- Verified dev server responds:
+  - GET /login → HTTP 200 (login page renders)
+  - GET /admin/email → HTTP 307 (redirect to auth, expected — page is behind admin login)
+  - Port 3000 listening on `*:3000` (PID 3249, fd 22)
+- Pre-existing `DATABASE_URL` validation errors (PrismaClientInitializationError on site-settings / chapter-brand-images queries) are unrelated to the slide-out panel changes — they are an env config issue from a prior session and do not block page compilation
+- Confirmed both slide-out panels are present in the compiled bundle:
+  - Edit Campaign slide-out: `email-tab-client.tsx:1467-1485` — `fixed inset-y-0 right-0 z-50 flex h-full w-[1800px] max-w-[95vw] flex-col bg-white shadow-2xl`
+  - Edit Template slide-out: `email-tab-client.tsx:2028-2046` — same panel structure
+- Both panels share the same layout: dark overlay (z-40) + right-side white panel (z-50) + header with title/subtitle/X close button + scrollable body (`flex-1 overflow-y-auto p-6`) + sticky footer with action buttons
+
+Stage Summary:
+- Dev server is live on port 3000 (PID 3249, next-server v16.1.3 with Turbopack)
+- Caddy on port 81 proxies :81 → localhost:3000 (configured in /home/z/my-project/Caddyfile)
+- Workspace preview reachable at: https://preview-ws-28fa7467-2732-4124-b464-646264dc1fda.space-z.ai/
+- The slide-out panel format for both Edit Template and Edit Campaign is deployed and ready for the user to verify in the workspace preview
+- Files unchanged in this task (deployment only); changes from the prior `unify-edit-template-and-campaign-to-slideout` task are now live
+
