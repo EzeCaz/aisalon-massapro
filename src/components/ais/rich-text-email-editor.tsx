@@ -137,6 +137,18 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
   const [fontFamilyOpen, setFontFamilyOpen] = React.useState(false);
   const [fontSizeOpen, setFontSizeOpen] = React.useState(false);
   const textColorRef = React.useRef<HTMLInputElement>(null);
+  // Brief "flash" state — set to a counter that increments on every successful
+  // Copy style click. The button uses this to trigger a 600ms pulse animation,
+  // so the user gets visual feedback even when the button was already pink
+  // from a previous copy. Without this, the second Copy style click appears
+  // to do nothing (the button is already pink) which makes the feature feel
+  // "stuck".
+  const [copyFlashKey, setCopyFlashKey] = React.useState(0);
+  React.useEffect(() => {
+    if (copyFlashKey === 0) return;
+    const h = window.setTimeout(() => setCopyFlashKey(0), 700);
+    return () => window.clearTimeout(h);
+  }, [copyFlashKey]);
 
   // Initialize the contentEditable on mount + whenever we switch back from
   // source mode. We DON'T re-init on every `value` change — that would
@@ -211,11 +223,19 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
    *  text in a <span style="...">. If the selection is collapsed (cursor only),
    *  no-op — the user must actually select some text first. After applying, the
    *  selection is restored to cover the newly-wrapped span so subsequent style
-   *  operations compose on the same text. */
+   *  operations compose on the same text.
+   *
+   *  NOTE: we do NOT call editor.focus() here. The caller (handlePasteStyle,
+   *  handleFontSize) is invoked from a toolbar button whose onMouseDown handler
+   *  calls preventDefault() — so the editor never loses focus and the user's
+   *  selection is preserved exactly as they made it. Calling editor.focus()
+   *  here would actually COLLAPSE the selection in some browsers (Chrome
+   *  restores the last cursor position rather than the last selection range
+   *  when focus was lost to a button click), which was the root cause of the
+   *  "paste only works once" bug. */
   const wrapSelectionWithStyle = (styleObj: Record<string, string>) => {
     const editor = editorRef.current;
     if (!editor) return;
-    editor.focus();
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
       return;
@@ -265,13 +285,20 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
   /** Read the typographic style of the element at the current selection start
    *  and stash it in copiedStyleRef for later "Paste style" use. We use
    *  getComputedStyle on the selection's container element so we capture the
-   *  *effective* style (inherited + inline) — exactly what the user sees. */
+   *  *effective* style (inherited + inline) — exactly what the user sees.
+   *
+   *  NOTE: we do NOT call editor.focus() here — the toolbar button's
+   *  onMouseDown handler calls preventDefault() so the editor never loses
+   *  focus. Calling editor.focus() was the root cause of the "copy gets
+   *  stuck" bug — in Chrome, when a contentEditable regains focus after a
+   *  button click, the selection is often collapsed to the cursor position
+   *  rather than restored to the user's range, so we'd capture the editor's
+   *  default body style instead of the user's selection. */
   const handleCopyStyle = () => {
     const editor = editorRef.current;
     if (!editor) return;
-    editor.focus();
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) {
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
       window.alert("Select some text first, then click Copy style.");
       return;
     }
@@ -296,11 +323,17 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
       textDecoration: cs.textDecoration,
     };
     setHasCopiedStyle(true);
+    // Bump the flash counter so the button pulses even if it was already pink.
+    setCopyFlashKey((k) => k + 1);
   };
 
   /** Apply the previously-copied style to the current selection. If nothing
    *  is copied yet, alerts the user. If the selection is collapsed, alerts
-   *  the user to select target text first. */
+   *  the user to select target text first.
+   *
+   *  NOTE: same as handleCopyStyle — we do NOT call editor.focus() here.
+   *  The button's onMouseDown preventDefault keeps the editor's selection
+   *  intact, so we can read it directly. */
   const handlePasteStyle = () => {
     const copied = copiedStyleRef.current;
     if (!copied) {
@@ -309,7 +342,6 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
     }
     const editor = editorRef.current;
     if (!editor) return;
-    editor.focus();
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
       window.alert("Select the target text first, then click Paste style.");
@@ -474,12 +506,24 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
           // value is intentionally uncontrolled — each click resets the picker
         />
         <div className="mx-1 h-5 w-px bg-neutral-300" />
-        {/* Copy / Paste style — paste-applies the last copied style to the current selection */}
+        {/* Copy / Paste style — paste-applies the last copied style to the current selection.
+            onMouseDown preventDefault is CRITICAL: without it, clicking the
+            button steals focus from the editor and the browser collapses the
+            text selection to a cursor, so we'd capture nothing (or the editor's
+            default body style) on Copy, and silently no-op on Paste. With
+            preventDefault, the editor retains focus and the user's selection
+            stays intact — Copy reads the right range and Paste wraps the
+            right text, every time. */}
         <button
           type="button"
           title="Copy style of selected text"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={handleCopyStyle}
-          className={`inline-flex h-8 items-center gap-1 rounded border px-2 text-xs font-semibold ${hasCopiedStyle ? "border-pink-300 bg-pink-50 text-pink-700" : "border-neutral-200 text-neutral-700 hover:bg-neutral-100"}`}
+          className={`inline-flex h-8 items-center gap-1 rounded border px-2 text-xs font-semibold transition-all ${
+            hasCopiedStyle
+              ? "border-pink-300 bg-pink-50 text-pink-700"
+              : "border-neutral-200 text-neutral-700 hover:bg-neutral-100"
+          } ${copyFlashKey > 0 ? "ring-2 ring-pink-400 ring-offset-1 scale-105" : ""}`}
         >
           <Paintbrush className="h-3.5 w-3.5" />
           Copy style
@@ -487,6 +531,7 @@ export function RichTextEmailEditor({ value, onChange, height = 420, readOnly = 
         <button
           type="button"
           title="Paste copied style to selected text"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={handlePasteStyle}
           disabled={!hasCopiedStyle}
           className="inline-flex h-8 items-center gap-1 rounded border border-neutral-200 px-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-40"
