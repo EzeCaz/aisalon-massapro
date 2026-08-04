@@ -35,8 +35,7 @@ import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
 // Brand logo (top-right of every email)
 // ----------------------------------------------------------------------------
 
-/** Default brand logo URL — the canonical AI Salon login banner image
- *  (the same wide hero image used as the login-page background / OG image).
+/** Default brand logo URL — the canonical AI Salon email logo.
  *  This is the LAST-RESORT fallback used only when:
  *    - the per-template `logoUrl` override is empty, AND
  *    - no global SiteSetting[emailLogo] has been picked by the Super Admin, AND
@@ -45,13 +44,15 @@ import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
  *
  *  In practice, the Super Admin picks the global email logo from the
  *  brand-image gallery (stored in SiteSetting[emailLogo], default seeded
- *  to the URL below). Per-template `logoUrl` still wins over everything.
+ *  to the URL below). Per-template `logoUrl` is now ALWAYS cleared by
+ *  the seed (so the global pick always wins — see seed.ts).
  *
- *  Spec: banner-proportioned, anchored top-right of the 560px-wide email
- *  body. Rendered at 160px wide with `height:auto` so the image's natural
- *  aspect ratio is preserved (no vertical squish). */
+ *  PER USER SPEC 2026-08-05: this is the user's chosen email logo —
+ *  https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png
+ *  Used top-right of every outgoing email at 150px wide with height:auto
+ *  so the image's natural aspect ratio is preserved. */
 export const DEFAULT_BRAND_LOGO_URL =
-  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png";
 
 /** Resolve the brand logo URL with the fallback chain:
  *  per-template → resolved default (global/chapter/env) → hardcoded default.

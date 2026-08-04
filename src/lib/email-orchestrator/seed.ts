@@ -82,23 +82,29 @@ export async function runSeed(): Promise<SeedResult> {
       if (!existing.altSubject && alt) patch.altSubject = alt.altSubject;
       if (!existing.altNotOpenedHours && alt) patch.altNotOpenedHours = alt.altNotOpenedHours;
 
-      // ── Migration 2026-08-03 (v2): ensure all seeded default templates
+      // ── Migration 2026-08-05 (v3): ensure all seeded default templates
       //  use the {{chapter_name}} merge token (not hardcoded "Tel Aviv")
-      //  AND that the email brand logo falls back to DEFAULT_BRAND_LOGO_URL
-      //  (the canonical AI Salon login banner). This is idempotent:
-      //    - htmlBody / noCodeHtmlBody are reset to the canonical tokenized
-      //      versions whenever they still contain the literal "Tel Aviv".
-      //    - logoUrl is reset to null whenever it's set to anything other
-      //      than the canonical login-banner URL. This clears any
-      //      previously-set per-template logo overrides so every email
-      //      uses the login banner as its brand mark.
+      //  AND that the email brand logo is ALWAYS controlled by the global
+      //  SiteSetting[emailLogo] pick (not per-template overrides).
+      //
+      //  PER USER SPEC 2026-08-05: "when I select the logo for the email
+      //  all emails will be automatically with the logo I've chosen."
+      //  This means the per-template `logoUrl` override must NEVER win
+      //  over the global pick. We achieve this by ALWAYS clearing the
+      //  per-template `logoUrl` to null in the seed — so resolveLogoUrl()
+      //  falls through to resolveEmailLogoDefault() which reads
+      //  SiteSetting[emailLogo] (the Super Admin's global pick).
+      //
+      //  The canonical email logo URL is now the user's chosen image:
+      //    https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png
+      //  This matches DEFAULTS[K_EMAIL_LOGO] in site-settings.ts and
+      //  DEFAULT_BRAND_LOGO_URL in templates.ts.
+      //
       //  We also handle the campaign footer line "AI Salon Tel Aviv · Empowering AI Connections"
       //  by replacing the entire htmlBody — the canonical template already
       //  has "AI Salon {{chapter_name}} · Empowering AI Connections".
       //  The subject line never contained "Tel Aviv", so we leave it alone.
       const def = DEFAULT_TEMPLATES[stageCfg.stage];
-      const canonicalLogoUrl =
-        "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
       const hasOldChapterText = (s: string | null): boolean =>
         !!s && (s.includes("The AI Salon Tel Aviv team") ||
                 s.includes("AI Salon Tel Aviv · Empowering AI Connections") ||
@@ -109,10 +115,13 @@ export async function runSeed(): Promise<SeedResult> {
       if (existing.noCodeHtmlBody && hasOldChapterText(existing.noCodeHtmlBody) && noCode) {
         patch.noCodeHtmlBody = noCode.html("{{eventTitle}}", "{{eventDate}}", "{{eventVenue}}");
       }
-      // Force the email brand logo to the canonical login banner. If a
-      // template had a per-template override set previously, clear it so
-      // resolveLogoUrl() falls back to DEFAULT_BRAND_LOGO_URL.
-      if (existing.logoUrl && existing.logoUrl !== canonicalLogoUrl) {
+      // ALWAYS clear the per-template logoUrl so the global
+      // SiteSetting[emailLogo] pick is used. Previously this only cleared
+      // logoUrl when it differed from the canonical URL — which meant
+      // templates seeded with the OLD canonical URL kept showing the old
+      // logo even after the user picked a new one. Now we clear it
+      // unconditionally so the global pick ALWAYS wins.
+      if (existing.logoUrl) {
         patch.logoUrl = null;
       }
 

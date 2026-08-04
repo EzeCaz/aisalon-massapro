@@ -54,6 +54,10 @@ const crypto = require('crypto');
 // by `prisma migrate deploy`. These will NOT be baselined as "applied".
 const NEW_MIGRATIONS = new Set([
   '20260804120000_email_unify_backend',
+  // 2026-08-05: clears per-template email logo overrides + sets the global
+  // SiteSetting[emailLogo] to the user's chosen URL. See migration SQL for
+  // the full rationale.
+  '20260805130000_clear_email_logo_overrides',
 ]);
 
 async function main() {

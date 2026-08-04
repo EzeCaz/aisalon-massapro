@@ -135,6 +135,25 @@ export async function POST() {
   await setSetting(K_GLOBAL_LOGIN_BANNER, GLOBAL_LOGIN_BANNER, user.id);
   await setSetting(K_EMAIL_LOGO, GLOBAL_EMAIL_LOGO, user.id);
 
+  // 2d. PER USER SPEC 2026-08-05: clear ALL per-template `logoUrl` overrides
+  // in EmailTemplate2 so the global SiteSetting[emailLogo] pick ALWAYS wins.
+  // Previously the seed only cleared logoUrl when it differed from the
+  // canonical URL — which was the OLD logo. Templates seeded with that OLD
+  // URL kept showing it even after the user picked a new global email logo.
+  // Now we clear ALL per-template logoUrl values unconditionally.
+  //
+  // This is the runtime equivalent of the SQL migration
+  // `20260805130000_clear_email_logo_overrides`. We do BOTH because:
+  //   - The SQL migration runs at build time (if `prisma migrate deploy`
+  //     succeeds — but it's non-fatal so might time out on Neon).
+  //   - This runtime clear runs when the Super Admin hits /api/admin/v7-seed.
+  // Belt + suspenders.
+  const logoCleared = await db.emailTemplate2.updateMany({
+    where: { logoUrl: { not: null } },
+    data: { logoUrl: null },
+  });
+  updates.emailTemplateLogoCleared = logoCleared.count;
+
   // 3. Backfill NULLs
   // SUPER_ADMIN users keep NULL scope (global).
   // TSK-0056: Use AND (not OR) so we ONLY backfill users whose scope is
