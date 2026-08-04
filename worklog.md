@@ -12503,3 +12503,26 @@ Stage Summary:
   - src/app/admin/email/email-tab-client.tsx (state + preview + load from template/flow)
 - Production DB column added, migration applied, Prisma client regenerated.
 - Pushed to GitHub main → Vercel production deploy will rebuild shortly.
+
+---
+Task ID: fix-copy-paste-style-stuck-after-first-use
+Agent: main
+Task: User reported "Copy style works only once per save — button gets stuck as pressed, only enables paste once". Fix so copy/paste can be used repeatedly without needing to save the email first.
+
+Work Log:
+- Diagnosed root cause: when the user clicked the Copy/Paste button, the browser moved focus to the button (default behavior). The handlers then called `editor.focus()` to restore focus. In Chrome, calling `.focus()` on a contentEditable that lost focus to a button click COLLAPSES the selection to a cursor position instead of restoring the user's range. Result: the 2nd Copy captured nothing (or the editor's default body style), and the 2nd Paste silently no-op'd because the selection was collapsed.
+- The "stuck" feeling was compounded by `hasCopiedStyle` state already being `true` from the first copy, so the button stayed pink with zero visual feedback on the 2nd copy attempt.
+- Three-part fix in `src/components/ais/rich-text-email-editor.tsx`:
+  1. Added `onMouseDown={(e) => e.preventDefault()}` on BOTH Copy style and Paste style buttons. This is the standard rich-text-editor pattern — prevents the button from stealing focus from the contentEditable, so the editor's selection is preserved exactly as the user made it.
+  2. Removed `editor.focus()` from `handleCopyStyle`, `handlePasteStyle`, and `wrapSelectionWithStyle`. They no longer need it (editor retains focus via the onMouseDown preventDefault), and the call was actively harmful (caused selection collapse). Also tightened `handleCopyStyle` to check `sel.isCollapsed` in addition to `rangeCount === 0` — was only checking rangeCount before, so a collapsed selection would silently walk up to the wrong parent element and capture its style.
+  3. Added `copyFlashKey` state: a counter that bumps on every successful Copy style click and triggers a 700ms `ring-2 ring-pink-400 ring-offset-1 scale-105` pulse animation on the Copy style button. Gives the user clear visual feedback that the copy happened, even when the button was already pink from a previous copy.
+- Verified: `npx tsc --noEmit --skipLibCheck` produces zero errors. Dev server compiles `/admin/email` successfully (HTTP 307 auth redirect, 66ms compile).
+- Committed: `6544c96 fix(email-editor): Copy/Paste style works repeatedly — prevent focus stealing + selection collapse` (1 file, +54/-9 lines).
+- Pushed: `50fcdba..6544c96 main -> main` to https://github.com/EzeCaz/aisalon-massapro — Vercel auto-deploy triggered.
+
+Stage Summary:
+- Copy/Paste style now works repeatedly without needing to save the email first.
+- After this fix, the full repeatable flow works: select text A → Copy (button pulses pink) → select text B → Paste (style A applied, B re-selected) → select text C → Copy (button pulses AGAIN, style C now on clipboard) → select text D → Paste (style C applied). Indefinitely.
+- The Copy style button now gives a brief ring + scale pulse animation on every successful copy, even when the button was already pink from a previous copy — no more "stuck" feeling.
+- File modified: `src/components/ais/rich-text-email-editor.tsx` only.
+- Pushed to GitHub main → Vercel production deploy will rebuild shortly.
