@@ -12342,3 +12342,20 @@ Stage Summary:
 - File modified: `src/app/admin/email/email-tab-client.tsx` (removed ~310 lines: section UI + 2 component definitions + state + handlers + import)
 - Dev server running on PID 1264, port 3000, no compile errors
 
+
+---
+Task ID: push-to-github-vercel
+Agent: main
+Task: User asked why recent changes are not on GitHub (EzeCaz/aisalon-massapro) or Vercel.
+
+Work Log:
+- Diagnosed: `git status` showed "Your branch is ahead of 'origin/main' by 8 commits" — all local commits were never pushed
+- Verified the 8 commits contained the expected changes (slide-out panels, logo fix, Campaign Templates removal): `git diff --stat origin/main..HEAD` showed `email-tab-client.tsx` 615 lines changed, `templates-client.tsx` 31 lines, `templates.ts` 23 lines, `worklog.md` 170 lines
+- Ran `git push origin main` — succeeded, pushed `1695488..dcd0912 main -> main`
+- Vercel auto-deploys from `main` branch on push (per the project's vercel.json config), so the production deployment at https://aisalon.massapro.com will rebuild with these changes within ~1-2 minutes
+
+Stage Summary:
+- 8 local commits now on GitHub: https://github.com/EzeCaz/aisalon-massapro
+- Vercel auto-deploy triggered — production site will be updated shortly
+- Going forward: any code change in this workspace must be `git commit` + `git push origin main` to land on GitHub and trigger Vercel deploy. Local edits alone (without push) stay only in this dev preview.
+
