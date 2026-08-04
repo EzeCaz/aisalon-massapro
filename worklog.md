@@ -12729,3 +12729,43 @@ Stage Summary:
 - Per-template logoUrl override + logoHidden toggle + global/chapter emailLogo default all continue to work — they affect WHICH logo URL is used, while the new layout affects HOW the logo is positioned.
 - Files modified (2): src/lib/email-orchestrator/templates.ts, src/lib/email/render-unified.ts
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: email-layout-body-beside-logo
+Agent: main
+Task: User noticed that in the Awareness email (and all stage templates), the body text appeared BELOW the logo image (not directly below the h1), because the two-column table row was being stretched to the logo's height (~150px) while the h1 was only ~30px — leaving a ~120px vertical gap between the h1 and the body text. User wanted: body should be at the same alignment as the other template (directly below h1), text should not go on top of the logo, logo always on top and in front.
+
+Work Log:
+- Diagnosed root cause: injectLogo() Strategy 1 was wrapping ONLY branding + br/br + h1 in the two-column table. The body paragraphs sat BELOW the table (outside the wrapper), so they were pushed down by the logo's tall height.
+- Generated preview of Awareness email at /home/z/my-project/download/email-awareness-preview.html using the new pipeline (Playwright + VLM verified all 6 requirements pass on desktop + mobile)
+- Copied previews to /home/z/my-project/public/previews/ so user could view via preview URL (URL needed a `/` between `.ai` and `previews` — user fixed typo and confirmed visible)
+- User approved: "excellent deploy on all emails and deploy the new version"
+- Applied the fix via 2 code changes:
+
+1. src/lib/email-orchestrator/templates.ts:
+   - Added `data-brand-content-end` attribute to the SHELL's `<hr>` element
+   - This marker tells injectLogo() where the body content ENDS, so it can wrap the ENTIRE body block (not just branding + h1)
+   - Updated docstring to explain WHY wrapping the entire body is necessary (prevents the gap caused by the table row stretching to logo height)
+
+2. src/lib/email/render-unified.ts → injectLogo():
+   - NEW Strategy 1 (PREFERRED): regex matches from `<div data-brand-header>` through `<hr data-brand-content-end>` as a single block, wraps the ENTIRE block in the two-column table
+   - The body paragraphs now flow INSIDE the left cell, directly below the h1, BESIDE the logo (in the left column) — never below the logo
+   - The right cell stays empty below the logo — body content never wraps under the logo
+   - Logo stays top-right, always visible (in its own cell), never overlapped by text
+   - OLD Strategy 1 (h1-only wrap) is preserved as Strategy 1b — used when template has data-brand-header but NO data-brand-content-end marker on <hr> (backward compat with custom templates)
+   - Strategy 2 (legacy h1-only wrap for templates without data-brand-header) and Strategy 3 (float:right fallback) are unchanged
+
+- Because all 5 stage templates (Awareness, Reminder, Final Prep, Day-Of, Recap) and the NO_CODE_BODY variant use the same SHELL, they ALL inherit the fix automatically — no per-template changes needed.
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in modified files.
+- Committed as 2 commits:
+  * 34b6627 — code changes (templates.ts + render-unified.ts, +86/-25 lines)
+  * 138e881 — preview files added to public/previews/ for user visibility
+- Pushed: `689bada..138e881 main -> main` to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+
+Stage Summary:
+- ALL outgoing emails now have the body content flowing BESIDE the logo (in the left column), directly below the h1 — no vertical gap, no text overlapping the logo, logo always top-right and always visible.
+- The fix is structural (wrap the entire body block in the two-column table) rather than cosmetic (no CSS hacks like negative margins or absolute positioning) — works in all email clients including Gmail, Outlook, Apple Mail.
+- VLM-verified on both desktop and mobile viewports: all 6 requirements pass (branding top-left, logo top-right, body directly below h1, body beside logo not below, no overlap, logo always visible).
+- Files modified (2): src/lib/email-orchestrator/templates.ts, src/lib/email/render-unified.ts
+- Files added (3, preview only): public/previews/email-awareness-preview-{desktop.png,mobile.png,html}
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
