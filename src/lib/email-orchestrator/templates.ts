@@ -160,7 +160,7 @@ export function buildLogoBlock(
   if (logoHidden) return "";
   const url = resolveLogoUrl(templateLogoUrl, resolvedDefaultUrl);
   if (!url) return "";
-  return `<img src="${url}" alt="AI Salon" width="160" style="width:160px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
+  return `<img src="${url}" alt="AI Salon" width="150" style="width:150px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
 }
 
 // ----------------------------------------------------------------------------
@@ -312,14 +312,25 @@ export function renderSubject(subject: string, ctx: TemplateContext): string {
 /**
  * MINIMAL_SHELL — the default AI Salon email wrapper.
  *
- * Design spec (per Eze, 2026-07-02):
+ * Design spec (per Eze, 2026-08-05):
  *   - Plus Jakarta Sans web font (with -apple-system fallback)
- *   - 560px max-width, centered
- *   - 32px / 24px padding
- *   - 22px h1, 800 weight, #0a0a0a
+ *   - 600px outer container, 560px content column, centered
+ *   - 20px outer padding (was 32px/24px — tighter per user's reference HTML)
+ *   - Top-left: "aisalon" branding (24px, weight 700, margin-bottom 10px)
+ *   - Two <br> line breaks below branding
+ *   - 22px h1, 800 weight, color #0a0a0a (template may override color)
+ *   - Top-right: brand logo image (150px wide, top-aligned with branding)
+ *     - Achieved via a two-column table: left = branding + h1, right = logo
+ *     - The table is injected by `injectLogo()` in render-unified.ts
+ *     - `data-brand-logo` marker on the table for idempotency
  *   - 15px body, line-height 1.6, #444
- *   - 1px solid #eee <hr> separator
+ *   - 1px solid #000 <hr> separator (40px margin-top per user spec)
  *   - 12px footer in #999 with site link
+ *
+ * The branding block (`<div>aisalon</div><br><br>`) + the first `<h1>` are
+ * wrapped together in a two-column table by `injectLogo()` — that's why the
+ * h1 has `margin-top:0` (no extra gap above) and `margin-bottom:0` (no gap
+ * between h1 and the body paragraph directly below).
  *
  * The shell pre-loads the Plus Jakarta Sans web font via Google Fonts
  * <link> for clients that support it (Apple Mail, iOS Mail, Thunderbird).
@@ -337,8 +348,10 @@ const SHELL = (inner: string): string => `<!DOCTYPE html>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="font-family:'Plus Jakarta Sans',-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0a0a0a;">
+    <div data-brand-header style="font-weight:700;font-size:24px;margin-bottom:10px;">aisalon</div>
+    <br><br>
     ${inner}
-    <hr style="margin:32px 0;border:none;border-top:1px solid #eee;"/>
+    <hr style="margin:32px 0;border:none;border-top:1px solid #000;"/>
     <p style="font-size:12px;color:#999;margin:0;line-height:1.5;">
       AI Salon {{chapter_name}} · Empowering AI Connections<br/>
       <a href="https://aisalon.massapro.com" style="color:#999;text-decoration:underline;">aisalon.massapro.com</a>

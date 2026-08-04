@@ -292,52 +292,83 @@ export function renderUnifiedSubject(
  * Idempotent: if the HTML already contains the `data-brand-logo` marker,
  * no injection happens (so calling this twice on the same HTML is safe).
  *
- * LAYOUT — two strategies, tried in order:
+ * LAYOUT — three strategies, tried in order:
  *
- *   1. (PREFERRED) Wrap the first `<h1>...</h1>` in a two-column table:
+ *   1. (PREFERRED — new layout per Eze 2026-08-05) Wrap the branding block
+ *      (`<div data-brand-header>aisalon</div>` + two `<br>` line breaks +
+ *      the first `<h1>`) in a two-column table:
  *        <table data-brand-logo>
  *          <tr>
- *            <td valign="top">  ← h1 goes here (left column, fluid width)
- *            <td valign="top" width="160" align="right">  ← logo img (right column, fixed 160px)
+ *            <td valign="top">  ← branding + br/br + h1 (left column, fluid width)
+ *            <td valign="top" width="150" align="right">  ← logo img (right column, fixed 150px)
  *          </tr>
  *        </table>
- *      This places the logo EXACTLY to the right of the heading text —
- *      matching the user's reference HTML layout. `valign="top"` on both
- *      cells ensures they align to the top, so the h1's vertical position
- *      is preserved regardless of the logo's height. This is dramatically
- *      more reliable than `float:right`, which could push the logo above
- *      the heading when the heading was short (because the float would
- *      clear to the next block-level element instead of sticking to the
- *      heading's line box).
+ *      This places the logo EXACTLY to the right of the "aisalon" branding
+ *      text, both top-aligned on the same horizontal line — matching the
+ *      user's reference HTML layout. The h1 sits below the branding with
+ *      the two `<br>` line breaks, and the body paragraph flows directly
+ *      below the h1.
  *
- *   2. (FALLBACK) If no `<h1>` is found, insert the logo img with
+ *   2. (LEGACY — for templates without data-brand-header) Wrap just the
+ *      first `<h1>...</h1>` in a two-column table (h1 left, logo right).
+ *      Used for custom templates that have an h1 but no branding block.
+ *
+ *   3. (FALLBACK) If no `<h1>` is found, insert the logo img with
  *      `float:right;margin:0 0 8px 16px;` added inline, right after the
  *      SHELL wrapper `<div style="max-width:560px...">` (or after `<body>`,
  *      or at the start of the HTML). This preserves the old behavior for
  *      templates that don't start with an `<h1>` (e.g. custom templates
  *      that begin with a `<p>` or `<div>`).
  *
- * The `data-brand-logo` marker is placed on the `<table>` (strategy 1) or
- * the `<img>` (strategy 2) so subsequent calls detect either and skip.
+ * The `data-brand-logo` marker is placed on the `<table>` (strategies 1+2)
+ * or the `<img>` (strategy 3) so subsequent calls detect either and skip.
  */
 export function injectLogo(html: string, logoHtml: string | undefined): string {
   if (!logoHtml) return html;
   // Idempotency: don't double-inject.
   if (/data-brand-logo/.test(html)) return html;
 
-  // ── Strategy 1: wrap the first <h1> in a two-column table ──────────────
-  // Match the first <h1 ...>...</h1> block (case-insensitive, non-greedy
-  // so we don't swallow subsequent content). Uses [\s\S] for dotall match
-  // because . doesn't match newlines in JS regex.
+  // ── Strategy 1: wrap branding block + first <h1> in a two-column table ─
+  // Match the pattern: <div data-brand-header ...>...</div> (optional
+  // whitespace) <br><br> (optional whitespace) <h1 ...>...</h1>. The
+  // branding div is identified by the `data-brand-header` attribute that
+  // the new SHELL adds. Uses [\s\S] for dotall match because . doesn't
+  // match newlines in JS regex.
+  const brandingH1Match = html.match(
+    /<div[^>]*data-brand-header[^>]*>[\s\S]*?<\/div>\s*<br\s*\/?\>\s*<br\s*\/?\>\s*<h1[^>]*>[\s\S]*?<\/h1>/i,
+  );
+  if (brandingH1Match && brandingH1Match.index !== undefined) {
+    const block = brandingH1Match[0];
+    // Build the two-column table wrapper. cellpadding=0 + cellspacing=0 +
+    // border=0 + border-collapse:collapse strips all default table spacing
+    // so the branding/h1 and logo sit flush. valign="top" on both cells
+    // ensures top alignment — the logo's top edge aligns with the
+    // "aisalon" branding div's top edge. The right cell has a fixed width
+    // of 150px (matching the user's reference HTML) + align="right" so
+    // the logo sticks to the right edge of the email body.
+    const tableWrapper =
+      `<table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">` +
+      `<tr>` +
+      `<td valign="top" style="vertical-align:top;">${block}</td>` +
+      `<td valign="top" width="150" align="right" style="vertical-align:top;width:150px;text-align:right;">${logoHtml}</td>` +
+      `</tr>` +
+      `</table>`;
+    // Replace just the matched branding+br/br+h1 block with the wrapped
+    // version. Using string slicing (not str.replace) to avoid regex
+    // special-character issues in the block content.
+    return (
+      html.slice(0, brandingH1Match.index) +
+      tableWrapper +
+      html.slice(brandingH1Match.index + block.length)
+    );
+  }
+
+  // ── Strategy 2 (legacy): wrap just the first <h1> in a two-column table ─
+  // Used when the template has an h1 but no data-brand-header div (e.g.
+  // custom templates that don't use the standard SHELL).
   const h1Match = html.match(/<h1[^>]*>[\s\S]*?<\/h1>/i);
   if (h1Match && h1Match.index !== undefined) {
     const h1Block = h1Match[0];
-    // Build the two-column table wrapper. cellpadding=0 + cellspacing=0 +
-    // border=0 + border-collapse:collapse strips all default table spacing
-    // so the h1 and logo sit flush. valign="top" on both cells ensures
-    // top alignment regardless of logo height. The right cell has a fixed
-    // width of 160px (the logo's render width) + align="right" so the logo
-    // sticks to the right edge of the email body.
     const tableWrapper =
       `<table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">` +
       `<tr>` +
@@ -345,9 +376,6 @@ export function injectLogo(html: string, logoHtml: string | undefined): string {
       `<td valign="top" width="160" align="right" style="vertical-align:top;width:160px;text-align:right;">${logoHtml}</td>` +
       `</tr>` +
       `</table>`;
-    // Replace just the first occurrence of the h1 block with the wrapped
-    // version. Using string slicing (not str.replace) to avoid regex
-    // special-character issues in the h1Block content.
     return (
       html.slice(0, h1Match.index) +
       tableWrapper +
@@ -355,7 +383,7 @@ export function injectLogo(html: string, logoHtml: string | undefined): string {
     );
   }
 
-  // ── Strategy 2 (fallback): floated img after SHELL / body ──────────────
+  // ── Strategy 3 (fallback): floated img after SHELL / body ──────────────
   // No <h1> found — fall back to the old float:right behavior so the logo
   // still appears at the top-right of the email. We add float:right +
   // margin inline to the img's style attribute (buildLogoBlock produces a
