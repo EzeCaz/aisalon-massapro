@@ -90,7 +90,7 @@ export async function runFlowWorker(): Promise<WorkerResult> {
           // TSK-0074: now selects from EmailTemplate2 (was EmailStageTemplate).
           // Field renamed htmlBody → bodyHtml. Added logoUrl so we can fix
           // the brand-logo bug (flow-sent emails were missing the logo).
-          template: { select: { id: true, subject: true, bodyHtml: true, name: true, logoUrl: true } },
+          template: { select: { id: true, subject: true, bodyHtml: true, name: true, logoUrl: true, logoHidden: true } },
           audience: { select: { id: true, name: true } },
           flow: { select: { id: true, name: true, status: true } },
         },
@@ -146,7 +146,7 @@ type DueQueueRow = Prisma.EmailQueueGetPayload<{
     };
     flowStep: {
       include: {
-        template: { select: { id: true; subject: true; bodyHtml: true; name: true; logoUrl: true } };
+        template: { select: { id: true; subject: true; bodyHtml: true; name: true; logoUrl: true; logoHidden: true } };
         audience: { select: { id: true; name: true } };
         flow: { select: { id: true; name: true; status: true } };
       };
@@ -263,7 +263,7 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
   const htmlBody = renderUnifiedEmail({
     html: step.template.bodyHtml,
     ctx,
-    logoHtml: buildLogoBlock(step.template.logoUrl),
+    logoHtml: buildLogoBlock(step.template.logoUrl, step.template.logoHidden ?? false),
     clickWrapFn: ctx.wrapLink,
     openPixelUrl: ctx.openPixelUrl,
     chapterName: ctx.chapterName,

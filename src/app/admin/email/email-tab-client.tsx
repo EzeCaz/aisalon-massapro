@@ -68,10 +68,12 @@ type Template = {
   bodyText: string | null;
   signatureHtml: string | null;
   thumbnailUrl: string | null;
-  // TSK-0074: logoUrl + mobileOverridesHtml are on EmailTemplate2 but
-  // weren't declared here before. Needed for the campaign composer's
-  // preview to show the brand logo + mobile overrides.
+  // TSK-0074: logoUrl + mobileOverridesHtml + logoHidden are on
+  // EmailTemplate2 but weren't declared here before. Needed for the
+  // campaign composer's preview to show the brand logo + mobile
+  // overrides + respect the per-template hide flag.
   logoUrl: string | null;
+  logoHidden?: boolean;
   mobileOverridesHtml: string | null;
   createdBy: string;
   creator: { id: string; email: string; name: string | null };
@@ -981,12 +983,14 @@ function CampaignComposer({
   );
   const [replyTo, setReplyTo] = React.useState(campaign?.replyTo || adminEmail);
 
-  // TSK-0074: logoUrl + mobileOverridesHtml for the campaign preview.
-  // These come from the selected template (if any). The campaign itself
-  // doesn't store these — at send time, the send route looks them up from
-  // the linked template. In the composer, we track the "preview logo" which
-  // is the template's logoUrl (or empty for the default brand logo).
+  // TSK-0074: logoUrl + mobileOverridesHtml + logoHidden for the campaign
+  // preview. These come from the selected template (if any). The campaign
+  // itself doesn't store these — at send time, the send route looks them up
+  // from the linked template. In the composer, we track the "preview logo"
+  // which is the template's logoUrl (or empty for the default brand logo)
+  // + the template's logoHidden flag.
   const [logoUrl, setLogoUrl] = React.useState<string>("");
+  const [logoHidden, setLogoHidden] = React.useState<boolean>(false);
   const [mobileOverridesHtml, setMobileOverridesHtml] = React.useState<string>("");
 
   // TSK-0074: Desktop/Mobile preview tabs (same as the template editor).
@@ -1045,6 +1049,7 @@ function CampaignComposer({
     // campaign preview shows the same branding + mobile styling as the
     // template editor.
     setLogoUrl(tpl.logoUrl ?? "");
+    setLogoHidden(!!tpl.logoHidden);
     setMobileOverridesHtml(tpl.mobileOverridesHtml ?? "");
     if (!name) setName(tpl.name);
     toast.success(`Loaded template "${tpl.name}"`);
@@ -1077,8 +1082,9 @@ function CampaignComposer({
       if (firstStep.template?.subject) setSubject(firstStep.template.subject);
       else if (firstStep.subjectVariantA) setSubject(firstStep.subjectVariantA);
       if (firstStep.template?.bodyHtml) setBodyHtml(firstStep.template.bodyHtml);
-      // TSK-0074: load logo + mobile overrides from the flow step's template.
+      // TSK-0074: load logo + mobile overrides + hide flag from the flow step's template.
       if (firstStep.template?.logoUrl !== undefined) setLogoUrl(firstStep.template.logoUrl ?? "");
+      if (firstStep.template?.logoHidden !== undefined) setLogoHidden(!!firstStep.template.logoHidden);
       if (firstStep.template?.mobileOverridesHtml !== undefined)
         setMobileOverridesHtml(firstStep.template.mobileOverridesHtml ?? "");
       if (!name) setName(`${flow.name} — campaign`);
@@ -1251,6 +1257,7 @@ function CampaignComposer({
   const [debouncedBody, setDebouncedBody] = React.useState(bodyHtml);
   const [debouncedMobile, setDebouncedMobile] = React.useState(mobileOverridesHtml);
   const [debouncedLogo, setDebouncedLogo] = React.useState(logoUrl);
+  const [debouncedLogoHidden, setDebouncedLogoHidden] = React.useState(logoHidden);
 
   React.useEffect(() => {
     const h = window.setTimeout(() => setDebouncedBody(bodyHtml), 300);
@@ -1264,6 +1271,10 @@ function CampaignComposer({
     const h = window.setTimeout(() => setDebouncedLogo(logoUrl), 300);
     return () => window.clearTimeout(h);
   }, [logoUrl]);
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedLogoHidden(logoHidden), 100);
+    return () => window.clearTimeout(h);
+  }, [logoHidden]);
 
   const previewSrcDoc = React.useMemo(() => {
     if (!debouncedBody.trim()) {
@@ -1272,12 +1283,12 @@ function CampaignComposer({
     return renderUnifiedEmail({
       html: debouncedBody,
       ctx: PREVIEW_CTX,
-      logoHtml: buildLogoBlock(debouncedLogo || null),
+      logoHtml: buildLogoBlock(debouncedLogo || null, debouncedLogoHidden),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
       chapterName: PREVIEW_CTX.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden]);
 
   // Preview pane — extracted so it can be rendered in two places:
   //   1. Inline (below the editor) on small screens — visible below xl breakpoint
@@ -1559,7 +1570,12 @@ function CampaignComposer({
       {/* Logo override — read-only when editing a flow-linked campaign (the
           logo comes from the template; edit it in the template editor).
           For non-flow campaigns, allow per-campaign override. */}
-      <LogoEditorField value={logoUrl} onChange={setLogoUrl} />
+      <LogoEditorField
+        value={logoUrl}
+        onChange={setLogoUrl}
+        hidden={logoHidden}
+        onHiddenChange={setLogoHidden}
+      />
 
       {/* Mobile overrides (CSS/HTML) — same as template editor */}
       <div className="rounded-md border border-cyan-200 bg-cyan-50/30 p-3">

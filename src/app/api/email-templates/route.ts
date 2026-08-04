@@ -56,8 +56,9 @@ export async function GET(req: NextRequest) {
       // Feature 1: no-code variant
       noCodeSubject: t.noCodeSubject,
       noCodeHtmlBody: t.noCodeHtmlBody,
-      // Feature 2: logo override
+      // Feature 2: logo override + hide toggle
       logoUrl: t.logoUrl,
+      logoHidden: t.logoHidden,
       // Feature 3: alt-subject re-send
       altSubject: t.altSubject,
       altNotOpenedHours: t.altNotOpenedHours,
@@ -83,8 +84,9 @@ export async function POST(req: NextRequest) {
     // Feature 1: no-code variant
     noCodeSubject?: string | null;
     noCodeHtmlBody?: string | null;
-    // Feature 2: logo override
+    // Feature 2: logo override + hide toggle
     logoUrl?: string | null;
+    logoHidden?: boolean;
     // Feature 3: alt-subject re-send
     altSubject?: string | null;
     altNotOpenedHours?: number | null;
@@ -118,6 +120,7 @@ export async function POST(req: NextRequest) {
         noCodeSubject: body.noCodeSubject?.trim() || null,
         noCodeHtmlBody: body.noCodeHtmlBody?.trim() || null,
         logoUrl: body.logoUrl?.trim() || null,
+        logoHidden: !!body.logoHidden,
         altSubject: body.altSubject?.trim() || null,
         altNotOpenedHours: body.altNotOpenedHours ?? null,
         mobileOverridesHtml: body.mobileOverridesHtml?.trim() || null,

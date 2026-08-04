@@ -293,7 +293,7 @@ async function sendStageEmailDirect(
     chapterName: rsvp.event.chapter,
   });
 
-  const logoHtml = buildLogoBlock(tpl?.logoUrl);
+  const logoHtml = buildLogoBlock(tpl?.logoUrl, tpl?.logoHidden ?? false);
   // TSK-0074: now calls renderUnifiedEmail + renderUnifiedSubject directly
   // (was renderTemplate + renderSubject, which now delegate here anyway).
   const renderedHtml = renderUnifiedEmail({

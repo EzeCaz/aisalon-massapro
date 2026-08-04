@@ -692,6 +692,11 @@ model EmailTemplate2 {
   mobileOverridesHtml  String?
   thumbnailUrl         String?
   logoUrl              String?
+  /// When true, the brand logo is NOT injected at the top-right of the
+  /// email at render time. Lets the admin fully hide the logo per-template
+  /// without having to clear the logoUrl override (so toggling back on
+  /// restores the previously-configured logo). Defaults to false (shown).
+  logoHidden           Boolean @default(false)
   stopIfNotOpenedHours Int?
   isActive             Boolean @default(true)
   isDefault            Boolean @default(false)

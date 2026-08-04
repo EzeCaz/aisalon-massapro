@@ -61,6 +61,7 @@ export async function POST(
       template: {
         select: {
           logoUrl: true,
+          logoHidden: true,
           mobileOverridesHtml: true,
         },
       },
@@ -184,7 +185,7 @@ export async function POST(
     // TSK-0074: pass the linked template's logoUrl + mobileOverridesHtml
     // so test sends match production rendering (brand logo top-right,
     // mobile overrides applied).
-    logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null),
+    logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null, campaign.template?.logoHidden ?? false),
     mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
     campaignId: id,
     trackToken: syntheticTrackToken,

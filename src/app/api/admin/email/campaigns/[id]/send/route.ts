@@ -49,6 +49,7 @@ export async function POST(
       template: {
         select: {
           logoUrl: true,
+          logoHidden: true,
           mobileOverridesHtml: true,
         },
       },
@@ -191,7 +192,7 @@ export async function POST(
       // so campaign sends get the same brand logo + mobile styling as
       // flow-sent emails. buildLogoBlock falls back to the default brand
       // logo when logoUrl is null/empty.
-      logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null),
+      logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null, campaign.template?.logoHidden ?? false),
       mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
       campaignId: id,
       trackToken,

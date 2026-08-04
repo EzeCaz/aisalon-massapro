@@ -59,6 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
               bodyText: true,
               signatureHtml: true,
               logoUrl: true,
+              logoHidden: true,
               mobileOverridesHtml: true,
             },
           },

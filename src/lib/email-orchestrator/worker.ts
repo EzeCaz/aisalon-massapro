@@ -344,7 +344,7 @@ async function sendStageEmail(
   // TSK-0074: now calls renderUnifiedEmail directly (was renderTemplate).
   // The unified renderer merges the orchestrator + campaign render paths
   // into one. logoHtml is injected idempotently (data-brand-logo marker).
-  const logoHtml = buildLogoBlock(tpl?.logoUrl);
+  const logoHtml = buildLogoBlock(tpl?.logoUrl, tpl?.logoHidden ?? false);
   const renderedHtml = renderUnifiedEmail({
     html: htmlTemplate,
     ctx,
@@ -526,7 +526,7 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         queueId: altRow.id,
         chapterName: altChapterName,
       });
-      const logoHtml = buildLogoBlock(tpl.logoUrl);
+      const logoHtml = buildLogoBlock(tpl.logoUrl, tpl.logoHidden ?? false);
       // TSK-0074: renderUnifiedEmail + renderUnifiedSubject (was renderTemplate +
       // inline .replace chain). Field renamed htmlBody → bodyHtml.
       const altRenderedHtml = renderUnifiedEmail({

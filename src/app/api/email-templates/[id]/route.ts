@@ -40,8 +40,9 @@ export async function PATCH(
     // Feature 1: no-code variant
     noCodeSubject?: string | null;
     noCodeHtmlBody?: string | null;
-    // Feature 2: logo override
+    // Feature 2: logo override + hide toggle
     logoUrl?: string | null;
+    logoHidden?: boolean;
     // Feature 3: alt-subject re-send
     altSubject?: string | null;
     altNotOpenedHours?: number | null;
@@ -87,9 +88,12 @@ export async function PATCH(
   if (body.noCodeHtmlBody !== undefined) {
     updateData.noCodeHtmlBody = body.noCodeHtmlBody?.trim() || null;
   }
-  // Feature 2: logo override
+  // Feature 2: logo override + hide toggle
   if (body.logoUrl !== undefined) {
     updateData.logoUrl = body.logoUrl?.trim() || null;
+  }
+  if (body.logoHidden !== undefined) {
+    updateData.logoHidden = !!body.logoHidden;
   }
   // Feature 3: alt-subject re-send
   if (body.altSubject !== undefined) {

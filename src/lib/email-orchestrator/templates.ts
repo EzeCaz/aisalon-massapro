@@ -57,7 +57,10 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
 /** Build the HTML block for the brand-logo <img> tag, anchored top-right.
  *  Returns an empty string if the resolved URL is falsy (which only happens
  *  if someone explicitly sets `EMAIL_BRAND_LOGO_URL=""` and the per-template
- *  override is also empty).
+ *  override is also empty), OR if `logoHidden` is true (admin unchecked the
+ *  "Show logo" box in the template editor — the logo URL is preserved so
+ *  toggling back on restores the previously-configured logo without needing
+ *  to re-upload or re-paste the URL).
  *
  *  The logo is rendered at a fixed 160px width with `height:auto` so the
  *  image's natural aspect ratio is preserved — this prevents the vertical
@@ -71,7 +74,13 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
  *  for clients that honor inline styles over HTML attributes.
  *
  *  Floated right with a small margin so body text wraps cleanly. */
-export function buildLogoBlock(templateLogoUrl: string | null | undefined): string {
+export function buildLogoBlock(
+  templateLogoUrl: string | null | undefined,
+  logoHidden?: boolean,
+): string {
+  // Admin explicitly disabled the logo for this template — skip injection
+  // entirely (don't even resolve the URL).
+  if (logoHidden) return "";
   const url = resolveLogoUrl(templateLogoUrl);
   if (!url) return "";
   return `<img src="${url}" alt="AI Salon" width="160" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:160px;height:auto;display:block;"/>`;

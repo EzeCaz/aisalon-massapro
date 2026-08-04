@@ -57,8 +57,9 @@ type Template = {
   // Feature 1: no-code variant
   noCodeSubject?: string | null;
   noCodeHtmlBody?: string | null;
-  // Feature 2: logo override
+  // Feature 2: logo override + hide toggle
   logoUrl?: string | null;
+  logoHidden?: boolean;
   // Feature 3: alt-subject re-send
   altSubject?: string | null;
   altNotOpenedHours?: number | null;
@@ -596,8 +597,9 @@ function TemplateEditorDialog({
   const [noCodeSubject, setNoCodeSubject] = React.useState<string>(template?.noCodeSubject ?? "");
   const [noCodeHtmlBody, setNoCodeHtmlBody] = React.useState<string>(template?.noCodeHtmlBody ?? "");
   const [showNoCodeEditor, setShowNoCodeEditor] = React.useState(false);
-  // Feature 2: logo override
+  // Feature 2: logo override + hide toggle
   const [logoUrl, setLogoUrl] = React.useState<string>(template?.logoUrl ?? "");
+  const [logoHidden, setLogoHidden] = React.useState<boolean>(template?.logoHidden ?? false);
   // Feature 3: alt-subject re-send
   const [altSubject, setAltSubject] = React.useState<string>(template?.altSubject ?? "");
   const [altNotOpenedHours, setAltNotOpenedHours] = React.useState<number | null>(template?.altNotOpenedHours ?? null);
@@ -644,6 +646,7 @@ function TemplateEditorDialog({
         noCodeSubject: noCodeSubject.trim() || null,
         noCodeHtmlBody: noCodeHtmlBody.trim() || null,
         logoUrl: logoUrl.trim() || null,
+        logoHidden,
         altSubject: altSubject.trim() || null,
         altNotOpenedHours,
         // TSK-0074 Phase 4: mobile-only overrides (sent as null when empty
@@ -688,11 +691,12 @@ function TemplateEditorDialog({
   // for preview). No tracking pixel either (no openPixelUrl).
   //
   // Re-renders are debounced 300ms after edits to bodyHtml /
-  // mobileOverridesHtml / logoUrl — avoids re-running the full pipeline on
-  // every keystroke.
+  // mobileOverridesHtml / logoUrl / logoHidden — avoids re-running the
+  // full pipeline on every keystroke.
   const [debouncedBody, setDebouncedBody] = React.useState(htmlBody);
   const [debouncedMobile, setDebouncedMobile] = React.useState(mobileOverridesHtml);
   const [debouncedLogo, setDebouncedLogo] = React.useState(logoUrl);
+  const [debouncedLogoHidden, setDebouncedLogoHidden] = React.useState(logoHidden);
 
   React.useEffect(() => {
     const h = window.setTimeout(() => setDebouncedBody(htmlBody), 300);
@@ -706,6 +710,13 @@ function TemplateEditorDialog({
     const h = window.setTimeout(() => setDebouncedLogo(logoUrl), 300);
     return () => window.clearTimeout(h);
   }, [logoUrl]);
+  // logoHidden is a checkbox toggle — debounce by 100ms (shorter than text
+  // inputs because there's no typing to debounce against, but a small delay
+  // avoids flicker if the user rapidly toggles).
+  React.useEffect(() => {
+    const h = window.setTimeout(() => setDebouncedLogoHidden(logoHidden), 100);
+    return () => window.clearTimeout(h);
+  }, [logoHidden]);
 
   const previewSrcDoc = React.useMemo(() => {
     // Don't run the pipeline on empty bodies — render a friendly placeholder
@@ -717,12 +728,12 @@ function TemplateEditorDialog({
     return renderUnifiedEmail({
       html: debouncedBody,
       ctx: PREVIEW_CTX,
-      logoHtml: buildLogoBlock(debouncedLogo || null),
+      logoHtml: buildLogoBlock(debouncedLogo || null, debouncedLogoHidden),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
       chapterName: PREVIEW_CTX.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden]);
 
   return (
     <>
@@ -861,8 +872,13 @@ function TemplateEditorDialog({
             </span>
           </div>
 
-          {/* Feature 2: Logo override with visual preview + upload */}
-          <LogoEditorField value={logoUrl} onChange={setLogoUrl} />
+          {/* Feature 2: Logo override with visual preview + upload + show/hide toggle */}
+          <LogoEditorField
+            value={logoUrl}
+            onChange={setLogoUrl}
+            hidden={logoHidden}
+            onHiddenChange={setLogoHidden}
+          />
 
           <div className="mb-3">
             <label className="mb-1 block text-xs font-semibold text-neutral-700">Email body (WYSIWYG)</label>
@@ -1280,9 +1296,16 @@ function MetricCard({
 export function LogoEditorField({
   value,
   onChange,
+  hidden = false,
+  onHiddenChange,
 }: {
   value: string;
   onChange: (v: string) => void;
+  /** When true, the "Show logo" checkbox is unchecked and the preview /
+   *  upload / URL controls are dimmed + disabled. The logo URL is preserved
+   *  so toggling back on restores the previously-configured logo. */
+  hidden?: boolean;
+  onHiddenChange?: (v: boolean) => void;
 }) {
   const [uploading, setUploading] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
@@ -1327,23 +1350,49 @@ export function LogoEditorField({
 
   return (
     <div className="mb-4 rounded border border-cyan-200 bg-cyan-50/40 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <label className="text-xs font-semibold text-cyan-900">
-          Brand logo (top-right of every email)
-        </label>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-cyan-900">
+            Brand logo (top-right of every email)
+          </label>
+          {/* Show / hide logo checkbox — when off, the logo is NOT injected
+              into the sent email (buildLogoBlock returns empty string).
+              The logo URL is preserved so toggling back on restores the
+              previously-configured logo without re-upload. */}
+          {onHiddenChange && (
+            <label className="inline-flex items-center gap-1.5 rounded border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-cyan-900 cursor-pointer hover:bg-cyan-50">
+              <input
+                type="checkbox"
+                checked={!hidden}
+                onChange={(e) => onHiddenChange(!e.target.checked)}
+                className="h-3 w-3 cursor-pointer accent-[#FF005A]"
+              />
+              Show logo
+            </label>
+          )}
+        </div>
         <span
           className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-            isOverride
-              ? "bg-[#FF005A]/10 text-[#FF005A]"
-              : "bg-neutral-200 text-neutral-600"
+            hidden
+              ? "bg-neutral-300 text-neutral-700"
+              : isOverride
+                ? "bg-[#FF005A]/10 text-[#FF005A]"
+                : "bg-neutral-200 text-neutral-600"
           }`}
         >
-          {isOverride ? "CUSTOM OVERRIDE" : "DEFAULT"}
+          {hidden ? "HIDDEN" : isOverride ? "CUSTOM OVERRIDE" : "DEFAULT"}
         </span>
       </div>
 
-      {/* Image preview — actual email size + enlarged */}
-      <div className="mb-3 flex items-center gap-4 rounded border border-cyan-100 bg-white p-3">
+      {/* Image preview — actual email size + enlarged.
+          Dimmed + non-interactive when hidden=true so the user gets a clear
+          visual signal that the logo won't appear in the sent email, while
+          still being able to see what's currently configured. */}
+      <div
+        className={`mb-3 flex items-center gap-4 rounded border border-cyan-100 bg-white p-3 transition-opacity ${
+          hidden ? "pointer-events-none opacity-40" : ""
+        }`}
+      >
         {/* Actual email render — matches the production render exactly:
             160px wide, height auto (preserves the image's natural aspect
             ratio, same as buildLogoBlock outputs). */}
@@ -1411,7 +1460,7 @@ export function LogoEditorField({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={uploading || hidden}
             className="inline-flex items-center gap-1.5 rounded bg-[#FF005A] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
           >
             {uploading ? (
@@ -1425,8 +1474,8 @@ export function LogoEditorField({
             <button
               type="button"
               onClick={() => onChange("")}
-              disabled={uploading}
-              className="inline-flex items-center gap-1 text-[10px] text-neutral-500 underline hover:text-neutral-800"
+              disabled={uploading || hidden}
+              className="inline-flex items-center gap-1 text-[10px] text-neutral-500 underline hover:text-neutral-800 disabled:opacity-50"
             >
               <RotateCcw className="h-3 w-3" />
               Reset to default
@@ -1435,13 +1484,17 @@ export function LogoEditorField({
         </div>
       </div>
 
-      {/* URL text input — for manual entry / advanced use */}
+      {/* URL text input — for manual entry / advanced use.
+          Also disabled when hidden=true (the URL is preserved, the user must
+          toggle the logo back on to edit it — this prevents accidental
+          edits while the logo is intentionally hidden). */}
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        disabled={hidden}
         placeholder="Custom URL — leave empty to use the default AI Salon mark"
-        className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs font-mono"
+        className="w-full rounded border border-neutral-300 px-2 py-1.5 text-xs font-mono disabled:bg-neutral-100 disabled:text-neutral-400"
       />
       <p className="mt-1 text-[10px] text-cyan-800">
         The logo is injected at the top-right of every email at render time
@@ -1449,6 +1502,11 @@ export function LogoEditorField({
         ratio). Upload a new image above, paste a custom URL, or leave empty
         to use the default. The default can also be overridden globally via
         the <code>EMAIL_BRAND_LOGO_URL</code> env var.
+        {hidden && (
+          <span className="ml-1 font-semibold text-pink-700">
+            Currently hidden — the sent email will NOT include a brand logo. The URL is preserved so you can toggle the logo back on without re-configuring.
+          </span>
+        )}
       </p>
     </div>
   );
