@@ -327,10 +327,22 @@ export function renderSubject(subject: string, ctx: TemplateContext): string {
  *   - 1px solid #000 <hr> separator (40px margin-top per user spec)
  *   - 12px footer in #999 with site link
  *
- * The branding block (`<div>aisalon</div><br><br>`) + the first `<h1>` are
- * wrapped together in a two-column table by `injectLogo()` — that's why the
- * h1 has `margin-top:0` (no extra gap above) and `margin-bottom:0` (no gap
- * between h1 and the body paragraph directly below).
+ * The branding block (`<div>aisalon</div><br><br>`) + ALL the inner body
+ * content (h1 + paragraphs + CTA + sign-off) — everything UP TO the `<hr>`
+ * footer separator — is wrapped together in a two-column table by
+ * `injectLogo()`. The `data-brand-content-end` attribute on the `<hr>` is
+ * the marker that tells `injectLogo()` where the body content ends.
+ *
+ * Why wrap the ENTIRE body (not just the h1)? If we only wrap branding +
+ * h1, the table row's height is `max(branding+h1 height, logo height)`.
+ * Since the logo is typically ~150px tall and the h1 is only ~30px, the
+ * row stretches to ~150px, leaving a ~120px gap between the h1 and the
+ * body paragraph below. By wrapping the ENTIRE body, the body paragraphs
+ * flow naturally inside the LEFT cell, directly below the h1 — while the
+ * logo sits in the RIGHT cell, top-aligned with the branding. The body
+ * never appears "below the logo" — it appears BESIDE the logo, in the
+ * left column. The logo is always top-right, always visible (in its own
+ * cell), and never overlapped by text.
  *
  * The shell pre-loads the Plus Jakarta Sans web font via Google Fonts
  * <link> for clients that support it (Apple Mail, iOS Mail, Thunderbird).
@@ -351,7 +363,7 @@ const SHELL = (inner: string): string => `<!DOCTYPE html>
     <div data-brand-header style="font-weight:700;font-size:24px;margin-bottom:10px;">aisalon</div>
     <br><br>
     ${inner}
-    <hr style="margin:32px 0;border:none;border-top:1px solid #000;"/>
+    <hr data-brand-content-end style="margin:32px 0;border:none;border-top:1px solid #000;"/>
     <p style="font-size:12px;color:#999;margin:0;line-height:1.5;">
       AI Salon {{chapter_name}} · Empowering AI Connections<br/>
       <a href="https://aisalon.massapro.com" style="color:#999;text-decoration:underline;">aisalon.massapro.com</a>

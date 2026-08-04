@@ -294,20 +294,36 @@ export function renderUnifiedSubject(
  *
  * LAYOUT — three strategies, tried in order:
  *
- *   1. (PREFERRED — new layout per Eze 2026-08-05) Wrap the branding block
- *      (`<div data-brand-header>aisalon</div>` + two `<br>` line breaks +
- *      the first `<h1>`) in a two-column table:
+ *   1. (PREFERRED — new layout per Eze 2026-08-05) Wrap the ENTIRE body
+ *      content block — from the branding div (`<div data-brand-header>`)
+ *      through the LAST paragraph before the `<hr data-brand-content-end>`
+ *      footer separator — in a two-column table:
  *        <table data-brand-logo>
  *          <tr>
- *            <td valign="top">  ← branding + br/br + h1 (left column, fluid width)
+ *            <td valign="top">  ← branding + br/br + h1 + body paragraphs + CTA + sign-off
  *            <td valign="top" width="150" align="right">  ← logo img (right column, fixed 150px)
  *          </tr>
  *        </table>
- *      This places the logo EXACTLY to the right of the "aisalon" branding
- *      text, both top-aligned on the same horizontal line — matching the
- *      user's reference HTML layout. The h1 sits below the branding with
- *      the two `<br>` line breaks, and the body paragraph flows directly
- *      below the h1.
+ *      The body content flows naturally inside the LEFT cell, directly
+ *      below the h1 — so the body is BESIDE the logo (in the left column),
+ *      NOT below the logo. This is the fix for the issue where a short h1
+ *      ("You're in, Eze.") combined with a tall logo (~150px) left a large
+ *      vertical gap between the h1 and the body, because the table row's
+ *      height was being stretched to match the logo's height. By including
+ *      the body in the left cell, the body sits directly under the h1
+ *      regardless of how tall the logo is. The logo stays top-right,
+ *      always visible (in its own cell), and never overlapped by text.
+ *
+ *      Requires the SHELL to mark the `<hr>` with `data-brand-content-end`
+ *      so the regex can find the end of the body content. Falls back to
+ *      Strategy 1b (h1-only wrap) if the marker is missing (e.g. custom
+ *      templates that don't use the standard SHELL).
+ *
+ *   1b. (LEGACY Strategy 1 — h1-only wrap) Wrap the branding block + the
+ *      first `<h1>` only (no body) in a two-column table. Used when the
+ *      template has `data-brand-header` but NO `data-brand-content-end`
+ *      marker on the `<hr>`. This is the old behavior — body flows below
+ *      the table, which can create a gap if the logo is tall.
  *
  *   2. (LEGACY — for templates without data-brand-header) Wrap just the
  *      first `<h1>...</h1>` in a two-column table (h1 left, logo right).
@@ -328,7 +344,50 @@ export function injectLogo(html: string, logoHtml: string | undefined): string {
   // Idempotency: don't double-inject.
   if (/data-brand-logo/.test(html)) return html;
 
-  // ── Strategy 1: wrap branding block + first <h1> in a two-column table ─
+  // ── Strategy 1 (PREFERRED): wrap ENTIRE body block (branding → <hr data-brand-content-end>) ─
+  // Match the pattern: <div data-brand-header ...>...</div> ... <hr data-brand-content-end ...>
+  // The [...] in between includes <br><br> + h1 + ALL body paragraphs + CTA + sign-off.
+  // Uses [\s\S] for dotall match because . doesn't match newlines in JS regex.
+  // NON-GREEDY so we stop at the FIRST <hr data-brand-content-end — if the body
+  // contains other <hr> elements (none currently do), they wouldn't trigger the
+  // end marker.
+  const fullBodyMatch = html.match(
+    /<div[^>]*data-brand-header[^>]*>[\s\S]*?<hr[^>]*data-brand-content-end[^>]*\/??>/i,
+  );
+  if (fullBodyMatch && fullBodyMatch.index !== undefined) {
+    const block = fullBodyMatch[0];
+    // Build the two-column table wrapper. cellpadding=0 + cellspacing=0 +
+    // border=0 + border-collapse:collapse strips all default table spacing
+    // so the body content and logo sit flush. valign="top" on both cells
+    // ensures top alignment — the logo's top edge aligns with the "aisalon"
+    // branding div's top edge. The right cell has a fixed width of 150px
+    // (matching the user's reference HTML) + align="right" so the logo
+    // sticks to the right edge of the email body.
+    //
+    // The LEFT cell contains the ENTIRE matched block (branding + br/br +
+    // h1 + body paragraphs + CTA + sign-off + the <hr> itself). The <hr>
+    // is INCLUDED in the left cell so the footer separator stays inside
+    // the body column (visually below the body content, full-width of the
+    // left cell). The right cell stays empty below the logo — body content
+    // never wraps under the logo.
+    const tableWrapper =
+      `<table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">` +
+      `<tr>` +
+      `<td valign="top" style="vertical-align:top;">${block}</td>` +
+      `<td valign="top" width="150" align="right" style="vertical-align:top;width:150px;text-align:right;">${logoHtml}</td>` +
+      `</tr>` +
+      `</table>`;
+    // Replace just the matched block with the wrapped version. Using
+    // string slicing (not str.replace) to avoid regex special-character
+    // issues in the block content.
+    return (
+      html.slice(0, fullBodyMatch.index) +
+      tableWrapper +
+      html.slice(fullBodyMatch.index + block.length)
+    );
+  }
+
+  // ── Strategy 1b (legacy h1-only wrap): wrap branding block + first <h1> only ─
   // Match the pattern: <div data-brand-header ...>...</div> (optional
   // whitespace) <br><br> (optional whitespace) <h1 ...>...</h1>. The
   // branding div is identified by the `data-brand-header` attribute that
@@ -339,13 +398,6 @@ export function injectLogo(html: string, logoHtml: string | undefined): string {
   );
   if (brandingH1Match && brandingH1Match.index !== undefined) {
     const block = brandingH1Match[0];
-    // Build the two-column table wrapper. cellpadding=0 + cellspacing=0 +
-    // border=0 + border-collapse:collapse strips all default table spacing
-    // so the branding/h1 and logo sit flush. valign="top" on both cells
-    // ensures top alignment — the logo's top edge aligns with the
-    // "aisalon" branding div's top edge. The right cell has a fixed width
-    // of 150px (matching the user's reference HTML) + align="right" so
-    // the logo sticks to the right edge of the email body.
     const tableWrapper =
       `<table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">` +
       `<tr>` +
@@ -353,9 +405,6 @@ export function injectLogo(html: string, logoHtml: string | undefined): string {
       `<td valign="top" width="150" align="right" style="vertical-align:top;width:150px;text-align:right;">${logoHtml}</td>` +
       `</tr>` +
       `</table>`;
-    // Replace just the matched branding+br/br+h1 block with the wrapped
-    // version. Using string slicing (not str.replace) to avoid regex
-    // special-character issues in the block content.
     return (
       html.slice(0, brandingH1Match.index) +
       tableWrapper +
