@@ -12526,3 +12526,51 @@ Stage Summary:
 - The Copy style button now gives a brief ring + scale pulse animation on every successful copy, even when the button was already pink from a previous copy — no more "stuck" feeling.
 - File modified: `src/components/ais/rich-text-email-editor.tsx` only.
 - Pushed to GitHub main → Vercel production deploy will rebuild shortly.
+
+---
+Task ID: fix-logo-layout-two-column-table
+Agent: main
+Task: User provided a reference HTML where the brand logo sits EXACTLY to the right of the heading text (side-by-side, two-column table layout). The current implementation uses float:right which pushes the logo above the text when the heading is short. Make all emails use the two-column table layout.
+
+Work Log:
+- Diagnosed root cause: `buildLogoBlock()` produced `<img style="float:right;margin:0 0 8px 16px;...">` and `injectLogo()` inserted it right after the SHELL wrapper `<div>`. With `float:right`, the logo floats against the first block-level content — but if the heading is short, the float clears to the next paragraph, pushing the logo ABOVE the heading instead of beside it.
+- The user's reference HTML uses a two-column `<table>` layout: left cell holds the heading, right cell (fixed 150px width) holds the logo. This is the standard email-client-compatible way to place two elements side-by-side reliably (floats are unreliable in email clients like Outlook).
+- Architectural decision: split the responsibility between `buildLogoBlock` (produces the `<img>` element) and `injectLogo` (decides the layout). Previously `buildLogoBlock` baked `float:right` into the img style, which meant the layout was fixed regardless of context. Now `buildLogoBlock` returns a MINIMAL img (no float, no margin) and `injectLogo` chooses the layout based on the full HTML context.
+- Updated `buildLogoBlock()` in `src/lib/email-orchestrator/templates.ts`:
+  * Removed `float:right;margin:0 0 8px 16px;` from the inline style.
+  * Kept `width:160px;height:auto;display:block;border:0;outline:none;text-decoration:none;` — these are the intrinsic img properties needed regardless of layout.
+  * Updated docstring to explain the new separation of concerns.
+- Updated `injectLogo()` in `src/lib/email/render-unified.ts` with TWO strategies:
+  * **Strategy 1 (PREFERRED)**: Find the first `<h1 ...>...</h1>` block (regex `<h1[^>]*>[\s\S]*?<\/h1>`, case-insensitive, non-greedy with `[\s\S]` for dotall). Wrap it in:
+    ```html
+    <table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+      <tr>
+        <td valign="top" style="vertical-align:top;">${h1Block}</td>
+        <td valign="top" width="160" align="right" style="vertical-align:top;width:160px;text-align:right;">${logoHtml}</td>
+      </tr>
+    </table>
+    ```
+    `valign="top"` on both cells ensures top alignment regardless of logo height. The right cell has fixed `width="160"` so the logo sticks to the right edge. `cellpadding=0; cellspacing=0; border=0; border-collapse:collapse` strips all default table spacing so the h1 and logo sit flush.
+  * **Strategy 2 (FALLBACK)**: If no `<h1>` is found, fall back to the old `float:right` behavior. Adds `float:right;margin:0 0 8px 16px;` inline to the img's style attribute (via regex replace on `style="..."`), then inserts after the SHELL wrapper / `<body>` / start of HTML.
+  * `data-brand-logo` marker placed on the `<table>` (strategy 1) or `<img>` (strategy 2) for idempotency — subsequent calls detect either and skip.
+- Updated file-level docstring in `render-unified.ts` (step 2 description) to reflect the new table-wrapping behavior.
+- Wrote test script `scripts/test-logo-layout.cjs` (not committed — .gitignored) that inlines the new `injectLogo` + `buildLogoBlock` and verifies 4 scenarios:
+  1. Typical email with `<h1>`: h1 wrapped in left cell, logo in right cell — PASS
+  2. Email without `<h1>`: falls back to floated img with `float:right` — PASS
+  3. Idempotency: calling `injectLogo` twice produces identical output — PASS
+  4. Multiple `<h1>`: only the FIRST is wrapped; subsequent h1s left alone — PASS
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces zero errors.
+- Dev server: `/admin/email` compiles successfully (HTTP 307 auth redirect, 57ms compile).
+- All 8 callers of `buildLogoBlock` (worker.ts ×2, flow-worker.ts, force-send-stage, send route, test-send route, templates-client preview, email-tab-client preview) automatically benefit from the new layout — no caller changes needed because the `logoHtml` arg to `renderUnifiedEmail` is still just the img string, and `injectLogo` handles the wrapping.
+- Committed: `917ebf8 fix(email): logo sits to the RIGHT of the heading — two-column table layout` (2 files, +87/-14 lines).
+- Pushed: `6544c96..917ebf8 main -> main` to https://github.com/EzeCaz/aisalon-massapro — Vercel auto-deploy triggered.
+
+Stage Summary:
+- The brand logo now sits EXACTLY to the right of the heading text in ALL emails — matching the user's reference HTML layout. This is achieved via a two-column `<table>` that wraps the first `<h1>`: left cell holds the h1 (fluid width), right cell holds the logo (fixed 160px, right-aligned).
+- The old `float:right` approach (which pushed the logo above the heading when the heading was short) is now only used as a FALLBACK for templates that don't have an `<h1>` (e.g. custom templates starting with `<p>` or `<div>`).
+- Layout is email-client-compatible: tables with `cellpadding=0; cellspacing=0; border=0; valign=top` render consistently across Gmail, Outlook, Apple Mail, Yahoo, and all mobile clients. Floats are unreliable in Outlook specifically.
+- Files modified (2):
+  - `src/lib/email-orchestrator/templates.ts` — `buildLogoBlock` returns minimal img
+  - `src/lib/email/render-unified.ts` — `injectLogo` wraps first `<h1>` in two-column table
+- No caller changes needed — all 8 callers pass `logoHtml` to `renderUnifiedEmail` which calls `injectLogo` internally.
+- Pushed to GitHub main → Vercel production deploy will rebuild shortly.
