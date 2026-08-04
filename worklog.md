@@ -12769,3 +12769,51 @@ Stage Summary:
 - Files modified (2): src/lib/email-orchestrator/templates.ts, src/lib/email/render-unified.ts
 - Files added (3, preview only): public/previews/email-awareness-preview-{desktop.png,mobile.png,html}
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: email-logo-global-pick-always-wins
+Agent: main
+Task: User reported that the Awareness template and all stages (Reminder, Final Prep, Day-Of, Recap) show the WRONG logo. The correct logo for ALL emails should be https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png (the one they selected via /admin/images). When the user selects the email logo, ALL emails should automatically use that logo.
+
+Work Log:
+- Root cause analysis: 3 places in the codebase were still referencing the OLD logo URL (1785668808200-0fdrda.png):
+  1. DEFAULT_BRAND_LOGO_URL in src/lib/email-orchestrator/templates.ts (the last-resort fallback)
+  2. canonicalLogoUrl in src/lib/email-orchestrator/seed.ts (used to decide whether to clear per-template logoUrl)
+  3. (The K_LOGIN_BANNER default in site-settings.ts is the same URL — that's CORRECT, it's the login banner, not the email logo. No change needed there.)
+
+- The seed.ts logic was: "clear per-template logoUrl if it differs from canonicalLogoUrl". Since canonicalLogoUrl was the OLD URL, templates seeded with the OLD URL kept showing it — the per-template override was NOT being cleared, so it won over the global SiteSetting[emailLogo] pick.
+
+- Applied the fix via 4 changes:
+
+1. src/lib/email-orchestrator/templates.ts:
+   - Updated DEFAULT_BRAND_LOGO_URL from OLD (1785668808200-0fdrda.png) → NEW (1785868301722-nl1qnl.png)
+   - Updated docstring to reflect the new canonical URL
+
+2. src/lib/email-orchestrator/seed.ts:
+   - Removed the canonicalLogoUrl constant entirely
+   - Changed the per-template logoUrl clearing logic from "clear if differs from canonical" to "ALWAYS clear"
+   - Now the seed unconditionally clears logoUrl on every run, so the global SiteSetting[emailLogo] pick ALWAYS wins
+   - Updated docstring to explain the new behavior (per user spec: "when I select the logo for the email all emails will be automatically with the logo I've chosen")
+
+3. NEW SQL migration: prisma/migrations/20260805130000_clear_email_logo_overrides/migration.sql
+   - Step 1: UPDATE EmailTemplate2 SET logoUrl = NULL WHERE logoUrl IS NOT NULL (clears all per-template overrides)
+   - Step 2: INSERT INTO SiteSetting (key, value, updatedAt) VALUES ('emailLogo', 'NEW_URL', NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE value != 'NEW_URL' (upserts the global pick to the user's chosen URL)
+   - Idempotent: safe to run multiple times
+   - Added to NEW_MIGRATIONS in scripts/baseline-migrations.cjs so it runs on the next `prisma migrate deploy` at build time
+
+4. src/app/api/admin/v7-seed/route.ts:
+   - Added a runtime clear of EmailTemplate2.logoUrl (the runtime equivalent of the SQL migration)
+   - Runs when the Super Admin hits POST /api/admin/v7-seed
+   - Belt + suspenders: if prisma migrate deploy times out on Neon advisory lock (which is non-fatal in the build script), the Super Admin can manually trigger the clear via this route
+
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in modified files.
+- Committed: `2bb8869 fix(email): all emails use the user's chosen logo (1785868301722-nl1qnl.png)` (5 files, +105/-22 lines)
+- Pushed: `45515df..2bb8869 main -> main` to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+
+Stage Summary:
+- ALL outgoing emails now use the user's chosen email logo (1785868301722-nl1qnl.png) as the brand mark top-right.
+- The global SiteSetting[emailLogo] pick (set via /admin/images → emailLogo role) ALWAYS wins — per-template logoUrl overrides are now always cleared by the seed AND by the SQL migration AND by the v7-seed route.
+- The fallback chain is now: per-template logoUrl (always null) → global SiteSetting[emailLogo] (= NEW URL) → env var → DEFAULTS[K_EMAIL_LOGO] (= NEW URL) → DEFAULT_BRAND_LOGO_URL (= NEW URL). Every link in the chain resolves to the user's chosen URL.
+- If the SQL migration times out on Neon at build time (non-fatal), the Super Admin can hit POST /api/admin/v7-seed to trigger the runtime clear as a fallback.
+- Files modified (4) + created (1): src/lib/email-orchestrator/templates.ts, src/lib/email-orchestrator/seed.ts, scripts/baseline-migrations.cjs, src/app/api/admin/v7-seed/route.ts, prisma/migrations/20260805130000_clear_email_logo_overrides/migration.sql
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
