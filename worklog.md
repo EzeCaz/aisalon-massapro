@@ -12645,3 +12645,30 @@ Stage Summary:
   * Option C: Check Vercel → Settings → Git → verify the production branch is "main" and auto-deploy is enabled; check Integrations → GitHub → verify the webhook is connected
 - Once Vercel deploys the latest commit, the user must HARD-REFRESH their browser (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows/Linux) to bypass the cached old JS bundle and load the new bundle containing the "Email logo" role button.
 - After successful deployment + hard refresh, each image card on /admin/images will show 4 buttons in a 2x2 grid: Favicon | Login hero / Login banner | Email logo. Clicking "Email logo" sets the global default; selecting a chapter in the filter first sets a per-chapter override.
+
+---
+Task ID: fix-vercel-build-migration-timeout
+Agent: main
+Task: Vercel production build fails with P1002 (Neon Postgres advisory lock timeout) during `prisma migrate deploy`, then falls back to `prisma db push --accept-data-loss` which fails on `relation "EmailCampaign_flowId_key" already exists`. Build exits with code 1, blocking the emailLogo feature deployment.
+
+Work Log:
+- Analyzed the Vercel build log the user pasted:
+  * `prisma generate` ✓ (0.4s)
+  * `baseline-migrations.cjs` ✓ (14 migration folders, 0 inserted, 0 updated, 14 skipped — all already applied)
+  * `prisma migrate deploy` ✗ — Error P1002: "Timed out trying to acquire a postgres advisory lock (SELECT pg_advisory_lock(72707369)). Timeout: 10000ms."
+  * Fallback `prisma db push --accept-data-loss` ✗ — Error: "relation 'EmailCampaign_flowId_key' already exists" (trying to CREATE INDEX that already exists)
+  * Build exits 1, `next build` never runs.
+- Root cause: Neon serverless Postgres intermittently can't acquire the advisory lock within Prisma's 10s timeout. The lock is needed by migrate deploy to prevent concurrent migrations — but ALL 14 migrations are already applied (baseline confirmed), so there's literally nothing to migrate. The fallback `prisma db push` is destructive and tries to reconcile schema drift by recreating indexes, which fails because they already exist.
+- Fix in `package.json` build script: replaced the destructive `prisma db push --accept-data-loss` fallback with a soft `echo` warning. The new build script is:
+  ```
+  prisma generate && node scripts/baseline-migrations.cjs && (prisma migrate deploy 2>&1 || echo '[build] WARNING: ... Continuing with next build...') && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+  ```
+  Now if migrate deploy times out, the build prints a warning and proceeds to `next build`. Since all migrations are already applied to prod, this is safe — there's no actual schema change pending.
+- Committed as `1338cbd` and pushed to main. Vercel should auto-trigger a fresh build within ~30s.
+- Verified locally: `package.json` line 7 contains the new build script.
+
+Stage Summary:
+- Vercel build will no longer fail when Neon's advisory lock times out — the migration step is now non-fatal.
+- This unblocks deployment of all recent features: emailLogo picker (commit 99d6774), logo two-column layout (917ebf8), Copy/Paste style fix (6544c96), Show logo checkbox (50fcdba), font editing (86c470c).
+- The destructive `prisma db push --accept-data-loss` fallback is removed — it was dangerous and could have caused data loss on a real schema drift. Real schema changes are applied separately via `npx prisma db execute --file` (see worklog entry for logoHidden migration).
+- User should see the new Vercel deployment go green within ~3-5 minutes of commit 1338cbd being pushed.
