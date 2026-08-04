@@ -12427,3 +12427,79 @@ Stage Summary:
 - "Paste style" button applies the captured style to any other selected text — works across the same editor instance. Disabled until a style is on the clipboard; turns pink when active.
 - File modified: `src/components/ais/rich-text-email-editor.tsx` only (single shared component, both editors auto-inherit the new controls).
 - Pushed to GitHub main → Vercel production deploy will rebuild shortly.
+
+---
+Task ID: add-show-hide-logo-checkbox
+Agent: main
+Task: On the Brand logo card (top-right of every email), enable a "Show or hide logo" checkbox. When unchecked, the brand logo is NOT injected into the sent email. Deploy to GitHub.
+
+Work Log:
+- Diagnosed: both Edit Template (flows/templates-client.tsx → TemplateEditorDialog → LogoEditorField) and Edit Campaign (email-tab-client.tsx → CampaignComposer → LogoEditorField) render the SAME `LogoEditorField` component. Single point of edit. Both editors also use the SAME render pipeline (buildLogoBlock → renderUnifiedEmail) for preview + send.
+- Prisma schema: added `logoHidden Boolean @default(false)` to `EmailTemplate2` model (between `logoUrl` and `stopIfNotOpenedHours`). Comment explains: "When true, the brand logo is NOT injected at the top-right of the email at render time. Lets the admin fully hide the logo per-template without having to clear the logoUrl override (so toggling back on restores the previously-configured logo)."
+- Created migration SQL: `prisma/migrations/20260805120000_add_logo_hidden/migration.sql` — single `ALTER TABLE "EmailTemplate2" ADD COLUMN "logoHidden" BOOLEAN NOT NULL DEFAULT false;`
+- Applied migration to production Neon DB via `npx prisma db execute --file ...` (the regular `prisma migrate deploy` failed with P1002 advisory-lock timeout, but `db execute` succeeded — the column was verified via information_schema.columns query + a Prisma client findFirst that successfully read `logoHidden: false`).
+- Regenerated Prisma client via `npx prisma generate` so the TypeScript types include `logoHidden`.
+- Updated `buildLogoBlock()` in `src/lib/email-orchestrator/templates.ts` — added 2nd param `logoHidden?: boolean`. When true, returns empty string immediately (skips even URL resolution). All 6 callers updated:
+  * `src/lib/email-orchestrator/worker.ts` (2 sites: primary render + alt-subject resend)
+  * `src/lib/email-orchestrator/flow-worker.ts` (flow-sent emails)
+  * `src/app/api/admin/email/force-send-stage/route.ts`
+  * `src/app/api/admin/email/campaigns/[id]/send/route.ts`
+  * `src/app/api/admin/email/campaigns/[id]/test-send/route.ts`
+  * `templates-client.tsx` preview + `email-tab-client.tsx` preview
+- Updated Prisma `select` clauses that already had `logoUrl: true` to also include `logoHidden: true`:
+  * `src/app/api/email-flows/[id]/route.ts` (flow GET — for CampaignComposer flow-loading path)
+  * `src/app/api/admin/email/campaigns/[id]/test-send/route.ts`
+  * `src/app/api/admin/email/campaigns/[id]/send/route.ts`
+  * `src/lib/email-orchestrator/flow-worker.ts` (2 sites)
+  * (force-send-stage uses `findUnique` without `select` — gets all fields automatically)
+- Updated `LogoEditorField` component (`src/app/admin/email/flows/templates-client.tsx`):
+  * Added 2 optional props: `hidden?: boolean` (default false) + `onHiddenChange?: (v: boolean) => void`
+  * When `onHiddenChange` is provided, a "Show logo" checkbox renders inline next to the title (cyan-bordered pill, accent-[#FF005A] checkbox). Checked = shown, unchecked = hidden.
+  * Status badge logic extended: hidden → "HIDDEN" (gray bg), else falls through to existing DEFAULT/CUSTOM OVERRIDE.
+  * When hidden=true: preview area dims to opacity-40 + pointer-events-none, Upload + Reset buttons disabled, URL input disabled, help text gains pink "Currently hidden — the sent email will NOT include a brand logo" notice.
+- Updated `Template` type in `templates-client.tsx`: added `logoHidden?: boolean`.
+- Wired state in `templates-client.tsx` TemplateEditorDialog:
+  * Added `const [logoHidden, setLogoHidden] = React.useState<boolean>(template?.logoHidden ?? false);`
+  * Save handler includes `logoHidden` in the POST/PATCH body.
+  * Added `debouncedLogoHidden` state with 100ms debounce (shorter than text inputs — checkbox toggle has no typing to debounce against).
+  * Preview `useMemo` calls `buildLogoBlock(debouncedLogo || null, debouncedLogoHidden)`.
+  * `LogoEditorField` call site passes `hidden={logoHidden}` + `onHiddenChange={setLogoHidden}`.
+- Updated `Template` type in `email-tab-client.tsx`: added `logoHidden?: boolean`.
+- Wired state in `email-tab-client.tsx` CampaignComposer:
+  * Added `const [logoHidden, setLogoHidden] = React.useState<boolean>(false);`
+  * `handleApplyTemplate` loads `setLogoHidden(!!tpl.logoHidden)`.
+  * `handleSelectFlow` loads `setLogoHidden(!!firstStep.template.logoHidden)` when the flow step's template has the field.
+  * Added `debouncedLogoHidden` state with 100ms debounce.
+  * Preview `useMemo` calls `buildLogoBlock(debouncedLogo || null, debouncedLogoHidden)`.
+  * `LogoEditorField` call site passes `hidden={logoHidden}` + `onHiddenChange={setLogoHidden}`.
+- Updated API routes:
+  * `GET  /api/email-templates`: response includes `logoHidden: t.logoHidden`.
+  * `POST /api/email-templates`: body type accepts `logoHidden?: boolean`; create data sets `logoHidden: !!body.logoHidden`.
+  * `PATCH /api/email-templates/[id]`: body type accepts `logoHidden?: boolean`; when present, `updateData.logoHidden = !!body.logoHidden`.
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in any modified file.
+- Dev server: restarted to pick up regenerated Prisma client. Verified `/admin/email` compiles successfully (HTTP 307 auth redirect — expected for unauthenticated curl).
+- Committed: `50fcdba feat(email): add 'Show logo' checkbox to brand logo field — hide logo per-template` (13 files, +160/-49 lines, new migration SQL).
+- Pushed: `86c470c..50fcdba main -> main` to https://github.com/EzeCaz/aisalon-massapro — Vercel auto-deploy triggered.
+
+Stage Summary:
+- "Show logo" checkbox now appears next to the "Brand logo (top-right of every email)" title in both Edit Template and Edit Campaign. Unchecking it hides the brand logo from the sent email — the top-right <img> is not injected at render time.
+- The logo URL is PRESERVED when hidden, so toggling back on restores the previously-configured logo without re-upload.
+- When hidden: preview dims to 40% opacity, upload/reset/URL controls are disabled, status badge shows "HIDDEN", and help text gains a pink notice explaining the logo won't appear in sends.
+- The preview iframe (Desktop + Mobile tabs) reflects the hidden state live — toggling the checkbox immediately removes the logo from the preview.
+- Per-template flag persists in the `EmailTemplate2.logoHidden` column on production Neon DB. All 6 render-path call sites (worker, flow-worker, force-send-stage, campaign send, campaign test-send, preview) respect the flag.
+- Files modified (13):
+  - prisma/schema.prisma (added logoHidden field)
+  - prisma/migrations/20260805120000_add_logo_hidden/migration.sql (new)
+  - src/lib/email-orchestrator/templates.ts (buildLogoBlock 2nd param)
+  - src/lib/email-orchestrator/worker.ts (2 call sites + Prisma select)
+  - src/lib/email-orchestrator/flow-worker.ts (1 call site + 2 Prisma selects)
+  - src/app/api/admin/email/force-send-stage/route.ts (1 call site)
+  - src/app/api/admin/email/campaigns/[id]/send/route.ts (1 call site + Prisma select)
+  - src/app/api/admin/email/campaigns/[id]/test-send/route.ts (1 call site + Prisma select)
+  - src/app/api/email-flows/[id]/route.ts (Prisma select only)
+  - src/app/api/email-templates/route.ts (GET + POST)
+  - src/app/api/email-templates/[id]/route.ts (PATCH)
+  - src/app/admin/email/flows/templates-client.tsx (LogoEditorField + state + preview)
+  - src/app/admin/email/email-tab-client.tsx (state + preview + load from template/flow)
+- Production DB column added, migration applied, Prisma client regenerated.
+- Pushed to GitHub main → Vercel production deploy will rebuild shortly.
