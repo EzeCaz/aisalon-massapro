@@ -491,7 +491,7 @@ export function EmailTabClient({
 
           {/* Composer modal */}
           <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
+            <DialogContent className="max-w-[128rem] w-[95vw] max-h-[92vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingCampaign ? "Edit campaign" : "New campaign"}
