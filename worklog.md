@@ -12390,3 +12390,40 @@ Stage Summary:
   - EmailCampaign cmseke7hr0003jw041lu18h4y: status FAILED → DRAFT
   - EmailRecipient (2 rows): status FAILED → PENDING, errorReason cleared
 
+
+---
+Task ID: add-font-controls-and-paste-style-to-email-editor
+Agent: main
+Task: Add all font editable characteristics (font color, size, font name) to the Email body in Edit Template / Edit Campaign, plus a "paste style" button to paste a specific style to another text. Deploy to GitHub.
+
+Work Log:
+- Verified both Edit Template (flows/templates-client.tsx → TemplateEditorDialog) and Edit Campaign (email-tab-client.tsx → CampaignComposer) render the SAME `RichTextEmailEditor` component from `src/components/ais/rich-text-email-editor.tsx`. Single point of edit.
+- Added new imports: `Paintbrush, ClipboardPaste, Palette, Type` from lucide-react.
+- Added `FONT_FAMILIES` constant: 11 email-safe font-family stacks (Arial, Helvetica, Georgia, Times New Roman, Courier New, Verdana, Tahoma, Trebuchet MS, Garamond, Palatino, system default).
+- Added `FONT_SIZES` constant: 16 sizes from 10 px to 48 px.
+- Added `CopiedStyle` type capturing 7 typographic properties (fontFamily, fontSize, color, backgroundColor, fontWeight, fontStyle, textDecoration).
+- Added state: `copiedStyleRef` (ref to hold copied style), `hasCopiedStyle` (state to toggle button visual), `fontFamilyOpen` / `fontSizeOpen` (dropdown toggles), `textColorRef` (hidden color input ref).
+- Added `wrapSelectionWithStyle(styleObj)` helper — wraps the current selection in a `<span style="...">` and re-selects the wrapped content so subsequent styles compose. Guards against collapsed selections and out-of-editor selections.
+- `handleFontFamily` — calls `exec("fontName", fontValue)` (cross-browser, produces `<font face="...">`).
+- `handleFontSize` — uses `wrapSelectionWithStyle({ "font-size": "${px}px" })` because `execCommand("fontSize")` only accepts legacy 1-7 sizes.
+- `handleTextColor` — calls `exec("foreColor", color)` (most reliable cross-browser text coloring).
+- `handleCopyStyle` — walks up from the selection start to the first Element, calls `getComputedStyle` to capture effective style (inherited + inline), stashes in `copiedStyleRef`.
+- `handlePasteStyle` — composes the captured style into a single style object and calls `wrapSelectionWithStyle`. Skips `background-color` when it is the default transparent `rgba(0, 0, 0, 0)`. Alerts the user if no style is copied or no target text is selected.
+- Added toolbar UI between the B/I/U buttons and the H1/H2/P buttons:
+  * Font family dropdown button (Type icon + "Font ▾") → list of 11 fonts rendered in their own family so the user can preview each.
+  * Font size dropdown button ("Size ▾") → list of 16 sizes rendered at their actual px size.
+  * Text color button (Palette icon + "Color") → triggers a hidden `<input type="color">` which opens the OS color picker.
+  * Copy style button (Paintbrush icon + "Copy style") — turns pink when a style is on the clipboard.
+  * Paste style button (ClipboardPaste icon + "Paste style") — disabled until a style has been copied.
+- All dropdowns auto-close each other (only one open at a time) for a cleaner UX.
+- Verified: `npx tsc --noEmit --skipLibCheck` produces zero errors in `rich-text-email-editor.tsx` (also no errors in `email-tab-client.tsx` or `templates-client.tsx`).
+- Verified: dev server compiles successfully — `GET /admin/email 200 in 9.5s (compile: 103ms)`.
+- Committed: `86c470c feat(email-editor): add font family / size / color + copy/paste style to WYSIWYG body` (1 file, +292/-2 lines).
+- Pushed: `dcd0912..86c470c main -> main` to https://github.com/EzeCaz/aisalon-massapro — Vercel auto-deploy triggered.
+
+Stage Summary:
+- Edit Template and Edit Campaign email body editors now have full font controls: font family (11 email-safe stacks), font size (10-48 px, 16 sizes), text color (native OS color picker), plus the existing Bold/Italic/Underline.
+- "Copy style" button captures the effective computed style of any selected text (font-family, font-size, color, background-color, font-weight, font-style, text-decoration).
+- "Paste style" button applies the captured style to any other selected text — works across the same editor instance. Disabled until a style is on the clipboard; turns pink when active.
+- File modified: `src/components/ais/rich-text-email-editor.tsx` only (single shared component, both editors auto-inherit the new controls).
+- Pushed to GitHub main → Vercel production deploy will rebuild shortly.
