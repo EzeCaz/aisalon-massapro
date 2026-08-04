@@ -54,7 +54,7 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
   return DEFAULT_BRAND_LOGO_URL;
 }
 
-/** Build the HTML block for the brand-logo <img> tag, anchored top-right.
+/** Build the HTML for the brand-logo <img> tag.
  *  Returns an empty string if the resolved URL is falsy (which only happens
  *  if someone explicitly sets `EMAIL_BRAND_LOGO_URL=""` and the per-template
  *  override is also empty), OR if `logoHidden` is true (admin unchecked the
@@ -73,7 +73,14 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
  *  correctly-proportioned render. The inline `height:auto` reinforces this
  *  for clients that honor inline styles over HTML attributes.
  *
- *  Floated right with a small margin so body text wraps cleanly. */
+ *  NOTE: this returns a MINIMAL img (no float, no margin). The actual
+ *  LAYOUT — two-column table with the logo on the right of the <h1>, OR
+ *  floated img as a fallback — is decided by `injectLogo()` in
+ *  `render-unified.ts`, which has access to the full HTML context and
+ *  can find the <h1> to wrap. This separation lets the table layout
+ *  place the logo EXACTLY to the right of the heading text (matching
+ *  the user's reference HTML), instead of the old float:right approach
+ *  which could push the logo above the text when the heading was short. */
 export function buildLogoBlock(
   templateLogoUrl: string | null | undefined,
   logoHidden?: boolean,
@@ -83,7 +90,7 @@ export function buildLogoBlock(
   if (logoHidden) return "";
   const url = resolveLogoUrl(templateLogoUrl);
   if (!url) return "";
-  return `<img src="${url}" alt="AI Salon" width="160" style="float:right;margin:0 0 8px 16px;border:0;outline:none;text-decoration:none;width:160px;height:auto;display:block;"/>`;
+  return `<img src="${url}" alt="AI Salon" width="160" style="width:160px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
 }
 
 // ----------------------------------------------------------------------------

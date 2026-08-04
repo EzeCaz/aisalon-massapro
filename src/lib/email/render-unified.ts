@@ -49,9 +49,11 @@
  *
  *   2. Inject brand logo (idempotent — only if `data-brand-logo` marker
  *      is not already present in the HTML and `logoHtml` is provided).
- *      Injection point priority: after the first `<div style="max-width:
- *      560px...">` (the SHELL wrapper), else after `<body>`, else at the
- *      start.
+ *      LAYOUT: wraps the first `<h1>` in a two-column table (h1 left,
+ *      logo right) so the logo sits exactly to the right of the heading
+ *      text — matching the user's reference HTML. Falls back to a
+ *      floated img after the SHELL wrapper / `<body>` when no `<h1>`
+ *      is found.
  *
  *   3. Prepend mobile overrides (if `mobileOverridesHtml` is provided).
  *      The overrides are wrapped inside `<style>@media (max-width: 600px)
@@ -285,23 +287,87 @@ export function renderUnifiedSubject(
 // ----------------------------------------------------------------------------
 
 /**
- * Inject the brand-logo HTML block at the top of the email.
+ * Inject the brand-logo HTML block into the email.
  *
  * Idempotent: if the HTML already contains the `data-brand-logo` marker,
  * no injection happens (so calling this twice on the same HTML is safe).
  *
- * Injection point priority:
- *   1. After the first `<div style="...max-width:560px...">` (the SHELL
- *      wrapper used by the orchestrator's default templates).
- *   2. After the first `<body>` tag.
- *   3. At the very start of the HTML.
+ * LAYOUT — two strategies, tried in order:
+ *
+ *   1. (PREFERRED) Wrap the first `<h1>...</h1>` in a two-column table:
+ *        <table data-brand-logo>
+ *          <tr>
+ *            <td valign="top">  ← h1 goes here (left column, fluid width)
+ *            <td valign="top" width="160" align="right">  ← logo img (right column, fixed 160px)
+ *          </tr>
+ *        </table>
+ *      This places the logo EXACTLY to the right of the heading text —
+ *      matching the user's reference HTML layout. `valign="top"` on both
+ *      cells ensures they align to the top, so the h1's vertical position
+ *      is preserved regardless of the logo's height. This is dramatically
+ *      more reliable than `float:right`, which could push the logo above
+ *      the heading when the heading was short (because the float would
+ *      clear to the next block-level element instead of sticking to the
+ *      heading's line box).
+ *
+ *   2. (FALLBACK) If no `<h1>` is found, insert the logo img with
+ *      `float:right;margin:0 0 8px 16px;` added inline, right after the
+ *      SHELL wrapper `<div style="max-width:560px...">` (or after `<body>`,
+ *      or at the start of the HTML). This preserves the old behavior for
+ *      templates that don't start with an `<h1>` (e.g. custom templates
+ *      that begin with a `<p>` or `<div>`).
+ *
+ * The `data-brand-logo` marker is placed on the `<table>` (strategy 1) or
+ * the `<img>` (strategy 2) so subsequent calls detect either and skip.
  */
 export function injectLogo(html: string, logoHtml: string | undefined): string {
   if (!logoHtml) return html;
   // Idempotency: don't double-inject.
   if (/data-brand-logo/.test(html)) return html;
-  // Tag the logo block with the marker so we can detect it on subsequent calls.
-  const tagged = logoHtml.replace(/<img /, '<img data-brand-logo ');
+
+  // ── Strategy 1: wrap the first <h1> in a two-column table ──────────────
+  // Match the first <h1 ...>...</h1> block (case-insensitive, non-greedy
+  // so we don't swallow subsequent content). Uses [\s\S] for dotall match
+  // because . doesn't match newlines in JS regex.
+  const h1Match = html.match(/<h1[^>]*>[\s\S]*?<\/h1>/i);
+  if (h1Match && h1Match.index !== undefined) {
+    const h1Block = h1Match[0];
+    // Build the two-column table wrapper. cellpadding=0 + cellspacing=0 +
+    // border=0 + border-collapse:collapse strips all default table spacing
+    // so the h1 and logo sit flush. valign="top" on both cells ensures
+    // top alignment regardless of logo height. The right cell has a fixed
+    // width of 160px (the logo's render width) + align="right" so the logo
+    // sticks to the right edge of the email body.
+    const tableWrapper =
+      `<table data-brand-logo width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">` +
+      `<tr>` +
+      `<td valign="top" style="vertical-align:top;">${h1Block}</td>` +
+      `<td valign="top" width="160" align="right" style="vertical-align:top;width:160px;text-align:right;">${logoHtml}</td>` +
+      `</tr>` +
+      `</table>`;
+    // Replace just the first occurrence of the h1 block with the wrapped
+    // version. Using string slicing (not str.replace) to avoid regex
+    // special-character issues in the h1Block content.
+    return (
+      html.slice(0, h1Match.index) +
+      tableWrapper +
+      html.slice(h1Match.index + h1Block.length)
+    );
+  }
+
+  // ── Strategy 2 (fallback): floated img after SHELL / body ──────────────
+  // No <h1> found — fall back to the old float:right behavior so the logo
+  // still appears at the top-right of the email. We add float:right +
+  // margin inline to the img's style attribute (buildLogoBlock produces a
+  // minimal img without these, since the preferred table layout doesn't
+  // need them).
+  const floatedImg = logoHtml.replace(
+    /style="([^"]*)"/i,
+    (_m, styles: string) =>
+      `style="float:right;margin:0 0 8px 16px;${styles}"`,
+  );
+  // Tag with the marker for idempotency detection.
+  const tagged = floatedImg.replace(/<img /, '<img data-brand-logo ');
 
   if (/<div[^>]*max-width:560px[^>]*>/i.test(html)) {
     return html.replace(
