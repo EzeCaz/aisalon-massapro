@@ -37,6 +37,7 @@ import { STAGES, getStage, scheduledFor, nextStage } from "./stages";
 import {
   buildContext,
   buildLogoBlock,
+  resolveEmailLogoDefault,
   DEFAULT_TEMPLATES,
 } from "./templates";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
@@ -149,6 +150,10 @@ async function processDuePending(result: WorkerResult): Promise<void> {
               address: true,
               slug: true,
               chapter: true,
+              // V7 chapter FK — used to resolve the per-chapter email-logo
+              // override (ChapterSetting[emailLogo]) at render time. Falls
+              // back to the global SiteSetting[emailLogo] when null.
+              chapterId: true,
             },
           },
         },
@@ -282,6 +287,8 @@ async function sendStageEmail(
         slug: string;
         /** Legacy free-form chapter label — defaults to "Tel Aviv". */
         chapter: string;
+        /** V7 chapter FK — used to resolve per-chapter email-logo override. */
+        chapterId: string | null;
       };
     } | null;
   },
@@ -344,7 +351,14 @@ async function sendStageEmail(
   // TSK-0074: now calls renderUnifiedEmail directly (was renderTemplate).
   // The unified renderer merges the orchestrator + campaign render paths
   // into one. logoHtml is injected idempotently (data-brand-logo marker).
-  const logoHtml = buildLogoBlock(tpl?.logoUrl, tpl?.logoHidden ?? false);
+  //
+  // PER USER SPEC 2026-08-05: the default logo URL is resolved async via
+  // resolveEmailLogoDefault(chapterId) — it checks the chapter override
+  // (ChapterSetting[emailLogo]) → global SiteSetting[emailLogo] → env var
+  // → seeded default. The per-template `logoUrl` override (tpl.logoUrl)
+  // still wins over this default — buildLogoBlock handles that precedence.
+  const resolvedLogoDefault = await resolveEmailLogoDefault(rsvp.event.chapterId);
+  const logoHtml = buildLogoBlock(tpl?.logoUrl, tpl?.logoHidden ?? false, resolvedLogoDefault);
   const renderedHtml = renderUnifiedEmail({
     html: htmlTemplate,
     ctx,
@@ -504,16 +518,19 @@ async function processAltResends(result: WorkerResult): Promise<void> {
           select: { title: true, startsAt: true },
         }),
       ]);
-      // Look up the chapter name for the {{chapter_name}} merge token.
-      // Uses the legacy `chapter` string field on Event (defaults to
-      // "Tel Aviv"). Best-effort — fall back to the buildContext default.
+      // Look up the chapter name + chapterId for the {{chapter_name}} merge
+      // token AND the per-chapter email-logo override. Uses the legacy
+      // `chapter` string field on Event (defaults to "Tel Aviv") for the
+      // display name. Best-effort — fall back to the buildContext default.
       let altChapterName: string | undefined;
+      let altChapterId: string | null = null;
       try {
         const eventWithChapter = await db.event.findUnique({
           where: { id: row.eventId },
-          select: { chapter: true },
+          select: { chapter: true, chapterId: true },
         });
         altChapterName = eventWithChapter?.chapter ?? undefined;
+        altChapterId = eventWithChapter?.chapterId ?? null;
       } catch {
         // ignore — buildContext falls back to "Tel Aviv".
       }
@@ -526,7 +543,17 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         queueId: altRow.id,
         chapterName: altChapterName,
       });
-      const logoHtml = buildLogoBlock(tpl.logoUrl, tpl.logoHidden ?? false);
+      // PER USER SPEC 2026-08-05: resolve the default email logo for the
+      // alt-subject re-send (chapter override → global SiteSetting → env →
+      // seeded default). Same event → same chapterId → same logo default
+      // as the primary send, but this is a separate function so we resolve
+      // independently.
+      const altResolvedLogoDefault = await resolveEmailLogoDefault(altChapterId);
+      const logoHtml = buildLogoBlock(
+        tpl.logoUrl,
+        tpl.logoHidden ?? false,
+        altResolvedLogoDefault,
+      );
       // TSK-0074: renderUnifiedEmail + renderUnifiedSubject (was renderTemplate +
       // inline .replace chain). Field renamed htmlBody → bodyHtml.
       const altRenderedHtml = renderUnifiedEmail({

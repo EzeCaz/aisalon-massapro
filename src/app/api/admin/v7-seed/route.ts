@@ -12,6 +12,7 @@ import {
   K_FAVICON,
   K_LOGIN_HERO as K_GLOBAL_LOGIN_HERO,
   K_LOGIN_BANNER as K_GLOBAL_LOGIN_BANNER,
+  K_EMAIL_LOGO,
   DEFAULTS,
 } from "@/lib/site-settings";
 
@@ -123,10 +124,16 @@ export async function POST() {
   const GLOBAL_FAVICON = DEFAULTS[K_FAVICON];
   const GLOBAL_LOGIN_HERO = DEFAULTS[K_GLOBAL_LOGIN_HERO];
   const GLOBAL_LOGIN_BANNER = DEFAULTS[K_GLOBAL_LOGIN_BANNER];
+  // PER USER SPEC 2026-08-05: global default email brand logo — the image
+  // injected top-right of every outgoing email (when the template has no
+  // per-template logoUrl override and logoHidden is false). Seeded to the
+  // canonical AI Salon email logo the user picked.
+  const GLOBAL_EMAIL_LOGO = DEFAULTS[K_EMAIL_LOGO];
 
   await setSetting(K_FAVICON, GLOBAL_FAVICON, user.id);
   await setSetting(K_GLOBAL_LOGIN_HERO, GLOBAL_LOGIN_HERO, user.id);
   await setSetting(K_GLOBAL_LOGIN_BANNER, GLOBAL_LOGIN_BANNER, user.id);
+  await setSetting(K_EMAIL_LOGO, GLOBAL_EMAIL_LOGO, user.id);
 
   // 3. Backfill NULLs
   // SUPER_ADMIN users keep NULL scope (global).
@@ -258,6 +265,7 @@ export async function POST() {
       favicon: GLOBAL_FAVICON,
       loginHero: GLOBAL_LOGIN_HERO,
       loginBanner: GLOBAL_LOGIN_BANNER,
+      emailLogo: GLOBAL_EMAIL_LOGO,
     },
     updates,
     verification: {

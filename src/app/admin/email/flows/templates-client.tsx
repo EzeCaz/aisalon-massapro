@@ -718,6 +718,29 @@ function TemplateEditorDialog({
     return () => window.clearTimeout(h);
   }, [logoHidden]);
 
+  // PER USER SPEC 2026-08-05: fetch the global default email logo (picked
+  // by the Super Admin in the brand-image gallery) so the preview shows the
+  // ACTUAL default logo that will be injected at send time — not the
+  // hardcoded fallback. The per-template `logoUrl` override still wins
+  // (handled by buildLogoBlock). Fetched once when the editor opens.
+  const [globalEmailLogoDefault, setGlobalEmailLogoDefault] = React.useState<string>("");
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/brand-images", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { selections?: { emailLogo?: string } } | null) => {
+        if (!cancelled && json?.selections?.emailLogo) {
+          setGlobalEmailLogoDefault(json.selections.emailLogo);
+        }
+      })
+      .catch(() => {
+        // Non-critical — preview falls back to DEFAULT_BRAND_LOGO_URL.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const previewSrcDoc = React.useMemo(() => {
     // Don't run the pipeline on empty bodies — render a friendly placeholder
     // instead so the iframe never shows a blank white box on a fresh new
@@ -728,12 +751,20 @@ function TemplateEditorDialog({
     return renderUnifiedEmail({
       html: debouncedBody,
       ctx: PREVIEW_CTX,
-      logoHtml: buildLogoBlock(debouncedLogo || null, debouncedLogoHidden),
+      logoHtml: buildLogoBlock(
+        debouncedLogo || null,
+        debouncedLogoHidden,
+        // Pass the resolved global default so the preview matches production
+        // rendering. Empty string = fall back to env/hardcoded default
+        // inside resolveLogoUrl (fine for the brief moment before the fetch
+        // completes).
+        globalEmailLogoDefault || undefined,
+      ),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
       chapterName: PREVIEW_CTX.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault]);
 
   return (
     <>

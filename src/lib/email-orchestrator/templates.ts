@@ -27,6 +27,9 @@
 
 import type { Event, EventRsvp, Speaker, EventAgendaItem } from "@prisma/client";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
+import { db } from "@/lib/db";
+import { K_EMAIL_LOGO, DEFAULTS } from "@/lib/site-settings";
+import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
 
 // ----------------------------------------------------------------------------
 // Brand logo (top-right of every email)
@@ -34,10 +37,15 @@ import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-uni
 
 /** Default brand logo URL — the canonical AI Salon login banner image
  *  (the same wide hero image used as the login-page background / OG image).
- *  This is the global default from SiteSetting[K_LOGIN_BANNER].
+ *  This is the LAST-RESORT fallback used only when:
+ *    - the per-template `logoUrl` override is empty, AND
+ *    - no global SiteSetting[emailLogo] has been picked by the Super Admin, AND
+ *    - no chapter ChapterSetting[emailLogo] override applies, AND
+ *    - the `EMAIL_BRAND_LOGO_URL` env var is unset.
  *
- *  Override per-template via `EmailStageTemplate.logoUrl`, or globally via
- *  the `EMAIL_BRAND_LOGO_URL` env var.
+ *  In practice, the Super Admin picks the global email logo from the
+ *  brand-image gallery (stored in SiteSetting[emailLogo], default seeded
+ *  to the URL below). Per-template `logoUrl` still wins over everything.
  *
  *  Spec: banner-proportioned, anchored top-right of the 560px-wide email
  *  body. Rendered at 160px wide with `height:auto` so the image's natural
@@ -46,12 +54,73 @@ export const DEFAULT_BRAND_LOGO_URL =
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png";
 
 /** Resolve the brand logo URL with the fallback chain:
- *  per-template → env var → hardcoded default. */
-export function resolveLogoUrl(templateLogoUrl: string | null | undefined): string {
+ *  per-template → resolved default (global/chapter/env) → hardcoded default.
+ *
+ *  `resolvedDefaultUrl` is the async-resolved default from
+ *  `resolveEmailLogoDefault()` — it already encodes the chapter override →
+ *  global SiteSetting → env var chain. When not provided (e.g. in the
+ *  template editor preview, where we can't easily do an async DB lookup
+ *  inside useMemo), we fall back to env var → hardcoded default. */
+export function resolveLogoUrl(
+  templateLogoUrl: string | null | undefined,
+  resolvedDefaultUrl?: string,
+): string {
   if (templateLogoUrl && templateLogoUrl.trim()) return templateLogoUrl.trim();
+  if (resolvedDefaultUrl && resolvedDefaultUrl.trim()) return resolvedDefaultUrl.trim();
   const env = process.env.EMAIL_BRAND_LOGO_URL;
   if (env && env.trim()) return env.trim();
   return DEFAULT_BRAND_LOGO_URL;
+}
+
+/**
+ * Async-resolve the default email brand logo URL for a given chapter
+ * context. Implements the fallback chain:
+ *
+ *   1. ChapterSetting[chapterId, "emailLogo"]   ← chapter-specific override
+ *   2. SiteSetting["emailLogo"]                  ← global Super-Admin pick
+ *   3. EMAIL_BRAND_LOGO_URL env var
+ *   4. DEFAULTS[K_EMAIL_LOGO] (seeded to the user's canonical email logo)
+ *
+ *  Call this ONCE per email send (it does up to 2 small DB reads) and pass
+ *  the result to `buildLogoBlock()` as `resolvedDefaultUrl`. The per-template
+ *  `logoUrl` override still wins over this default — `buildLogoBlock` handles
+ *  that precedence internally.
+ *
+ *  Safe to call with `chapterId = null/undefined` — skips the chapter
+ *  lookup and goes straight to the global default. This is the path used
+ *  by campaign sends that aren't tied to a specific chapter.
+ *
+ *  Any DB error falls back to the env var → seeded default so a DB outage
+ *  never blocks email sends. */
+export async function resolveEmailLogoDefault(
+  chapterId?: string | null,
+): Promise<string> {
+  // 1. Chapter-level override (only when a chapter context is provided)
+  if (chapterId) {
+    try {
+      const overrides = await getChapterBrandImageOverrides(chapterId);
+      const chapterLogo = overrides[K_EMAIL_LOGO];
+      if (chapterLogo && chapterLogo.trim()) return chapterLogo.trim();
+    } catch (err) {
+      console.warn("[templates] could not read chapter email-logo override:", err);
+    }
+  }
+  // 2. Global SiteSetting[emailLogo]
+  try {
+    const row = await db.siteSetting.findUnique({
+      where: { key: K_EMAIL_LOGO },
+      select: { value: true },
+    });
+    const globalLogo = row?.value;
+    if (globalLogo && globalLogo.trim()) return globalLogo.trim();
+  } catch (err) {
+    console.warn("[templates] could not read global email-logo SiteSetting:", err);
+  }
+  // 3. Env var
+  const env = process.env.EMAIL_BRAND_LOGO_URL;
+  if (env && env.trim()) return env.trim();
+  // 4. Seeded default (DEFAULTS[K_EMAIL_LOGO])
+  return DEFAULTS[K_EMAIL_LOGO];
 }
 
 /** Build the HTML for the brand-logo <img> tag.
@@ -84,11 +153,12 @@ export function resolveLogoUrl(templateLogoUrl: string | null | undefined): stri
 export function buildLogoBlock(
   templateLogoUrl: string | null | undefined,
   logoHidden?: boolean,
+  resolvedDefaultUrl?: string,
 ): string {
   // Admin explicitly disabled the logo for this template — skip injection
   // entirely (don't even resolve the URL).
   if (logoHidden) return "";
-  const url = resolveLogoUrl(templateLogoUrl);
+  const url = resolveLogoUrl(templateLogoUrl, resolvedDefaultUrl);
   if (!url) return "";
   return `<img src="${url}" alt="AI Salon" width="160" style="width:160px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
 }

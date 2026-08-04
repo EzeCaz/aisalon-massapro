@@ -336,6 +336,7 @@ export async function GET() {
     if (settings.favicon) allowedUrls.add(settings.favicon);
     if (settings.loginHero) allowedUrls.add(settings.loginHero);
     if (settings.loginBanner) allowedUrls.add(settings.loginBanner);
+    if (settings.emailLogo) allowedUrls.add(settings.emailLogo);
 
     // TSK-0060: Always include the curated global brand library so
     // chapter admins can pick from these images for their overrides.

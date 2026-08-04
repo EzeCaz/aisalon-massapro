@@ -50,6 +50,7 @@ type Selections = {
   favicon: string;
   loginHero: string;
   loginBanner: string;
+  emailLogo: string;
 };
 
 type ApiResponse = {
@@ -63,19 +64,21 @@ type ChapterOverridesResponse = {
   global: Selections;
 };
 
-const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
+const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner" | "emailLogo", string> = {
   favicon: "Favicon",
   loginHero: "Login hero",
   loginBanner: "Login banner",
+  emailLogo: "Email logo",
 };
 
-const ROLE_HINTS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
+const ROLE_HINTS: Record<"favicon" | "loginHero" | "loginBanner" | "emailLogo", string> = {
   favicon: "Browser tab icon (32×32 or larger, square)",
   loginHero: "Square mascot image on the login page right panel",
   loginBanner: "Wide hero image used as login page background / OG image",
+  emailLogo: "Default brand logo at the top-right of every outgoing email",
 };
 
-const ROLE_KEYS = ["favicon", "loginHero", "loginBanner"] as const;
+const ROLE_KEYS = ["favicon", "loginHero", "loginBanner", "emailLogo"] as const;
 type RoleKey = (typeof ROLE_KEYS)[number];
 
 export function ChapterBrandImagesEditor({
@@ -300,9 +303,9 @@ export function ChapterBrandImagesEditor({
         )}
       </div>
 
-      {/* Current overrides summary — 3 cards showing the current state
+      {/* Current overrides summary — 4 cards showing the current state
           for each role (override URL or "falling back to global"). */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {ROLE_KEYS.map((role) => {
           const url = overrides[role];
           const globalUrl = globalSettings?.[role] ?? "";
@@ -533,7 +536,7 @@ export function ChapterBrandImagesEditor({
                       </div>
 
                       {/* Per-role set buttons */}
-                      <div className="mt-1.5 grid grid-cols-3 gap-0.5">
+                      <div className="mt-1.5 grid grid-cols-2 gap-0.5">
                         {ROLE_KEYS.map((role) => {
                           const isSelected = selectedChapterRoles.includes(role);
                           const busy =

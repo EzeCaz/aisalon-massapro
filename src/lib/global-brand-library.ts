@@ -71,6 +71,11 @@ export const GLOBAL_BRAND_LIBRARY_URLS: readonly string[] = [
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782940769382-r2twkn.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1783707737806-k0s0bs.png",
   "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png",
+  // PER USER SPEC 2026-08-05: canonical email brand logo — the image the
+  // user wants as the default top-right logo on every outgoing email.
+  // Listed here so chapter admins can also pick it for their chapter-level
+  // email-logo override.
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png",
 ];
 
 /**

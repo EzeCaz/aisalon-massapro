@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { sendCampaignEmail } from "@/lib/email-orchestrator/sender";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
-import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
+import { buildLogoBlock, resolveEmailLogoDefault } from "@/lib/email-orchestrator/templates";
 import { htmlToText } from "@/lib/email-campaign/render";
 
 /**
@@ -185,7 +185,12 @@ export async function POST(
     // TSK-0074: pass the linked template's logoUrl + mobileOverridesHtml
     // so test sends match production rendering (brand logo top-right,
     // mobile overrides applied).
-    logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null, campaign.template?.logoHidden ?? false),
+    logoHtml: buildLogoBlock(
+      campaign.template?.logoUrl ?? null,
+      campaign.template?.logoHidden ?? false,
+      // PER USER SPEC 2026-08-05: resolve chapter → global → env → seeded default.
+      await resolveEmailLogoDefault(campaign.chapterId ?? null),
+    ),
     mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
     campaignId: id,
     trackToken: syntheticTrackToken,

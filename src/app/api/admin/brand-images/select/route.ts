@@ -11,6 +11,7 @@ import {
   K_FAVICON,
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
+  K_EMAIL_LOGO,
 } from "@/lib/site-settings";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 
@@ -177,4 +178,4 @@ function extToMime(ext: string): string {
 }
 
 // Re-export the keys for client-side use (used by ImagesGallery).
-export { K_FAVICON, K_LOGIN_HERO, K_LOGIN_BANNER };
+export { K_FAVICON, K_LOGIN_HERO, K_LOGIN_BANNER, K_EMAIL_LOGO };

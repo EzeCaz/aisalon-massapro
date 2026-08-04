@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { sendCampaignEmail, isSmtpConfigured, isGmailConfigured } from "@/lib/email-orchestrator/sender";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
-import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
+import { buildLogoBlock, resolveEmailLogoDefault } from "@/lib/email-orchestrator/templates";
 import { randomUUID } from "crypto";
 import { htmlToText } from "@/lib/email-campaign/render";
 
@@ -149,6 +149,13 @@ export async function POST(
   let failedCount = 0;
   const errors: string[] = [];
 
+  // PER USER SPEC 2026-08-05: resolve the default email brand logo ONCE
+  // before the recipient loop (chapter override → global SiteSetting → env
+  // var → seeded default). Reused for every recipient — the logo default is
+  // campaign-scoped, not recipient-scoped. The per-template logoUrl override
+  // (campaign.template?.logoUrl) still wins over this default.
+  const resolvedLogoDefault = await resolveEmailLogoDefault(campaign.chapterId ?? null);
+
   for (const r of recipients) {
     // Per-recipient trackToken (for open/click tracking later)
     const trackToken = randomUUID().replace(/-/g, "");
@@ -192,7 +199,11 @@ export async function POST(
       // so campaign sends get the same brand logo + mobile styling as
       // flow-sent emails. buildLogoBlock falls back to the default brand
       // logo when logoUrl is null/empty.
-      logoHtml: buildLogoBlock(campaign.template?.logoUrl ?? null, campaign.template?.logoHidden ?? false),
+      logoHtml: buildLogoBlock(
+        campaign.template?.logoUrl ?? null,
+        campaign.template?.logoHidden ?? false,
+        resolvedLogoDefault,
+      ),
       mobileOverridesHtml: campaign.template?.mobileOverridesHtml ?? undefined,
       campaignId: id,
       trackToken,

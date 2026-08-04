@@ -47,6 +47,7 @@ import {
   buildContext,
   DEFAULT_TEMPLATES,
   buildLogoBlock,
+  resolveEmailLogoDefault,
 } from "@/lib/email-orchestrator/templates";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 import { sendEmail } from "@/lib/email-orchestrator/sender";
@@ -146,6 +147,7 @@ export async function POST(req: NextRequest) {
               address: true,
               slug: true,
               chapter: true,
+              chapterId: true,
             },
           },
         },
@@ -242,6 +244,8 @@ async function sendStageEmailDirect(
         slug: string;
         /** Legacy free-form chapter label — defaults to "Tel Aviv". */
         chapter: string;
+        /** V7 chapter FK — used to resolve per-chapter email-logo override. */
+        chapterId: string | null;
       };
     } | null;
   },
@@ -293,7 +297,12 @@ async function sendStageEmailDirect(
     chapterName: rsvp.event.chapter,
   });
 
-  const logoHtml = buildLogoBlock(tpl?.logoUrl, tpl?.logoHidden ?? false);
+  const logoHtml = buildLogoBlock(
+    tpl?.logoUrl,
+    tpl?.logoHidden ?? false,
+    // PER USER SPEC 2026-08-05: resolve chapter → global → env → seeded default.
+    await resolveEmailLogoDefault(rsvp.event.chapterId),
+  );
   // TSK-0074: now calls renderUnifiedEmail + renderUnifiedSubject directly
   // (was renderTemplate + renderSubject, which now delegate here anyway).
   const renderedHtml = renderUnifiedEmail({

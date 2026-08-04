@@ -1276,6 +1276,29 @@ function CampaignComposer({
     return () => window.clearTimeout(h);
   }, [logoHidden]);
 
+  // PER USER SPEC 2026-08-05: fetch the global default email logo (picked
+  // by the Super Admin in the brand-image gallery) so the campaign preview
+  // shows the ACTUAL default logo that will be injected at send time — not
+  // the hardcoded fallback. The per-template `logoUrl` override still wins
+  // (handled by buildLogoBlock). Fetched once when the composer mounts.
+  const [globalEmailLogoDefault, setGlobalEmailLogoDefault] = React.useState<string>("");
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/brand-images", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { selections?: { emailLogo?: string } } | null) => {
+        if (!cancelled && json?.selections?.emailLogo) {
+          setGlobalEmailLogoDefault(json.selections.emailLogo);
+        }
+      })
+      .catch(() => {
+        // Non-critical — preview falls back to DEFAULT_BRAND_LOGO_URL.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const previewSrcDoc = React.useMemo(() => {
     if (!debouncedBody.trim()) {
       return `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;padding:32px;color:#999;font-size:14px;text-align:center;">Start typing in the editor above to see a live preview here.</body></html>`;
@@ -1283,12 +1306,16 @@ function CampaignComposer({
     return renderUnifiedEmail({
       html: debouncedBody,
       ctx: PREVIEW_CTX,
-      logoHtml: buildLogoBlock(debouncedLogo || null, debouncedLogoHidden),
+      logoHtml: buildLogoBlock(
+        debouncedLogo || null,
+        debouncedLogoHidden,
+        globalEmailLogoDefault || undefined,
+      ),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
       chapterName: PREVIEW_CTX.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault]);
 
   // Preview pane — extracted so it can be rendered in two places:
   //   1. Inline (below the editor) on small screens — visible below xl breakpoint

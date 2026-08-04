@@ -29,7 +29,7 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { sendEmail, type SendResult } from "./sender";
-import { buildContext, buildLogoBlock } from "./templates";
+import { buildContext, buildLogoBlock, resolveEmailLogoDefault } from "./templates";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 
 export type WorkerResult = {
@@ -226,16 +226,19 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
   // Build context.
   const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
 
-  // Look up the chapter name for the {{chapter_name}} merge token.
-  // Uses the legacy `chapter` string field on Event (defaults to
-  // "Tel Aviv"). Best-effort — fall back to the buildContext default.
+  // Look up the chapter name + chapterId for the {{chapter_name}} merge
+  // token AND the per-chapter email-logo override (ChapterSetting[emailLogo]).
+  // Uses the legacy `chapter` string field on Event (defaults to "Tel Aviv")
+  // for the display name. Best-effort — fall back to the buildContext default.
   let chapterName: string | undefined;
+  let chapterId: string | null = null;
   try {
     const eventWithChapter = await db.event.findUnique({
       where: { id: row.eventId },
-      select: { chapter: true },
+      select: { chapter: true, chapterId: true },
     });
     chapterName = eventWithChapter?.chapter ?? undefined;
+    chapterId = eventWithChapter?.chapterId ?? null;
   } catch {
     // ignore — buildContext falls back to "Tel Aviv".
   }
@@ -260,10 +263,20 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
   // so flow-sent emails get the same top-right brand mark as stage-based sends.
   //
   // Also: field renamed htmlBody → bodyHtml on EmailTemplate2.
+  //
+  // PER USER SPEC 2026-08-05: resolve the default email logo async
+  // (chapter override → global SiteSetting → env var → seeded default)
+  // and pass it to buildLogoBlock. The per-template logoUrl override
+  // (step.template.logoUrl) still wins.
+  const resolvedLogoDefault = await resolveEmailLogoDefault(chapterId);
   const htmlBody = renderUnifiedEmail({
     html: step.template.bodyHtml,
     ctx,
-    logoHtml: buildLogoBlock(step.template.logoUrl, step.template.logoHidden ?? false),
+    logoHtml: buildLogoBlock(
+      step.template.logoUrl,
+      step.template.logoHidden ?? false,
+      resolvedLogoDefault,
+    ),
     clickWrapFn: ctx.wrapLink,
     openPixelUrl: ctx.openPixelUrl,
     chapterName: ctx.chapterName,

@@ -49,6 +49,7 @@ type Selections = {
   favicon: string;
   loginHero: string;
   loginBanner: string;
+  emailLogo: string;
 };
 
 type ApiResponse = {
@@ -56,19 +57,21 @@ type ApiResponse = {
   selections: Selections;
 };
 
-const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
+const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner" | "emailLogo", string> = {
   favicon: "Favicon",
   loginHero: "Login hero",
   loginBanner: "Login banner",
+  emailLogo: "Email logo",
 };
 
-const ROLE_HINTS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
+const ROLE_HINTS: Record<"favicon" | "loginHero" | "loginBanner" | "emailLogo", string> = {
   favicon: "Browser tab icon (32×32 or larger, square)",
   loginHero: "Square mascot image on the login page right panel",
   loginBanner: "Wide hero image used as login page background / OG image",
+  emailLogo: "Default brand logo at the top-right of every outgoing email",
 };
 
-const ROLE_KEYS = ["favicon", "loginHero", "loginBanner"] as const;
+const ROLE_KEYS = ["favicon", "loginHero", "loginBanner", "emailLogo"] as const;
 type RoleKey = (typeof ROLE_KEYS)[number];
 
 export function GlobalBrandImagesEditor({
@@ -103,6 +106,7 @@ export function GlobalBrandImagesEditor({
     favicon: "",
     loginHero: "",
     loginBanner: "",
+    emailLogo: "",
   };
 
   // For each role, find which image is currently selected as the global default.
@@ -213,8 +217,8 @@ export function GlobalBrandImagesEditor({
         )}
       </div>
 
-      {/* Current global selections summary — 3 cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Current global selections summary — 4 cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {ROLE_KEYS.map((role) => {
           const url = selections[role] ?? "";
           return (
@@ -365,7 +369,7 @@ export function GlobalBrandImagesEditor({
                       </div>
 
                       {/* Per-role set buttons */}
-                      <div className="mt-1.5 grid grid-cols-3 gap-0.5">
+                      <div className="mt-1.5 grid grid-cols-2 gap-0.5">
                         {ROLE_KEYS.map((role) => {
                           const isSelected = selectedRoles.includes(role);
                           const busy = busyKey === `select:${img.url}:${role}`;

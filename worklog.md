@@ -12574,3 +12574,43 @@ Stage Summary:
   - `src/lib/email/render-unified.ts` — `injectLogo` wraps first `<h1>` in two-column table
 - No caller changes needed — all 8 callers pass `logoHtml` to `renderUnifiedEmail` which calls `injectLogo` internally.
 - Pushed to GitHub main → Vercel production deploy will rebuild shortly.
+
+---
+Task ID: default-email-logo-picker
+Agent: main
+Task: Enable selecting a default email brand logo from the image gallery — both globally (all emails) and per-chapter. User example: https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png
+
+Work Log:
+- Explored existing brand-image system: site-settings.ts (K_FAVICON/K_LOGIN_HERO/K_LOGIN_BANNER), chapter-brand-images.ts (chapter overrides), global-brand-library.ts (curated URLs), brand-images API routes, GlobalBrandImagesEditor + ChapterBrandImagesEditor + ImagesGallery UIs.
+- Traced email logo pipeline: templates.ts resolveLogoUrl()/buildLogoBlock() → called by worker.ts (stage sends + alt resends), flow-worker.ts (flow sends), force-send-stage route, campaign send + test-send routes. Logo fallback was hardcoded DEFAULT_BRAND_LOGO_URL with env var override only — no admin-pickable global/chapter default.
+- Added new brand-image role "emailLogo":
+  * site-settings.ts: K_EMAIL_LOGO constant, added to ALL_KEYS allowlist, DEFAULTS seeded to user's canonical URL, added to PublicSettings type + getPublicSettings() (both return paths).
+  * chapter-brand-images.ts: added K_EMAIL_LOGO to CHAPTER_BRAND_IMAGE_KEYS, updated getEffectiveBrandImages/getEffectiveBrandImagesBySlug merge fns, re-export.
+  * global-brand-library.ts: added user's example URL so chapter admins can also pick it.
+- Modified email rendering pipeline:
+  * templates.ts: resolveLogoUrl() + buildLogoBlock() now accept optional resolvedDefaultUrl param. Added async resolveEmailLogoDefault(chapterId?) that resolves chapter override → global SiteSetting → env var → seeded default.
+  * worker.ts: added chapterId to event select + sendStageEmail row type; resolve default before buildLogoBlock (primary + alt-resend paths).
+  * flow-worker.ts: extended event lookup to fetch chapterId; resolve default before buildLogoBlock.
+  * force-send-stage route: added chapterId to event select + row type; resolve default before buildLogoBlock.
+  * campaign send route: resolve default once before recipient loop using campaign.chapterId; pass to buildLogoBlock.
+  * campaign test-send route: resolve default inline (campaign.chapterId); pass to buildLogoBlock.
+- Updated API routes:
+  * brand-images GET: include settings.emailLogo in allowedUrls filter for non-global callers.
+  * brand-images select: re-export K_EMAIL_LOGO.
+  * chapters/[id]/brand-images GET: return emailLogo in global object.
+  * v7-seed: seed global emailLogo SiteSetting + include in verification report.
+- Updated UIs to add the emailLogo role (4th role alongside favicon/loginHero/loginBanner):
+  * GlobalBrandImagesEditor: Selections type, ROLE_LABELS, ROLE_HINTS, ROLE_KEYS, summary grid (3→4 cols responsive), per-role buttons (3→2 cols).
+  * ChapterBrandImagesEditor: same changes.
+  * ImagesGallery (/admin/images): same changes to both global + chapter sections.
+- Updated preview rendering to fetch + use the resolved global email logo default:
+  * templates-client.tsx (TemplateEditorDialog preview): fetch /api/admin/brand-images selections.emailLogo on mount, pass to buildLogoBlock.
+  * email-tab-client.tsx (CampaignComposer preview): same fetch + pass.
+- Ran `npx tsc --noEmit` — all touched files pass (pre-existing errors in unrelated files only).
+
+Stage Summary:
+- New "Email logo" role added to the brand-image gallery — selectable globally (Super Admin, /admin/chapters + /admin/images) and per-chapter (Admin/Chapter Organizer, /admin/chapters/[id]).
+- Fallback chain at send time: per-template logoUrl → chapter emailLogo override → global emailLogo SiteSetting → EMAIL_BRAND_LOGO_URL env var → seeded default (user's canonical URL).
+- Per-template logoUrl override + logoHidden toggle still work exactly as before (they take precedence over the default).
+- Preview in template editor + campaign composer now reflects the actual admin-picked default logo.
+- No schema migration needed — emailLogo reuses the existing SiteSetting/ChapterSetting key-value tables.

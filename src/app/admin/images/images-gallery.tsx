@@ -28,6 +28,7 @@ type Selections = {
   favicon: string;
   loginHero: string;
   loginBanner: string;
+  emailLogo: string;
 };
 
 type ApiResponse = {
@@ -50,13 +51,14 @@ type Chapter = {
   city: string | null;
 };
 
-const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner", string> = {
+const ROLE_LABELS: Record<"favicon" | "loginHero" | "loginBanner" | "emailLogo", string> = {
   favicon: "Favicon",
   loginHero: "Login hero",
   loginBanner: "Login banner",
+  emailLogo: "Email logo",
 };
 
-const ROLE_KEYS = ["favicon", "loginHero", "loginBanner"] as const;
+const ROLE_KEYS = ["favicon", "loginHero", "loginBanner", "emailLogo"] as const;
 type RoleKey = (typeof ROLE_KEYS)[number];
 
 /**
@@ -153,7 +155,7 @@ export function ImagesGallery({
   }, []);
 
   const images = data?.images ?? [];
-  const selections = data?.selections ?? { favicon: "", loginHero: "", loginBanner: "" };
+  const selections = data?.selections ?? { favicon: "", loginHero: "", loginBanner: "", emailLogo: "" };
 
   // For each role, find which image is currently selected.
   const isImageSelectedForRole = (img: BrandImage, role: keyof Selections): boolean => {
@@ -468,7 +470,7 @@ export function ImagesGallery({
             <p className="text-xs font-semibold text-[#820A7D] mb-2">
               {selectedChapter.name} chapter — current overrides
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
               {ROLE_KEYS.map((role) => {
                 const url = chapterOverrides[role];
                 return (
@@ -511,7 +513,7 @@ export function ImagesGallery({
         <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-black/50 mb-2">
           Global selections (site-wide defaults)
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {ROLE_KEYS.map((role) => {
             const url = selections[role];
             const isDefault = !url;
@@ -630,7 +632,7 @@ export function ImagesGallery({
                   <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-black/50 mb-1">
                     Global
                   </p>
-                  <div className="grid grid-cols-3 gap-1">
+                  <div className="grid grid-cols-2 gap-1">
                     {ROLE_KEYS.map((role) => {
                       const isSelected = selectedGlobalRoles.includes(role);
                       const busy = busyKey === `select:${img.url}:${role}`;
@@ -679,7 +681,7 @@ export function ImagesGallery({
                     <p className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#820A7D] mb-1">
                       {selectedChapter.name} chapter
                     </p>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-2 gap-1">
                       {ROLE_KEYS.map((role) => {
                         const isSelected = selectedChapterRoles.includes(role);
                         const busy =

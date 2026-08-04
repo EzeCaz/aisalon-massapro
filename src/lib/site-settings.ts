@@ -31,6 +31,16 @@ export const K_FAVICON = "favicon";
 export const K_LOGIN_HERO = "loginHero";
 /** Canonical key for the login-page banner image (background / OG image). */
 export const K_LOGIN_BANNER = "loginBanner";
+/**
+ * Canonical key for the GLOBAL default email brand logo — the image
+ * injected at the top-right of every outgoing email that doesn't have a
+ * per-template `logoUrl` override and isn't `logoHidden`.
+ *
+ * Selectable from the brand-image gallery at /admin/chapters (Super Admin
+ * global picker) or /admin/chapters/[id] (per-chapter override via
+ * ChapterSetting). Falls back to DEFAULT_BRAND_LOGO_URL when unset.
+ */
+export const K_EMAIL_LOGO = "emailLogo";
 /** Canonical key for the WhatsApp "Join our group" link shown in the header. */
 export const K_WHATSAPP_GROUP_URL = "whatsappGroupUrl";
 /** Canonical key for the WhatsApp CTA text shown in the header (e.g. "Join our WhatsApp"). */
@@ -57,6 +67,7 @@ export const ALL_KEYS: ReadonlySet<string> = new Set([
   K_FAVICON,
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
+  K_EMAIL_LOGO,
   K_WHATSAPP_GROUP_URL,
   K_WHATSAPP_GROUP_TEXT,
   K_LINKEDIN_URL,
@@ -102,6 +113,13 @@ export const DEFAULTS: Record<string, string> = {
   // ChapterSetting. (Previously defaulted to /images/falafel-meerkat.jpg
   // which was a placeholder; this is now the real canonical banner.)
   [K_LOGIN_BANNER]: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785668808200-0fdrda.png",
+  // PER USER SPEC 2026-08-05: global default email brand logo — the image
+  // injected top-right of every outgoing email (when the template has no
+  // per-template logoUrl override and logoHidden is false). Seeded to the
+  // canonical AI Salon email logo the user picked. Super Admins can change
+  // it from the brand-image gallery at /admin/chapters; chapter admins can
+  // override it per-chapter from /admin/chapters/[id].
+  [K_EMAIL_LOGO]: "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785868301722-nl1qnl.png",
   // Default WhatsApp group invite link — the AI Salon TLV community group.
   // Admin can override at /admin/images (no redeploy needed).
   [K_WHATSAPP_GROUP_URL]: "https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3",
@@ -126,6 +144,8 @@ export type PublicSettings = {
   favicon: string;
   loginHero: string;
   loginBanner: string;
+  /** Global default email brand logo (top-right of every outgoing email). */
+  emailLogo: string;
   whatsappGroupUrl: string;
   whatsappGroupText: string;
   linkedinUrl: string;
@@ -160,6 +180,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
       favicon: DEFAULTS[K_FAVICON],
       loginHero: DEFAULTS[K_LOGIN_HERO],
       loginBanner: DEFAULTS[K_LOGIN_BANNER],
+      emailLogo: DEFAULTS[K_EMAIL_LOGO],
       whatsappGroupUrl: DEFAULTS[K_WHATSAPP_GROUP_URL],
       whatsappGroupText: DEFAULTS[K_WHATSAPP_GROUP_TEXT],
       linkedinUrl: DEFAULTS[K_LINKEDIN_URL],
@@ -173,6 +194,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     favicon: map.get(K_FAVICON) ?? DEFAULTS[K_FAVICON],
     loginHero: map.get(K_LOGIN_HERO) ?? DEFAULTS[K_LOGIN_HERO],
     loginBanner: map.get(K_LOGIN_BANNER) ?? DEFAULTS[K_LOGIN_BANNER],
+    emailLogo: map.get(K_EMAIL_LOGO) ?? DEFAULTS[K_EMAIL_LOGO],
     whatsappGroupUrl: map.get(K_WHATSAPP_GROUP_URL) ?? DEFAULTS[K_WHATSAPP_GROUP_URL],
     whatsappGroupText: map.get(K_WHATSAPP_GROUP_TEXT) ?? DEFAULTS[K_WHATSAPP_GROUP_TEXT],
     linkedinUrl: map.get(K_LINKEDIN_URL) ?? DEFAULTS[K_LINKEDIN_URL],

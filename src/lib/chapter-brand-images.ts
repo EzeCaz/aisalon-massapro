@@ -28,6 +28,7 @@ import {
   K_FAVICON,
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
+  K_EMAIL_LOGO,
   getPublicSettings,
   type PublicSettings,
 } from "@/lib/site-settings";
@@ -43,6 +44,7 @@ export const CHAPTER_BRAND_IMAGE_KEYS = [
   K_FAVICON,
   K_LOGIN_HERO,
   K_LOGIN_BANNER,
+  K_EMAIL_LOGO,
 ] as const;
 
 export type ChapterBrandImageKey = (typeof CHAPTER_BRAND_IMAGE_KEYS)[number];
@@ -130,6 +132,7 @@ export async function getEffectiveBrandImages(
     favicon: overrides.favicon ?? globalSettings.favicon,
     loginHero: overrides.loginHero ?? globalSettings.loginHero,
     loginBanner: overrides.loginBanner ?? globalSettings.loginBanner,
+    emailLogo: overrides.emailLogo ?? globalSettings.emailLogo,
   };
 }
 
@@ -146,6 +149,7 @@ export async function getEffectiveBrandImagesBySlug(
     favicon: result.overrides.favicon ?? globalSettings.favicon,
     loginHero: result.overrides.loginHero ?? globalSettings.loginHero,
     loginBanner: result.overrides.loginBanner ?? globalSettings.loginBanner,
+    emailLogo: result.overrides.emailLogo ?? globalSettings.emailLogo,
   };
 }
 
@@ -236,4 +240,4 @@ export async function getChapterBrandImageOverridesForChapters(
 
 // Re-export the keys + DEFAULTS so callers don't need to import from
 // two different modules.
-export { K_FAVICON, K_LOGIN_HERO, K_LOGIN_BANNER, DEFAULTS };
+export { K_FAVICON, K_LOGIN_HERO, K_LOGIN_BANNER, K_EMAIL_LOGO, DEFAULTS };

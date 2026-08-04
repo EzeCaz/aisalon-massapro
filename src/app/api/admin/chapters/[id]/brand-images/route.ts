@@ -84,6 +84,7 @@ export async function GET(
       favicon: global.favicon,
       loginHero: global.loginHero,
       loginBanner: global.loginBanner,
+      emailLogo: global.emailLogo,
     },
   });
 }
