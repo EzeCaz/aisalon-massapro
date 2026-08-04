@@ -12312,3 +12312,33 @@ Stage Summary:
 - User may still need to clear the existing (undecryptable) session cookie from their browser, since it was encrypted with a previous random secret — but new logins will work and persist correctly
 - Files modified: `/home/z/my-project/.env` (appended NEXTAUTH_SECRET + NEXTAUTH_URL lines)
 
+
+---
+Task ID: remove-campaign-templates-section
+Agent: main
+Task: User wants the "Campaign Templates" section removed from the email admin page. The upper "Flow Templates (Stage 1-5)" section is the only template UI to keep. Re-wire everything that pointed to the removed EmailTemplate editor to use the flow-backed templates instead.
+
+Work Log:
+- Diagnosed the page layout in `src/app/admin/email/email-tab-client.tsx`:
+  - Upper section (KEEP): "Flow Templates (Stage 1-5)" — uses `<TemplatesClient>` from `./flows/templates-client.tsx`, edits `EmailTemplate2` rows via `/api/email-templates`, full WYSIWYG editor with logo + mobile overrides + preview tabs
+  - Lower section (REMOVE): "Campaign Templates" — used `<TemplatesTable>` + `<TemplateEditor>` slide-out, basic textarea-only editor, also reads/writes `EmailTemplate2` but with a much more limited UI
+- Verified both APIs (`/api/admin/email/templates` and `/api/email-templates`) actually read from the same `EmailTemplate2` table (per TSK-0074 unification) — so removing the lower section does NOT lose any data; the upper section already covers all editing needs
+- Removed the "Campaign Templates" `<section>` block (was ~25 lines: heading + "Create template" button + `<TemplatesTable>` render)
+- Removed the `{templateEditorOpen && <TemplateEditor ... />}` slide-out panel render block
+- Removed the `TemplatesTable` component definition (~70 lines: empty state + table with Name/Category/Subject/Campaigns/Created/Actions columns)
+- Removed the `TemplateEditor` component definition (~210 lines: slide-out panel with name/category/subject/body textarea + preview toggle + save/cancel footer)
+- Removed unused state: `templateEditorOpen`, `editingTemplate`
+- Removed unused handlers: `handleCreateTemplate`, `handleTemplateSaved`
+- Removed unused import: `FilePlus2` from lucide-react
+- Kept the `templates` state + `refreshTemplates` function — still needed by CampaignComposer's "Start from template (optional)" dropdown and by `handleSaveAsTemplateSaved`
+- Kept the Save-as-template modal + `SaveAsTemplateForm` — still useful for converting a sent campaign into a reusable `EmailTemplate2` row (which the upper Flow Templates section then shows)
+- Verified `npx tsc --noEmit --skipLibCheck` produces zero errors in `email-tab-client.tsx`
+- Verified dev server (PID 1264) compiles the modified file successfully — `✓ Compiled in 440ms` in dev log, `/admin/email` returns HTTP 307 (auth redirect, expected for unauthenticated curl)
+
+Stage Summary:
+- "Campaign Templates" section is gone from the email admin page — only the "Flow Templates (Stage 1-5)" section remains, providing a single unified template UI
+- All template editing now happens through the flow-backed `TemplatesClient` slide-out panel (full WYSIWYG, logo field, mobile overrides, desktop/mobile preview tabs)
+- The CampaignComposer's "Start from template" dropdown + "Save as template" button still work — they read/write the same `EmailTemplate2` rows that the Flow Templates section manages
+- File modified: `src/app/admin/email/email-tab-client.tsx` (removed ~310 lines: section UI + 2 component definitions + state + handlers + import)
+- Dev server running on PID 1264, port 3000, no compile errors
+
