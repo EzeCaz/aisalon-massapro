@@ -12614,3 +12614,34 @@ Stage Summary:
 - Per-template logoUrl override + logoHidden toggle still work exactly as before (they take precedence over the default).
 - Preview in template editor + campaign composer now reflects the actual admin-picked default logo.
 - No schema migration needed — emailLogo reuses the existing SiteSetting/ChapterSetting key-value tables.
+
+---
+Task ID: default-email-logo-picker-verify-deployment
+Agent: main
+Task: User reported seeing only 3 role buttons (Favicon, Login hero, Login banner) below each image on /admin/images — missing the new "Email logo" 4th role that was implemented in commit 99d6774. Verify deployment status.
+
+Work Log:
+- Verified local code state: `src/app/admin/images/images-gallery.tsx` lines 54-61 define ROLE_LABELS with all 4 roles including `emailLogo: "Email logo"`, and ROLE_KEYS array includes "emailLogo". Lines 630-664 render ALL ROLE_KEYS buttons unconditionally per image card. Code is correct.
+- Verified git state: `git ls-remote origin main` returns `99d6774dad92d9d364af6231e189328ff065891a` — the emailLogo commit IS pushed to GitHub main.
+- Verified TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in any file touched by the emailLogo feature (images-gallery.tsx, brand-images/route.ts, site-settings.ts, chapter-brand-images.ts, global-brand-library.ts, templates-client.tsx, email-tab-client.tsx, templates.ts, worker.ts, flow-worker.ts, force-send-stage, send route, test-send route, v7-seed route).
+- Investigated production deployment at https://aisalon-massapro.vercel.app/admin/images:
+  * Deployment ID served: `dpl_7eZZdrXaErjKVdjxks62jYxRUG1T`
+  * Fetched all 17 JS chunks served on the page
+  * Searched each chunk for "Email logo" / "emailLogo" / "Login hero" / "Login banner" / "Favicon"
+  * RESULT: chunk `f6e02dc52d8f0428.js` contains "Favicon", "Login hero", "Login banner" (and lowercase variants) but does NOT contain "Email logo" or "emailLogo"
+  * CONCLUSION: The deployed ImagesGallery code predates commit 99d6774 — Vercel is still serving the previous deployment.
+- Pushed empty commit `b221147` ("chore: trigger vercel rebuild — emailLogo role not yet deployed") to force a fresh Vercel build via the GitHub integration.
+- Waited ~5 minutes total (3 × 60-120s sleeps), re-checked deployment ID and chunk contents after each wait.
+  * Deployment ID never changed (still `dpl_7eZZdrXaErjKVdjxks62jYxRUG1T`)
+  * Chunk `f6e02dc52d8f0428.js` still does not contain "Email logo"
+  * CONCLUSION: Vercel auto-deploy is not picking up commits pushed to main — either the GitHub integration is broken, or builds are failing silently, or auto-deploy is disabled for the production branch.
+
+Stage Summary:
+- The emailLogo feature IS fully implemented and committed (99d6774) and pushed (b221147 empty commit on top) to https://github.com/EzeCaz/aisalon-massapro.git main branch.
+- The production deployment at https://aisalon-massapro.vercel.app is STALE — still serving the pre-emailLogo deployment `dpl_7eZZdrXaErjKVdjxks62jYxRUG1T`.
+- User needs to manually trigger a deployment from the Vercel dashboard:
+  * Option A: Vercel dashboard → aisalon-massapro project → Deployments tab → click the latest commit (b221147 or 99d6774) → "Redeploy" 
+  * Option B: Vercel dashboard → Deployments → "Create Deployment" from main branch
+  * Option C: Check Vercel → Settings → Git → verify the production branch is "main" and auto-deploy is enabled; check Integrations → GitHub → verify the webhook is connected
+- Once Vercel deploys the latest commit, the user must HARD-REFRESH their browser (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows/Linux) to bypass the cached old JS bundle and load the new bundle containing the "Email logo" role button.
+- After successful deployment + hard refresh, each image card on /admin/images will show 4 buttons in a 2x2 grid: Favicon | Login hero / Login banner | Email logo. Clicking "Email logo" sets the global default; selecting a chapter in the filter first sets a per-chapter override.
