@@ -12359,3 +12359,34 @@ Stage Summary:
 - Vercel auto-deploy triggered — production site will be updated shortly
 - Going forward: any code change in this workspace must be `git commit` + `git push origin main` to land on GitHub and trigger Vercel deploy. Local edits alone (without push) stay only in this dev preview.
 
+
+---
+Task ID: fix-failed-host-test-campaign
+Agent: main
+Task: User reported "Host test flow — campaign" with subject "Interested in hosting an AI Salon event?" had status FAILED.
+
+Work Log:
+- Diagnosed via Prisma query against production Neon DB:
+  - Campaign ID: cmseke7hr0003jw041lu18h4y
+  - Recipients (2): eze@massapro.com + ezeszna@gmail.com
+  - Both recipients had status=FAILED with errorReason: "Skipped — global email sending is paused (SiteSetting[emailSendPaused]=true). Resume sending in /admin/email to deliver."
+  - Campaign status=FAILED, startedAt=2026-08-04T17:50:17, completedAt=2026-08-04T17:50:17 (failed instantly — never attempted to send)
+- Root cause: SiteSetting `emailSendPaused` was set to `true` on 2026-08-03 19:26 (by user cmql4vi0v0000pskqtaqkcl82 = eze@massapro.com) — likely toggled on accidentally in the admin UI
+- Unpaused email sending: `prisma.siteSetting.upsert({ where: { key: 'emailSendPaused' }, update: { value: 'false' } })` — now set to `false` as of 2026-08-04T17:51:55
+- Reset the failed campaign back to DRAFT so the user can re-send it:
+  - Reset 2 EmailRecipient rows from FAILED → PENDING, cleared errorReason
+  - Reset EmailCampaign: status DRAFT, startedAt=null, completedAt=null
+
+Stage Summary:
+- Global email sending is now UNPAUSED — emails will actually go out when campaigns are sent
+- The "Host test flow — campaign" is back in DRAFT status with 2 PENDING recipients — user can click "Send now" in /admin/email to actually deliver it
+- Files/scripts created:
+  - /home/z/my-project/scripts/diagnose-failed-campaign.cjs
+  - /home/z/my-project/scripts/diagnose-recipients.cjs
+  - /home/z/my-project/scripts/unpause-email-sending.cjs
+  - /home/z/my-project/scripts/reset-failed-campaign.cjs
+- Production DB changes:
+  - SiteSetting `emailSendPaused`: "true" → "false"
+  - EmailCampaign cmseke7hr0003jw041lu18h4y: status FAILED → DRAFT
+  - EmailRecipient (2 rows): status FAILED → PENDING, errorReason cleared
+
