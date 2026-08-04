@@ -12200,3 +12200,37 @@ Stage Summary:
 - Files modified:
   - `src/app/admin/email/flows/templates-client.tsx` (slide-out width + LogoEditorField preview)
   - `src/lib/email-orchestrator/templates.ts` (buildLogoBlock aspect-ratio fix)
+
+---
+Task ID: unify-edit-template-and-campaign-to-slideout
+Agent: main
+Task: Convert "Edit template" and "Edit campaign" centered modals to the same slide-out panel format used by the flow-backed template editor (right-side panel, 1800px wide, overlay + header/body/footer sections).
+
+Work Log:
+- Read user-provided HTML snippets:
+  - "Right format" reference: the TemplateEditorDialog slide-out from templates-client.tsx (fixed inset-y-0 right-0, w-[1800px], header + scrollable body + footer)
+  - "Format edit template" (to change): the local TemplateEditor in email-tab-client.tsx — a centered Dialog modal with tpl-name/tpl-category/tpl-subject/plain textarea + "Save new version" button
+  - "Edit campaign format" (to change): the CampaignComposer in email-tab-client.tsx — a centered Dialog modal (max-w-[128rem]) with form fields + 2-column preview layout
+- Added `X` icon to the lucide-react imports (needed for the slide-out panel close button)
+- Replaced the parent Dialog wrappers:
+  - `<Dialog open={composerOpen}>...<CampaignComposer/></Dialog>` → `{composerOpen && <CampaignComposer .../>}`
+  - `<Dialog open={templateEditorOpen}>...<TemplateEditor/></Dialog>` → `{templateEditorOpen && <TemplateEditor .../>}`
+- Modified TemplateEditor return: replaced `<div className="space-y-4 py-2">...<DialogFooter>...</DialogFooter></div>` with the slide-out panel structure:
+  - `<div className="fixed inset-0 z-40 bg-black/40" onClick={onCancel} />` (overlay)
+  - `<div className="fixed inset-y-0 right-0 z-50 flex h-full w-[1800px] max-w-[95vw] flex-col bg-white shadow-2xl">` (panel)
+  - Header: title + subtitle + X close button
+  - Body: `flex-1 overflow-y-auto p-6` containing all form fields
+  - Footer: `border-t px-6 py-4` with Cancel + Save buttons
+- Modified CampaignComposer return: replaced `<div className="py-2">...<DialogFooter>...</DialogFooter></div>` with the same slide-out panel structure:
+  - Overlay + panel + header (with title/subtitle/X button)
+  - Body: `flex-1 overflow-y-auto p-6` containing the existing 2-column grid (form fields on left, sticky preview sidebar on right)
+  - Footer: `border-t px-6 py-4` with all action buttons (Close, Test send, Pause, Send now, Save as template, Save draft)
+- Verified: `npx tsc --noEmit --skipLibCheck` — no errors in email-tab-client.tsx (all pre-existing errors are in unrelated files)
+- Dialog/DialogContent/DialogHeader/DialogFooter imports are still used by: SaveAsTemplateForm (line 573), TestSendDialog (line 2332) — not removed
+
+Stage Summary:
+- Both "Edit template" and "Edit campaign" now render as right-side slide-out panels (1800px wide, max-w-[95vw]) — matching the format of the flow-backed TemplateEditorDialog from templates-client.tsx
+- The slide-out panel structure is: dark overlay + right-side white panel with header (title + subtitle + X close), scrollable body, and sticky footer with action buttons
+- The CampaignComposer's 2-column layout (form fields + sticky preview sidebar) is preserved inside the panel body — the preview stays visible while scrolling on xl+ screens
+- The TemplateEditor keeps its existing form fields (name, category, subject, body textarea + preview toggle) — just wrapped in the new panel layout
+- Files modified: `src/app/admin/email/email-tab-client.tsx` only

@@ -45,6 +45,7 @@ import {
   BarChart3,
   Monitor,
   Smartphone,
+  X,
 } from "lucide-react";
 import { OrchestratorPanel } from "./orchestrator-panel";
 import { EmailAdminNav, type EmailAdminTab } from "@/components/ais/email-admin-nav";
@@ -489,106 +490,84 @@ export function EmailTabClient({
             />
           </section>
 
-          {/* Composer modal */}
-          <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-            <DialogContent className="max-w-[128rem] w-[95vw] max-h-[92vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingCampaign ? "Edit campaign" : "New campaign"}
-                </DialogTitle>
-                <DialogDescription>
-                  Compose your email below. Save a draft, save it as a reusable template,
-                  or send it now to the selected recipient list.
-                </DialogDescription>
-              </DialogHeader>
-              <CampaignComposer
-                key={editingCampaign?.id || "new"}
-                campaign={editingCampaign}
-                templates={templates}
-                tags={tags}
-                membersCount={membersCount}
-                adminEmail={adminEmail}
-                flows={flows}
-                onSaved={handleComposerSaved}
-                onCancel={() => {
-                  setComposerOpen(false);
-                  setEditingCampaign(null);
-                }}
-                onTestSend={(c) => setTestSendTarget(c)}
-                onRequestSaveAsTemplate={async (subject, bodyHtml, suggestedName) => {
-                  try {
-                    let campaignId = editingCampaign?.id;
-                    const campaignName = editingCampaign?.name || suggestedName || "Draft";
+          {/* Composer slide-out panel — rendered by CampaignComposer itself */}
+          {composerOpen && (
+            <CampaignComposer
+              key={editingCampaign?.id || "new"}
+              campaign={editingCampaign}
+              templates={templates}
+              tags={tags}
+              membersCount={membersCount}
+              adminEmail={adminEmail}
+              flows={flows}
+              onSaved={handleComposerSaved}
+              onCancel={() => {
+                setComposerOpen(false);
+                setEditingCampaign(null);
+              }}
+              onTestSend={(c) => setTestSendTarget(c)}
+              onRequestSaveAsTemplate={async (subject, bodyHtml, suggestedName) => {
+                try {
+                  let campaignId = editingCampaign?.id;
+                  const campaignName = editingCampaign?.name || suggestedName || "Draft";
 
-                    if (!campaignId) {
-                      const createRes = await fetch("/api/admin/email/campaigns", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          name: campaignName,
-                          subject,
-                          bodyHtml,
-                          listSource: "ALL_MEMBERS",
-                          listConfigJson: "{}",
-                        }),
-                      });
-                      if (!createRes.ok) {
-                        const d = await createRes.json().catch(() => ({}));
-                        toast.error(d.error || "Failed to create draft for template");
-                        return;
-                      }
-                      const d = await createRes.json();
-                      campaignId = d.campaign.id;
-                    } else {
-                      await fetch(`/api/admin/email/campaigns/${campaignId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          subject,
-                          bodyHtml,
-                          name: suggestedName || campaignName,
-                        }),
-                      });
-                    }
-
-                    setSaveAsTemplateSource({
-                      campaignId: campaignId!,
-                      campaignName: suggestedName || campaignName,
-                      defaultName: `${suggestedName || campaignName} (template)`,
+                  if (!campaignId) {
+                    const createRes = await fetch("/api/admin/email/campaigns", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        name: campaignName,
+                        subject,
+                        bodyHtml,
+                        listSource: "ALL_MEMBERS",
+                        listConfigJson: "{}",
+                      }),
                     });
-                    setSaveAsTemplateOpen(true);
-                  } catch (e) {
-                    toast.error("Failed to prepare template");
-                    console.error(e);
+                    if (!createRes.ok) {
+                      const d = await createRes.json().catch(() => ({}));
+                      toast.error(d.error || "Failed to create draft for template");
+                      return;
+                    }
+                    const d = await createRes.json();
+                    campaignId = d.campaign.id;
+                  } else {
+                    await fetch(`/api/admin/email/campaigns/${campaignId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        subject,
+                        bodyHtml,
+                        name: suggestedName || campaignName,
+                      }),
+                    });
                   }
-                }}
-              />
-            </DialogContent>
-          </Dialog>
 
-          {/* Template editor modal */}
-          <Dialog open={templateEditorOpen} onOpenChange={setTemplateEditorOpen}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingTemplate ? "Edit template" : "Create template"}
-                </DialogTitle>
-                <DialogDescription>
-                  Templates store a reusable subject + body pair. They don't send — pick
-                  one from the composer's dropdown to use it as a starting point.
-                </DialogDescription>
-              </DialogHeader>
-              <TemplateEditor
-                key={editingTemplate?.id || "new"}
-                template={editingTemplate}
-                onSaved={handleTemplateSaved}
-                onCancel={() => {
-                  setTemplateEditorOpen(false);
-                  setEditingTemplate(null);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+                  setSaveAsTemplateSource({
+                    campaignId: campaignId!,
+                    campaignName: suggestedName || campaignName,
+                    defaultName: `${suggestedName || campaignName} (template)`,
+                  });
+                  setSaveAsTemplateOpen(true);
+                } catch (e) {
+                  toast.error("Failed to prepare template");
+                  console.error(e);
+                }
+              }}
+            />
+          )}
+
+          {/* Template editor slide-out panel — rendered by TemplateEditor itself */}
+          {templateEditorOpen && (
+            <TemplateEditor
+              key={editingTemplate?.id || "new"}
+              template={editingTemplate}
+              onSaved={handleTemplateSaved}
+              onCancel={() => {
+                setTemplateEditorOpen(false);
+                setEditingTemplate(null);
+              }}
+            />
+          )}
 
           {/* Save-as-template modal (used by both row button + in-composer button) */}
           <Dialog open={saveAsTemplateOpen} onOpenChange={setSaveAsTemplateOpen}>
@@ -1486,7 +1465,27 @@ function CampaignComposer({
   );
 
   return (
-    <div className="py-2">
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onCancel} />
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[1800px] max-w-[95vw] flex-col bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold">
+              {isEditing ? "Edit campaign" : "New campaign"}
+            </h3>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Compose your email below. Save a draft, save it as a reusable template,
+              or send it now to the selected recipient list.
+            </p>
+          </div>
+          <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-700">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_680px] gap-6 items-start">
         <div className="space-y-4 min-w-0">
       {/* TSK-0074 Phase 5C: source chooser (only for NEW campaigns).
@@ -1829,9 +1828,10 @@ function CampaignComposer({
         </div>
       </div>
       </div>
+        </div>
 
-      {/* Footer actions — full width, below both columns */}
-      <DialogFooter className="mt-4 gap-2 flex flex-row flex-wrap justify-end items-center">
+        {/* Footer actions */}
+        <div className="flex items-center justify-end gap-2 border-t border-neutral-200 px-6 py-4">
         <Button
           type="button"
           variant="outline"
@@ -1920,8 +1920,9 @@ function CampaignComposer({
             {isEditing ? "Save changes" : "Save draft"}
           </Button>
         )}
-      </DialogFooter>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -2025,103 +2026,130 @@ function TemplateEditor({
   };
 
   return (
-    <div className="space-y-4 py-2">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <Label htmlFor="tpl-name">Template name</Label>
-          <Input
-            id="tpl-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Monthly newsletter"
-            className="mt-1"
-          />
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onCancel} />
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-[1800px] max-w-[95vw] flex-col bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold">
+              {template ? "Edit template" : "New template"}
+            </h3>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Templates store a reusable subject + body pair. They don&rsquo;t send — pick
+              one from the composer&rsquo;s dropdown to use it as a starting point.
+            </p>
+          </div>
+          <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-700">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <div>
-          <Label htmlFor="tpl-category">Category</Label>
-          <Input
-            id="tpl-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="general"
-            className="mt-1"
-          />
-        </div>
-      </div>
 
-      <div>
-        <Label htmlFor="tpl-subject">Subject</Label>
-        <Input
-          id="tpl-subject"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder="e.g. You're invited — AI Salon TLV"
-          className="mt-1"
-        />
-      </div>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="tpl-name">Template name</Label>
+                <Input
+                  id="tpl-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Monthly newsletter"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="tpl-category">Category</Label>
+                <Input
+                  id="tpl-category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="general"
+                  className="mt-1"
+                />
+              </div>
+            </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <Label htmlFor="tpl-body">Body (HTML)</Label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowPreview((s) => !s)}
-            className="h-7"
-          >
-            <Eye className="h-3.5 w-3.5 mr-1" />
-            {showPreview ? "Edit" : "Preview"}
-          </Button>
-        </div>
-        {/* Email-safe 600px width — same as the composer, so the
-            template author sees the exact inbox rendering.
-            SHRINK-TO-FIT: no horizontal scroll. Images/tables scale to
-            fit the 600px column. */}
-        <div className="flex justify-center">
-          <div className="w-full max-w-[600px]">
-            {showPreview ? (
-              <div
-                className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm overflow-hidden break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_div]:max-w-full"
-                dangerouslySetInnerHTML={{ __html: bodyHtml }}
+            <div>
+              <Label htmlFor="tpl-subject">Subject</Label>
+              <Input
+                id="tpl-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="e.g. You're invited — AI Salon TLV"
+                className="mt-1"
               />
-            ) : (
-              <Textarea
-                id="tpl-body"
-                value={bodyHtml}
-                onChange={(e) => setBodyHtml(e.target.value)}
-                rows={12}
-                className="font-mono text-xs"
-                placeholder="<h1>Hi {{name}},</h1>..."
-              />
-            )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="tpl-body">Body (HTML)</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowPreview((s) => !s)}
+                  className="h-7"
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1" />
+                  {showPreview ? "Edit" : "Preview"}
+                </Button>
+              </div>
+              {/* Email-safe 600px width — same as the composer, so the
+                  template author sees the exact inbox rendering.
+                  SHRINK-TO-FIT: no horizontal scroll. Images/tables scale to
+                  fit the 600px column. */}
+              <div className="flex justify-center">
+                <div className="w-full max-w-[600px]">
+                  {showPreview ? (
+                    <div
+                      className="rounded-md border border-black/15 bg-white p-4 min-h-[260px] prose-sm overflow-hidden break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:w-full [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_div]:max-w-full"
+                      dangerouslySetInnerHTML={{ __html: bodyHtml }}
+                    />
+                  ) : (
+                    <Textarea
+                      id="tpl-body"
+                      value={bodyHtml}
+                      onChange={(e) => setBodyHtml(e.target.value)}
+                      rows={12}
+                      className="font-mono text-xs"
+                      placeholder="<h1>Hi {{name}},</h1>..."
+                    />
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-black/50 mt-1 text-center">
+                Email-safe width: 600px · Merge field <code>{"{{name}}"}</code> resolves
+                to recipient&apos;s name when sent.
+              </p>
+            </div>
           </div>
         </div>
-        <p className="text-xs text-black/50 mt-1 text-center">
-          Email-safe width: 600px · Merge field <code>{"{{name}}"}</code> resolves
-          to recipient&apos;s name when sent.
-        </p>
-      </div>
 
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-[#820A7D] hover:bg-[#820A7D]/90 text-white"
-        >
-          {saving ? (
-            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-1.5" />
-          )}
-          {template ? "Save new version" : "Create template"}
-        </Button>
-      </DialogFooter>
-    </div>
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 border-t border-neutral-200 px-6 py-4">
+          <button
+            onClick={onCancel}
+            className="rounded border border-neutral-300 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded bg-[#FF005A] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#d8004d] disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {template ? "Save new version" : "Create template"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
