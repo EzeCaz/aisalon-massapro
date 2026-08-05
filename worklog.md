@@ -12952,3 +12952,62 @@ Stage Summary:
 - The 'N matched · M excluded · K will receive' header gives the admin a clear summary of the audience size before saving.
 - Files modified (4): src/app/admin/email/flows/audiences-client.tsx, src/app/api/email-audiences/preview/route.ts, src/app/api/email-audiences/route.ts, src/lib/email-orchestrator/audience-filter.ts
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: campaign-send-audience-listsource-fix
+Agent: main
+Task: User reported that editing the "Sponsor camp — campaign" and clicking Send returned: "No recipients matched the list filter. Update the list source and try again." — even though the linked flow's first step has the "Sponsor leads" audience (29 emails) correctly attached.
+
+Work Log:
+- Inspected production via agent-browser: the "Sponsor camp — campaign" row
+  is in DRAFT status, 0 recipients, never sent. Edit dialog confirms
+  listSource is locked to "Audience from flow (locked)" — pulling from the
+  linked "Sponsor camp" flow.
+- The flow itself is healthy: 1 step, Active, A·Audience = "Sponsor leads"
+  (29 emails, dynamic), C·Email = "Host our event" template. But the flow
+  has 0 sends (no manual trigger fired, no auto-trigger configured).
+- Root cause traced in /api/admin/email/campaigns/[id]/send/route.ts →
+  resolveRecipients(): it only handled 4 listSource values:
+    1. ALL_MEMBERS
+    2. TAG:<label>
+    3. EVENT:<eventId>
+    4. MANUAL (with { emails: [...] })
+  It did NOT handle AUDIENCE:<audienceId>. But the flow-save route in
+  /api/email-flows/[id]/route.ts creates the linked campaign with
+  listSource = `AUDIENCE:${firstStep.audienceId}` (and listConfigJson =
+  { audienceId }) when the flow's first step has an audience. So the
+  resolver fell through to `return []`, producing the user's error.
+
+Fix:
+- src/app/api/admin/email/campaigns/[id]/send/route.ts:
+  * Imported resolveAudienceEmailsById from @/lib/email-orchestrator/audience-filter
+  * Added an AUDIENCE:<audienceId> case to resolveRecipients() that:
+    - Calls resolveAudienceEmailsById(audienceId) — the SAME resolver that
+      flow-trigger.ts and queue handlers use. This means STATIC email lists
+      AND DYNAMIC filter specs both work, AND any stored exclusions
+      (spec.excludedEmails) are applied.
+    - Iterates the resolved emails, dedupes by lowercase, and hydrates
+      each into a recipient row { userId?, email, name? } — looking up
+      the platform User by email to populate userId + name when possible
+      (matching the MANUAL case's behavior).
+  * Updated the docstring to document the new AUDIENCE:<id> case + why
+    flow-linked campaigns use it.
+
+- TypeScript: npx tsc --noEmit --skipLibCheck produces ZERO errors in the
+  modified file.
+- Committed: 35a0d99 fix(campaign-send): resolve AUDIENCE:<id> listSource
+  so flow-linked campaigns can send (1 file, +36 lines)
+- Pushed: 0951a00..35a0d99 main -> main — Vercel auto-deploy triggered.
+
+Stage Summary:
+- After Vercel finishes rebuilding (~3-5 min), editing the "Sponsor camp —
+  campaign" and clicking "Send now" will resolve the Sponsor Leads
+  audience (29 emails, with any exclusions the admin set) and send the
+  Host our event email to every recipient. The campaign will move from
+  DRAFT → SENDING → SENT, with EmailRecipient rows + EmailEvent SENT
+  records created per recipient.
+- The fix is generic — ANY flow-linked campaign (where the flow's first
+  step has an audience) will now send correctly via the "Send now" button.
+  Previously all such campaigns would hit the "No recipients matched"
+  error regardless of audience size.
+- Files modified (1): src/app/api/admin/email/campaigns/[id]/send/route.ts
