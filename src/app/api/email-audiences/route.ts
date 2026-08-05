@@ -90,9 +90,11 @@ export async function GET(req: NextRequest) {
       try {
         if (a.filtersJson) {
           const spec = parseSpec(a.filtersJson);
-          const all = await resolveAudienceEmails(spec);
-          emailCount = all.length;
-          emailPreview = all.slice(0, 3); // first 3 for inline preview
+          if (spec) {
+            const all = await resolveAudienceEmails(spec);
+            emailCount = all.length;
+            emailPreview = all.slice(0, 3); // first 3 for inline preview
+          }
         }
       } catch {
         // If resolution fails (e.g. invalid filter), fall back to 0 — UI will still render.

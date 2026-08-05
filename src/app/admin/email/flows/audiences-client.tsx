@@ -42,6 +42,11 @@ type FilterSpec = {
   source: "users" | "rsvps" | "users_and_rsvps";
   combinator: "AND" | "OR";
   groups: FilterGroup[];
+  /** Optional list of emails to exclude from the resolved set, even when
+   *  they match the filter rules. Used by the live match preview — the
+   *  admin deselects individual users and they're stored here so the
+   *  exclusion persists across re-resolutions. Lowercased. */
+  excludedEmails?: string[];
 };
 
 type Audience = {
@@ -298,6 +303,45 @@ function buildKeywordGroup(
     combinator: "OR",
     rules: fields.map((field) => ({ field, op: "contains" as FilterOp, value: trimmed })),
   };
+}
+
+/** Split a multi-keyword input string into individual keywords.
+ *  Supports comma, semicolon, and whitespace separators. Quotes are
+ *  preserved (so `"new york"` becomes one keyword `new york`).
+ *  Returns an array of trimmed, non-empty keywords. */
+function splitKeywords(input: string): string[] {
+  // Match either a quoted phrase OR a single token (no commas/semicolons/
+  // whitespace inside).
+  const re = /"([^"]+)"|'([^']+)'|([^,;\s]+)/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input)) !== null) {
+    const kw = (m[1] ?? m[2] ?? m[3] ?? "").trim();
+    if (kw.length > 0) out.push(kw);
+  }
+  return out;
+}
+
+/** Build a list of OR filter groups — ONE GROUP PER KEYWORD — for use
+ *  with `spec.combinator = "OR"` at the top level. Returns null if no
+ *  keywords could be extracted.
+ *
+ *  Example: splitKeywords("partner, sponsor, host") returns 3 keywords.
+ *  For each, we build an OR group covering all KEYWORD_USER_FIELDS.
+ *  The result is 3 groups combined with OR — anyone whose profile
+ *  contains "partner" OR "sponsor" OR "host" (in any field) matches. */
+function buildKeywordGroups(
+  fields: string[],
+  input: string,
+): FilterGroup[] | null {
+  const keywords = splitKeywords(input);
+  if (keywords.length === 0 || fields.length === 0) return null;
+  const groups: FilterGroup[] = [];
+  for (const kw of keywords) {
+    const g = buildKeywordGroup(fields, kw);
+    if (g) groups.push(g);
+  }
+  return groups.length > 0 ? groups : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -760,11 +804,13 @@ function KeywordSearchBar({
   const [error, setError] = React.useState<string | null>(null);
 
   // Debounced live preview — fire when the admin stops typing for 350ms.
+  // Searches for EACH keyword individually and unions the results, so the
+  // preview matches what the saved audience will actually resolve to.
   const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    const q = keyword.trim();
-    if (!q) {
+    const keywords = splitKeywords(keyword);
+    if (keywords.length === 0) {
       setPreview(null);
       setError(null);
       return;
@@ -773,15 +819,32 @@ function KeywordSearchBar({
       setLoading(true);
       setError(null);
       try {
-        const r = await fetch(
-          `/api/admin/members/search?q=${encodeURIComponent(q)}&limit=50`,
+        // Fire one search per keyword, union by user id (preserving the
+        // first-seen match's data). Limit each call to 50 to avoid
+        // excessive load — if the union exceeds 50, the UI truncates.
+        const perKeywordResults = await Promise.all(
+          keywords.map((kw) =>
+            fetch(`/api/admin/members/search?q=${encodeURIComponent(kw)}&limit=50`)
+              .then((r) => (r.ok ? r.json() : { users: [] }))
+              .catch(() => ({ users: [] }))
+          ),
         );
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          throw new Error(err?.error || `HTTP ${r.status}`);
+        const seen = new Set<string>();
+        const merged: KeywordPreviewUser[] = [];
+        for (const data of perKeywordResults) {
+          const users = (data.users || []) as KeywordPreviewUser[];
+          for (const u of users) {
+            if (!seen.has(u.id)) {
+              seen.add(u.id);
+              merged.push(u);
+            }
+          }
         }
-        const data = await r.json();
-        setPreview((data.users || []) as KeywordPreviewUser[]);
+        // Sort by name for stable display.
+        merged.sort((a, b) =>
+          (a.name || "").localeCompare(b.name || "") || a.email.localeCompare(b.email),
+        );
+        setPreview(merged);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Search failed");
         setPreview([]);
@@ -799,34 +862,41 @@ function KeywordSearchBar({
   // (Early return placed AFTER all hooks to comply with the Rules of Hooks.)
   if (filters.source === "rsvps") return null;
 
-  /** Build a persisted OR filter group from the keyword and merge it into
-   *  the current filter spec. */
+  /** Build persisted OR filter groups from the keyword(s) and merge them
+   *  into the current filter spec. Supports multiple keywords separated
+   *  by commas, semicolons, or whitespace — each keyword becomes its
+   *  own OR group, and the spec's top-level combinator is set to OR so
+   *  anyone matching ANY keyword is included. */
   function applyKeywordToFilter() {
-    const trimmed = keyword.trim();
-    if (!trimmed) {
-      toast.error("Type a keyword first");
+    const keywords = splitKeywords(keyword);
+    if (keywords.length === 0) {
+      toast.error("Type at least one keyword first");
       return;
     }
-    const group = buildKeywordGroup(KEYWORD_USER_FIELDS, trimmed);
-    if (!group) {
-      toast.error("Could not build filter from keyword");
+    const groups = buildKeywordGroups(KEYWORD_USER_FIELDS, keyword);
+    if (!groups || groups.length === 0) {
+      toast.error("Could not build filter from keyword(s)");
       return;
     }
-    // Replace the entire filter spec with a single keyword-driven group.
-    // The existing combinator + source are preserved so the admin can
-    // still add more groups later (e.g. AND with country = IL).
+    // Replace the entire filter spec with the keyword-driven groups.
+    // Set the top-level combinator to OR so the spec matches anyone who
+    // hits ANY of the keywords. Source is preserved.
     setFilters({
       ...filters,
-      combinator: "AND",
-      groups: [group, ...filters.groups.filter((g) => {
-        // Drop placeholder groups that have no real rules (the default
-        // `{field: email, op: equals, value: ""}` group that ships with a
-        // fresh audience).
-        return g.rules.some((r) => r.value && r.value.trim().length > 0);
-      })],
+      combinator: "OR",
+      groups: [
+        ...groups,
+        ...filters.groups.filter((g) => {
+          // Drop placeholder groups that have no real rules.
+          return g.rules.some((r) => r.value && r.value.trim().length > 0);
+        }),
+      ],
     });
+    const kwLabel = keywords.length === 1
+      ? `"${keywords[0]}"`
+      : `${keywords.length} keywords (${keywords.map((k) => `"${k}"`).join(", ")})`;
     toast.success(
-      `Added keyword filter for "${trimmed}" — ${preview?.length ?? 0} members currently match`,
+      `Added filter for ${kwLabel} — ${preview?.length ?? 0} members currently match`,
     );
   }
 
@@ -842,12 +912,12 @@ function KeywordSearchBar({
         </span>
       </div>
       <p className="mb-3 text-[11px] text-neutral-600 leading-relaxed">
-        Type any keyword (e.g. <code className="bg-white px-1 rounded border border-neutral-200">Sponsor</code>,{" "}
-        <code className="bg-white px-1 rounded border border-neutral-200">host</code>,{" "}
-        <code className="bg-white px-1 rounded border border-neutral-200">investor</code>) to preview
-        how many members match across <strong>all text fields</strong> — name, email, company, title,
-        bio, <em>interested in</em>, profile categories, applied for, mobile, URLs. Then click
-        &ldquo;Build audience from keyword&rdquo; to turn it into a live OR filter group.
+        Type one or more keywords (separated by commas, spaces, or semicolons — e.g.{" "}
+        <code className="bg-white px-1 rounded border border-neutral-200">sponsor, host, partner</code>)
+        to preview how many members match across <strong>all text fields</strong> — name, email, company,
+        title, bio, <em>interested in</em>, profile categories, applied for, mobile, URLs. Each keyword
+        becomes its own OR group, so anyone matching ANY keyword is included. Then click
+        &ldquo;Build audience from keyword(s)&rdquo; to turn it into a live filter.
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
@@ -862,7 +932,7 @@ function KeywordSearchBar({
                 applyKeywordToFilter();
               }
             }}
-            placeholder="Type a keyword and press Enter…"
+            placeholder="Type keyword(s) and press Enter…  e.g.  sponsor, host, partner"
             className="w-full rounded border border-neutral-300 pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
           />
         </div>
@@ -874,7 +944,7 @@ function KeywordSearchBar({
           title="Replace the filter with a keyword-driven OR group"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          Build audience from keyword
+          Build audience from keyword(s)
         </button>
       </div>
       {/* Live preview */}
@@ -1055,7 +1125,296 @@ function DynamicEditor({
       >
         <Plus className="h-4 w-4" /> Add group
       </button>
+
+      {/* Live match preview — shows every user the current filter resolves
+          to, with checkboxes to deselect individuals. Deselected users are
+          persisted in spec.excludedEmails and stay excluded on every
+          re-resolution (flow runs, sidebar count, etc.). */}
+      <LiveMatchPreview filters={filters} setFilters={setFilters} />
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Live match preview
+// ─────────────────────────────────────────────────────────────────────────────
+
+type PreviewUser = {
+  email: string;
+  name: string | null;
+  company: string | null;
+  title: string | null;
+  interestedIn: string | null;
+  profileCategories: string | null;
+  appliedFor: string | null;
+  bio: string | null;
+  archivedAt: string | null;
+};
+
+type PreviewResponse = {
+  emails: string[];
+  count: number;
+  users?: PreviewUser[];
+  excludedUsers?: PreviewUser[];
+  baseCount?: number;
+  excludedCount?: number;
+  error?: string;
+};
+
+function LiveMatchPreview({
+  filters,
+  setFilters,
+}: {
+  filters: FilterSpec;
+  setFilters: (f: FilterSpec) => void;
+}) {
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [included, setIncluded] = React.useState<PreviewUser[]>([]);
+  const [excluded, setExcluded] = React.useState<PreviewUser[]>([]);
+  const [baseCount, setBaseCount] = React.useState(0);
+  const [hasLoaded, setHasLoaded] = React.useState(false);
+  const [filterHash, setFilterHash] = React.useState<string>("");
+
+  // Compute a stable hash of the spec to detect changes (so we don't
+  // re-fetch on every keystroke if the spec hasn't actually changed).
+  // We deliberately EXCLUDE excludedEmails from the hash — the preview
+  // re-fetches when filter rules change, but toggling a checkbox only
+  // updates the excludedEmails list locally (no re-fetch needed; the
+  // backend resolver will apply the exclusion on save).
+  const computeHash = (f: FilterSpec): string => {
+    const { excludedEmails, ...rest } = f;
+    return JSON.stringify(rest);
+  };
+
+  // Debounced fetch — fire when the spec hash changes (after 500ms idle).
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    const newHash = computeHash(filters);
+    if (newHash === filterHash && hasLoaded) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await fetch("/api/email-audiences/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filters,
+            includeUserDetails: true,
+          }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err?.error || `HTTP ${r.status}`);
+        }
+        const data: PreviewResponse = await r.json();
+        setIncluded(data.users || []);
+        setExcluded(data.excludedUsers || []);
+        setBaseCount(data.baseCount ?? data.count);
+        setFilterHash(newHash);
+        setHasLoaded(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Preview failed");
+        setIncluded([]);
+        setExcluded([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.groups, filters.combinator, filters.source]);
+
+  const excludedEmailsSet = React.useMemo(
+    () => new Set((filters.excludedEmails || []).map((e) => e.toLowerCase())),
+    [filters.excludedEmails],
+  );
+
+  /** Toggle a user's excluded state. Adds/removes their email from
+   *  spec.excludedEmails (lowercased). */
+  const toggleUser = (email: string) => {
+    const lower = email.toLowerCase();
+    const current = new Set(excludedEmailsSet);
+    if (current.has(lower)) {
+      current.delete(lower);
+    } else {
+      current.add(lower);
+    }
+    setFilters({
+      ...filters,
+      excludedEmails: Array.from(current).sort(),
+    });
+  };
+
+  /** Move all currently-excluded users back to the included list. */
+  const reincludeAll = () => {
+    setFilters({
+      ...filters,
+      excludedEmails: [],
+    });
+  };
+
+  /** Exclude all currently-included users. */
+  const excludeAll = () => {
+    const allEmails = included.map((u) => u.email.toLowerCase());
+    setFilters({
+      ...filters,
+      excludedEmails: Array.from(new Set(allEmails)).sort(),
+    });
+  };
+
+  const finalCount = baseCount - excludedEmailsSet.size;
+  const hasAnyRules = filters.groups.some((g) =>
+    g.rules.some((r) => r.value && r.value.trim().length > 0),
+  );
+
+  return (
+    <section className="rounded-lg border border-neutral-300 bg-neutral-50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-neutral-700" />
+          <h3 className="text-sm font-bold text-neutral-800">Matched users</h3>
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-500" />
+          ) : hasLoaded && !error ? (
+            <span className="rounded bg-white px-2 py-0.5 text-[10px] font-bold text-neutral-700 border border-neutral-200">
+              {baseCount} matched · {excludedEmailsSet.size} excluded · {finalCount} will receive
+            </span>
+          ) : null}
+        </div>
+        {hasLoaded && !error && included.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={excludeAll}
+              className="text-[10px] text-neutral-500 hover:text-red-500 hover:underline"
+              title="Exclude all currently-included users"
+            >
+              Exclude all
+            </button>
+            <span className="text-neutral-300">·</span>
+            <button
+              type="button"
+              onClick={reincludeAll}
+              disabled={excludedEmailsSet.size === 0}
+              className="text-[10px] text-neutral-500 hover:text-[#FF005A] hover:underline disabled:opacity-30 disabled:no-underline"
+              title="Re-include all excluded users"
+            >
+              Re-include all
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!hasAnyRules ? (
+        <div className="rounded border border-dashed border-neutral-300 bg-white px-3 py-3 text-xs text-neutral-500">
+          Add at least one filter rule above to see matching users here.
+        </div>
+      ) : error ? (
+        <div className="flex items-center gap-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+          <AlertCircle className="h-3.5 w-3.5" /> {error}
+        </div>
+      ) : loading ? (
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Resolving matched users…
+        </div>
+      ) : hasLoaded && included.length === 0 && excluded.length === 0 ? (
+        <div className="rounded border border-dashed border-neutral-300 bg-white px-3 py-3 text-xs text-neutral-500">
+          No members match the current filter. New members matching it will be picked up
+          automatically once the filter is saved.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Included users */}
+          {included.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                Will receive ({included.length})
+              </p>
+              <ul className="divide-y divide-neutral-100 rounded border border-neutral-200 bg-white max-h-72 overflow-y-auto">
+                {included.map((u) => {
+                  const isExcluded = excludedEmailsSet.has(u.email.toLowerCase());
+                  return (
+                    <li
+                      key={u.email}
+                      className={`flex items-center gap-2 px-2 py-1.5 text-xs ${
+                        isExcluded ? "opacity-40" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={() => toggleUser(u.email)}
+                        className="h-3.5 w-3.5 rounded border-neutral-300 text-[#FF005A] focus:ring-[#FF005A]/40"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span className="font-semibold text-neutral-900 truncate">
+                            {u.name || "(no name)"}
+                          </span>
+                          {u.archivedAt && (
+                            <span className="rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-700">
+                              ARCHIVED
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-neutral-500 truncate">{u.email}</div>
+                      </div>
+                      {u.company && (
+                        <span className="text-neutral-400 truncate max-w-[120px]">{u.company}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Excluded users */}
+          {excluded.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                Excluded ({excluded.length})
+              </p>
+              <ul className="divide-y divide-neutral-100 rounded border border-neutral-200 bg-white max-h-40 overflow-y-auto">
+                {excluded.map((u) => (
+                  <li
+                    key={u.email}
+                    className="flex items-center gap-2 px-2 py-1.5 text-xs opacity-60"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() => toggleUser(u.email)}
+                      className="h-3.5 w-3.5 rounded border-neutral-300 text-[#FF005A] focus:ring-[#FF005A]/40"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-neutral-900">
+                        {u.name || "(no name)"}
+                      </span>
+                      <span className="text-neutral-500"> · {u.email}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasLoaded && !error && (included.length > 0 || excluded.length > 0) && (
+        <p className="mt-3 text-[10px] text-neutral-500 leading-relaxed">
+          Uncheck a user to exclude them from this audience — they won&apos;t receive any email sent
+          to this audience, even if they match the filter rules. Exclusions are saved with the
+          audience and apply on every flow run. The actual audience is re-resolved each time a flow
+          step fires, so new matching users are picked up automatically (and can be excluded later).
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -58,6 +58,19 @@ export type AudienceFilterSpec = {
   source: "users" | "rsvps" | "users_and_rsvps";
   combinator: "AND" | "OR";
   groups: FilterGroup[];
+  /**
+   * Optional list of email addresses to EXCLUDE from the resolved set,
+   * even when they match the filter rules. Each email is lowercased.
+   *
+   * Used by the audience editor's "live match preview" — the admin can
+   * deselect individual users from the matched list before saving, and
+   * those emails are stored here so they stay excluded on every
+   * subsequent re-resolution (flow runs, sidebar count, etc.).
+   *
+   * Backward compat: missing/null/empty array = no exclusions (same
+   * behavior as before this field was added).
+   */
+  excludedEmails?: string[];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,6 +283,18 @@ export function parseSpec(json: string | null | undefined): AudienceFilterSpec |
     if (!["users", "rsvps", "users_and_rsvps"].includes(obj.source)) return null;
     if (!["AND", "OR"].includes(obj.combinator)) return null;
     if (!Array.isArray(obj.groups)) return null;
+    // Validate optional excludedEmails field — if present, must be an
+    // array of strings. Coerce to a clean string[] (drop non-strings,
+    // lowercase). If absent or invalid, omit it entirely.
+    if (obj.excludedEmails !== undefined && obj.excludedEmails !== null) {
+      if (!Array.isArray(obj.excludedEmails)) {
+        delete obj.excludedEmails;
+      } else {
+        obj.excludedEmails = obj.excludedEmails
+          .filter((e: unknown): e is string => typeof e === "string" && e.length > 0)
+          .map((e: string) => e.toLowerCase());
+      }
+    }
     return obj as AudienceFilterSpec;
   } catch {
     return null;
@@ -722,6 +747,70 @@ export async function resolveAudienceEmails(spec: AudienceFilterSpec): Promise<s
     users.forEach((u) => emailSet.add(u.email.toLowerCase()));
 
     // Pull secondary emails (UserEmail) for matching users
+    const userIds = users.map((u) => u.email);
+    if (userIds.length > 0) {
+      const secondary = await db.userEmail.findMany({
+        where: {
+          user: {
+            email: { in: userIds },
+            archivedAt: null,
+          },
+        },
+        select: { email: true },
+      });
+      secondary.forEach((e) => emailSet.add(e.email.toLowerCase()));
+    }
+  }
+
+  if (spec.source === "rsvps" || spec.source === "users_and_rsvps") {
+    const rsvpWhere = buildRsvpWhere(spec, ctx);
+    const rsvps = await db.eventRsvp.findMany({
+      where: rsvpWhere,
+      select: { email: true },
+    });
+    rsvps.forEach((r) => emailSet.add(r.email.toLowerCase()));
+  }
+
+  // Apply admin-curated exclusions (emails explicitly deselected in the
+  // audience editor's live match preview). Lowercase + dedupe for safety.
+  if (Array.isArray(spec.excludedEmails) && spec.excludedEmails.length > 0) {
+    const excluded = new Set(
+      spec.excludedEmails
+        .filter((e): e is string => typeof e === "string" && e.length > 0)
+        .map((e) => e.toLowerCase()),
+    );
+    for (const e of excluded) {
+      emailSet.delete(e);
+    }
+  }
+
+  return Array.from(emailSet).sort();
+}
+
+/**
+ * Resolve the spec WITHOUT applying `excludedEmails`. Used by the live
+ * preview UI to compute "N matched, M excluded, K will receive" —
+ * `baseCount - count = excludedCount`.
+ *
+ * Same as `resolveAudienceEmails` except it ignores the
+ * `excludedEmails` field. Returns lowercased de-duplicated emails.
+ */
+export async function resolveAudienceBaseEmails(spec: AudienceFilterSpec): Promise<string[]> {
+  const specWithoutExclusions: AudienceFilterSpec = {
+    ...spec,
+    excludedEmails: [],
+  };
+  const emailSet = new Set<string>();
+  const ctx = await buildEngagementContext(specWithoutExclusions);
+
+  if (spec.source === "users" || spec.source === "users_and_rsvps") {
+    const userWhere = buildUserWhere(spec, ctx);
+    const users = await db.user.findMany({
+      where: { ...userWhere, archivedAt: null },
+      select: { email: true },
+    });
+    users.forEach((u) => emailSet.add(u.email.toLowerCase()));
+
     const userIds = users.map((u) => u.email);
     if (userIds.length > 0) {
       const secondary = await db.userEmail.findMany({
