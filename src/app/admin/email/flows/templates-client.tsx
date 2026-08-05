@@ -766,6 +766,69 @@ function TemplateEditorDialog({
     });
   }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault]);
 
+  // TSK-0074 Phase 4 (rev 2026-08-05): render the Desktop/Mobile preview pane
+  // as a reusable function so it can be placed in TWO locations:
+  //   1. A sticky right sidebar (visible on xl+ screens alongside the editor)
+  //   2. An inline pane below the editor (visible on smaller screens, < xl)
+  // This matches the campaign-composer side-by-side layout (see email-tab-client.tsx
+  // `renderPreviewPane`). srcdoc is produced by the same `renderUnifiedEmail`
+  // pipeline used at send time, so the preview matches production rendering 1:1.
+  const renderPreviewPane = () => (
+    <div className="rounded border border-neutral-300 bg-neutral-50">
+      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPreviewTab("desktop")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+              previewTab === "desktop"
+                ? "bg-[#FF005A] text-white"
+                : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            Desktop
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewTab("mobile")}
+            className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
+              previewTab === "mobile"
+              ? "bg-[#FF005A] text-white"
+              : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            Mobile
+          </button>
+        </div>
+        <span className="text-[10px] text-neutral-500">
+          Rendered via <code>renderUnifiedEmail</code> · matches production sends
+        </span>
+      </div>
+      <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
+        <iframe
+          srcDoc={previewSrcDoc}
+          title="Email preview"
+          sandbox="allow-same-origin"
+          style={{
+            width: previewTab === "desktop" ? 600 : 375,
+            maxWidth: "100%",
+            height: 520,
+            background: "#ffffff",
+            border: "1px solid #e5e5e5",
+            borderRadius: 4,
+          }}
+        />
+      </div>
+      <div className="border-t border-neutral-200 bg-white px-3 py-1.5 text-center text-[10px] text-neutral-500">
+        {previewTab === "desktop"
+          ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
+          : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
@@ -785,6 +848,13 @@ function TemplateEditorDialog({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
+        {/* Side-by-side layout: editor on the left, sticky preview on the right.
+            On xl+ screens, the preview stays in view while scrolling through
+            the editor fields. On smaller screens (< xl), the preview appears
+            inline below the editor (via the xl:hidden fallback). This matches
+            the campaign-composer side-by-side layout (see email-tab-client.tsx). */}
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_680px] gap-6 items-start">
+        <div className="space-y-4 min-w-0">
           <div className="mb-4">
             <label className="mb-1 block text-xs font-semibold text-neutral-700">Template name</label>
             <input
@@ -937,62 +1007,20 @@ function TemplateEditorDialog({
             </p>
           </div>
 
-          {/* TSK-0074 Phase 4: Desktop / Mobile preview pane (always visible
-              below the editor). srcdoc is rendered via the same pipeline as
-              production sends. */}
-          <div className="rounded border border-neutral-300 bg-neutral-50">
-            <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-3 py-2">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab("desktop")}
-                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
-                    previewTab === "desktop"
-                      ? "bg-[#FF005A] text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  <Monitor className="h-3.5 w-3.5" />
-                  Desktop
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewTab("mobile")}
-                  className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold ${
-                    previewTab === "mobile"
-                      ? "bg-[#FF005A] text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  <Smartphone className="h-3.5 w-3.5" />
-                  Mobile
-                </button>
-              </div>
-              <span className="text-[10px] text-neutral-500">
-                Rendered via <code>renderUnifiedEmail</code> · matches production sends
-              </span>
-            </div>
-            <div className="flex justify-center bg-[repeating-conic-gradient(#f5f5f5_0%_25%,#ffffff_0%_50%)] bg-[length:16px_16px] p-4">
-              <iframe
-                srcDoc={previewSrcDoc}
-                title="Email preview"
-                sandbox="allow-same-origin"
-                style={{
-                  width: previewTab === "desktop" ? 600 : 375,
-                  maxWidth: "100%",
-                  height: 520,
-                  background: "#ffffff",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: 4,
-                }}
-              />
-            </div>
-            <div className="border-t border-neutral-200 bg-white px-3 py-1.5 text-center text-[10px] text-neutral-500">
-              {previewTab === "desktop"
-                ? "Desktop · 600px wide (typical webmail / Gmail desktop)"
-                : "Mobile · 375px wide (iPhone SE / 12 mini viewport)"}
-            </div>
+          {/* Desktop / Mobile preview — inline on small screens (below the editor).
+              On xl+ screens, the preview moves to a sticky right sidebar (see
+              the right column below). The srcDoc is the same in both cases. */}
+          <div className="xl:hidden">{renderPreviewPane()}</div>
+        </div>
+
+        {/* Sticky preview sidebar — visible on xl+ screens alongside the editor.
+            The preview stays in view while scrolling through the form fields. */}
+        <div className="hidden xl:block">
+          <div className="sticky top-4">
+            {renderPreviewPane()}
           </div>
+        </div>
+        </div>
         </div>
 
         {/* Footer */}
