@@ -6,6 +6,7 @@ import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-uni
 import { buildLogoBlock, resolveEmailLogoDefault } from "@/lib/email-orchestrator/templates";
 import { randomUUID } from "crypto";
 import { htmlToText } from "@/lib/email-campaign/render";
+import { resolveAudienceEmailsById } from "@/lib/email-orchestrator/audience-filter";
 
 /**
  * POST /api/admin/email/campaigns/[id]/send
@@ -19,6 +20,11 @@ import { htmlToText } from "@/lib/email-campaign/render";
  *   - listSource === "TAG:<label>": all users with at least one matching tag
  *   - listSource === "EVENT:<eventId>": all users who RSVP'd to that event
  *   - listSource === "MANUAL": listConfigJson is { emails: ["a@x.com", ...] }
+ *   - listSource === "AUDIENCE:<id>": resolve via audience-filter evaluator
+ *     (supports STATIC email lists AND DYNAMIC filter specs with exclusions;
+ *     this is what flow-linked campaigns use — when a flow with an audience
+ *     on its first step is saved as ACTIVE, the auto-created linked campaign
+ *     gets listSource = "AUDIENCE:<audienceId>")
  *   - Otherwise: empty list (no recipients)
  *
  * This endpoint is synchronous — it sends all emails in the request. For
@@ -379,6 +385,36 @@ async function resolveRecipients(
       out.push({
         userId: user?.id,
         email,
+        name: user?.name || null,
+      });
+    }
+    return out;
+  }
+
+  // AUDIENCE:<audienceId> — resolve via the audience-filter evaluator.
+  // This is what flow-linked campaigns use: when a flow with an audience on
+  // its first step is saved as ACTIVE, the auto-created linked campaign gets
+  // listSource = "AUDIENCE:<audienceId>" + listConfigJson = { audienceId }.
+  // We resolve BOTH static (email list) and dynamic (filter spec) audiences,
+  // apply any stored exclusions, then hydrate each email into a recipient
+  // row (with userId linkage if the email matches a platform user).
+  const audienceMatch = listSource.match(/^AUDIENCE:(.+)$/);
+  if (audienceMatch) {
+    const audienceId = audienceMatch[1];
+    const emails = await resolveAudienceEmailsById(audienceId);
+    const seen = new Set<string>();
+    const out: Array<{ userId?: string; email: string; name?: string | null }> = [];
+    for (const email of emails) {
+      const lower = email.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      const user = await db.user.findUnique({
+        where: { email: lower },
+        select: { id: true, email: true, name: true },
+      });
+      out.push({
+        userId: user?.id,
+        email: lower,
         name: user?.name || null,
       });
     }
