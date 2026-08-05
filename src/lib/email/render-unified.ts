@@ -586,11 +586,13 @@ export function appendTrackingAndFooter(
   const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
 
   // Build the footer block (pixel + optional unsubscribe).
+  // The footer text uses the {{chapter_name}} merge tag (matching the body
+  // template convention) — substituted below with the resolved chapter name.
   const footerParts: string[] = [];
   if (unsubscribeUrl) {
     footerParts.push(
       `<div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">`,
-      `  <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon ${escapeHtml(chapter)}.</p>`,
+      `  <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon {{chapter_name}}.</p>`,
       `  <p style="margin: 0;"><a href="${unsubscribeUrl}" style="color: #999;">Unsubscribe</a></p>`,
       `</div>`,
     );
@@ -602,7 +604,14 @@ export function appendTrackingAndFooter(
   }
   if (footerParts.length === 0) return html;
 
-  const footer = `\n${footerParts.join("\n")}\n`;
+  let footer = `\n${footerParts.join("\n")}\n`;
+  // Substitute the {{chapter_name}} merge tag in the footer text with the
+  // resolved chapter name. The footer is built AFTER the body's token
+  // replacement, so we handle this single token here.
+  footer = footer.replace(
+    /\{\{\s*chapter_name\s*\}\}/g,
+    escapeHtml(chapter),
+  );
 
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${footer}</body>`);

@@ -168,13 +168,23 @@ export function appendTrackingPixel(
   const unsubUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${campaignId}`;
   const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
 
-  const footer = `
+  // Footer text uses the {{chapter_name}} merge tag (matching the body
+  // template convention) — substituted below with the resolved chapter name.
+  const footerRaw = `
     <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
-      <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon ${chapter}.</p>
+      <p style="margin: 0 0 8px;">You received this email because you are a member of AI Salon {{chapter_name}}.</p>
       <p style="margin: 0;"><a href="${unsubUrl}" style="color: #999;">Unsubscribe</a></p>
     </div>
     <img src="${pixelUrl}" width="1" height="1" alt="" style="display:none; visibility:hidden; position:absolute; left:-9999px;" />
   `.trim();
+
+  // Substitute the {{chapter_name}} merge tag in the footer with the resolved
+  // chapter name. The footer is built AFTER the body's token replacement,
+  // so we handle this single token here.
+  const footer = footerRaw.replace(
+    /\{\{\s*chapter_name\s*\}\}/g,
+    chapter,
+  );
 
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${footer}</body>`);
