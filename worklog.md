@@ -12852,3 +12852,47 @@ Stage Summary:
 - Files modified (1): src/app/admin/email/flows/templates-client.tsx
 - Backup created: /home/z/my-project/download/aisalon-project-backup-20260805-040259.zip (86 MB, 2632 files)
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: email-footer-chapter-name-merge-tag
+Agent: main
+Task: User wants the email footer text changed from "AI Salon Tel Aviv" (hardcoded default visible in actual emails) to "AI Salon {{chapter_name}}" (using the merge tag convention, matching the body template). The {{chapter_name}} token should be substituted at render time with the actual chapter name.
+
+Work Log:
+- Found two places where the unsubscribe footer text is built:
+  1. src/lib/email/render-unified.ts → appendTrackingAndFooter() (orchestrator path)
+  2. src/lib/email-campaign/render.ts → appendTrackingPixel() (campaign path)
+
+- Both already used a dynamic `${chapter}` substitution (resolved from `chapterName` parameter, defaulting to "Tel Aviv" when not provided). The chapterName IS being passed in correctly from the orchestrator worker (worker.ts:347 chapterName: rsvp.event.chapter, flow-worker.ts:257 chapterName, etc.) — so when the event.chapter field is "Tel Aviv", the footer shows "Tel Aviv". When the event.chapter is something else, the footer shows that.
+
+- The user's request: change the LITERAL footer text to use the {{chapter_name}} merge tag (matching the body template convention, e.g. "— The AI Salon {{chapter_name}} team" in templates.ts:398). This makes the footer source text consistent with the rest of the email template's merge-tag convention.
+
+- Applied the fix in both files:
+
+1. src/lib/email/render-unified.ts (appendTrackingAndFooter):
+   - Changed footer text from `AI Salon ${escapeHtml(chapter)}` → `AI Salon {{chapter_name}}`
+   - Added a regex substitution step AFTER the footer is built:
+     `footer = footer.replace(/\{\{\s*chapter_name\s*\}\}/g, escapeHtml(chapter))`
+   - This is necessary because the footer is built AFTER the body's token replacement (which happens in replaceTokens at line 178). The body tokens are already substituted before appendTrackingAndFooter is called, so we handle the {{chapter_name}} substitution explicitly on the footer text.
+   - Added a comment explaining why the substitution happens here
+
+2. src/lib/email-campaign/render.ts (appendTrackingPixel):
+   - Same change: footer text uses {{chapter_name}} merge tag
+   - Added the same regex substitution step on the footer text
+   - Renamed the intermediate variable to footerRaw → footer (after substitution)
+
+- Behavior:
+  - When chapterName is provided (orchestrator path, from event.chapter): {{chapter_name}} → actual chapter name (e.g. "Tel Aviv", "New York", etc.)
+  - When chapterName is NOT provided: {{chapter_name}} → "Tel Aviv" (default fallback, preserves backward compat)
+  - The literal source text in the code now uses {{chapter_name}} merge tag — consistent with the body template convention
+
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in modified files (verified with grep — no errors in render-unified.ts or email-campaign/render.ts).
+- Committed: `446bf99 feat(email-footer): use {{chapter_name}} merge tag instead of hardcoded substitution` (2 files, +23/-4 lines)
+- Pushed: `35ff604..446bf99 main -> main` to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+
+Stage Summary:
+- The email unsubscribe footer now uses the {{chapter_name}} merge tag (matching the body template convention) instead of inline ${chapter} substitution.
+- The merge tag is properly substituted at render time with the actual chapter name (resolved from the event.chapter field via the orchestrator worker).
+- The default fallback ("Tel Aviv") is preserved for backward compat — when chapterName is not provided, the footer shows "AI Salon Tel Aviv".
+- Files modified (2): src/lib/email/render-unified.ts, src/lib/email-campaign/render.ts
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
