@@ -12817,3 +12817,38 @@ Stage Summary:
 - If the SQL migration times out on Neon at build time (non-fatal), the Super Admin can hit POST /api/admin/v7-seed to trigger the runtime clear as a fallback.
 - Files modified (4) + created (1): src/lib/email-orchestrator/templates.ts, src/lib/email-orchestrator/seed.ts, scripts/baseline-migrations.cjs, src/app/api/admin/v7-seed/route.ts, prisma/migrations/20260805130000_clear_email_logo_overrides/migration.sql
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: template-editor-side-by-side-preview
+Agent: main
+Task: User requested the edit template page use the same side-by-side preview layout as the edit campaign page. Currently the edit template has the preview BELOW the editor, not on the right side. After deploying, run a backup.
+
+Work Log:
+- Analyzed the campaign-composer side-by-side pattern in src/app/admin/email/email-tab-client.tsx:
+  - Outer grid: `grid grid-cols-1 xl:grid-cols-[1fr_680px] gap-6 items-start`
+  - Left column: editor fields with `space-y-4 min-w-0`
+  - Right column: sticky preview sidebar with `hidden xl:block` + `sticky top-4`
+  - Inline fallback for small screens: `<div className="xl:hidden">{renderPreviewPane()}</div>`
+  - Preview pane extracted as a reusable `renderPreviewPane()` function
+
+- Applied the same pattern to src/app/admin/email/flows/templates-client.tsx:
+  1. Extracted the inline preview JSX (was lines 940-995) into a reusable `renderPreviewPane()` function defined before the `return` statement. The function returns the same Desktop/Mobile preview pane JSX (rounded border, Desktop/Mobile tabs, iframe with srcDoc, footer caption).
+  2. Wrapped the body content in the side-by-side grid:
+     - `<div className="grid grid-cols-1 xl:grid-cols-[1fr_680px] gap-6 items-start">`
+     - Left column: `<div className="space-y-4 min-w-0">` containing all editor fields (template name, subject, alt-subject, no-code variant, stop-if-not-opened, logo editor, WYSIWYG body, mobile overrides)
+     - Right column: `<div className="hidden xl:block"><div className="sticky top-4">{renderPreviewPane()}</div></div>`
+  3. Added inline fallback for small screens: `<div className="xl:hidden">{renderPreviewPane()}</div>` at the end of the left column (so on mobile/tablet, the preview appears below the editor — same behavior as before).
+
+- TypeScript: `npx tsc --noEmit --skipLibCheck` produces ZERO errors in the modified file.
+- Committed: `1d96f81 feat(email/templates): side-by-side editor + preview layout (matches campaign composer)` (1 file, +83/-55 lines)
+- Pushed: `2f872f9..1d96f81 main -> main` to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+- Ran project backup: `bash scripts/create-project-backup.sh` → /home/z/my-project/download/aisalon-project-backup-20260805-040259.zip (86 MB, 2632 files)
+- DB backup (db-backup.sh) failed because the local .env uses SQLite but production is Postgres on Neon — this is expected; the project source backup is the relevant artifact here.
+
+Stage Summary:
+- The template editor now has a side-by-side layout on xl+ screens (≥1280px): editor fields on the left, sticky preview on the right. The preview stays in view while scrolling through the form fields.
+- On smaller screens (< xl), the preview appears inline below the editor (unchanged behavior, so mobile/tablet users still get a usable layout).
+- The layout matches the campaign-composer side-by-side pattern (same grid classes, same sticky positioning, same `renderPreviewPane()` function pattern).
+- Files modified (1): src/app/admin/email/flows/templates-client.tsx
+- Backup created: /home/z/my-project/download/aisalon-project-backup-20260805-040259.zip (86 MB, 2632 files)
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
