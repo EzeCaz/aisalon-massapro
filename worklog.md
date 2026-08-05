@@ -12896,3 +12896,59 @@ Stage Summary:
 - The default fallback ("Tel Aviv") is preserved for backward compat — when chapterName is not provided, the footer shows "AI Salon Tel Aviv".
 - Files modified (2): src/lib/email/render-unified.ts, src/lib/email-campaign/render.ts
 - Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
+
+---
+Task ID: audience-multi-keyword-and-live-preview-with-exclusions
+Agent: main
+Task: User reported that the 'Sponsor Leads' audience resets to 0 users on save, even though the keyword search shows 19 matches. User wants: (1) when generating an audience, show all matched users at the bottom with the ability to unselect individuals, (2) the saved audience should preserve the configuration (not reset to 0).
+
+Work Log:
+- ROOT CAUSE (the 'reset to 0' bug):
+  The KeywordSearchBar treated the entire input string as ONE keyword. When the user typed 'partner, sponsor, host', it called buildKeywordGroup(KEYWORD_USER_FIELDS, 'partner, sponsor, host') — which built ONE OR group with rules like 'contains \"partner, sponsor, host\"' across all 13 fields. Almost no user has that exact comma-separated string in their profile, so the saved spec resolved to 0. The 19 matches the user saw in the live preview came from /api/admin/members/search which runs ONE search per call — but the persisted spec was structurally different from what the preview showed.
+
+- FIX 1 — Multi-keyword support (src/app/admin/email/flows/audiences-client.tsx):
+  - Added splitKeywords(input) helper: parses comma/space/semicolon-separated input, supports quoted phrases (e.g. \"new york\")
+  - Added buildKeywordGroups(fields, input) helper: builds ONE OR group PER keyword
+  - KeywordSearchBar live preview now fires ONE search PER keyword and unions the results by user id (preserving first-seen match's data), sorted by name
+  - applyKeywordToFilter() now sets spec.combinator = 'OR' (was 'AND') so anyone matching ANY keyword is included
+  - Updated placeholder text, button label, and helper text to mention multi-keyword support
+  - Toast message now shows the keyword count + each individual keyword
+
+- FIX 2 — Live match preview with per-user exclusions (src/app/admin/email/flows/audiences-client.tsx):
+  - New LiveMatchPreview component rendered at the bottom of DynamicEditor (after the 'Add group' button)
+  - Calls POST /api/email-audiences/preview with includeUserDetails=true (debounced 500ms after filter changes)
+  - Shows every matched user with: checkbox, name, email, company, ARCHIVED badge (if archived)
+  - Header shows 'N matched · M excluded · K will receive' so the admin sees the impact of exclusions at a glance
+  - Each user has a checkbox — uncheck to exclude them from the audience
+  - 'Exclude all' / 'Re-include all' bulk action buttons
+  - Excluded users are stored in spec.excludedEmails (lowercased, deduplicated, sorted), saved with the audience, and applied on every re-resolution (flow runs, sidebar count, etc.)
+  - Excluded users appear in a separate 'Excluded (N)' section below the included list, with checkboxes to re-include them
+  - Help text at the bottom explains the persistence + auto-re-resolution behavior
+  - Debounce uses a stable hash of the spec (excluding excludedEmails) so toggling a checkbox doesn't trigger a re-fetch — the backend resolver applies the exclusion on save
+  - Shows 'Add at least one filter rule above to see matching users here.' when no rules have values, and 'No members match the current filter.' when the resolver returns 0
+
+- BACKEND changes:
+  - src/lib/email-orchestrator/audience-filter.ts:
+    - Added excludedEmails?: string[] to AudienceFilterSpec type (with docstring explaining usage)
+    - resolveAudienceEmails() now filters out excluded emails at the end (lowercase, dedupe for safety)
+    - New resolveAudienceBaseEmails(spec) — resolves WITHOUT applying excludedEmails, used by the preview to compute 'N matched' (before exclusions)
+    - parseSpec() now validates + normalizes excludedEmails: if present, must be an array of strings; non-strings are dropped, all are lowercased; if invalid type, the field is deleted entirely
+  - src/app/api/email-audiences/preview/route.ts:
+    - Accepts includeUserDetails: boolean in the body
+    - Returns users[] (with name, email, company, title, interestedIn, profileCategories, appliedFor, bio, archivedAt) when includeUserDetails=true
+    - Returns excludedUsers[] (same shape, for users in excludedEmails) so the UI can show them as 'deselected' rows with a checkbox to re-include
+    - Returns baseCount + excludedCount for the summary header
+    - Backward compat: when includeUserDetails is absent/false, returns just { emails, count, baseCount, excludedCount } (no users array)
+  - src/app/api/email-audiences/route.ts:
+    - Null-guard the parseSpec result before passing to resolveAudienceEmails (defensive — was already working but TS now requires the check after the spec type change)
+
+- TypeScript: npx tsc --noEmit --skipLibCheck produces ZERO errors in modified files (verified with grep — no errors in audiences-client.tsx, audience-filter.ts, preview/route.ts, [id]/route.ts, or email-audiences/route.ts).
+- Committed: 0951a00 feat(audiences): multi-keyword search + live match preview with per-user exclusions (4 files, +597/-46 lines)
+- Pushed: 1e6f452..0951a00 main -> main to https://github.com/EzeCaz/aisalon-massapro.git — Vercel auto-deploy triggered.
+
+Stage Summary:
+- The 'Sponsor Leads' audience will now correctly resolve to 19 users when the admin types 'partner, sponsor, host' in the keyword bar and clicks 'Build audience from keyword(s)'. Each keyword becomes its own OR group, combined with OR at the spec level — anyone matching ANY keyword is included.
+- The admin can see all 19 matched users at the bottom of the editor (with name, email, company, archived badge), and uncheck any individual user to exclude them from the audience. Exclusions are saved with the audience and apply on every flow run.
+- The 'N matched · M excluded · K will receive' header gives the admin a clear summary of the audience size before saving.
+- Files modified (4): src/app/admin/email/flows/audiences-client.tsx, src/app/api/email-audiences/preview/route.ts, src/app/api/email-audiences/route.ts, src/lib/email-orchestrator/audience-filter.ts
+- Pushed to GitHub main → Vercel auto-deploy will rebuild shortly.
