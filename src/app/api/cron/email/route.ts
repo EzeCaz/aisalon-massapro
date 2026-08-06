@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendMail, emailConfigured } from "@/lib/email";
-import { randomUUID } from "crypto";
+import {
+  renderUnifiedEmail,
+  renderUnifiedSubject,
+  type UnifiedRenderContext,
+} from "@/lib/email/render-unified";
 
 /**
  * GET /api/cron/email
@@ -58,6 +62,65 @@ export async function GET(req: NextRequest) {
   const MAX_RETRY_ATTEMPTS = 3;
   const BATCH_SIZE = 50;
 
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXTAUTH_URL ||
+    "https://aisalon.massapro.com";
+
+  /**
+   * Personalize a campaign email for one recipient using the unified
+   * renderer (same path as /api/admin/email/campaigns/[id]/send/route.ts).
+   *
+   * Previously this cron route used a primitive inline `.replace()` chain
+   * that ONLY handled {{name}}, {{email}}, {{chapter_name}}, and
+   * {{chapterName}}. Every other merge tag — including
+   * {{finishOnboardingUrl}} — was left as a literal token in the HTML.
+   * Browsers/email clients then saw `<a href="{{finishOnboardingUrl}}">`
+   * and stripped the malformed href attribute, so the link text rendered
+   * but wasn't clickable. The chapter name also fell back to "Tel Aviv"
+   * whenever the campaign had no chapterId, ignoring the recipient's own
+   * chapter.
+   *
+   * This helper fixes both issues by delegating to `renderUnifiedEmail`,
+   * which handles the full token set, and by resolving the chapter name
+   * from: recipient.chapter → campaign.chapter → "Tel Aviv".
+   */
+  function personalizeForRecipient(r: {
+    email: string;
+    name: string | null;
+    trackToken: string;
+    chapter?: { name: string } | null;
+    campaign: {
+      id: string;
+      subjectSnapshot: string;
+      bodyHtmlSnapshot: string;
+      chapter?: { name: string } | null;
+    };
+  }): { html: string; subject: string; unsubscribeUrl: string } {
+    const firstName = (r.name || r.email.split("@")[0]).split(" ")[0];
+    const chapterName =
+      r.chapter?.name || r.campaign.chapter?.name || "Tel Aviv";
+    const ctx: UnifiedRenderContext = {
+      firstName,
+      name: r.name || "",
+      email: r.email,
+      chapterName,
+      finishOnboardingUrl: `${baseUrl}/onboarding`,
+    };
+    const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${r.trackToken}&c=${r.campaign.id}`;
+    const html = renderUnifiedEmail({
+      html: r.campaign.bodyHtmlSnapshot,
+      ctx,
+      campaignId: r.campaign.id,
+      trackToken: r.trackToken,
+      baseUrl,
+      unsubscribeUrl,
+      chapterName,
+    });
+    const subject = renderUnifiedSubject(r.campaign.subjectSnapshot, ctx);
+    return { html, subject, unsubscribeUrl };
+  }
+
   const stats = {
     retriedFailed: 0,
     recoveredFailed: 0,
@@ -74,6 +137,7 @@ export async function GET(req: NextRequest) {
       retryCount: { lt: MAX_RETRY_ATTEMPTS },
     },
     include: {
+      chapter: { select: { name: true } },
       campaign: {
         select: {
           id: true,
@@ -100,19 +164,12 @@ export async function GET(req: NextRequest) {
       r.campaign.fromEmail || process.env.SMTP_FROM || "no-reply@aisalon.massapro.com";
     const from = `${fromName} <${fromEmail}>`;
 
-    // Resolve chapter name for the {{chapter_name}} merge token.
-    // Falls back to "Tel Aviv" when the campaign has no chapter.
-    const chapterName = r.campaign.chapter?.name ?? "Tel Aviv";
-
-    const personalizedHtml = r.campaign.bodyHtmlSnapshot
-      .replace(/\{\{name\}\}/g, r.name || "there")
-      .replace(/\{\{email\}\}/g, r.email)
-      .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
-      .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName);
+    const { html: personalizedHtml, subject: personalizedSubject } =
+      personalizeForRecipient(r);
 
     const result = await sendMail({
       to: r.email,
-      subject: r.campaign.subjectSnapshot,
+      subject: personalizedSubject,
       html: personalizedHtml,
       from,
       ...(r.campaign.replyTo ? { cc: r.campaign.replyTo } : {}),
@@ -161,8 +218,10 @@ export async function GET(req: NextRequest) {
     const queued = await db.emailRecipient.findMany({
       where: { campaignId: campaign.id, status: "QUEUED" },
       include: {
+        chapter: { select: { name: true } },
         campaign: {
           select: {
+            id: true,
             subjectSnapshot: true,
             bodyHtmlSnapshot: true,
             fromName: true,
@@ -185,19 +244,12 @@ export async function GET(req: NextRequest) {
         r.campaign.fromEmail || process.env.SMTP_FROM || "no-reply@aisalon.massapro.com";
       const from = `${fromName} <${fromEmail}>`;
 
-      // Resolve chapter name for the {{chapter_name}} merge token.
-      // Falls back to "Tel Aviv" when the campaign has no chapter.
-      const chapterName = r.campaign.chapter?.name ?? "Tel Aviv";
-
-      const personalizedHtml = r.campaign.bodyHtmlSnapshot
-        .replace(/\{\{name\}\}/g, r.name || "there")
-        .replace(/\{\{email\}\}/g, r.email)
-        .replace(/\{\{\s*chapter_name\s*\}\}/g, chapterName)
-        .replace(/\{\{\s*chapterName\s*\}\}/g, chapterName);
+      const { html: personalizedHtml, subject: personalizedSubject } =
+        personalizeForRecipient(r);
 
       const result = await sendMail({
         to: r.email,
-        subject: r.campaign.subjectSnapshot,
+        subject: personalizedSubject,
         html: personalizedHtml,
         from,
         ...(r.campaign.replyTo ? { cc: r.campaign.replyTo } : {}),

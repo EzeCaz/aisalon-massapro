@@ -160,6 +160,13 @@ export async function POST(
   // var → seeded default). Reused for every recipient — the logo default is
   // campaign-scoped, not recipient-scoped. The per-template logoUrl override
   // (campaign.template?.logoUrl) still wins over this default.
+  //
+  // NOTE: This uses the campaign's chapterId (not the per-recipient
+  // chapterId) because the logo is a campaign-level brand decision — the
+  // admin picked the template + logo when composing the campaign, and that
+  // brand should stay consistent across all recipients of THIS campaign.
+  // The {{chapter_name}} merge tag in the BODY, however, IS resolved
+  // per-recipient below (r.chapterName → campaignChapterName → "Tel Aviv").
   const resolvedLogoDefault = await resolveEmailLogoDefault(campaign.chapterId ?? null);
 
   for (const r of recipients) {
@@ -171,6 +178,10 @@ export async function POST(
         userId: r.userId || null,
         email: r.email,
         name: r.name || null,
+        // Persist the recipient's chapter on the EmailRecipient row so the
+        // cron retry/queue-drain path (/api/cron/email) can resolve
+        // {{chapter_name}} without re-querying the User table.
+        chapterId: r.chapterId ?? null,
         trackToken,
         status: "QUEUED",
       },
@@ -185,11 +196,19 @@ export async function POST(
     //   5. Had a `cc: replyTo` bug (was CC'ing the replyTo address on every send).
     // The unified renderer fixes all 5 issues in one place.
     const firstName = (r.name || "there").split(" ")[0];
+    // Per-recipient chapter name resolution (priority):
+    //   1. r.chapterName — the recipient's own chapter (from User.chapter)
+    //   2. chapterName — the campaign's linked chapter (computed above)
+    //   3. "Tel Aviv" — platform-wide fallback (already baked into chapterName)
+    // This lets a single campaign reach members across multiple chapters
+    // and have each email show the recipient's own chapter name.
+    const perRecipientChapterName =
+      r.chapterName && r.chapterName.trim() ? r.chapterName : chapterName;
     const renderCtx = {
       firstName,
       name: r.name || "",
       email: r.email,
-      chapterName,
+      chapterName: perRecipientChapterName,
       eventTitle: eventCtx?.title ?? "",
       eventVenue: eventCtx?.venue ?? "",
       eventAddress: eventCtx?.address ?? "",
@@ -220,7 +239,7 @@ export async function POST(
       trackToken,
       baseUrl,
       unsubscribeUrl,
-      chapterName,
+      chapterName: perRecipientChapterName,
     });
     // Plain-text alternative: snapshot.bodyTextSnapshot if set, else derive
     // from the snapshot bodyHtml (NOT the rendered HTML — we don't want
@@ -330,7 +349,15 @@ export async function POST(
 async function resolveRecipients(
   listSource: string,
   listConfigJson: string
-): Promise<Array<{ userId?: string; email: string; name?: string | null }>> {
+): Promise<
+  Array<{
+    userId?: string;
+    email: string;
+    name?: string | null;
+    chapterId?: string | null;
+    chapterName?: string | null;
+  }>
+> {
   let config: any = {};
   try {
     config = JSON.parse(listConfigJson || "{}");
@@ -338,13 +365,31 @@ async function resolveRecipients(
     config = {};
   }
 
+  // Common User select that includes chapter info for per-recipient
+  // {{chapter_name}} resolution. Used by ALL_MEMBERS, TAG, MANUAL, and
+  // AUDIENCE paths. EVENT path goes through RSVPs and hydrates the user
+  // separately below.
+  const userSelectWithChapter = {
+    id: true,
+    email: true,
+    name: true,
+    chapterId: true,
+    chapter: { select: { name: true } },
+  } as const;
+
   // ALL_MEMBERS — every user with an email
   if (listSource === "ALL_MEMBERS") {
     const users = await db.user.findMany({
       where: { email: { not: "" } },
-      select: { id: true, email: true, name: true },
+      select: userSelectWithChapter,
     });
-    return users.map((u) => ({ userId: u.id, email: u.email, name: u.name }));
+    return users.map((u) => ({
+      userId: u.id,
+      email: u.email,
+      name: u.name,
+      chapterId: u.chapterId,
+      chapterName: u.chapter?.name ?? null,
+    }));
   }
 
   // TAG:<label> — all users with at least one MemberTag matching the label
@@ -353,30 +398,51 @@ async function resolveRecipients(
     const label = tagMatch[1];
     const users = await db.user.findMany({
       where: { tags: { some: { label } } },
-      select: { id: true, email: true, name: true },
+      select: userSelectWithChapter,
     });
-    return users.map((u) => ({ userId: u.id, email: u.email, name: u.name }));
+    return users.map((u) => ({
+      userId: u.id,
+      email: u.email,
+      name: u.name,
+      chapterId: u.chapterId,
+      chapterName: u.chapter?.name ?? null,
+    }));
   }
 
-  // EVENT:<eventId> — all users who RSVP'd to that event
+  // EVENT:<eventId> — all users who RSVP'd to that event. RSVPs may not
+  // have a userId (manual email-only RSVPs), so we hydrate chapter info
+  // from the User row only when userId is present.
   const eventMatch = listSource.match(/^EVENT:(.+)$/);
   if (eventMatch) {
     const eventId = eventMatch[1];
     const rsvps = await db.eventRsvp.findMany({
       where: { eventId, status: "GOING" },
-      select: { userId: true, email: true, name: true },
+      select: {
+        userId: true,
+        email: true,
+        name: true,
+        user: { select: { chapterId: true, chapter: { select: { name: true } } } },
+      },
     });
     return rsvps.map((r) => ({
       userId: r.userId || undefined,
       email: r.email,
       name: r.name,
+      chapterId: r.user?.chapterId ?? null,
+      chapterName: r.user?.chapter?.name ?? null,
     }));
   }
 
   // MANUAL — listConfigJson is { emails: ["a@x.com", ...] }
   if (listSource === "MANUAL" && Array.isArray(config.emails)) {
     const seen = new Set<string>();
-    const out: Array<{ userId?: string; email: string; name?: string | null }> = [];
+    const out: Array<{
+      userId?: string;
+      email: string;
+      name?: string | null;
+      chapterId?: string | null;
+      chapterName?: string | null;
+    }> = [];
     for (const emailRaw of config.emails) {
       const email = (emailRaw || "").toString().trim().toLowerCase();
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
@@ -385,12 +451,14 @@ async function resolveRecipients(
       // Try to resolve to a platform user
       const user = await db.user.findUnique({
         where: { email },
-        select: { id: true, email: true, name: true },
+        select: userSelectWithChapter,
       });
       out.push({
         userId: user?.id,
         email,
         name: user?.name || null,
+        chapterId: user?.chapterId ?? null,
+        chapterName: user?.chapter?.name ?? null,
       });
     }
     return out;
@@ -408,19 +476,27 @@ async function resolveRecipients(
     const audienceId = audienceMatch[1];
     const emails = await resolveAudienceEmailsById(audienceId);
     const seen = new Set<string>();
-    const out: Array<{ userId?: string; email: string; name?: string | null }> = [];
+    const out: Array<{
+      userId?: string;
+      email: string;
+      name?: string | null;
+      chapterId?: string | null;
+      chapterName?: string | null;
+    }> = [];
     for (const email of emails) {
       const lower = email.toLowerCase();
       if (seen.has(lower)) continue;
       seen.add(lower);
       const user = await db.user.findUnique({
         where: { email: lower },
-        select: { id: true, email: true, name: true },
+        select: userSelectWithChapter,
       });
       out.push({
         userId: user?.id,
         email: lower,
         name: user?.name || null,
+        chapterId: user?.chapterId ?? null,
+        chapterName: user?.chapter?.name ?? null,
       });
     }
     return out;
