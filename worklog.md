@@ -13168,3 +13168,64 @@ Stage Summary:
 - Files modified (8): audiences-client.tsx, flows/page.tsx,
   campaigns/[id]/send/route.ts, preview/route.ts, flow-builder-canvas.tsx,
   audience-filter.ts, templates.ts, render-unified.ts
+
+---
+Task ID: 7
+Agent: main (continuation)
+Task: (1) Fix HTTP 500 on login at aisalon.massapro.com with info@noovi.co user.
+      (2) Provide step-by-step guide for sending "Finish joining to Ai Salon community"
+          template to members who registered >30 min ago but haven't completed onboarding.
+
+Work Log:
+- Inspected src/app/api/auth/post-login-redirect/route.ts and found `mustSetPassword`
+  in the `select` clause of a `db.user.findUnique` call.
+- Verified via grep that `mustSetPassword` does NOT exist anywhere in prisma/schema.prisma
+  (zero matches) and was NEVER added by any migration.
+- Root cause: post-login-redirect was dead code with zero callers before commit 2b6d385.
+  That commit wired EVERY sign-in path (Google OAuth + email/password) through this
+  endpoint. From that point on, every login attempt threw
+  `PrismaClientValidationError: Unknown field 'mustSetPassword' for select statement
+  on type 'User'` → HTTP 500 on /login for every user, every time.
+- Also found mustSetPassword runtime references in 3 other files that would 500 when
+  triggered: src/app/api/auth/set-password/route.ts (POST + GET),
+  src/app/api/profile/set-password/route.ts (POST data write),
+  src/app/set-password/page.tsx (select + redirect-away gate).
+- Fix: removed every runtime mustSetPassword reference across 5 files. Kept the
+  /set-password page accessible to any signed-in user (form handles both set-first
+  and change-password cases via hasPassword check on passwordHash). All remaining
+  references in src/ are now JSDoc comments only (no runtime code paths).
+- Committed as 0de066c and pushed to main → Vercel auto-deploy triggered.
+
+- For task 2 (step-by-step guide):
+  * Confirmed audience-filter.ts supports the needed fields:
+    - `onboardedAt` (date type, supports `is_set` / `is_not_set`)
+    - `createdAt` labeled "Signed up at" (date type, supports `before` / `after`)
+  * Confirmed audiences-client.tsx renders a `datetime-local` input for date fields
+    when `before` or `after` operator is selected.
+  * Confirmed {{finishOnboardingUrl}} merge tag is already wired (commit 58221b9)
+    and resolves to `${baseUrl}/onboarding` for both campaigns and flows.
+  * Confirmed Flows system has no USER_SIGNUP trigger (only RSVP_GOING,
+    DOOR_CHECKED_IN, MARKED_ATTENDED, MARKED_NO_SHOW, MANUAL). So fully-automated
+    "send 30 min after signup if not onboarded" is NOT possible today.
+  * Confirmed campaign-composer.tsx (the standard /admin/email "New campaign" UI)
+    does NOT support picking a saved audience as listSource — it only supports
+    all_members / non_members / event_rsvp / manual_upload / specific_users.
+    So the only way to send to a saved dynamic audience is via a Flow.
+  * Therefore the recommended path for the user's use case is:
+    1. Build the email template (if not already present)
+    2. Build a dynamic audience with the 2 rules
+    3. Build a 1-step flow that uses the audience + template
+    4. Activate the flow → creates a linked DRAFT campaign
+    5. Go to Campaigns tab, find the linked campaign, click Send
+
+Stage Summary:
+- Login 500 fix shipped (commit 0de066c pushed to main, Vercel auto-deploying).
+- Step-by-step guide prepared for sending the "Finish joining" template to
+  not-onboarded-after-30-min members via the audience + flow + linked-campaign
+  pipeline.
+- Known limitation: the audience filter's `before` operator requires a manually
+  computed timestamp (no relative "30 minutes ago" support). To re-catch newly
+  registered users, the audience must be re-edited with a fresh cutoff time.
+- Known limitation: flows have no USER_SIGNUP trigger, so fully-automated
+  recurring sends to new signups aren't possible without adding a new
+  triggerKind + cron-based enrollment.
