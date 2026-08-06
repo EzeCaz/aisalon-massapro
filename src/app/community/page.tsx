@@ -7,14 +7,20 @@ import { AppHeader } from "@/components/ais/app-header";
 import { CommunityGrid } from "./community-grid";
 import Link from "next/link";
 
-export const metadata = { title: "Community — AI Salon Tel Aviv" };
+export const metadata = { title: "Community — AI Salon" };
+
+/** Default chapter name shown when the current user has no chapterId
+ *  set (e.g. legacy accounts). The directory lists members from ALL
+ *  chapters, not just the current user's — but the header + footer
+ *  copy uses the current user's chapter for personalization. */
+const DEFAULT_CHAPTER_NAME = "Tel Aviv";
 
 /**
  * /community — member directory.
  *
- * Lists every onboarded, non-archived member of AI Salon Tel Aviv
- * with their profile picture, name, company, LinkedIn URL, and a
- * "Contact" button that opens a 1-on-1 DM dialog.
+ * Lists every onboarded, non-archived member of AI Salon (across all
+ * chapters) with their profile picture, name, company, LinkedIn URL,
+ * and a "Contact" button that opens a 1-on-1 DM dialog.
  *
  * Auth gate: signed-in + onboarded members only. Anonymous visitors
  * are redirected to /login (the directory is members-only — unlike
@@ -35,10 +41,15 @@ export default async function CommunityPage() {
       email: true,
       importSource: true,
       onboardedAt: true,
+      chapter: { select: { name: true } },
     },
   });
   if (!meRow) redirect("/login?callbackUrl=/community");
   if (needsOnboarding(meRow)) redirect("/onboarding");
+
+  // Chapter display name for personalization. Falls back to "Tel Aviv"
+  // for legacy users without a chapter.
+  const chapterName = meRow.chapter?.name ?? DEFAULT_CHAPTER_NAME;
 
   // Fetch every onboarded, non-archived member EXCEPT the current
   // user (you can't DM yourself — the API would reject it anyway).
@@ -89,13 +100,13 @@ export default async function CommunityPage() {
         {/* Page header */}
         <div className="mb-10">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            AI Salon Tel Aviv
+            AI Salon {chapterName}
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
             Meet the <span className="ais-gradient-text">community</span>
           </h1>
           <p className="mt-3 text-base text-black/80 max-w-2xl">
-            Founders, builders, investors, and researchers building AI in Tel Aviv.
+            Founders, builders, investors, and researchers building AI in {chapterName}.
             Click <span className="font-semibold">Contact</span> on any profile to start a private 1-on-1 chat.
           </p>
         </div>
@@ -132,13 +143,13 @@ export default async function CommunityPage() {
         {/* Member count footer */}
         {sortedMembers.length > 0 && (
           <div className="mt-10 text-center text-xs text-black/50">
-            Showing {sortedMembers.length} member{sortedMembers.length === 1 ? "" : "s"} · AI Salon Tel Aviv
+            Showing {sortedMembers.length} member{sortedMembers.length === 1 ? "" : "s"} · AI Salon {chapterName}
           </div>
         )}
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+          <span>© {new Date().getFullYear()} AI Salon {chapterName} · Empowering AI Connections</span>
           <span>
             Platform by{" "}
             <a

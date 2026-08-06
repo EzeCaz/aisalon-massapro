@@ -17,6 +17,17 @@ type Props = {
   };
   interestedInOptions: string[];
   profileCategoriesOptions: string[];
+  /** Display name of the chapter the user is onboarding into
+   *  (e.g. "Tel Aviv", "Montreal"). Used to personalize the success
+   *  toast + submit button. Defaults to "Tel Aviv" for backwards
+   *  compatibility with callers that don't pass it. */
+  chapterName?: string;
+  /** Chapter slug (e.g. "mtl"). Sent to the onboarding API so the
+   *  server can associate the user with the chapter row (sets
+   *  user.chapterId). Empty string = no association (legacy
+   *  behaviour — user stays unaffiliated until they RSVP to an
+   *  event). */
+  chapterSlug?: string;
 };
 
 /**
@@ -42,6 +53,8 @@ export function OnboardingForm({
   initial,
   interestedInOptions,
   profileCategoriesOptions,
+  chapterName = "Tel Aviv",
+  chapterSlug = "",
 }: Props) {
   const router = useRouter();
 
@@ -89,6 +102,10 @@ export function OnboardingForm({
           profileCategories: Array.from(profileCategories),
           appliedFor,
           bio,
+          // Pass the chapter slug so the server can associate the user
+          // with the chapter row (sets user.chapterId). Empty string
+          // is treated as "no chapter" — server leaves chapterId null.
+          chapterSlug,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -100,7 +117,7 @@ export function OnboardingForm({
         return;
       }
 
-      toast.success("Welcome to AI Salon Tel Aviv! Redirecting…", { id: t });
+      toast.success(`Welcome to AI Salon ${chapterName}! Redirecting…`, { id: t });
       // Small delay so the toast has time to show before navigation.
       setTimeout(() => {
         router.push("/events");

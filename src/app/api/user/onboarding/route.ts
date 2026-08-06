@@ -25,6 +25,9 @@ import { needsOnboarding } from "@/lib/onboarding";
  *     profileCategories: string[],     // Tell us more about yourself (checkboxes)
  *     appliedFor?: string,             // I would like to apply for (single-select)
  *     bio?: string,                    // Tell us more about yourself :) (long text)
+ *     chapterSlug?: string,            // Optional — associates user with a chapter
+ *                                      //   (sets user.chapterId). Empty/missing = no
+ *                                      //   association. Invalid slug = silently ignored.
  *   }
  *
  * Pre-imported users (importSource set) are NOT allowed to submit this
@@ -63,6 +66,7 @@ export async function POST(req: NextRequest) {
     profileCategories?: string[];
     appliedFor?: string;
     bio?: string;
+    chapterSlug?: string;
   };
   try {
     body = await req.json();
@@ -143,6 +147,41 @@ export async function POST(req: NextRequest) {
   // bio: optional, capped at 2000 chars.
   const bio = (body.bio || "").trim().slice(0, 2000) || null;
 
+  // --- Resolve optional chapter association -----------------------------
+  // If the client passed a chapterSlug (e.g. "mtl"), look up the chapter
+  // row and set user.chapterId so the user is permanently associated with
+  // that chapter. This means a brand-new user who logs in via
+  // /login?chapterSlug=mtl and completes onboarding will have
+  // chapterId=montreal-chapter-id going forward — every page that reads
+  // me.chapter will show Montreal branding without needing ?chapterSlug=
+  // in every URL.
+  //
+  // Empty/missing chapterSlug = no chapter association (legacy behaviour
+  // — user stays unaffiliated until they RSVP to an event).
+  //
+  // Invalid slug (typo, chapter deleted) = silently ignored. We don't
+  // want to block onboarding just because the chapter row is missing.
+  let chapterId: string | undefined = undefined;
+  const chapterSlugRaw = (body.chapterSlug || "").trim();
+  if (chapterSlugRaw) {
+    try {
+      const chapter = await db.chapter.findUnique({
+        where: { slug: chapterSlugRaw },
+        select: { id: true },
+      });
+      if (chapter) {
+        chapterId = chapter.id;
+      } else {
+        console.warn(
+          `[onboarding] chapterSlug "${chapterSlugRaw}" did not match any chapter row — user.chapterId will NOT be set.`
+        );
+      }
+    } catch (err) {
+      // DB error — non-fatal. Log + continue without setting chapterId.
+      console.warn("[onboarding] could not look up chapter by slug:", err);
+    }
+  }
+
   // --- Update the user row + mark onboarded -----------------------------
   const updated = await db.user.update({
     where: { id: me.id },
@@ -158,12 +197,17 @@ export async function POST(req: NextRequest) {
       appliedFor: appliedFor || null,
       bio,
       onboardedAt: new Date(),
+      // Only set chapterId if we resolved a valid chapter from the slug.
+      // Don't clobber an existing chapterId with null when chapterSlug
+      // is absent (legacy callers that don't send chapterSlug).
+      ...(chapterId ? { chapterId } : {}),
     },
     select: {
       id: true,
       name: true,
       email: true,
       onboardedAt: true,
+      chapterId: true,
     },
   });
 

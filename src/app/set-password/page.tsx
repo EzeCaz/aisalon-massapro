@@ -4,11 +4,50 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { SetPasswordForm } from "./set-password-form";
+import { getEffectiveBrandImagesBySlug } from "@/lib/chapter-brand-images";
 
-export const metadata = {
-  title: "Set Your Password — AI Salon Tel Aviv",
-  description: "Set a new password for your AI Salon Tel Aviv account.",
-};
+/** Default chapter slug when none is provided. Mirrors /login + /onboarding. */
+const DEFAULT_CHAPTER_SLUG = "tel-aviv";
+
+/**
+ * Resolve the chapter to show on /set-password. Same priority order as
+ * /onboarding: URL query param → user's chapterId → default Tel Aviv.
+ * Returns `{ slug, name }` with the chapter's display name.
+ */
+async function resolveChapter(
+  urlSlug: string | undefined,
+  userChapterId: string | null | undefined
+): Promise<{ slug: string; name: string }> {
+  let slug = urlSlug || DEFAULT_CHAPTER_SLUG;
+
+  if (!urlSlug && userChapterId) {
+    try {
+      const ch = await db.chapter.findUnique({
+        where: { id: userChapterId },
+        select: { slug: true, name: true },
+      });
+      if (ch) return { slug: ch.slug, name: ch.name };
+    } catch {
+      // DB unreachable — fall through.
+    }
+  }
+
+  let name = slug
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  try {
+    const ch = await db.chapter.findUnique({
+      where: { slug },
+      select: { name: true },
+    });
+    if (ch) name = ch.name;
+  } catch {
+    // DB unreachable — keep the humanized slug.
+  }
+
+  return { slug, name };
+}
 
 /**
  * /set-password — set or change password page.
@@ -21,6 +60,10 @@ export const metadata = {
  *      imported members) and the "change password" case (already has a
  *      passwordHash — requires current password verification).
  *
+ * CHAPTER-SCOPED BEHAVIOR:
+ *   - /set-password?chapterSlug=mtl renders the page with the Montreal
+ *     chapter name + Montreal brand images. Same flow as /onboarding.
+ *
  * NOTE: A previous version of this page had a `mustSetPassword` gate
  * that redirected away users who didn't need to set a password. That
  * field was never added to the Prisma schema — the reference was dead
@@ -28,7 +71,11 @@ export const metadata = {
  * HTTP 500 on every visit to this page. The gate has been removed;
  * the page is now accessible to any signed-in user.
  */
-export default async function SetPasswordPage() {
+export default async function SetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ chapterSlug?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     redirect("/login?callbackUrl=/set-password");
@@ -43,20 +90,35 @@ export default async function SetPasswordPage() {
       passwordHash: true,
       onboardedAt: true,
       importSource: true,
+      chapterId: true,
     },
   });
   if (!me) {
     redirect("/login?callbackUrl=/set-password");
   }
 
+  const { chapterSlug: urlSlug } = await searchParams;
+  const { slug: chapterSlug, name: chapterName } = await resolveChapter(
+    urlSlug,
+    me.chapterId
+  );
+
+  // Load chapter-scoped brand images for the logo mark.
+  const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
+  const markUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
+
   return (
     <main className="min-h-screen bg-white">
       {/* Brand header strip */}
       <div className="border-b border-black/10 bg-white">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between">
-          <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
+          <AiSalonLogoServer
+            variant="horizontal-tagline"
+            className="text-[1.05rem]"
+            markSrc={markUrl}
+          />
           <span className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80">
-            Tel Aviv Chapter
+            {chapterName} Chapter
           </span>
         </div>
       </div>
@@ -85,7 +147,9 @@ export default async function SetPasswordPage() {
 
       <footer className="border-t border-black/10 bg-white">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+          <span>
+            © {new Date().getFullYear()} AI Salon {chapterName} · Empowering AI Connections
+          </span>
           <span>
             Platform by{" "}
             <a
@@ -101,4 +165,17 @@ export default async function SetPasswordPage() {
       </footer>
     </main>
   );
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ chapterSlug?: string }>;
+}) {
+  const { chapterSlug: urlSlug } = await searchParams;
+  const { name: chapterName } = await resolveChapter(urlSlug, null);
+  return {
+    title: `Set Your Password — AI Salon ${chapterName}`,
+    description: `Set a new password for your AI Salon ${chapterName} account.`,
+  };
 }

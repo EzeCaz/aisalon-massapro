@@ -71,6 +71,14 @@ export async function GET(req: NextRequest) {
   const safeNext =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/events";
 
+  // Propagate the chapterSlug (e.g. "mtl" from /login?chapterSlug=mtl)
+  // to /onboarding so the page renders with the correct chapter name +
+  // brand images. This is only relevant for the needs-onboarding branch
+  // — for returning members we honor `next` as-is (they've already
+  // picked a chapter, and /events etc. resolve chapter context from the
+  // user's chapterId).
+  const chapterSlug = req.nextUrl.searchParams.get("chapterSlug") || "";
+
   // 1. Pre-imported members (from the AI Salon TLV spreadsheet). They
   //    already have intake data, so they skip onboarding. Auto-mark
   //    onboardedAt if it's somehow not set yet (requirement #2: existing
@@ -97,5 +105,12 @@ export async function GET(req: NextRequest) {
   //    before they can browse — `next` is ignored because onboarding is
   //    mandatory. After they submit the form, the form's own redirect
   //    sends them to /events.
-  return NextResponse.redirect(new URL("/onboarding", req.url));
+  //
+  //    Forward the chapterSlug (if any) so /onboarding renders with the
+  //    correct chapter branding (e.g. Montreal instead of the default
+  //    Tel Aviv).
+  const onboardingUrl = chapterSlug
+    ? new URL(`/onboarding?chapterSlug=${encodeURIComponent(chapterSlug)}`, req.url)
+    : new URL("/onboarding", req.url);
+  return NextResponse.redirect(onboardingUrl);
 }

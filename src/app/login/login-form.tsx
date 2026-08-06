@@ -29,6 +29,13 @@ export function LoginForm({ callbackUrl }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const finalCallback = callbackUrl || params.get("callbackUrl") || "/events";
+  // Propagate the chapter slug (e.g. "mtl" from /login?chapterSlug=mtl)
+  // through to /api/auth/post-login-redirect, which forwards it to
+  // /onboarding?chapterSlug=mtl so the onboarding page renders with the
+  // correct chapter name + brand images. Without this, a user who logs
+  // in via the Montreal login page lands on a Tel Aviv-branded
+  // onboarding page.
+  const chapterSlug = params.get("chapterSlug") || "";
 
   const [tab, setTab] = useState<Tab>("google");
   const [loading, setLoading] = useState<"google" | "email" | "signup" | null>(null);
@@ -70,7 +77,17 @@ export function LoginForm({ callbackUrl }: Props) {
   // /events/xyz as `next` so the redirect endpoint sends them back there
   // AFTER confirming they're already onboarded. New users still get forced
   // to /onboarding regardless of `next`.
-  const redirectEndpoint = `/api/auth/post-login-redirect?next=${encodeURIComponent(finalCallback)}`;
+  //
+  // The `chapterSlug` param is also forwarded so /onboarding (and any
+  // other downstream page) can render the chapter-correct branding. The
+  // post-login-redirect endpoint will inject it into the /onboarding URL.
+  const redirectEndpoint = (() => {
+    const url = `/api/auth/post-login-redirect?next=${encodeURIComponent(finalCallback)}`;
+    if (chapterSlug) {
+      return `${url}&chapterSlug=${encodeURIComponent(chapterSlug)}`;
+    }
+    return url;
+  })();
 
   async function googleSignIn() {
     setError(null);
