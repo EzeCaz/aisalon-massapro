@@ -13725,3 +13725,90 @@ Stage Summary:
   * Use the Flows/Campaigns/Status multi-select dropdowns at the top
   * Click the eye icon on any row to preview the email
   * Check rows + click "Duplicate" or "Send to another audience"
+
+---
+Task ID: report-standalone-2
+Agent: main (super-z)
+Task: (1) Make /admin/email/report a standalone page (not a tab) — remove EmailAdminNav, add back link. (2) Add two sub-tabs (Table / Graphs) below the page header. (3) Add KPI summary cards matching the flow report style (Sent/Opened/Clicked/Failed/Pending/Total/Skipped). (4) Graphs tab should use the same toggleable chart card style as the member dashboard (bar/pie/table toggle per chart + global "Set all" control).
+
+Work Log:
+- Read the flow report HTML the user pasted (flow-report-dialog.tsx) —
+  identified the 7-card KPI summary layout: Sent (blue), Opened (emerald
+  + open rate sub), Clicked (fuchsia + click rate sub), Failed (red),
+  Pending (amber), Total queue (neutral), Skipped (zinc). Each card is
+  a small white box with icon + label + big number.
+- Read the member-dashboard.tsx + toggleable-chart-card.tsx to understand
+  the ToggleableChartCard component API: title, subtitle, chartType (bar/
+  pie/table), data ({label,count}[]), orientation, height, colorOffset,
+  plus useChartTypeState hook for per-chart + global "Set all" control.
+- Updated /admin/email/report/page.tsx:
+  * Removed <EmailAdminNav active="report" /> — the report is now a
+    standalone page, not a tab.
+  * Added a "Back to email admin" link (ArrowLeft icon) at the top.
+  * Added searchParams prop ({ row?: string }) to accept the ?row=
+    campaign:xxx deep-link from the campaign table's report icon.
+  * Passes initialRowId to ReportClient.
+- Updated /admin/email/email-tab-client.tsx:
+  * Changed the campaign row's BarChart3 "stats" button from a toast
+    ("Stats coming soon") to an <a> link to /admin/email/report?row=
+    campaign:<id>. This makes the report icon on each SENT campaign
+    deep-link to the report page with that row pre-selected.
+- Major restructure of /admin/email/report/report-client.tsx:
+  * Added module-scope constants REPORT_CHART_IDS + REPORT_DEFAULT_
+    CHART_TYPES (moved out of component body so the useChartTypeState
+    hook's useCallback deps are stable across renders).
+  * Added `view` state: "table" | "graphs" (defaults to "table").
+  * Added `summary` useMemo: computes Sent/Opened/Clicked/Failed/
+    Pending/Total/Skipped from all rows (not filtered — the summary
+    always reflects the full dataset).
+  * Added `chartData` useMemo: computes 6 chart datasets from
+    filteredRows (so charts respect active filters):
+    - sendsOverTime: group by month (last 12), count sentCount
+    - typeSplit: count rows by type (Campaign/Flow/Manual)
+    - statusSplit: count rows by status
+    - topAudiences: group by audienceName, sum recipients, top 10
+    - topFlows: group by flowName, sum recipients, top 10
+    - topTemplates: group by templateName, sum recipients, top 10
+  * Added `initialRowId` prop — when set, pre-selects that row +
+    sets the search to its name after data loads.
+  * New render structure:
+    1. Page header (title + refresh button)
+    2. KPI summary cards (7 cards, always visible)
+    3. Sub-tab toggle (Table / Graphs)
+    4. {view === "table" && (... existing table UI ...)}
+    5. {view === "graphs" && (... charts grid ...)}
+    6. Preview modal (always rendered, outside both views)
+    7. Batch action dialog (always rendered, outside both views)
+  * Graphs view renders:
+    - Charts toolbar with global "Set all" control (Bar/Pie/Table)
+    - 2-column grid of 6 ToggleableChartCard components
+  * Added 2 new sub-components:
+    - KpiCard: matches the flow report's summary card style (icon +
+      label + big number + optional sub-text).
+    - SubTabButton: matches EmailAdminNav's TopTab style (pink
+      underline + pink text when active, muted when inactive).
+- Verified: npx tsc --noEmit produces 0 errors in all modified files.
+- Committed as c0f64df and pushed to origin/main. Vercel will auto-deploy.
+
+Stage Summary:
+- /admin/email/report is now a standalone page (no EmailAdminNav tab
+  bar). A "Back to email admin" link at the top returns to /admin/email.
+- KPI summary cards (7) are always visible at the top, matching the
+  flow report's style. Opened/Clicked cards show the rate as sub-text.
+- Two sub-tabs below the KPI cards:
+  * Table: the full-featured table from the previous iteration (type
+    column, sortable headers, multi-select filters, preview eye
+    button, audience column, row checkboxes + batch actions).
+  * Graphs: 6 toggleable chart cards (Sends over time, Type split,
+    Status split, Top audiences, Top flows, Top templates). Each
+    chart has a bar/pie/table toggle in its header, plus a global
+    "Set all" control above the grid. Charts respect active filters.
+- Campaign row's BarChart3 icon now deep-links to /admin/email/report?
+  row=campaign:<id>, pre-selecting + searching for that campaign.
+- Files modified:
+  * src/app/admin/email/report/page.tsx (standalone page, back link,
+    ?row= query param forwarding)
+  * src/app/admin/email/report/report-client.tsx (view state, KPI
+    summary, chartData, Graphs view, KpiCard + SubTabButton components,
+    initialRowId deep-link)
+  * src/app/admin/email/email-tab-client.tsx (BarChart3 icon → link)
