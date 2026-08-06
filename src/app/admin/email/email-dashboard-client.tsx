@@ -15,6 +15,7 @@ import {
   Calendar,
   Edit3,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 import { CampaignComposer } from "./campaign-composer";
 import { CampaignStats } from "./campaign-stats";
@@ -74,6 +75,10 @@ export function EmailDashboardClient({
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
   const [view, setView] = useState<View>({ kind: "list" });
   const [refreshing, setRefreshing] = useState(false);
+  // Track which campaign ID is currently being resent so we can show a
+  // spinner on just that row's Resend button (instead of a global
+  // overlay that blocks the whole list).
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   async function refresh() {
     setRefreshing(true);
@@ -92,6 +97,64 @@ export function EmailDashboardClient({
   function handleCreated(campaign: Campaign) {
     setCampaigns((prev) => [campaign, ...prev]);
     setView({ kind: "stats", campaignId: campaign.id });
+  }
+
+  // "Resend to same audience" — clones the source campaign (subject,
+  // body, audience, from/reply-to) and immediately fires the send
+  // pipeline on the clone. One-click re-blast without walking the
+  // 4-step composer again. Only SENT / FAILED campaigns can be resent
+  // (the API enforces this too, but we hide the button for other
+  // statuses so the admin doesn't see a dead action).
+  async function handleResend(campaign: Campaign) {
+    if (!confirm(
+      `Resend "${campaign.name}" to the same audience?\n\n` +
+      `This creates a new campaign with the same subject, body, and ` +
+      `recipient list, then sends it immediately. The original ` +
+      `campaign is not modified.`
+    )) {
+      return;
+    }
+    setResendingId(campaign.id);
+    const t = toast.loading(`Resending "${campaign.name}"…`);
+    try {
+      const res = await fetch(
+        `/api/admin/email/campaigns/${campaign.id}/resend`,
+        { method: "POST" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) {
+        throw new Error(data?.error || `Failed (${res.status})`);
+      }
+
+      // 207 = multi-status: clone created but send step failed. Surface
+      // the send error but still refresh so the admin can see + retry
+      // the new DRAFT clone in the list.
+      if (data.sendError) {
+        toast.error(
+          `Cloned, but send failed: ${data.sendError}`,
+          { id: t, duration: 8000 }
+        );
+      } else if (data.sendResult) {
+        const sr = data.sendResult;
+        toast.success(
+          `Resent to ${sr.sentCount || 0} recipients` +
+          (sr.failedCount ? ` (${sr.failedCount} failed)` : ""),
+          { id: t }
+        );
+      } else {
+        toast.success("Resend queued", { id: t });
+      }
+
+      // Refresh so the new clone appears at the top of the list.
+      await refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to resend",
+        { id: t }
+      );
+    } finally {
+      setResendingId(null);
+    }
   }
 
   if (view.kind === "compose") {
@@ -218,6 +281,8 @@ export function EmailDashboardClient({
               key={c.id}
               campaign={c}
               onView={() => setView({ kind: "stats", campaignId: c.id })}
+              onResend={() => handleResend(c)}
+              resending={resendingId === c.id}
             />
           ))
         )}
@@ -229,9 +294,13 @@ export function EmailDashboardClient({
 function CampaignRow({
   campaign,
   onView,
+  onResend,
+  resending,
 }: {
   campaign: Campaign;
   onView: () => void;
+  onResend: () => void;
+  resending: boolean;
 }) {
   const status = campaign.status;
   const statusColor =
@@ -250,6 +319,12 @@ function CampaignRow({
     : campaign.scheduledAt
     ? `Scheduled ${new Date(campaign.scheduledAt).toLocaleString()}`
     : "—";
+
+  // Only show "Resend" for terminal states (SENT or FAILED). For DRAFT
+  // the Edit button already lets the admin open + send; for SCHEDULED /
+  // SENDING a resend would either double-send or collide with the
+  // in-flight batch worker.
+  const canResend = status === "SENT" || status === "FAILED";
 
   return (
     <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/5 hover:bg-black/[0.02] items-center text-sm">
@@ -270,6 +345,22 @@ function CampaignRow({
         </code>
       </div>
       <div className="col-span-2 flex justify-end gap-1">
+        {canResend && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onResend}
+            disabled={resending}
+            title="Create a new campaign with the same audience + content and send it now"
+          >
+            {resending ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1" />
+            )}
+            Resend
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={onView}>
           {status === "DRAFT" ? (
             <>

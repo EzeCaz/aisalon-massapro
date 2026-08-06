@@ -13297,3 +13297,74 @@ Stage Summary:
   hardcoded "Tel Aviv" references. These would need similar treatment
   but are lower priority since the user's primary complaint was about
   the onboarding flow.
+
+---
+Task ID: 9
+Agent: main (continuation)
+Task: Add a "Resend to same audience" action button to the email
+      campaign list. User wanted another button on the campaign row
+      actions (next to Edit/View) that re-sends the same campaign to
+      its original audience in one click, without walking the 4-step
+      composer again.
+
+Work Log:
+- Read email-dashboard-client.tsx → identified CampaignRow component
+  as the place to add the button (single existing action: Edit/View).
+- Read campaign-composer.tsx, campaigns/[id]/send/route.ts,
+  campaigns/route.ts, campaigns/[id]/route.ts, save-as-template/route.ts
+  → understood the create + send pipeline and the EmailCampaign schema
+  (listSource + listConfigJson encode the audience; snapshot fields
+  hold subject/body/signature).
+- Created new API endpoint POST /api/admin/email/campaigns/[id]/resend:
+    * Loads source campaign.
+    * Guards: source.status must be SENT or FAILED (409 otherwise).
+    * Clones the campaign as a fresh DRAFT — copies templateId,
+      subjectSnapshot, bodyHtmlSnapshot, bodyTextSnapshot,
+      signatureHtmlSnapshot, listSource, listConfigJson, fromName,
+      fromEmail, replyTo, chapterId. Does NOT copy flowId (1:1
+      constraint with EmailFlow), status, timestamps, or recipientCount.
+    * Name suffixed with " (Resend YYYY-MM-DD HH:mm)" so it's
+      distinguishable in the list.
+    * Delegates the actual send to the existing /send route via an
+      internal fetch (forwards the admin's auth cookie). This keeps
+      the send pipeline — recipient resolution, renderUnifiedEmail
+      with logo + tracking, per-recipient send + event logging — in
+      ONE place. No ~200 lines of duplicated sender logic.
+    * Returns { campaign, sendResult, sendError? } with status 200
+      on full success or 207 (multi-status) if the clone was created
+      but the send step failed (admin can still see + retry the
+      clone in the list).
+- Updated email-dashboard-client.tsx:
+    * Added `RefreshCw` icon import (used for the Resend button).
+    * Added `resendingId` state in EmailDashboardClient to track
+      which row is currently being resent (per-row spinner, not a
+      global overlay).
+    * Added `handleResend(campaign)` — confirm() dialog, POST to
+      /resend, toast for loading/success/error, refresh list on
+      completion. Distinguishes 207 (clone ok, send failed) from
+      hard errors.
+    * Extended CampaignRow props with `onResend` + `resending`.
+    * Added a "Resend" button to the actions column, visible only
+      for SENT or FAILED campaigns (canResend). Shows a spinner
+      (Loader2) when that row is resending. Button has a tooltip
+      explaining what it does.
+- TypeScript: 0 new errors in the 2 modified files (verified via
+  `npx tsc --noEmit` — the remaining errors are all pre-existing in
+  unrelated files: tracking routes, chart components, rsvp routes).
+
+Stage Summary:
+- New 1-click "Resend" action available on every SENT or FAILED
+  campaign row in /admin/email.
+- The action clones the source campaign (same audience + same
+  content) and fires the send pipeline immediately — no composer
+  walk-through required.
+- The original campaign is never mutated; a new row is created with
+  a " (Resend <timestamp>)" suffix so the audit trail is preserved.
+- Audience is re-resolved at send time (not at clone time), so
+  dynamic sources (ALL_MEMBERS, TAG:*, AUDIENCE:*) will pick up
+  members who joined since the original send. Static sources
+  (MANUAL, EVENT:<id>) resend to the same stored list.
+- If the send step fails (e.g. SMTP not configured, no recipients
+  matched), the clone is still created as a DRAFT and the admin
+  sees a clear error toast — they can then open the clone and
+  retry manually.
