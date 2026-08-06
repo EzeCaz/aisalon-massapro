@@ -13489,3 +13489,73 @@ Stage Summary:
   * src/app/admin/email/email-dashboard-client.tsx
   * src/app/admin/admin-members-table.tsx
 - Deploy: pushed to origin/main, Vercel will auto-deploy shortly.
+
+---
+Task ID: 11
+Agent: main
+Task: Fix tasks A+B — the previous commit (c2c9807) edited the wrong
+file. The user reported that the Resend button + horizontal-scroll
+fix were not visible on /admin/email.
+
+Work Log:
+- Inspected the pasted HTML from the user's live site
+  (upload/Pasted Content_1786027923255.txt). Found <thead> with
+  columns: Name, Status, Subject, Flow, Template, Recipients, Last
+  sent, Actions. That's NOT what email-dashboard-client.tsx renders
+  (which has columns: Campaign, Status, Recipients, Scheduled/Sent,
+  List source, Actions).
+- Greped the codebase for the actual header text "Last sent" + "Flow"
+  + "Template" — found them in src/app/admin/email/email-tab-client.tsx
+  at lines 725-729. That file's CampaignsTable component is what's
+  actually rendered on /admin/email.
+- Verified email-dashboard-client.tsx is dead code — not imported by
+  any file (only mentioned in a comment in admin-tabs-nav.tsx). My
+  previous Task A+B fix was applied to the wrong file. The previous
+  Task C fix (members table) was on the correct file and worked as
+  the user confirmed.
+- FIX A — Added handleResendCampaign in EmailTabClient component:
+    * Confirms with the admin via window.confirm
+    * POSTs to /api/admin/email/campaigns/[id]/resend
+    * Surfaces toast for success / 207 multi-status (clone ok, send
+      failed) / error
+    * Calls refreshCampaigns() so the new clone appears at top
+    * Tracks resendingId state for per-row spinner
+- Wired onResend + resendingId props through to CampaignsTable.
+- Added Resend button as the FIRST action button in each row. Blue
+  RefreshCw icon, only visible for SENT or FAILED campaigns, spinner
+  while resendingId matches.
+- FIX B — Horizontal scroll:
+    * Changed table wrapper from overflow-x-auto to overflow-hidden
+      so the table can no longer scroll horizontally.
+    * Reduced Subject column max-width from max-w-md (28rem) to
+      max-w-[14rem] (224px) with truncate.
+    * Added responsive column hiding so the table fits on narrower
+      viewports:
+        - Last sent: hidden md:table-cell (hidden below 768px)
+        - Flow:      hidden lg:table-cell (hidden below 1024px)
+        - Template:  hidden xl:table-cell (hidden below 1280px)
+      Visible column counts: 5 on mobile, 6 on md, 7 on lg, 8 on xl.
+      This matches the templates section above which has 7 cols and
+      never scrolls.
+- Verified: npx tsc --noEmit produces 0 new errors in the modified
+  file.
+- Committed as 5133836 and pushed to origin/main. Vercel will auto-
+  deploy shortly.
+
+Stage Summary:
+- The previous commit (c2c9807) edited dead code. This commit applies
+  the same Resend feature + horizontal-scroll fix to the ACTUAL table
+  rendered at /admin/email — CampaignsTable in email-tab-client.tsx.
+- The Resend API endpoint at /api/admin/email/campaigns/[id]/resend
+  was already deployed in commit 5fd73dd — no backend changes needed.
+- After Vercel finishes deploying (1-2 min), hard-refresh /admin/email
+  and the user should see:
+    * A blue RefreshCw icon button on every SENT or FAILED campaign
+      row (first icon in the Actions column). Click it → confirm →
+      clone + send to original audience.
+    * No horizontal scroll on the campaigns table. Flow + Template +
+      Last sent columns progressively disappear on narrower viewports.
+- Files modified:
+  * src/app/admin/email/email-tab-client.tsx (handleResendCampaign,
+    CampaignsTable signature, Resend button, responsive column
+    hiding, overflow-hidden)
