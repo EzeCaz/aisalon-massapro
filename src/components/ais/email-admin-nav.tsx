@@ -20,9 +20,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Mail, Workflow, Users, FileText, Sparkles } from "lucide-react";
+import { Mail, Workflow, Users, FileText, Sparkles, BarChart3 } from "lucide-react";
 
-export type EmailAdminTab = "campaigns" | "orchestrator" | "flows";
+export type EmailAdminTab = "campaigns" | "orchestrator" | "report" | "flows";
 export type FlowSubtab = "flows" | "audiences" | "templates";
 
 type Props = {
@@ -76,6 +76,15 @@ export function EmailAdminNav({
             label="Orchestrator"
             badge="New"
             badgeColor="bg-[#FF005A] text-white"
+          />
+          <TopTab
+            as="link"
+            href="/admin/email/report"
+            active={active === "report"}
+            icon={<BarChart3 className="h-3.5 w-3.5" />}
+            label="Report"
+            badge="New"
+            badgeColor="bg-[#007E72] text-white"
           />
           <TopTab
             as="link"

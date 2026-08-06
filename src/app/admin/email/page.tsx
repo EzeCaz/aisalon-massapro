@@ -66,6 +66,8 @@ export default async function EmailTabPage({
   // Resolve the active top-level tab from the URL. Defaults to "campaigns".
   const sp = await searchParams;
   const tabParam = (sp.tab || "campaigns").toLowerCase();
+  // "report" has its own dedicated page — redirect there so the URL is clean.
+  if (tabParam === "report") redirect("/admin/email/report");
   const activeTab: "campaigns" | "orchestrator" | "flows" =
     tabParam === "orchestrator" ? "orchestrator" : tabParam === "flows" ? "flows" : "campaigns";
 

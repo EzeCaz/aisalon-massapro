@@ -794,6 +794,10 @@ function CampaignsTable({
               <th className="text-right font-medium px-3 py-2.5 w-[7%]">Recipients</th>
               <th className="text-left font-medium px-3 py-2.5 w-[11%] hidden md:table-cell">Last sent</th>
               <th className="text-right font-medium px-3 py-2.5 w-[18%]">Actions</th>
+              {/* All cells below use break-words + whitespace-normal so long
+                  content (template names, dates, flow names) wraps cleanly
+                  to multiple lines instead of overflowing or being clipped.
+                  align-top keeps the first line aligned with siblings. */}
             </tr>
           </thead>
           <tbody>
@@ -819,23 +823,23 @@ function CampaignsTable({
                   <td className="px-3 py-2.5 text-black/70 align-top break-words whitespace-normal">
                     {c.subjectSnapshot}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs align-top hidden lg:table-cell">
+                  <td className="px-3 py-2.5 text-black/80 text-xs align-top hidden lg:table-cell break-words whitespace-normal">
                     {c.flow ? (
                       <a
                         href={`/admin/email/flows?flow=${c.flow.id}`}
                         className="inline-flex items-center gap-1 text-[#FF005A] hover:underline"
                         title={`Flow status: ${c.flow.status}`}
                       >
-                        <Workflow className="h-3 w-3" />
-                        <span className="truncate max-w-[120px]">{c.flow.name}</span>
+                        <Workflow className="h-3 w-3 flex-shrink-0" />
+                        <span className="break-words whitespace-normal">{c.flow.name}</span>
                       </a>
                     ) : (
                       <span className="text-black/30">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs hidden xl:table-cell">
+                  <td className="px-3 py-2.5 text-black/80 text-xs align-top hidden xl:table-cell break-words whitespace-normal">
                     {c.template ? (
-                      <Badge variant="outline" className="font-normal text-xs">
+                      <Badge variant="outline" className="font-normal text-xs break-words whitespace-normal">
                         {c.template.name}
                       </Badge>
                     ) : (
@@ -845,7 +849,7 @@ function CampaignsTable({
                   <td className="px-3 py-2.5 text-right text-black/80 align-top">
                     {c._count.recipients > 0 ? c._count.recipients : "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap hidden md:table-cell align-top">
+                  <td className="px-3 py-2.5 text-black/80 text-xs align-top hidden md:table-cell break-words whitespace-normal">
                     {lastSent ? (
                       <span title={new Date(lastSent).toISOString()}>
                         {new Date(lastSent).toLocaleDateString()}{" "}
