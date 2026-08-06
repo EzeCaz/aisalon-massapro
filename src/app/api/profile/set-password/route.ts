@@ -13,12 +13,14 @@ import bcrypt from "bcryptjs";
  * password WITHOUT verifying a "current password" (since they don't
  * have one).
  *
- * On success, clears mustSetPassword so the user is no longer
- * redirected to /set-password.
- *
  * If the user already has a passwordHash, this endpoint returns 400 —
  * they should use /api/auth/change-password (which requires the
  * current password) instead.
+ *
+ * NOTE: A previous version of this endpoint also wrote `mustSetPassword:
+ * false` on the user row. That field was never added to the Prisma
+ * schema, so the write would throw a Prisma validation error at runtime.
+ * The reference has been removed.
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
   const newHash = await bcrypt.hash(newPassword, 10);
   await db.user.update({
     where: { id: user.id },
-    data: { passwordHash: newHash, mustSetPassword: false },
+    data: { passwordHash: newHash },
   });
   return NextResponse.json({ ok: true });
 }

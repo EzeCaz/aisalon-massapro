@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { needsOnboarding } from "@/lib/onboarding";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { SetPasswordForm } from "./set-password-form";
 
@@ -12,22 +11,22 @@ export const metadata = {
 };
 
 /**
- * /set-password — forced password reset page.
+ * /set-password — set or change password page.
  *
  * Auth gate:
  *   1. Not signed in  → redirect to /login?callbackUrl=/set-password
- *   2. Signed in but mustSetPassword=false → redirect to /events
- *      (they don't need to be here)
- *   3. Signed in and mustSetPassword=true → render the form
+ *   2. Signed in but user row not found → redirect to /login
+ *   3. Otherwise → render the form. The form itself handles both the
+ *      "set first password" case (no passwordHash yet — Google-only or
+ *      imported members) and the "change password" case (already has a
+ *      passwordHash — requires current password verification).
  *
- * Brand-new users who haven't onboarded yet get redirected to /onboarding
- * FIRST (onboarding takes priority over password reset — we want them to
- * complete the intake form before they can use the platform, and the
- * password reset can happen after).
- *
- * Wait — actually if they were forced to reset their password, they should
- * do it BEFORE onboarding (otherwise they could be interrupted mid-flow).
- * Let me reverse: mustSetPassword takes priority over onboarding.
+ * NOTE: A previous version of this page had a `mustSetPassword` gate
+ * that redirected away users who didn't need to set a password. That
+ * field was never added to the Prisma schema — the reference was dead
+ * code that threw a Prisma validation error at runtime, causing
+ * HTTP 500 on every visit to this page. The gate has been removed;
+ * the page is now accessible to any signed-in user.
  */
 export default async function SetPasswordPage() {
   const session = await getServerSession(authOptions);
@@ -42,20 +41,12 @@ export default async function SetPasswordPage() {
       email: true,
       name: true,
       passwordHash: true,
-      mustSetPassword: true,
       onboardedAt: true,
       importSource: true,
     },
   });
   if (!me) {
     redirect("/login?callbackUrl=/set-password");
-  }
-
-  // If the user doesn't actually need to set a password, send them to
-  // the right place (onboarding if they still need it, otherwise /events).
-  if (!me.mustSetPassword) {
-    if (needsOnboarding(me)) redirect("/onboarding");
-    redirect("/events");
   }
 
   return (

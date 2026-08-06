@@ -17,26 +17,32 @@ import { db } from "@/lib/db";
  *
  *   1. Not signed in            → /login
  *   2. User row not found       → /login
- *   3. mustSetPassword=true     → /set-password   (force password change;
- *                                                  ignores `next`)
- *   4. importSource set         → /events         (pre-imported member;
+ *   3. importSource set         → /events         (pre-imported member;
  *                                                  auto-marks onboardedAt
  *                                                  if not set yet; ignores
  *                                                  `next` so the side
  *                                                  effect always runs)
- *   5. onboardedAt set          → `next` or /events  (returning member)
- *   6. otherwise (new user)     → /onboarding     (brand-new self-registered;
+ *   4. onboardedAt set          → `next` or /events  (returning member)
+ *   5. otherwise (new user)     → /onboarding     (brand-new self-registered;
  *                                                  ignores `next` — onboarding
  *                                                  is mandatory before they
  *                                                  can browse the site)
+ *
+ * NOTE: A previous version of this route had a `mustSetPassword` gate
+ * that redirected to /set-password. That field was NEVER added to the
+ * Prisma schema — the reference was dead code that threw a Prisma
+ * validation error at runtime, causing HTTP 500 on every login attempt.
+ * The gate has been removed. Users who need to set a password can still
+ * visit /set-password directly or use the profile page's "set password"
+ * button — both paths are linked from the UI.
  *
  * Security: the `next` param MUST be a relative path (starts with `/` but
  * not `//`). Absolute URLs are rejected to prevent open-redirect abuse.
  *
  * The `next` param is only honored on the "happy path" (returning member
- * who has already onboarded). Force-set-password, pre-imported, and
- * needs-onboarding users are always routed to their respective mandatory
- * destinations — `next` is ignored in those cases.
+ * who has already onboarded, OR pre-imported member). Needs-onboarding
+ * users are always routed to /onboarding — `next` is ignored in that
+ * case because onboarding is mandatory.
  */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -48,7 +54,6 @@ export async function GET(req: NextRequest) {
     where: { email: session.user.email },
     select: {
       id: true,
-      mustSetPassword: true,
       importSource: true,
       onboardedAt: true,
     },
@@ -66,14 +71,7 @@ export async function GET(req: NextRequest) {
   const safeNext =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/events";
 
-  // 1. Force-set-password gate (imported members on first login,
-  //    forgot-password users with a temp password). Always wins — we
-  //    cannot let the user browse until they've set a real password.
-  if (me.mustSetPassword) {
-    return NextResponse.redirect(new URL("/set-password", req.url));
-  }
-
-  // 2. Pre-imported members (from the AI Salon TLV spreadsheet). They
+  // 1. Pre-imported members (from the AI Salon TLV spreadsheet). They
   //    already have intake data, so they skip onboarding. Auto-mark
   //    onboardedAt if it's somehow not set yet (requirement #2: existing
   //    DB members are auto-marked as "filled"). We ignore `next` here so
@@ -88,13 +86,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(safeNext, req.url));
   }
 
-  // 3. Returning member who has already completed onboarding. Honor the
+  // 2. Returning member who has already completed onboarding. Honor the
   //    `next` param so deep links (e.g. /events/some-slug) work.
   if (me.onboardedAt) {
     return NextResponse.redirect(new URL(safeNext, req.url));
   }
 
-  // 4. Brand-new self-registered user (Google OAuth or email sign-up) who
+  // 3. Brand-new self-registered user (Google OAuth or email sign-up) who
   //    has NOT yet filled out the intake form. Force them to /onboarding
   //    before they can browse — `next` is ignored because onboarding is
   //    mandatory. After they submit the form, the form's own redirect

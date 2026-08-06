@@ -55,7 +55,6 @@ export function LoginForm({ callbackUrl }: Props) {
 
   // Both Google and email sign-in route through /api/auth/post-login-redirect
   // so the server can inspect the user row and decide where to send them:
-  //   - mustSetPassword → /set-password
   //   - importSource    → /events (auto-marks onboardedAt if missing)
   //   - onboardedAt     → finalCallback (the original deep link, e.g. /events/some-slug)
   //   - otherwise       → /onboarding (brand-new user, mandatory intake form)
