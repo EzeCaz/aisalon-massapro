@@ -107,13 +107,19 @@ export function LoginForm({ callbackUrl }: Props) {
 
   async function emailSignIn(e: React.FormEvent) {
     e.preventDefault();
-    if (!signinEmail || !signinPassword) return;
+    // Trim both fields — copy-pasting from emails often grabs trailing
+    // whitespace/newlines, which would silently break bcrypt.compare
+    // server-side (the user would see "Incorrect email or password"
+    // even though they typed the right thing).
+    const email = signinEmail.trim().toLowerCase();
+    const password = signinPassword.trim();
+    if (!email || !password) return;
     setError(null);
     setInfo(null);
     setLoading("email");
     const res = await signIn("email", {
-      email: signinEmail,
-      password: signinPassword,
+      email,
+      password,
       redirect: false,
       callbackUrl: redirectEndpoint,
     });

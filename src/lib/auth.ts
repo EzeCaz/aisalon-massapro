@@ -63,7 +63,13 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(creds) {
         const email = creds?.email?.trim().toLowerCase();
-        const password = creds?.password ?? "";
+        // Trim the password too — copy-pasting from email clients
+        // (especially on mobile) frequently grabs trailing whitespace
+        // or a newline, which would make bcrypt.compare() fail even
+        // though the user typed the right password. Trimming is safe
+        // because generated passwords are always alphanumeric (no
+        // leading/trailing spaces by construction).
+        const password = creds?.password?.trim() ?? "";
         if (!email || !password) return null;
 
         const user = await db.user.findUnique({ where: { email } });
