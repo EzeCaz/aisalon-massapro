@@ -236,7 +236,10 @@ export function buildContext(args: {
     agenda: agenda
       .map((a) => `• ${formatTime(a.startsAt)} — ${a.title}`)
       .join("\n"),
-    chapterName: args.chapterName ?? "Tel Aviv",
+    // TSK-0075: no "Tel Aviv" fallback — callers must resolve the chapter
+    // name via the V7 Chapter relation (chapterRef.name) before invoking
+    // the renderer. Empty string keeps the bug visible instead of silent.
+    chapterName: args.chapterName ?? "",
     finishOnboardingUrl,
     openPixelUrl,
     wrapLink: (url: string) =>

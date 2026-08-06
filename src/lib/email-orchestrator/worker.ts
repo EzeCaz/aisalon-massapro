@@ -154,6 +154,11 @@ async function processDuePending(result: WorkerResult): Promise<void> {
               // override (ChapterSetting[emailLogo]) at render time. Falls
               // back to the global SiteSetting[emailLogo] when null.
               chapterId: true,
+              // TSK-0075: V7 Chapter relation — used to resolve the
+              // {{chapter_name}} merge tag to the REAL chapter name
+              // (e.g. "Montreal") instead of the legacy free-form
+              // `chapter` String field which defaults to "Tel Aviv".
+              chapterRef: { select: { id: true, name: true } },
             },
           },
         },
@@ -289,6 +294,8 @@ async function sendStageEmail(
         chapter: string;
         /** V7 chapter FK — used to resolve per-chapter email-logo override. */
         chapterId: string | null;
+        /** TSK-0075: V7 Chapter relation — preferred source for {{chapter_name}}. */
+        chapterRef: { id: string; name: string } | null;
       };
     } | null;
   },
@@ -337,6 +344,13 @@ async function sendStageEmail(
   ]);
 
   const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+  // TSK-0075: resolve chapter name from the V7 Chapter relation (preferred)
+  // rather than the legacy free-form `Event.chapter` String field (which
+  // defaults to "Tel Aviv" in the schema and was the root cause of Montreal
+  // emails saying "Tel Aviv"). Fall back to the legacy field only if the V7
+  // relation is missing (e.g. a backfilled event with no chapterId).
+  const resolvedChapterName =
+    rsvp.event.chapterRef?.name ?? rsvp.event.chapter ?? undefined;
   const ctx = buildContext({
     event: rsvp.event,
     rsvp,
@@ -344,7 +358,7 @@ async function sendStageEmail(
     agenda,
     baseUrl,
     queueId: row.id,
-    chapterName: rsvp.event.chapter,
+    chapterName: resolvedChapterName,
   });
 
   // ─── Feature 2: inject brand logo (top-right) at render time ─────
@@ -519,20 +533,26 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         }),
       ]);
       // Look up the chapter name + chapterId for the {{chapter_name}} merge
-      // token AND the per-chapter email-logo override. Uses the legacy
-      // `chapter` string field on Event (defaults to "Tel Aviv") for the
-      // display name. Best-effort — fall back to the buildContext default.
+      // token AND the per-chapter email-logo override. TSK-0075: uses the
+      // V7 `chapterRef.name` (preferred) over the legacy `chapter` String
+      // field (which defaults to "Tel Aviv" and was the root cause of the
+      // Montreal "Tel Aviv" bug).
       let altChapterName: string | undefined;
       let altChapterId: string | null = null;
       try {
         const eventWithChapter = await db.event.findUnique({
           where: { id: row.eventId },
-          select: { chapter: true, chapterId: true },
+          select: {
+            chapter: true,
+            chapterId: true,
+            chapterRef: { select: { id: true, name: true } },
+          },
         });
-        altChapterName = eventWithChapter?.chapter ?? undefined;
+        altChapterName =
+          eventWithChapter?.chapterRef?.name ?? eventWithChapter?.chapter ?? undefined;
         altChapterId = eventWithChapter?.chapterId ?? null;
       } catch {
-        // ignore — buildContext falls back to "Tel Aviv".
+        // ignore — buildContext falls back to empty chapterName.
       }
       const ctx = buildContext({
         event: row.rsvp.event,

@@ -38,9 +38,22 @@ export default async function EmailTabPage({
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, chapterId: true },
   });
   if (!me) redirect("/login");
+
+  // TSK-0075: resolve the admin's chapter name (via V7 chapterId → Chapter.name)
+  // so the template + campaign composer previews can substitute {{chapter_name}}
+  // with the admin's actual chapter (e.g. "Montreal") instead of the hardcoded
+  // "Tel Aviv" fallback that was masking the bug.
+  let previewChapterName = "";
+  if (me.chapterId) {
+    const ch = await db.chapter.findUnique({
+      where: { id: me.chapterId },
+      select: { name: true },
+    });
+    if (ch?.name) previewChapterName = ch.name;
+  }
 
   // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
   const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
@@ -199,6 +212,7 @@ export default async function EmailTabPage({
           flows={flowsJson}
           audiences={audiencesJson}
           stageTemplates={stageTemplatesJson}
+          previewChapterName={previewChapterName}
         />
       </main>
 

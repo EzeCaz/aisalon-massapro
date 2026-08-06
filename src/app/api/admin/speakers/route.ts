@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission, requireEventSpeakersEdit, isError } from "@/lib/auth-guards";
+import {
+  requirePermission,
+  requireEventSpeakersEdit,
+  isError,
+  getCurrentUser,
+} from "@/lib/auth-guards";
+import { getUserScope, scopeChapterWhere, getCoHostedEventIds } from "@/lib/permissions";
 
 /**
  * GET /api/admin/speakers
@@ -9,12 +15,25 @@ import { requirePermission, requireEventSpeakersEdit, isError } from "@/lib/auth
  * to speaker" picker.
  *
  * Permission: any user with members.view (SUPER_ADMIN + ADMIN).
+ *
+ * TSK-0075: scoped to the admin's chapter/country. A Montreal admin only
+ * sees speakers linked to Montreal events. SUPER_ADMIN sees all.
  */
 export async function GET() {
   const me = await requirePermission("members.view");
   if (isError(me)) return me;
 
+  // TSK-0075: scope by chapter + (for CO_HOST) by co-hosted event IDs.
+  const { scope } = await getCurrentUser();
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+  const baseWhere = scopeChapterWhere(scope!);
+  const where =
+    scopedEventIds === null
+      ? baseWhere
+      : { ...baseWhere, eventId: { in: scopedEventIds } };
+
   const speakers = await db.speaker.findMany({
+    where,
     orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
     include: {
       event: { select: { id: true, title: true, slug: true, startsAt: true } },

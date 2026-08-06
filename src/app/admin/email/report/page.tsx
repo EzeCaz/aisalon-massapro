@@ -39,7 +39,7 @@ export default async function EmailReportPage({
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, chapterId: true },
   });
   if (!me) redirect("/login");
 
@@ -48,6 +48,17 @@ export default async function EmailReportPage({
   if (!can(effectiveRole, "members.view")) redirect("/events");
 
   const scope = await getUserScope(me.id);
+
+  // TSK-0075: resolve admin's chapter name so the report page's preview
+  // dialog shows {{chapter_name}} substituted with the admin's chapter.
+  let previewChapterName = "";
+  if (me.chapterId) {
+    const ch = await db.chapter.findUnique({
+      where: { id: me.chapterId },
+      select: { name: true },
+    });
+    if (ch?.name) previewChapterName = ch.name;
+  }
 
   // Fetch all audiences in scope so the batch-action "Send to audience"
   // picker has the full list. Same scoping as the main email page.
@@ -121,7 +132,7 @@ export default async function EmailReportPage({
           </Link>
         </div>
 
-        <ReportClient audiences={audiencesJson} initialRowId={initialRowId} />
+        <ReportClient audiences={audiencesJson} initialRowId={initialRowId} previewChapterName={previewChapterName} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

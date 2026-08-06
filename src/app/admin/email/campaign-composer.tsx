@@ -62,7 +62,7 @@ const DEFAULT_SIGNATURE_HTML = `<table cellpadding="0" cellspacing="0" style="fo
     </td>
     <td style="vertical-align: top;">
       <div style="font-weight: 700; font-size: 15px;">Ezequiel Sznaider</div>
-      <div style="color: #FF005A; font-weight: 600;">Founder, AI Salon Tel Aviv</div>
+      <div style="color: #FF005A; font-weight: 600;">Founder, AI Salon {{chapter_name}}</div>
       <div style="color: #666; margin-top: 4px;">
         <a href="https://aisalon.massapro.com" style="color: #004F98;">aisalon.massapro.com</a> · MassaPro
       </div>
@@ -607,7 +607,7 @@ export function CampaignComposer({
             <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g. You're invited — AI Salon Tel Aviv #3"
+              placeholder="e.g. You're invited — AI Salon {{chapter_name}} #3"
             />
             <p className="text-xs text-black/50 mt-1">
               Merge tags: <code>{"{{first_name}}"}</code> <code>{"{{full_name}}"}</code>{" "}

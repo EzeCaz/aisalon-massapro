@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import {
+  can,
+  getUserScope,
+  scopeChapterWhere,
+  getCoHostedEventIds,
+} from "@/lib/permissions";
 
 /**
  * POST /api/admin/registrants
@@ -101,6 +106,9 @@ export async function POST(req: NextRequest) {
  *
  * Returns all RSVPs across all events (or filtered by eventId).
  * Used by the admin Registrants tab for live refresh after edits.
+ *
+ * TSK-0075: scoped to the admin's chapter/country. A Montreal admin only
+ * sees RSVPs for Montreal events. SUPER_ADMIN sees all.
  */
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -112,11 +120,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // TSK-0075: scope by chapter + (for CO_HOST) by co-hosted event IDs.
+  const scope = await getUserScope(me.id);
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+  const baseWhere = scopeChapterWhere(scope);
   const url = new URL(req.url);
   const eventId = url.searchParams.get("eventId");
 
+  // Compose the where: scope filter + (optional) eventId filter + (for CO_HOST) event filter.
+  const where =
+    scopedEventIds === null
+      ? eventId
+        ? { ...baseWhere, eventId }
+        : baseWhere
+      : eventId
+      ? { ...baseWhere, eventId: { in: scopedEventIds.includes(eventId) ? [eventId] : [] } }
+      : { ...baseWhere, eventId: { in: scopedEventIds } };
+
   const rsvps = await db.eventRsvp.findMany({
-    where: eventId ? { eventId } : undefined,
+    where,
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
     include: {
       event: { select: { id: true, title: true, slug: true, startsAt: true } },

@@ -79,9 +79,13 @@ type Props = {
   templates: Template[];
   // Notify parent of changes (so the Flows tab's template dropdown updates).
   onTemplatesChange: (t: { id: string; name: string; subject: string; stage: number | null; isDefault?: boolean; isActive?: boolean }[]) => void;
+  // TSK-0075: the admin's chapter name — used to substitute {{chapter_name}}
+  // in the template editor preview so a Montreal admin sees "Montreal".
+  // Optional for backward compat; defaults to "" (no chapter name shown).
+  previewChapterName?: string;
 };
 
-export function TemplatesClient({ templates, onTemplatesChange }: Props) {
+export function TemplatesClient({ templates, onTemplatesChange, previewChapterName }: Props) {
   const [list, setList] = React.useState<Template[]>(templates);
   const [loading, setLoading] = React.useState(false);
   const [editing, setEditing] = React.useState<Template | null>(null);
@@ -357,6 +361,7 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
       {editing && (
         <TemplateEditorDialog
           template={editing}
+          previewChapterName={previewChapterName}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); refresh(); }}
         />
@@ -380,6 +385,7 @@ export function TemplatesClient({ templates, onTemplatesChange }: Props) {
       {creating && (
         <TemplateEditorDialog
           template={null}
+          previewChapterName={previewChapterName}
           onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); refresh(); }}
         />
@@ -559,15 +565,21 @@ function NewTemplateChoiceDialog({
 // TSK-0074: exported so the CampaignComposer can reuse the same preview
 // context (ensures the campaign preview and template preview show identical
 // sample data).
+//
+// TSK-0075: the chapter name is now DYNAMIC per admin — a Montreal admin
+// sees "Montreal" in the preview, a Tel Aviv admin sees "Tel Aviv". The
+// constant `PREVIEW_CTX` is kept (with empty chapterName) for backward
+// compat with code paths that haven't been updated; new code should call
+// `makePreviewCtx(chapterName)` instead.
 export const PREVIEW_CTX: UnifiedRenderContext = {
   firstName: "Friend",
   name: "Friend",
   email: "test@example.com",
-  chapterName: "Tel Aviv",
+  chapterName: "",
   eventTitle: "AI Salon Demo Event",
   eventDate: "Tue, Mar 12, 2025 · 6:00 PM",
-  eventVenue: "Tel Aviv Innovation Lab",
-  eventAddress: "Rothschild 1, Tel Aviv",
+  eventVenue: "Demo Venue",
+  eventAddress: "123 Main St",
   eventUrl: "https://aisalon.massapro.com/e/demo",
   myCodeUrl: "https://aisalon.massapro.com/e/demo/my-code",
   checkInCode: "ABCD-1234",
@@ -575,6 +587,23 @@ export const PREVIEW_CTX: UnifiedRenderContext = {
   agenda:
     "• 6:00 PM — Doors\n• 6:30 PM — Intro\n• 7:00 PM — Panel\n• 8:00 PM — Networking",
 };
+
+/**
+ * Build a per-admin preview context. The chapterName comes from the
+ * admin's chapter (resolved on the server side via the User.chapterId →
+ * Chapter.name lookup) so a Montreal admin sees "Montreal" substituted
+ * for {{chapter_name}} in template + campaign previews.
+ */
+export function makePreviewCtx(chapterName: string | null | undefined): UnifiedRenderContext {
+  return {
+    ...PREVIEW_CTX,
+    chapterName: chapterName && chapterName.trim() ? chapterName : "",
+    // TSK-0075: also localize the venue/address placeholders so a Montreal
+    // admin doesn't see "Tel Aviv Innovation Lab" in their preview.
+    eventVenue: chapterName ? `${chapterName} Innovation Lab` : "Demo Venue",
+    eventAddress: chapterName ? `123 Main St, ${chapterName}` : "123 Main St",
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Template editor dialog (also handles "create new")
@@ -584,10 +613,13 @@ function TemplateEditorDialog({
   template,
   onClose,
   onSaved,
+  previewChapterName,
 }: {
   template: Template | null;
   onClose: () => void;
   onSaved: () => void;
+  /** TSK-0075: admin's chapter name — for substituting {{chapter_name}} in the preview. */
+  previewChapterName?: string;
 }) {
   const [name, setName] = React.useState(template?.name ?? "");
   const [subject, setSubject] = React.useState(template?.subject ?? "");
@@ -741,6 +773,14 @@ function TemplateEditorDialog({
     };
   }, []);
 
+  // TSK-0075: build a per-admin preview ctx (chapterName from the admin's
+  // chapter) so a Montreal admin sees "Montreal" substituted for
+  // {{chapter_name}} in the template editor preview.
+  const previewCtx = React.useMemo(
+    () => makePreviewCtx(previewChapterName),
+    [previewChapterName],
+  );
+
   const previewSrcDoc = React.useMemo(() => {
     // Don't run the pipeline on empty bodies — render a friendly placeholder
     // instead so the iframe never shows a blank white box on a fresh new
@@ -750,7 +790,7 @@ function TemplateEditorDialog({
     }
     return renderUnifiedEmail({
       html: debouncedBody,
-      ctx: PREVIEW_CTX,
+      ctx: previewCtx,
       logoHtml: buildLogoBlock(
         debouncedLogo || null,
         debouncedLogoHidden,
@@ -762,9 +802,9 @@ function TemplateEditorDialog({
       ),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
-      chapterName: PREVIEW_CTX.chapterName,
+      chapterName: previewCtx.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault, previewCtx]);
 
   // TSK-0074 Phase 4 (rev 2026-08-05): render the Desktop/Mobile preview pane
   // as a reusable function so it can be placed in TWO locations:

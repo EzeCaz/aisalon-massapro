@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
+import { getCurrentUser } from "@/lib/auth-guards";
 import { sendCampaignEmail, isSmtpConfigured, isGmailConfigured } from "@/lib/email-orchestrator/sender";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
 import { buildLogoBlock, resolveEmailLogoDefault } from "@/lib/email-orchestrator/templates";
@@ -41,6 +42,11 @@ export async function POST(
   if (!admin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // TSK-0075: resolve the admin's scope so we can scope recipient
+  // resolution (ALL_MEMBERS / TAG) to their chapter/country. This prevents
+  // a Montreal admin from emailing TLV members via a global listSource.
+  const { scope } = await getCurrentUser();
 
   const { id } = await params;
   const campaign = await db.emailCampaign.findUnique({
@@ -84,7 +90,10 @@ export async function POST(
   }
 
   // ---- Resolve recipients ----
-  const recipients = await resolveRecipients(campaign.listSource, campaign.listConfigJson);
+  // TSK-0075: pass the admin's scope so chapter-scoped admins only
+  // resolve recipients in their chapter/country (prevents a Montreal
+  // admin from emailing TLV members via ALL_MEMBERS).
+  const recipients = await resolveRecipients(campaign.listSource, campaign.listConfigJson, scope ?? undefined);
   if (recipients.length === 0) {
     return NextResponse.json(
       { error: "No recipients matched the list filter. Update the list source and try again." },
@@ -353,10 +362,16 @@ export async function POST(
 
 /**
  * Resolve the list of recipients based on listSource + listConfigJson.
+ *
+ * TSK-0075: takes an optional `scope` parameter (the admin's UserScope)
+ * so chapter/country-scoped admins only resolve recipients in their
+ * scope. This prevents a Montreal admin from emailing TLV members when
+ * listSource is "ALL_MEMBERS" or "TAG:<label>". Global scope = no filter.
  */
 async function resolveRecipients(
   listSource: string,
-  listConfigJson: string
+  listConfigJson: string,
+  scope?: import("@/lib/permissions").UserScope,
 ): Promise<
   Array<{
     userId?: string;
@@ -374,6 +389,23 @@ async function resolveRecipients(
     config = {};
   }
 
+  // TSK-0075: build a scopeUserWhere fragment so chapter-scoped admins
+  // can't email members outside their chapter via ALL_MEMBERS / TAG.
+  // Global scope = empty where (no filter — match everyone).
+  // "none" scope = never-match (admin with no chapter can't send at all).
+  const scopeUserWhereFragment = scope
+    ? (() => {
+        switch (scope.kind) {
+          case "global": return {};
+          case "country": return { countryId: scope.countryId };
+          case "chapter": return {
+            OR: [{ chapterId: scope.chapterId }, { countryId: scope.countryId, chapterId: null }],
+          };
+          case "none": return { id: "___NEVER___" };
+        }
+      })()
+    : {};
+
   // Common User select that includes chapter info for per-recipient
   // {{chapter_name}} resolution AND the chapter slug (used to build
   // chapter-aware {{finishOnboardingUrl}} links). Used by ALL_MEMBERS,
@@ -387,10 +419,10 @@ async function resolveRecipients(
     chapter: { select: { name: true, slug: true } },
   } as const;
 
-  // ALL_MEMBERS — every user with an email
+  // ALL_MEMBERS — every user with an email (scoped to admin's chapter/country)
   if (listSource === "ALL_MEMBERS") {
     const users = await db.user.findMany({
-      where: { email: { not: "" } },
+      where: { email: { not: "" }, ...scopeUserWhereFragment },
       select: userSelectWithChapter,
     });
     return users.map((u) => ({
@@ -403,12 +435,12 @@ async function resolveRecipients(
     }));
   }
 
-  // TAG:<label> — all users with at least one MemberTag matching the label
+  // TAG:<label> — all users with at least one MemberTag matching the label (scoped)
   const tagMatch = listSource.match(/^TAG:(.+)$/);
   if (tagMatch) {
     const label = tagMatch[1];
     const users = await db.user.findMany({
-      where: { tags: { some: { label } } },
+      where: { tags: { some: { label } }, ...scopeUserWhereFragment },
       select: userSelectWithChapter,
     });
     return users.map((u) => ({
@@ -460,6 +492,7 @@ async function resolveRecipients(
       name?: string | null;
       chapterId?: string | null;
       chapterName?: string | null;
+      chapterSlug?: string | null;
     }> = [];
     for (const emailRaw of config.emails) {
       const email = (emailRaw || "").toString().trim().toLowerCase();

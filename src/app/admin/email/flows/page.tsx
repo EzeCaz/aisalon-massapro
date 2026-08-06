@@ -2,7 +2,13 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny, getEffectiveRole} from "@/lib/permissions";
+import {
+  canAny,
+  getEffectiveRole,
+  getUserScope,
+  scopeEventWhere,
+  type UserScope,
+} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { FlowsPageClient } from "./flows-page-client";
@@ -12,10 +18,24 @@ import {
   parseSpec,
   resolveAudienceEmails,
 } from "@/lib/email-orchestrator/audience-filter";
+import { Globe2 } from "lucide-react";
 
-export const metadata = { title: "Email Flows — Admin — AI Salon Tel Aviv" };
+export const metadata = { title: "Email Flows — Admin — AI Salon" };
 
 export const dynamic = "force-dynamic";
+
+function scopeBadge(scope: UserScope): { label: string; color: string } {
+  switch (scope.kind) {
+    case "global":
+      return { label: "Global", color: "bg-[#820A7D] text-white" };
+    case "country":
+      return { label: "Country", color: "bg-[#FF005A] text-white" };
+    case "chapter":
+      return { label: "Chapter", color: "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40" };
+    case "none":
+      return { label: "No scope", color: "bg-black/10 text-black/60" };
+  }
+}
 
 export default async function FlowBuilderPage() {
   const session = await getServerSession(authOptions);
@@ -23,7 +43,7 @@ export default async function FlowBuilderPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true, name: true },
+    select: { id: true, email: true, role: true, name: true, chapterId: true },
   });
   if (!me) redirect("/login");
 
@@ -34,6 +54,31 @@ export default async function FlowBuilderPage() {
     redirect("/events");
   }
 
+  // TSK-0075: resolve the admin's chapter name (via V7 chapterId → Chapter.name)
+  // so the template editor preview can substitute {{chapter_name}} with the
+  // admin's actual chapter (e.g. "Montreal") instead of "Tel Aviv".
+  let previewChapterName = "";
+  if (me.chapterId) {
+    const ch = await db.chapter.findUnique({
+      where: { id: me.chapterId },
+      select: { name: true },
+    });
+    if (ch?.name) previewChapterName = ch.name;
+  }
+
+  // TSK-0075: scope templates + events + audiences by chapter.
+  // Global templates (chapterId=null) are visible to all admins.
+  // Events are scoped via scopeEventWhere (chapterRef.countryId / chapterId).
+  const scope = await getUserScope(me.id);
+  const emailModelWhere =
+    scope.kind === "global"
+      ? {}
+      : scope.kind === "country"
+      ? { OR: [{ chapterId: null }, { chapter: { countryId: scope.countryId } }] }
+      : scope.kind === "chapter"
+      ? { OR: [{ chapterId: null }, { chapterId: scope.chapterId }] }
+      : { id: "___NEVER___" };
+
   // Ensure the test audience + stage templates exist (idempotent).
   // Safe to run on every page load — runSeed is idempotent.
   try {
@@ -42,11 +87,12 @@ export default async function FlowBuilderPage() {
     console.error("[flows/page] seed failed:", e);
   }
 
-  // Load templates + events + audiences for the dropdowns.
+  // Load templates + events + audiences for the dropdowns (scoped).
   const [templates, events, audiences] = await Promise.all([
     // TSK-0074: was db.emailStageTemplate (legacy, now EmailStageTemplateLegacy).
     // Now reads from the unified EmailTemplate2 table.
     db.emailTemplate2.findMany({
+      where: emailModelWhere,
       orderBy: [{ stage: "asc" }, { name: "asc" }],
       select: {
         id: true,
@@ -58,11 +104,13 @@ export default async function FlowBuilderPage() {
       },
     }),
     db.event.findMany({
+      where: scopeEventWhere(scope),
       orderBy: { startsAt: "desc" },
       take: 50,
       select: { id: true, title: true, slug: true, startsAt: true },
     }),
     db.emailAudience.findMany({
+      where: emailModelWhere,
       orderBy: [{ isTest: "desc" }, { name: "asc" }],
       select: {
         id: true,
@@ -129,16 +177,30 @@ export default async function FlowBuilderPage() {
     }),
   );
 
+  const badge = scopeBadge(scope);
+
   return (
     <div className="min-h-screen bg-neutral-50">
       <AppHeader />
       <AdminTabs role={effectiveRole} />
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         <EmailAdminNav active="flows" />
+        <div className="mb-4 flex items-center gap-2 text-xs text-black/60">
+          <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider ${badge.color}`}>
+            <Globe2 className="h-2.5 w-2.5" />
+            {badge.label} scope
+          </span>
+          <span>
+            · Flows, audiences, and templates are scoped to your{" "}
+            {scope.kind === "global" ? "global view" : scope.kind === "country" ? "country" : "chapter"}.
+            Global templates (no chapter) are visible to all admins.
+          </span>
+        </div>
         <FlowsPageClient
           templates={templates}
           events={events.map((e) => ({ ...e, startsAt: e.startsAt.toISOString() }))}
           initialAudiences={audiencesParsed}
+          previewChapterName={previewChapterName}
         />
       </main>
     </div>

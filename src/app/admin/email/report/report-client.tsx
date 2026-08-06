@@ -70,6 +70,7 @@ import {
   useChartTypeState,
   type ChartType,
 } from "@/components/admin/toggleable-chart-card";
+import { replaceTokens } from "@/lib/email/render-unified";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -156,10 +157,14 @@ const REPORT_DEFAULT_CHART_TYPES: Record<ReportChartId, ChartType> = {
 export function ReportClient({
   audiences,
   initialRowId,
+  previewChapterName,
 }: {
   audiences: AudienceInfo[];
   /** Optional ?row=campaign:xxx from the URL — pre-selects that row. */
   initialRowId?: string | null;
+  /** TSK-0075: admin's chapter name — used to substitute {{chapter_name}}
+   *  in the preview dialog so Montreal admin sees "Montreal". */
+  previewChapterName?: string;
 }) {
   const [data, setData] = React.useState<ReportListResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -960,7 +965,7 @@ export function ReportClient({
       )}
 
       {/* ── Preview modal ── */}
-      <PreviewDialog row={previewRow} onClose={() => setPreviewRow(null)} />
+      <PreviewDialog row={previewRow} onClose={() => setPreviewRow(null)} previewChapterName={previewChapterName} />
 
       {/* ── Batch action dialog ── */}
       <Dialog open={batchActionOpen !== null} onOpenChange={(o) => !o && setBatchActionOpen(null)}>
@@ -1429,25 +1434,38 @@ function MultiSelectFilter({
  * PreviewDialog — renders the email HTML in a sandboxed iframe so the
  * admin can see exactly what was sent. The iframe is sandboxed without
  * allow-scripts to prevent any embedded scripts from running.
+ *
+ * TSK-0075: the bodyHtml stored on a campaign is the TEMPLATE snapshot
+ * (with {{chapter_name}} still as a token, not yet substituted). We run
+ * replaceTokens() with the admin's chapter name so a Montreal admin sees
+ * "Montreal" instead of "{{chapter_name}}" or "Tel Aviv" in the preview.
  */
 function PreviewDialog({
   row,
   onClose,
+  previewChapterName,
 }: {
   row: ReportRow | null;
   onClose: () => void;
+  previewChapterName?: string;
 }) {
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   // Write the email HTML into the iframe via srcdoc (simplest + safest).
+  // TSK-0075: substitute {{chapter_name}} (and other tokens) with the
+  // admin's chapter so the preview reflects what recipients would see.
   React.useEffect(() => {
     if (row?.bodyHtml && iframeRef.current) {
-      // iframe srcdoc handles the HTML directly. We add a tiny base style
-      // reset so the email renders as it would in a real client.
-      const styled = `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111;background:#fff;}img{max-width:100%;height:auto;}a{color:#FF005A;}</style></head><body>${row.bodyHtml}</body></html>`;
+      const substituted = replaceTokens(row.bodyHtml, {
+        chapterName: previewChapterName ?? "",
+        firstName: "Friend",
+        name: "Friend",
+        email: "recipient@example.com",
+      });
+      const styled = `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><style>body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#111;background:#fff;}img{max-width:100%;height:auto;}a{color:#FF005A;}</style></head><body>${substituted}</body></html>`;
       iframeRef.current.srcdoc = styled;
     }
-  }, [row]);
+  }, [row, previewChapterName]);
 
   return (
     <Dialog open={row !== null} onOpenChange={(o) => !o && onClose()}>

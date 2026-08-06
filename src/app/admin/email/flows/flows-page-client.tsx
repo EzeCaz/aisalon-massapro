@@ -20,6 +20,7 @@ import { AudiencesClient } from "./audiences-client";
 import { TemplatesClient } from "./templates-client";
 import { CleanupSyntheticRsvpsButton } from "./cleanup-synthetic-rsvps-button";
 import { BackupDbButton } from "./backup-db-button";
+import { SeedChapterButton } from "./seed-chapter-button";
 import type { FlowTemplate, FlowAudience } from "@/components/ais/flow-builder/flow-builder-canvas";
 import type { FlowSubtab } from "@/components/ais/email-admin-nav";
 
@@ -27,12 +28,16 @@ type Props = {
   templates: FlowTemplate[];
   events: { id: string; title: string; slug: string; startsAt: string }[];
   initialAudiences: FlowAudience[];
+  /** TSK-0075: admin's chapter name — passed through to TemplatesClient
+   *  so the template editor preview substitutes {{chapter_name}} correctly. */
+  previewChapterName?: string;
 };
 
 export function FlowsPageClient({
   templates,
   events,
   initialAudiences,
+  previewChapterName,
 }: Props) {
   const [tab, setTab] = React.useState<FlowSubtab>("flows");
   // Lifted audience + template state so changes in one tab reflect in another.
@@ -63,10 +68,12 @@ export function FlowsPageClient({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white p-3">
         <div className="text-sm text-neutral-700">
           <span className="font-semibold text-neutral-900">Admin actions.</span>{" "}
-          Backup the database, or clean up synthetic RSVPs created by the old
+          Seed your chapter from Tel Aviv (one-click clone of flows/audiences/campaigns),
+          backup the database, or clean up synthetic RSVPs created by the old
           "Send to Audience" action.
         </div>
         <div className="flex flex-wrap gap-2">
+          <SeedChapterButton />
           <BackupDbButton />
           <CleanupSyntheticRsvpsButton />
         </div>
@@ -101,6 +108,7 @@ export function FlowsPageClient({
       {tab === "templates" && (
         <TemplatesClient
           templates={[]}
+          previewChapterName={previewChapterName}
           onTemplatesChange={(next) => {
             setTemplatesState(next.map((t) => ({
               id: t.id,

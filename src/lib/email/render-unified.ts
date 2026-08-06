@@ -190,7 +190,13 @@ export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
   const firstName = ctx.firstName ?? ctx.name ?? "";
   const fullName = ctx.name ?? ctx.firstName ?? "";
   const email = ctx.email ?? "";
-  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "Tel Aviv";
+  // TSK-0075: chapter fallback is "" (empty), NOT "Tel Aviv". The hardcoded
+  // "Tel Aviv" fallback was masking the real bug — when no chapter was
+  // resolved, the renderer silently wrote "Tel Aviv" into Montreal emails.
+  // Now: if the caller didn't supply a chapterName, the token is replaced
+  // with empty string. Callers MUST resolve the chapter name (via V7
+  // chapterRef.name lookup) before calling the renderer.
+  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "";
   const eventTitle = ctx.eventTitle ?? "";
   const eventDate = ctx.eventDate ?? "";
   const eventVenue = ctx.eventVenue ?? "";
@@ -253,7 +259,7 @@ export function renderUnifiedSubject(
   const firstName = ctx.firstName ?? ctx.name ?? "";
   const fullName = ctx.name ?? ctx.firstName ?? "";
   const email = ctx.email ?? "";
-  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "Tel Aviv";
+  const chapter = ctx.chapterName && ctx.chapterName.trim() ? ctx.chapterName : "";
   const eventTitle = ctx.eventTitle ?? "";
   const eventDate = ctx.eventDate ?? "";
   const eventVenue = ctx.eventVenue ?? "";
@@ -600,7 +606,7 @@ export function appendTrackingAndFooter(
     pixelUrl = `${baseUrl}/api/email/open?t=${trackToken}&c=${campaignId}`;
   }
 
-  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
+  const chapter = chapterName && chapterName.trim() ? chapterName : "";
 
   // Build the footer block (pixel + optional unsubscribe).
   // The footer text uses the {{chapter_name}} merge tag (matching the body

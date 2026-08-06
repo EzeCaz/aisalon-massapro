@@ -2,13 +2,21 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES, getEffectiveRole} from "@/lib/permissions";
+import {
+  can,
+  isSuperAdminEmail,
+  ROLES,
+  getEffectiveRole,
+  getUserScope,
+  scopeEventWhere,
+  getCoHostedEventIds,
+} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { SpeakerIntroEditor } from "./speaker-intro-editor";
 import type { EventPickListItem } from "./types";
 
-export const metadata = { title: "Speaker Intro Mockup — AI Salon Tel Aviv" };
+export const metadata = { title: "Speaker Intro Mockup — AI Salon" };
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +34,9 @@ export const dynamic = "force-dynamic";
  *   4. Download a print-quality PNG (2400×1600 at 2× DPR).
  *
  * Permission gate: ADMIN + SUPER_ADMIN (same as /admin/mockups).
+ *
+ * TSK-0075: events dropdown is scoped to the admin's chapter/country.
+ * A Montreal admin only sees Montreal events in the picker.
  */
 
 export default async function SpeakerIntroMockupPage() {
@@ -55,9 +66,18 @@ export default async function SpeakerIntroMockupPage() {
     redirect("/events");
   }
 
+  // TSK-0075: scope the events dropdown by chapter/country.
+  const scope = await getUserScope(me.id);
+  const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+  const eventsWhere =
+    scopedEventIds === null
+      ? scopeEventWhere(scope)
+      : { id: { in: scopedEventIds } };
+
   // Fetch the events list for the auto-fill dropdown. Lightweight: just
   // the fields needed to identify an event in the picker. Newest first.
   const eventsRaw = await db.event.findMany({
+    where: eventsWhere,
     orderBy: { startsAt: "desc" },
     select: {
       id: true,

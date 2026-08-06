@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { can, getUserScope, scopeUserWhere } from "@/lib/permissions";
 
 /**
  * GET /api/admin/members
@@ -13,6 +13,10 @@ import { can } from "@/lib/permissions";
  *
  * Permission: any user with the "members.view" permission. This includes
  * SUPER_ADMIN and ADMIN. CO_HOST and MEMBER get 403.
+ *
+ * TSK-0075: scoped to the admin's chapter/country. A Montreal admin only
+ * sees Montreal members; a TLV admin only sees TLV members. SUPER_ADMIN
+ * sees all (global scope).
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -24,7 +28,11 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // TSK-0075: scope the query to the admin's chapter/country.
+  const scope = await getUserScope(me.id);
+
   const members = await db.user.findMany({
+    where: { ...scopeUserWhere(scope), archivedAt: null },
     orderBy: [{ importSource: "desc" }, { createdAt: "desc" }],
     include: {
       tags: true,

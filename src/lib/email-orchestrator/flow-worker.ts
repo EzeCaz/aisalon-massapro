@@ -228,19 +228,26 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
 
   // Look up the chapter name + chapterId for the {{chapter_name}} merge
   // token AND the per-chapter email-logo override (ChapterSetting[emailLogo]).
-  // Uses the legacy `chapter` string field on Event (defaults to "Tel Aviv")
-  // for the display name. Best-effort — fall back to the buildContext default.
+  // TSK-0075: resolves the chapter name from the V7 Chapter relation
+  // (chapterRef.name) — preferred over the legacy `chapter` String field
+  // (which defaults to "Tel Aviv" and was the root cause of Montreal emails
+  // saying "Tel Aviv").
   let chapterName: string | undefined;
   let chapterId: string | null = null;
   try {
     const eventWithChapter = await db.event.findUnique({
       where: { id: row.eventId },
-      select: { chapter: true, chapterId: true },
+      select: {
+        chapter: true,
+        chapterId: true,
+        chapterRef: { select: { id: true, name: true } },
+      },
     });
-    chapterName = eventWithChapter?.chapter ?? undefined;
+    chapterName =
+      eventWithChapter?.chapterRef?.name ?? eventWithChapter?.chapter ?? undefined;
     chapterId = eventWithChapter?.chapterId ?? null;
   } catch {
-    // ignore — buildContext falls back to "Tel Aviv".
+    // ignore — buildContext falls back to empty chapterName.
   }
 
   const ctx = buildContext({

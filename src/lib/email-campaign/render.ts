@@ -100,12 +100,13 @@ export function applyMergeTags(
   text: string,
   recipient: { email: string; name: string | null },
   event?: MergeEventContext,
-  /** Chapter display name — defaults to "Tel Aviv" when not provided. */
+  /** Chapter display name — empty string when not provided (no "Tel Aviv" fallback). */
   chapterName?: string,
 ): string {
   const firstName = recipient.name?.split(" ")[0] || "";
   const fullName = recipient.name || "";
-  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
+  // TSK-0075: no "Tel Aviv" fallback — caller must resolve chapter name.
+  const chapter = chapterName && chapterName.trim() ? chapterName : "";
   let out = text
     .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
     .replace(/\{\{\s*full_name\s*\}\}/g, fullName)
@@ -166,7 +167,7 @@ export function appendTrackingPixel(
 ): string {
   const pixelUrl = `${baseUrl}/api/email/open?t=${trackToken}&c=${campaignId}`;
   const unsubUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${campaignId}`;
-  const chapter = chapterName && chapterName.trim() ? chapterName : "Tel Aviv";
+  const chapter = chapterName && chapterName.trim() ? chapterName : "";
 
   // Footer text uses the {{chapter_name}} merge tag (matching the body
   // template convention) — substituted below with the resolved chapter name.
@@ -235,7 +236,7 @@ export function renderEmail(input: RenderInput): RenderedEmail {
     firstName,
     name: recipient.name ?? "",
     email: recipient.email,
-    chapterName: chapterName ?? "Tel Aviv",
+    chapterName: chapterName ?? "",
     eventTitle: event?.title ?? "",
     eventVenue: event?.venue ?? "",
     eventAddress: event?.address ?? "",
@@ -274,7 +275,7 @@ export function renderEmail(input: RenderInput): RenderedEmail {
     trackToken,
     baseUrl,
     unsubscribeUrl,
-    chapterName: chapterName ?? "Tel Aviv",
+    chapterName: chapterName ?? "",
   });
 
   const domain = baseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");

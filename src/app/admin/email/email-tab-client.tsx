@@ -48,7 +48,7 @@ import {
 } from "lucide-react";
 import { OrchestratorPanel } from "./orchestrator-panel";
 import { EmailAdminNav, type EmailAdminTab } from "@/components/ais/email-admin-nav";
-import { TemplatesClient, PREVIEW_CTX, LogoEditorField } from "./flows/templates-client";
+import { TemplatesClient, makePreviewCtx, LogoEditorField } from "./flows/templates-client";
 import { RichTextEmailEditor } from "@/components/ais/rich-text-email-editor";
 import { buildLogoBlock } from "@/lib/email-orchestrator/templates";
 import { renderUnifiedEmail } from "@/lib/email/render-unified";
@@ -152,6 +152,9 @@ type Props = {
   audiences: AudienceSummary[];
   /** All EmailStageTemplate rows (same source as /admin/email/flows). */
   stageTemplates: StageTemplateSummary[];
+  /** TSK-0075: the admin's chapter name — used to substitute {{chapter_name}}
+   * in campaign composer previews so a Montreal admin sees "Montreal". */
+  previewChapterName?: string;
 };
 
 // ----------------------------------------------------------------------------
@@ -168,6 +171,7 @@ export function EmailTabClient({
   flows,
   audiences,
   stageTemplates,
+  previewChapterName,
 }: Props) {
   const [campaigns, setCampaigns] = React.useState<Campaign[]>(initialCampaigns);
   const [templates, setTemplates] = React.useState<Template[]>(initialTemplates);
@@ -464,6 +468,7 @@ export function EmailTabClient({
             </div>
             <TemplatesClient
               templates={[]}
+              previewChapterName={previewChapterName}
               onTemplatesChange={(next) => {
                 setStageTemplatesState(next.map((t) => ({
                   id: t.id,
@@ -517,6 +522,7 @@ export function EmailTabClient({
               membersCount={membersCount}
               adminEmail={adminEmail}
               flows={flows}
+              previewChapterName={previewChapterName}
               onSaved={handleComposerSaved}
               onCancel={() => {
                 setComposerOpen(false);
@@ -1047,6 +1053,7 @@ function CampaignComposer({
   onCancel,
   onTestSend,
   onRequestSaveAsTemplate,
+  previewChapterName,
 }: {
   campaign: Campaign | null;
   templates: Template[];
@@ -1058,6 +1065,8 @@ function CampaignComposer({
   onCancel: () => void;
   onTestSend: (c: Campaign) => void;
   onRequestSaveAsTemplate: (subject: string, bodyHtml: string, suggestedName: string) => Promise<void>;
+  /** TSK-0075: admin's chapter name — for substituting {{chapter_name}} in the preview. */
+  previewChapterName?: string;
 }) {
   const isFrozen = campaign && (campaign.status === "SENT" || campaign.status === "SENDING");
   const isEditing = !!campaign;
@@ -1390,13 +1399,21 @@ function CampaignComposer({
     };
   }, []);
 
+  // TSK-0075: build a per-admin preview ctx so a Montreal admin sees
+  // "Montreal" substituted for {{chapter_name}} in the campaign composer
+  // preview (matches the template editor preview behavior).
+  const previewCtx = React.useMemo(
+    () => makePreviewCtx(previewChapterName),
+    [previewChapterName],
+  );
+
   const previewSrcDoc = React.useMemo(() => {
     if (!debouncedBody.trim()) {
       return `<!DOCTYPE html><html><body style="font-family:-apple-system,sans-serif;padding:32px;color:#999;font-size:14px;text-align:center;">Start typing in the editor above to see a live preview here.</body></html>`;
     }
     return renderUnifiedEmail({
       html: debouncedBody,
-      ctx: PREVIEW_CTX,
+      ctx: previewCtx,
       logoHtml: buildLogoBlock(
         debouncedLogo || null,
         debouncedLogoHidden,
@@ -1404,9 +1421,9 @@ function CampaignComposer({
       ),
       mobileOverridesHtml: debouncedMobile || undefined,
       unsubscribeUrl: "#",
-      chapterName: PREVIEW_CTX.chapterName,
+      chapterName: previewCtx.chapterName,
     });
-  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault]);
+  }, [debouncedBody, debouncedMobile, debouncedLogo, debouncedLogoHidden, globalEmailLogoDefault, previewCtx]);
 
   // Preview pane — extracted so it can be rendered in two places:
   //   1. Inline (below the editor) on small screens — visible below xl breakpoint
