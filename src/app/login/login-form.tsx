@@ -146,7 +146,17 @@ export function LoginForm({ callbackUrl }: Props) {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: signupEmail, name: signupName }),
+        // Forward chapterSlug so /api/auth/signup tags the new user with
+        // the right chapterId + countryId at creation time. Without this,
+        // a user who signs up via /login?chapterSlug=mtl creates a User
+        // row with chapterId=null — and every page that reads chapter
+        // context from the user row (onboarding, profile, community,
+        // email merge tags) falls back to "Tel Aviv".
+        body: JSON.stringify({
+          email: signupEmail,
+          name: signupName,
+          ...(chapterSlug ? { chapterSlug } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

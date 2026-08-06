@@ -204,6 +204,18 @@ export async function POST(
     // and have each email show the recipient's own chapter name.
     const perRecipientChapterName =
       r.chapterName && r.chapterName.trim() ? r.chapterName : chapterName;
+    // Build the finishOnboardingUrl with ?chapterSlug=<recipient's slug>
+    // so when the user clicks the link in the email, the /onboarding page
+    // renders with their chapter's branding (logo, name, copy) even if
+    // their user.chapterId is null (e.g. they signed up before the
+    // signup-form-was-chapter-aware fix). Without this, the URL is just
+    // /onboarding with no slug, and resolveChapter() on the onboarding
+    // page falls back to DEFAULT_CHAPTER_SLUG = "tel-aviv" — so Montreal
+    // members see Tel Aviv branding on the onboarding page they reached
+    // via an email link.
+    const finishOnboardingUrl = r.chapterSlug
+      ? `${baseUrl}/onboarding?chapterSlug=${encodeURIComponent(r.chapterSlug)}`
+      : `${baseUrl}/onboarding`;
     const renderCtx = {
       firstName,
       name: r.name || "",
@@ -214,11 +226,7 @@ export async function POST(
       eventAddress: eventCtx?.address ?? "",
       eventUrl,
       myCodeUrl,
-      // Link to /onboarding so the recipient can finish filling out their
-      // profile. The post-login-redirect endpoint forces onboarding for
-      // users who haven't completed it, so this URL works whether the user
-      // is logged in or not.
-      finishOnboardingUrl: `${baseUrl}/onboarding`,
+      finishOnboardingUrl,
     };
     const personalizedSubject = renderUnifiedSubject(campaign.subjectSnapshot, renderCtx);
     const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${id}`;
@@ -356,6 +364,7 @@ async function resolveRecipients(
     name?: string | null;
     chapterId?: string | null;
     chapterName?: string | null;
+    chapterSlug?: string | null;
   }>
 > {
   let config: any = {};
@@ -366,15 +375,16 @@ async function resolveRecipients(
   }
 
   // Common User select that includes chapter info for per-recipient
-  // {{chapter_name}} resolution. Used by ALL_MEMBERS, TAG, MANUAL, and
-  // AUDIENCE paths. EVENT path goes through RSVPs and hydrates the user
-  // separately below.
+  // {{chapter_name}} resolution AND the chapter slug (used to build
+  // chapter-aware {{finishOnboardingUrl}} links). Used by ALL_MEMBERS,
+  // TAG, MANUAL, and AUDIENCE paths. EVENT path goes through RSVPs and
+  // hydrates the user separately below.
   const userSelectWithChapter = {
     id: true,
     email: true,
     name: true,
     chapterId: true,
-    chapter: { select: { name: true } },
+    chapter: { select: { name: true, slug: true } },
   } as const;
 
   // ALL_MEMBERS — every user with an email
@@ -389,6 +399,7 @@ async function resolveRecipients(
       name: u.name,
       chapterId: u.chapterId,
       chapterName: u.chapter?.name ?? null,
+      chapterSlug: u.chapter?.slug ?? null,
     }));
   }
 
@@ -406,6 +417,7 @@ async function resolveRecipients(
       name: u.name,
       chapterId: u.chapterId,
       chapterName: u.chapter?.name ?? null,
+      chapterSlug: u.chapter?.slug ?? null,
     }));
   }
 
@@ -421,7 +433,12 @@ async function resolveRecipients(
         userId: true,
         email: true,
         name: true,
-        user: { select: { chapterId: true, chapter: { select: { name: true } } } },
+        user: {
+          select: {
+            chapterId: true,
+            chapter: { select: { name: true, slug: true } },
+          },
+        },
       },
     });
     return rsvps.map((r) => ({
@@ -430,6 +447,7 @@ async function resolveRecipients(
       name: r.name,
       chapterId: r.user?.chapterId ?? null,
       chapterName: r.user?.chapter?.name ?? null,
+      chapterSlug: r.user?.chapter?.slug ?? null,
     }));
   }
 
@@ -459,6 +477,7 @@ async function resolveRecipients(
         name: user?.name || null,
         chapterId: user?.chapterId ?? null,
         chapterName: user?.chapter?.name ?? null,
+        chapterSlug: user?.chapter?.slug ?? null,
       });
     }
     return out;
@@ -482,6 +501,7 @@ async function resolveRecipients(
       name?: string | null;
       chapterId?: string | null;
       chapterName?: string | null;
+      chapterSlug?: string | null;
     }> = [];
     for (const email of emails) {
       const lower = email.toLowerCase();
@@ -497,6 +517,7 @@ async function resolveRecipients(
         name: user?.name || null,
         chapterId: user?.chapterId ?? null,
         chapterName: user?.chapter?.name ?? null,
+        chapterSlug: user?.chapter?.slug ?? null,
       });
     }
     return out;

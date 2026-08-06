@@ -84,28 +84,38 @@ export async function GET(req: NextRequest) {
    * This helper fixes both issues by delegating to `renderUnifiedEmail`,
    * which handles the full token set, and by resolving the chapter name
    * from: recipient.chapter → campaign.chapter → "Tel Aviv".
+   *
+   * The finishOnboardingUrl is also chapter-aware: when the recipient has
+   * a chapter slug, we append ?chapterSlug=<slug> to the URL so the
+   * /onboarding page renders with the recipient's chapter branding
+   * (logo, name, copy) — even if their user.chapterId is null (e.g.
+   * legacy signups from before the signup form was chapter-aware).
    */
   function personalizeForRecipient(r: {
     email: string;
     name: string | null;
     trackToken: string;
-    chapter?: { name: string } | null;
+    chapter?: { name: string; slug: string } | null;
     campaign: {
       id: string;
       subjectSnapshot: string;
       bodyHtmlSnapshot: string;
-      chapter?: { name: string } | null;
+      chapter?: { name: string; slug: string } | null;
     };
   }): { html: string; subject: string; unsubscribeUrl: string } {
     const firstName = (r.name || r.email.split("@")[0]).split(" ")[0];
     const chapterName =
       r.chapter?.name || r.campaign.chapter?.name || "Tel Aviv";
+    const chapterSlug = r.chapter?.slug || r.campaign.chapter?.slug || "";
+    const finishOnboardingUrl = chapterSlug
+      ? `${baseUrl}/onboarding?chapterSlug=${encodeURIComponent(chapterSlug)}`
+      : `${baseUrl}/onboarding`;
     const ctx: UnifiedRenderContext = {
       firstName,
       name: r.name || "",
       email: r.email,
       chapterName,
-      finishOnboardingUrl: `${baseUrl}/onboarding`,
+      finishOnboardingUrl,
     };
     const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${r.trackToken}&c=${r.campaign.id}`;
     const html = renderUnifiedEmail({
@@ -137,7 +147,7 @@ export async function GET(req: NextRequest) {
       retryCount: { lt: MAX_RETRY_ATTEMPTS },
     },
     include: {
-      chapter: { select: { name: true } },
+      chapter: { select: { name: true, slug: true } },
       campaign: {
         select: {
           id: true,
@@ -147,7 +157,7 @@ export async function GET(req: NextRequest) {
           fromEmail: true,
           replyTo: true,
           status: true,
-          chapter: { select: { name: true } },
+          chapter: { select: { name: true, slug: true } },
         },
       },
     },
@@ -218,7 +228,7 @@ export async function GET(req: NextRequest) {
     const queued = await db.emailRecipient.findMany({
       where: { campaignId: campaign.id, status: "QUEUED" },
       include: {
-        chapter: { select: { name: true } },
+        chapter: { select: { name: true, slug: true } },
         campaign: {
           select: {
             id: true,
@@ -227,7 +237,7 @@ export async function GET(req: NextRequest) {
             fromName: true,
             fromEmail: true,
             replyTo: true,
-            chapter: { select: { name: true } },
+            chapter: { select: { name: true, slug: true } },
           },
         },
       },
