@@ -776,21 +776,24 @@ function CampaignsTable({
         </Button>
       </div>
       <div className="rounded-lg border border-black/10 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
           <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
             <tr>
-              <th className="text-left font-medium px-3 py-2.5">Name</th>
-              <th className="text-left font-medium px-3 py-2.5">Status</th>
-              <th className="text-left font-medium px-3 py-2.5 max-w-[14rem]">Subject</th>
-              {/* Hide Flow + Template on smaller viewports so the table
-                  doesn't overflow horizontally. They come back on lg / xl
-                  screens where there's room. Matches the templates
-                  section approach (which has 7 cols and never scrolls). */}
-              <th className="text-left font-medium px-3 py-2.5 hidden lg:table-cell">Flow</th>
-              <th className="text-left font-medium px-3 py-2.5 hidden xl:table-cell">Template</th>
-              <th className="text-right font-medium px-3 py-2.5">Recipients</th>
-              <th className="text-left font-medium px-3 py-2.5 hidden md:table-cell">Last sent</th>
-              <th className="text-right font-medium px-3 py-2.5">Actions</th>
+              {/* table-fixed + explicit th widths = columns are always
+                  exactly this wide, so the total table width is
+                  predictable and never overflows the container. Name +
+                  Subject get fixed widths and their text wraps to
+                  multiple lines (break-words) instead of being capped
+                  with truncate + max-w-* (which left column width up
+                  to the browser and pushed Actions off-screen). */}
+              <th className="text-left font-medium px-3 py-2.5 w-[16%]">Name</th>
+              <th className="text-left font-medium px-3 py-2.5 w-[8%]">Status</th>
+              <th className="text-left font-medium px-3 py-2.5 w-[20%]">Subject</th>
+              <th className="text-left font-medium px-3 py-2.5 w-[10%] hidden lg:table-cell">Flow</th>
+              <th className="text-left font-medium px-3 py-2.5 w-[10%] hidden xl:table-cell">Template</th>
+              <th className="text-right font-medium px-3 py-2.5 w-[7%]">Recipients</th>
+              <th className="text-left font-medium px-3 py-2.5 w-[11%] hidden md:table-cell">Last sent</th>
+              <th className="text-right font-medium px-3 py-2.5 w-[18%]">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -804,16 +807,19 @@ function CampaignsTable({
               const lastSent = c.completedAt || c.startedAt;
               return (
                 <tr key={c.id} className="border-t border-black/5 hover:bg-black/[0.02]">
-                  <td className="px-3 py-2.5 font-medium text-black max-w-xs truncate">
+                  {/* align-top so multi-line wrapped cells (Name,
+                      Subject) align with the first line of other cells
+                      instead of being vertically centered. */}
+                  <td className="px-3 py-2.5 font-medium text-black align-top break-words whitespace-normal">
                     {c.name}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 align-top">
                     <StatusBadge status={c.status} />
                   </td>
-                  <td className="px-3 py-2.5 text-black/70 max-w-[14rem] truncate">
+                  <td className="px-3 py-2.5 text-black/70 align-top break-words whitespace-normal">
                     {c.subjectSnapshot}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs hidden lg:table-cell">
+                  <td className="px-3 py-2.5 text-black/80 text-xs align-top hidden lg:table-cell">
                     {c.flow ? (
                       <a
                         href={`/admin/email/flows?flow=${c.flow.id}`}
@@ -836,10 +842,10 @@ function CampaignsTable({
                       <span className="text-black/30">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-black/80">
+                  <td className="px-3 py-2.5 text-right text-black/80 align-top">
                     {c._count.recipients > 0 ? c._count.recipients : "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap hidden md:table-cell">
+                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap hidden md:table-cell align-top">
                     {lastSent ? (
                       <span title={new Date(lastSent).toISOString()}>
                         {new Date(lastSent).toLocaleDateString()}{" "}
@@ -849,7 +855,8 @@ function CampaignsTable({
                       <span className="text-black/30">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-right align-top">
+                    <div className="flex justify-end items-center gap-0.5 flex-wrap">
                     {/* Resend — for SENT or FAILED. Clones the campaign +
                         sends to the same audience in one click. */}
                     {(c.status === "SENT" || c.status === "FAILED") && (
@@ -983,6 +990,7 @@ function CampaignsTable({
                     {c.status === "SENDING" && (
                       <Loader2 className="h-4 w-4 animate-spin text-[#FF005A] inline-block ml-1" />
                     )}
+                    </div>
                   </td>
                 </tr>
               );
