@@ -41,6 +41,10 @@ type SeedResponse = {
     audiences: { cloned: number; skipped: number };
     flows: { cloned: number; skipped: number };
     campaigns: { cloned: number; skipped: number };
+    chapterCore?: {
+      brandImages: { applied: string[]; skipped: string[] };
+      chapterFields: { applied: string[]; skipped: string[] };
+    };
   };
   note: string;
 };
@@ -168,6 +172,34 @@ export function SeedChapterButton({
                   skipped={result.summary.campaigns.skipped}
                 />
               </div>
+
+              {/* Chapter core blueprint applied */}
+              {result.summary.chapterCore ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  <div className="font-semibold mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Chapter core blueprint applied
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div>
+                      <span className="font-semibold">Brand images:</span>{" "}
+                      {result.summary.chapterCore.brandImages.applied.length > 0
+                        ? `${result.summary.chapterCore.brandImages.applied.join(", ")} applied`
+                        : "none applied"}
+                      {result.summary.chapterCore.brandImages.skipped.length > 0 &&
+                        ` · ${result.summary.chapterCore.brandImages.skipped.join(", ")} already set`}
+                    </div>
+                    <div>
+                      <span className="font-semibold">Chapter fields:</span>{" "}
+                      {result.summary.chapterCore.chapterFields.applied.length > 0
+                        ? `${result.summary.chapterCore.chapterFields.applied.join(", ")} applied`
+                        : "none applied"}
+                      {result.summary.chapterCore.chapterFields.skipped.length > 0 &&
+                        ` · ${result.summary.chapterCore.chapterFields.skipped.join(", ")} already set`}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {/* Note about templates */}
               <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">

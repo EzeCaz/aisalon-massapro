@@ -13837,3 +13837,64 @@ Stage Summary:
 - Mockup "Set as default" (the local browser default, not the per-event server default) now saves per-chapter. Montreal admin's default only loads for Montreal admin. SUPER_ADMIN gets a "global" namespace.
 - The per-event "Save as event default" (handleSaveAsDefault, server-side) was already chapter-scoped implicitly via the event picker (which only shows the admin's chapter events). No change needed there.
 - Files changed: 12 modified + 1 new (/src/lib/mockup-defaults-key.ts).
+
+---
+Task ID: TSK-0077-chapter-core
+Agent: main
+Task: Two-part task:
+  1. Fix /admin/dashboard/event-dashboard chapter-scoping bug (Montreal admin saw Tel Aviv events)
+  2. Create chaptercore.md — default new chapter blueprint system captured from Montreal's config
+
+Work Log:
+- Task 1 (event-dashboard scoping):
+  * Found same bug as the email report: ADMIN-role users got scopedEventIds=null from
+    getCoHostedEventIds, and the old code treated null as "no filter" (sees ALL events globally)
+  * Fixed by adding getUserScope + scopeEventWhere (for events) + scopeChapterWhere (for RSVPs)
+  * Committed as fix(event-dashboard) + pushed
+- Task 2 (chaptercore.md blueprint):
+  * Asked 4 clarifying questions; user chose: full chapter config, repo /public/defaults/,
+    auto-apply on seed, blueprint + documentation
+  * Explored the chapter config system via subagent:
+    - ChapterSetting model has 4 image keys: favicon, loginHero, loginBanner, emailLogo
+    - Chapter model has heroImageUrl column (separate from loginHero ChapterSetting)
+    - seed-chapter API clones email infra (audiences/flows/campaigns) but NOT brand images
+    - Montreal has no seed file (created manually); heroImageUrl set via set-montreal-hero.ts
+    - Global brand asset URLs are in src/lib/site-settings.ts DEFAULTS map
+  * Created /public/defaults/chapter-core/ with 5 downloaded brand images:
+    - favicon.webp, login-hero.png, login-banner.png, email-logo.png, chapter-hero.jpeg
+  * Created chaptercore.md at repo root — full blueprint doc + embedded JSON config block
+    delimited by <!-- CHAPTERCORE_JSON_START --> / <!-- CHAPTERCORE_JSON_END -->
+  * Created src/lib/chapter-core.ts — parser that reads chaptercore.md, extracts the JSON
+    block, validates shape, caches result. Also resolvePublicPathToUrl() helper.
+  * Updated src/app/api/admin/email/seed-chapter/route.ts:
+    - Added applyChapterCoreDefaults() function that runs after email-infra cloning
+    - Creates ChapterSetting rows for the 4 brand image keys (idempotent — skips if exists)
+    - Sets Chapter.heroImageUrl (idempotent — skips if already set)
+    - Sets Chapter.timezone/whatsappGroupUrl/linkedinUrl (idempotent — only if default/null)
+    - Returns summary of applied vs skipped in the API response
+  * Updated src/app/admin/email/flows/seed-chapter-button.tsx:
+    - Added chapterCore to SeedResponse type
+    - Added "Chapter core blueprint applied" section to the result dialog showing
+      which brand images + chapter fields were applied vs skipped
+  * Created scripts/download-chapter-core-images.sh — re-download images from Vercel Blob
+  * Created scripts/capture-montreal-config.ts — one-off DB query (couldn't run: local env
+    has no DB, but kept for future use when DB is accessible)
+  * Created scripts/test-chapter-core-parser.ts — smoke test for the parser
+  * Fixed parser bug: markers appear in prose docs too, so used lastIndexOf with the
+    full "<!-- CHAPTERCORE_JSON_START" form to find the actual JSON block
+  * Verified: parser extracts + validates the JSON correctly
+  * TypeScript: 0 new errors in my files (117 pre-existing errors in other files unchanged)
+
+Stage Summary:
+- Event dashboard now properly scoped by chapter/country (Montreal admin sees only Montreal)
+- chaptercore.md is the single source of truth for the default new chapter config:
+  * 5 brand image files in /public/defaults/chapter-core/
+  * JSON config block in chaptercore.md (machine-readable)
+  * Full documentation (human-readable)
+- seed-chapter API now auto-applies the blueprint when seeding a new chapter:
+  * Creates ChapterSetting rows for favicon/loginHero/loginBanner/emailLogo
+  * Sets Chapter.heroImageUrl
+  * Sets Chapter.timezone (only if currently the default Asia/Jerusalem)
+  * All idempotent — never overwrites existing non-default values
+- To update the default new chapter image: edit chaptercore.md (or replace the file in
+  /public/defaults/chapter-core/) — no code changes needed

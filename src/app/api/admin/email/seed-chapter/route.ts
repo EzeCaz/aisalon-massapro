@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { getUserScope, canActOnChapter } from "@/lib/permissions";
+import { getChapterCoreConfig, resolvePublicPathToUrl } from "@/lib/chapter-core";
 
 /**
  * POST /api/admin/email/seed-chapter
@@ -26,8 +27,9 @@ import { getUserScope, canActOnChapter } from "@/lib/permissions";
  *     so there's no need to duplicate them per chapter. Per the user spec:
  *     "email templates... stay as default template for all new chapters")
  *   - EmailQueue rows (per-recipient send history is not portable)
- *   - Chapter-specific logos / brand images (those are managed separately
- *     via /admin/images + ChapterSetting)
+ *   - Chapter-specific logos / brand images ARE now applied from the
+ *     chaptercore.md blueprint (TSK-0077). See "Apply chapter core
+ *     defaults" section below.
  *
  * IDEMPOTENT:
  *   - Re-running the seed does NOT create duplicate clones. The endpoint
@@ -258,6 +260,16 @@ export async function POST(req: NextRequest) {
     campaignsCloned++;
   }
 
+  // ── Apply chapter core defaults (TSK-0077) ───────────────────────
+  // Read the chaptercore.md blueprint + apply the default brand images
+  // (favicon, loginHero, loginBanner, emailLogo, chapterHero) + chapter
+  // settings (timezone, social URLs) to the target chapter.
+  //
+  // IDEMPOTENT: only sets values that are currently null/default — never
+  // overwrites an existing non-default value. This means re-running seed
+  // on a chapter that already has its own brand images won't clobber them.
+  const chapterCoreResult = await applyChapterCoreDefaults(targetChapterId, admin.id);
+
   return NextResponse.json({
     ok: true,
     sourceChapterId,
@@ -267,9 +279,133 @@ export async function POST(req: NextRequest) {
       audiences: { cloned: audiencesCloned, skipped: audiencesSkipped },
       flows: { cloned: flowsCloned, skipped: flowsSkipped },
       campaigns: { cloned: campaignsCloned, skipped: campaignsSkipped },
+      chapterCore: chapterCoreResult,
     },
     note:
       "Email templates were NOT cloned — they remain global (chapterId=null) and are visible to all chapters. " +
+      "Brand images + chapter settings were applied from chaptercore.md (the default new chapter blueprint). " +
       "If you want a chapter-specific template variant, duplicate it from /admin/email/flows → Templates tab.",
   });
+}
+
+/**
+ * Apply the chaptercore.md blueprint defaults to a chapter.
+ *
+ * For each brand image in the blueprint:
+ *   - If it's a ChapterSetting key (favicon/loginHero/loginBanner/emailLogo):
+ *     create a ChapterSetting row ONLY if one doesn't already exist.
+ *   - If it's a Chapter column (heroImageUrl): set it ONLY if currently null.
+ *
+ * For chapter defaults (timezone, whatsappGroupUrl, linkedinUrl):
+ *   - timezone: set only if currently the schema default ("Asia/Jerusalem")
+ *   - whatsapp/linkedin: set only if currently null
+ *
+ * Returns a summary of what was applied vs skipped.
+ */
+async function applyChapterCoreDefaults(
+  chapterId: string,
+  _adminId: string
+): Promise<{
+  brandImages: { applied: string[]; skipped: string[] };
+  chapterFields: { applied: string[]; skipped: string[] };
+}> {
+  const config = getChapterCoreConfig();
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
+    "http://localhost:3000";
+
+  const brandImagesApplied: string[] = [];
+  const brandImagesSkipped: string[] = [];
+  const chapterFieldsApplied: string[] = [];
+  const chapterFieldsSkipped: string[] = [];
+
+  // ── 1. Brand images stored as ChapterSetting rows ────────────────
+  // Only create a row if one doesn't already exist for this key —
+  // never overwrite an existing override.
+  const settingEntries = Object.entries(config.brandImages).filter(
+    ([, img]) => img.chapterSettingKey
+  );
+  for (const [key, img] of settingEntries) {
+    if (!img.chapterSettingKey) continue;
+    const existing = await db.chapterSetting.findUnique({
+      where: {
+        chapterId_key: { chapterId, key: img.chapterSettingKey },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      brandImagesSkipped.push(key);
+      continue;
+    }
+    const url = resolvePublicPathToUrl(img.path);
+    await db.chapterSetting.create({
+      data: {
+        chapterId,
+        key: img.chapterSettingKey,
+        value: url,
+      },
+    });
+    brandImagesApplied.push(key);
+  }
+
+  // ── 2. Brand images stored on the Chapter row (heroImageUrl) ─────
+  // Only set if currently null — don't clobber an existing hero.
+  const chapterFieldEntries = Object.entries(config.brandImages).filter(
+    ([, img]) => img.chapterField
+  );
+  if (chapterFieldEntries.length > 0) {
+    const chapter = await db.chapter.findUnique({
+      where: { id: chapterId },
+      select: { heroImageUrl: true, timezone: true, whatsappGroupUrl: true, linkedinUrl: true },
+    });
+    if (chapter) {
+      const patch: Record<string, string | null> = {};
+
+      for (const [key, img] of chapterFieldEntries) {
+        if (!img.chapterField) continue;
+        const currentValue = (chapter as Record<string, unknown>)[img.chapterField] as string | null;
+        if (currentValue) {
+          chapterFieldsSkipped.push(key);
+          continue;
+        }
+        patch[img.chapterField] = resolvePublicPathToUrl(img.path);
+        chapterFieldsApplied.push(key);
+      }
+
+      // ── 3. Chapter defaults (timezone, social URLs) ──────────────
+      // Only set if currently the schema default or null.
+      if (config.defaults.timezone && chapter.timezone === "Asia/Jerusalem") {
+        patch.timezone = config.defaults.timezone;
+        chapterFieldsApplied.push("timezone");
+      } else if (config.defaults.timezone) {
+        chapterFieldsSkipped.push("timezone");
+      }
+      if (config.defaults.whatsappGroupUrl && !chapter.whatsappGroupUrl) {
+        patch.whatsappGroupUrl = config.defaults.whatsappGroupUrl;
+        chapterFieldsApplied.push("whatsappGroupUrl");
+      } else if (config.defaults.whatsappGroupUrl !== undefined) {
+        chapterFieldsSkipped.push("whatsappGroupUrl");
+      }
+      if (config.defaults.linkedinUrl && !chapter.linkedinUrl) {
+        patch.linkedinUrl = config.defaults.linkedinUrl;
+        chapterFieldsApplied.push("linkedinUrl");
+      } else if (config.defaults.linkedinUrl !== undefined) {
+        chapterFieldsSkipped.push("linkedinUrl");
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await db.chapter.update({ where: { id: chapterId }, data: patch });
+      }
+    }
+  }
+
+  // Suppress unused-var warning for origin (kept for future use — e.g.
+  // if we need to log the resolved origin for debugging).
+  void origin;
+
+  return {
+    brandImages: { applied: brandImagesApplied, skipped: brandImagesSkipped },
+    chapterFields: { applied: chapterFieldsApplied, skipped: chapterFieldsSkipped },
+  };
 }
