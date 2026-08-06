@@ -320,11 +320,17 @@ function CampaignRow({
     ? `Scheduled ${new Date(campaign.scheduledAt).toLocaleString()}`
     : "—";
 
-  // Only show "Resend" for terminal states (SENT or FAILED). For DRAFT
-  // the Edit button already lets the admin open + send; for SCHEDULED /
+  // "Resend" clones the campaign + re-sends to the same audience. Only
+  // meaningful for terminal states (SENT/FAILED) — for DRAFT the Edit
+  // button already lets the admin open + send, and for SCHEDULED /
   // SENDING a resend would either double-send or collide with the
-  // in-flight batch worker.
+  // in-flight batch worker. We still RENDER the button on non-eligible
+  // rows (disabled, with a tooltip explaining why) so the feature is
+  // discoverable instead of mysteriously absent.
   const canResend = status === "SENT" || status === "FAILED";
+  const resendTooltip = canResend
+    ? "Create a new campaign with the same audience + content and send it now"
+    : `Resend is only available for SENT or FAILED campaigns (this one is ${status}). Open + send this campaign first.`;
 
   return (
     <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/5 hover:bg-black/[0.02] items-center text-sm">
@@ -345,22 +351,21 @@ function CampaignRow({
         </code>
       </div>
       <div className="col-span-2 flex justify-end gap-1">
-        {canResend && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onResend}
-            disabled={resending}
-            title="Create a new campaign with the same audience + content and send it now"
-          >
-            {resending ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3 w-3 mr-1" />
-            )}
-            Resend
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onResend}
+          disabled={!canResend || resending}
+          title={resendTooltip}
+          className={!canResend ? "opacity-40 cursor-not-allowed" : ""}
+        >
+          {resending ? (
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3 mr-1" />
+          )}
+          Resend
+        </Button>
         <Button size="sm" variant="outline" onClick={onView}>
           {status === "DRAFT" ? (
             <>

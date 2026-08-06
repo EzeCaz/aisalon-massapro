@@ -1356,7 +1356,7 @@ function EditRegistrantDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit3 className="h-4 w-4 text-[#FF005A]" />
