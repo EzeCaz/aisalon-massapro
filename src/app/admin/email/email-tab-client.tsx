@@ -222,6 +222,59 @@ export function EmailTabClient({
     setComposerOpen(true);
   };
 
+  // "Resend to same audience" — clones the source campaign (subject,
+  // body, audience, from/reply-to) and immediately fires the send
+  // pipeline on the clone via the /resend API endpoint. One-click
+  // re-blast without walking the composer again. Only SENT / FAILED
+  // campaigns can be resent (the API enforces this too).
+  const [resendingId, setResendingId] = React.useState<string | null>(null);
+  const handleResendCampaign = async (c: Campaign) => {
+    if (!confirm(
+      `Resend "${c.name}" to the same audience?\n\n` +
+      `This creates a new campaign with the same subject, body, and ` +
+      `recipient list, then sends it immediately. The original ` +
+      `campaign is not modified.`
+    )) {
+      return;
+    }
+    setResendingId(c.id);
+    const t = toast.loading(`Resending "${c.name}"…`);
+    try {
+      const res = await fetch(
+        `/api/admin/email/campaigns/${c.id}/resend`,
+        { method: "POST" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 207) {
+        throw new Error(data?.error || `Failed (${res.status})`);
+      }
+      // 207 = multi-status: clone created but send step failed.
+      if (data.sendError) {
+        toast.error(
+          `Cloned, but send failed: ${data.sendError}`,
+          { id: t, duration: 8000 }
+        );
+      } else if (data.sendResult) {
+        const sr = data.sendResult;
+        toast.success(
+          `Resent to ${sr.sentCount || 0} recipients` +
+          (sr.failedCount ? ` (${sr.failedCount} failed)` : ""),
+          { id: t }
+        );
+      } else {
+        toast.success("Resend queued", { id: t });
+      }
+      await refreshCampaigns();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to resend",
+        { id: t }
+      );
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const handleEditCampaign = (c: Campaign) => {
     setEditingCampaign(c);
     setComposerOpen(true);
@@ -449,6 +502,8 @@ export function EmailTabClient({
               onPause={handlePauseCampaign}
               onResume={handleResumeCampaign}
               onTestSend={handleOpenTestSend}
+              onResend={handleResendCampaign}
+              resendingId={resendingId}
             />
           </section>
 
@@ -613,6 +668,8 @@ function CampaignsTable({
   onPause,
   onResume,
   onTestSend,
+  onResend,
+  resendingId,
 }: {
   campaigns: Campaign[];
   onEdit: (c: Campaign) => void;
@@ -622,6 +679,8 @@ function CampaignsTable({
   onPause: (c: Campaign) => Promise<void>;
   onResume: (c: Campaign) => Promise<void>;
   onTestSend: (c: Campaign) => void;
+  onResend: (c: Campaign) => Promise<void>;
+  resendingId: string | null;
 }) {
   const [sending, setSending] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -716,17 +775,21 @@ function CampaignsTable({
           Refresh
         </Button>
       </div>
-      <div className="rounded-lg border border-black/10 overflow-x-auto">
+      <div className="rounded-lg border border-black/10 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-black/[0.03] text-black/80 sticky top-0 z-10">
             <tr>
               <th className="text-left font-medium px-3 py-2.5">Name</th>
               <th className="text-left font-medium px-3 py-2.5">Status</th>
-              <th className="text-left font-medium px-3 py-2.5">Subject</th>
-              <th className="text-left font-medium px-3 py-2.5">Flow</th>
-              <th className="text-left font-medium px-3 py-2.5">Template</th>
+              <th className="text-left font-medium px-3 py-2.5 max-w-[14rem]">Subject</th>
+              {/* Hide Flow + Template on smaller viewports so the table
+                  doesn't overflow horizontally. They come back on lg / xl
+                  screens where there's room. Matches the templates
+                  section approach (which has 7 cols and never scrolls). */}
+              <th className="text-left font-medium px-3 py-2.5 hidden lg:table-cell">Flow</th>
+              <th className="text-left font-medium px-3 py-2.5 hidden xl:table-cell">Template</th>
               <th className="text-right font-medium px-3 py-2.5">Recipients</th>
-              <th className="text-left font-medium px-3 py-2.5">Last sent</th>
+              <th className="text-left font-medium px-3 py-2.5 hidden md:table-cell">Last sent</th>
               <th className="text-right font-medium px-3 py-2.5">Actions</th>
             </tr>
           </thead>
@@ -747,10 +810,10 @@ function CampaignsTable({
                   <td className="px-3 py-2.5">
                     <StatusBadge status={c.status} />
                   </td>
-                  <td className="px-3 py-2.5 text-black/70 max-w-md truncate">
+                  <td className="px-3 py-2.5 text-black/70 max-w-[14rem] truncate">
                     {c.subjectSnapshot}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs">
+                  <td className="px-3 py-2.5 text-black/80 text-xs hidden lg:table-cell">
                     {c.flow ? (
                       <a
                         href={`/admin/email/flows?flow=${c.flow.id}`}
@@ -764,7 +827,7 @@ function CampaignsTable({
                       <span className="text-black/30">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs">
+                  <td className="px-3 py-2.5 text-black/80 text-xs hidden xl:table-cell">
                     {c.template ? (
                       <Badge variant="outline" className="font-normal text-xs">
                         {c.template.name}
@@ -776,7 +839,7 @@ function CampaignsTable({
                   <td className="px-3 py-2.5 text-right text-black/80">
                     {c._count.recipients > 0 ? c._count.recipients : "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-black/80 text-xs whitespace-nowrap hidden md:table-cell">
                     {lastSent ? (
                       <span title={new Date(lastSent).toISOString()}>
                         {new Date(lastSent).toLocaleDateString()}{" "}
@@ -787,6 +850,24 @@ function CampaignsTable({
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    {/* Resend — for SENT or FAILED. Clones the campaign +
+                        sends to the same audience in one click. */}
+                    {(c.status === "SENT" || c.status === "FAILED") && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onResend(c)}
+                        disabled={resendingId === c.id}
+                        className="h-7 px-2 text-[#004F98] hover:text-[#004F98]"
+                        title="Resend to the same audience (creates a new campaign)"
+                      >
+                        {resendingId === c.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    )}
                     {/* Test send — always visible */}
                     <Button
                       size="sm"
