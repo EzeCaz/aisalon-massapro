@@ -13011,3 +13011,84 @@ Stage Summary:
   Previously all such campaigns would hit the "No recipients matched"
   error regardless of audience size.
 - Files modified (1): src/app/api/admin/email/campaigns/[id]/send/route.ts
+
+---
+Task ID: google-signin-onboarding-gate-fix
+Agent: main
+Task: User asked why "Moayad Abo Rya" registered but has no profile data. Investigation revealed Google sign-in bypassed the onboarding gate entirely. User chose option 2: fix the Google sign-in flow to force new users through onboarding.
+
+Work Log:
+- Investigated Moayad's profile on production via /api/admin/members/search:
+  * id: cmsgphyay0000l404lnwjoh9c
+  * email: abo.rya.889@gmail.com
+  * name: Moayad Abo Rya (from Google)
+  * image: Google avatar URL
+  * company/title/bio/mobile/linkedin/etc.: ALL null
+  * onboardedAt: null
+  * importSource: null
+- Traced the registration flow in src/lib/auth.ts: Google sign-in callback
+  creates a User row with ONLY email + name + image + role + utmUid. All
+  other profile fields (company, title, bio, mobile, linkedin, etc.) are
+  left null — they're supposed to be filled in by the /onboarding form.
+- Found /api/auth/post-login-redirect endpoint existed with the correct
+  routing logic (mustSetPassword → /set-password, importSource → /events,
+  onboardedAt → /events, otherwise → /onboarding) but had ZERO callers.
+- Both Google and email sign-in paths in login-form.tsx pushed directly
+  to `finalCallback` (default '/events'), completely bypassing the
+  redirect endpoint.
+- Discovered the bypass mechanism: public pages like /e/[slug] (event
+  landing page) have NO onboarding gate. A user who signed up via Google
+  from an event link → Google OAuth → callback to /e/[slug] → could
+  browse the public event page indefinitely without ever filling out
+  the intake form. Result: 'ghost members' with onboardedAt=null and
+  empty profile fields.
+
+Fix (2 files, +94/-38 lines):
+1. src/app/api/auth/post-login-redirect/route.ts:
+   * Converted from JSON responses to HTTP 302 redirects (so it works
+     for top-level browser navigation from Google OAuth callback, not
+     just fetch() calls).
+   * Added a `next` query param so deep links (e.g. /events/some-slug)
+     are honored when the user is already onboarded. Validated to be a
+     relative path (starts with '/', not '//') to prevent open-redirect
+     abuse.
+   * `next` is IGNORED for users who need /set-password, /onboarding,
+     or the importSource auto-mark side effect — those mandatory routes
+     always take priority.
+   * Preserved the existing 'auto-mark imported members as onboarded'
+     side effect.
+
+2. src/app/login/login-form.tsx:
+   * Google sign-in: callbackUrl is now
+     /api/auth/post-login-redirect?next=<finalCallback>
+   * Email sign-in: router.push() navigates to the same redirect endpoint
+   * Dev sign-in: same change, for consistency
+   * Added explanatory comment so future maintainers don't 'simplify'
+     it back to the broken direct push.
+
+TypeScript: Zero new errors. The 2 remaining errors in the file
+(mustSetPassword not in Prisma schema) are pre-existing — confirmed via
+git stash that they existed before my changes. The mustSetPassword check
+is dead code (the field doesn't exist in the DB) but was kept for
+forward-compat.
+
+Committed: 2b6d385 fix(auth): force new Google users through onboarding
+gate via post-login-redirect
+Pushed: 35a0d99..2b6d385 main -> main — Vercel auto-deploy triggered.
+
+Stage Summary:
+- After Vercel rebuilds (~3-5 min), every brand-new Google user will be
+  forced to /onboarding before they can browse the site. The /onboarding
+  page already has its own gate (redirects to /events if already onboarded)
+  and the form submission sets onboardedAt=NOW() + writes all profile
+  fields.
+- Returning members (onboardedAt set) are sent to their original deep
+  link or /events — same as before, no behavior change.
+- Pre-imported members (importSource set) are auto-marked onboarded if
+  not already, then sent to their deep link — same as before.
+- Existing ghost members (like Moayad) will be forced to /onboarding
+  the next time they sign in. The admin can also manually fill in their
+  profile via Edit Member, or click 'Send chapter form' to email them
+  a link to the onboarding form.
+- Files modified (2): src/app/api/auth/post-login-redirect/route.ts,
+  src/app/login/login-form.tsx
