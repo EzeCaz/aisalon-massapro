@@ -13092,3 +13092,79 @@ Stage Summary:
   a link to the onboarding form.
 - Files modified (2): src/app/api/auth/post-login-redirect/route.ts,
   src/app/login/login-form.tsx
+
+---
+Task ID: audience-editor-fixes + exclude-rules + finish-onboarding-url
+Agent: main
+Task: User reported 3 issues + 1 new feature:
+  1A. LiveMatchPreview doesn't show for audiences with is_set/is_not_set rules
+  1B. Rules reset when re-editing an existing audience
+  1C. Add exclude rules (rule-based exclusions, not just per-user checkboxes)
+  2. Add a "finish process" URL token for email templates so admins can
+      link users to finish filling out the onboarding form for their chapter
+
+Work Log:
+- Reproduced bug (a) on production: "Didnt fill Reg-form" audience has
+  60 matched emails (confirmed via /api/email-audiences), but the editor
+  showed the default placeholder rule ("Email contains ''") instead of
+  the saved rules (linkedinUrl is_not_set + companyUrl is_not_set).
+- Root cause (a): hasAnyRules check required r.value to be non-empty,
+  but is_set/is_not_set operators don't need a value. Fixed by adding
+  VALUELESS_OPS set.
+- Root cause (b): flows/page.tsx audiencesParsed did NOT include the
+  'filters' field for DYNAMIC audiences. So AudienceEditor received
+  audience.filters = undefined and fell back to the default placeholder.
+  The filtersJson WAS saved correctly (sidebar showed '60 emails'),
+  the editor just never loaded it. Fixed by adding
+  filters: parseSpec(a.filtersJson) to the return.
+- Implemented exclude rules (task 1C):
+  * New excludeGroups?: FilterGroup[] field on AudienceFilterSpec
+  * New resolveExcludeRuleEmails() helper in audience-filter.ts
+  * resolveAudienceEmails() now subtracts excludeRuleEmails before
+    subtracting excludedEmails
+  * Preview API returns ruleExcludedUsers[] + ruleExcludedCount +
+    manualExcludedCount so the UI can distinguish rule-excluded from
+    manually-excluded users
+  * New ExcludeGroupsEditor component (red-themed section) in
+    audiences-client.tsx, reuses FilterGroupEditor
+  * LiveMatchPreview now shows 3 sections: Will receive (checkboxes),
+    Excluded by rules (no checkbox — remove rule to re-include),
+    Excluded manually (checkbox to re-include)
+  * Header: "N matched · M excluded by rules · P excluded manually ·
+    K will receive"
+- Implemented {{finishOnboardingUrl}} token (task 2):
+  * New field on UnifiedRenderContext + TemplateContext
+  * Token replacement in replaceTokens() + renderUnifiedSubject()
+    (both camelCase {{finishOnboardingUrl}} and snake_case
+    {{finish_onboarding_url}})
+  * Populated in buildContext() (orchestrator path) and in the campaign
+    send route (campaign path)
+  * URL = ${baseUrl}/onboarding — works whether logged in or not
+    (post-login-redirect forces onboarding for users who haven't
+    completed it, per the previous fix in commit 2b6d385)
+
+TypeScript: 0 new errors from these changes (125 pre-existing errors
+in unrelated files: skills, dashboard, etc.).
+
+Committed: 58221b9 feat(audiences+email): fix rule-load bug + exclude
+rules + {{finishOnboardingUrl}} token (8 files, +395/-21 lines)
+Pushed: 2b6d385..58221b9 main -> main — Vercel auto-deploy triggered.
+
+Stage Summary:
+- After Vercel rebuilds (~3-5 min):
+  * Editing an existing DYNAMIC audience will load the saved rules
+    (no more reset).
+  * The LiveMatchPreview will show for is_set/is_not_set rules (e.g.
+    "Didn't fill Reg-form" will show all 60 matched users with
+    checkboxes to exclude individuals).
+  * New "Exclude rules" section (red box) lets admins add rule-based
+    exclusions (e.g. "exclude users who already filled the form" =
+    onboardedAt is_set). Rule-excluded users appear in a separate
+    "Excluded by rules" section in the preview (no checkbox — remove
+    the rule to re-include them).
+  * Email templates can use {{finishOnboardingUrl}} (or
+    {{finish_onboarding_url}}) to link recipients to /onboarding.
+    The URL works whether the user is logged in or not.
+- Files modified (8): audiences-client.tsx, flows/page.tsx,
+  campaigns/[id]/send/route.ts, preview/route.ts, flow-builder-canvas.tsx,
+  audience-filter.ts, templates.ts, render-unified.ts
