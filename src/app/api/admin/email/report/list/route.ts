@@ -29,6 +29,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
+import {
+  getUserScope,
+  scopeChapterWhere,
+  getCoHostedEventIds,
+} from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +90,22 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // TSK-0076: scope the report by the admin's chapter/country.
+  // A Montreal admin only sees Montreal campaigns + queue items.
+  // SUPER_ADMIN (scope.kind === "global") sees everything.
+  // CO_HOST (scopedEventIds !== null) only sees rows for events they co-host.
+  const scope = await getUserScope(admin.id);
+  const scopedEventIds = await getCoHostedEventIds(admin.id, admin.role);
+  const chapterWhere = scopeChapterWhere(scope);
+
   // 1) All campaigns (covers type "campaign" + type "flow").
+  //    Scoped to the admin's chapter via scopeChapterWhere.
+  //    For CO_HOST, further restrict to their co-hosted events (campaigns
+  //    don't carry an eventId, but their flow's trigger event or audience
+  //    is chapter-bound — so we rely on the chapterId filter alone for them,
+  //    which is the same behavior as the registrants API for CO_HOST).
   const campaigns = await db.emailCampaign.findMany({
+    where: chapterWhere,
     orderBy: { createdAt: "desc" },
     include: {
       template: { select: { id: true, name: true, category: true } },
@@ -102,8 +121,13 @@ export async function GET() {
   //    (e.g. test-send). We group them by (subject, event) so the report
   //    shows one row per "send batch" rather than one row per recipient.
   //    Grouping reduces thousands of queue rows into a manageable list.
+  //    Scoped to the admin's chapter + (for CO_HOST) co-hosted events.
+  const manualQueueWhere =
+    scopedEventIds === null
+      ? { ...chapterWhere, flowStepId: null }
+      : { ...chapterWhere, flowStepId: null, eventId: { in: scopedEventIds } };
   const manualQueueItems = await db.emailQueue.findMany({
-    where: { flowStepId: null },
+    where: manualQueueWhere,
     orderBy: { createdAt: "desc" },
     take: 1000,
     select: {

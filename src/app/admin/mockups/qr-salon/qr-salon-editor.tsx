@@ -48,11 +48,21 @@ import { QrSalonSelectedPanel } from "../shared/qr-salon-selected-panel";
 
 const STORAGE_KEY = "qr-salon-data-v4";
 // PER TSK-0053: Local "Set as default" storage. The ENTIRE current `data`
-// is saved under `qr-salon-style-defaults-current`. When the user clicks
-// "Reset", if a saved default exists it is loaded instead of SAMPLE_DATA.
+// is saved under `qr-salon-style-defaults-{scopeKey}-current`. When the
+// user clicks "Reset", if a saved default exists it is loaded instead of
+// SAMPLE_DATA.
+// TSK-0076: the scopeKey segment namespaces the default by chapter.
 const STYLE_DEFAULTS_KEY_PREFIX = "qr-salon-style-defaults-";
 
-export function QrSalonEditor() {
+type Props = {
+  /**
+   * Chapter-scope key for localStorage namespacing (TSK-0076).
+   * e.g. "chapter_abc123" for a Montreal admin, "global" for SUPER_ADMIN.
+   */
+  scopeKey: string;
+};
+
+export function QrSalonEditor({ scopeKey }: Props) {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(JSON.stringify(SAMPLE_DATA, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
@@ -259,7 +269,7 @@ export function QrSalonEditor() {
    * "Reset", this saved default is loaded instead of SAMPLE_DATA.
    */
   const handleSetAsDefault = useCallback(() => {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     try {
       localStorage.setItem(key, JSON.stringify(data));
       setSavedDefaultFeedback(true);
@@ -267,11 +277,11 @@ export function QrSalonEditor() {
     } catch {
       // ignore quota errors
     }
-  }, [data]);
+  }, [data, scopeKey]);
 
   // ─── Reset ──────────────────────────────────────────────────────
   function handleReset() {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     let savedDefault: QrSalonData | null = null;
     try {
       const saved = localStorage.getItem(key);

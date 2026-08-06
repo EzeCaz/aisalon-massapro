@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny, isSuperAdminEmail, ROLES, getEffectiveRole} from "@/lib/permissions";
+import { canAny, isSuperAdminEmail, ROLES, getEffectiveRole, getUserScope} from "@/lib/permissions";
+import { buildScopeKey } from "@/lib/mockup-defaults-key";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { QrSalonEditor } from "./qr-salon-editor";
@@ -58,6 +59,11 @@ export default async function QrSalonMockupPage() {
     redirect("/events");
   }
 
+  // TSK-0076: derive a scopeKey for chapter-scoped localStorage defaults
+  // (the "Set as default" button saves per-chapter, not globally).
+  const scope = await getUserScope(me.id);
+  const scopeKey = buildScopeKey(scope);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
@@ -83,7 +89,7 @@ export default async function QrSalonMockupPage() {
           </p>
         </div>
 
-        <QrSalonEditor />
+        <QrSalonEditor scopeKey={scopeKey} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

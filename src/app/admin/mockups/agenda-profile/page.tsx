@@ -11,6 +11,7 @@ import {
   scopeEventWhere,
   getCoHostedEventIds,
 } from "@/lib/permissions";
+import { buildScopeKey } from "@/lib/mockup-defaults-key";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AgendaProfileEditor } from "./agenda-profile-editor";
@@ -59,7 +60,9 @@ export default async function AgendaProfileMockupPage() {
   }
 
   // TSK-0075: scope the events dropdown by chapter/country.
+  // TSK-0076: also derive a scopeKey for chapter-scoped localStorage defaults.
   const scope = await getUserScope(me.id);
+  const scopeKey = buildScopeKey(scope);
   const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
   const eventsWhere =
     scopedEventIds === null
@@ -102,7 +105,7 @@ export default async function AgendaProfileMockupPage() {
           </p>
         </div>
 
-        <AgendaProfileEditor events={events} />
+        <AgendaProfileEditor events={events} scopeKey={scopeKey} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

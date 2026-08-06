@@ -39,16 +39,21 @@ import {
 
 const STORAGE_KEY = "event-profile-data-v1";
 // PER TSK-0053: Local "Set as default" storage. The ENTIRE current `data`
-// is saved under `event-profile-style-defaults-current`. When the user
-// clicks "Reset", if a saved default exists it is loaded instead of
-// SAMPLE_DATA.
+// is saved under `event-profile-style-defaults-{scopeKey}-current`. When
+// the user clicks "Reset", if a saved default exists it is loaded instead
+// of SAMPLE_DATA.
+// TSK-0076: the scopeKey segment namespaces the default by chapter.
 const STYLE_DEFAULTS_KEY_PREFIX = "event-profile-style-defaults-";
 
 type Props = {
   events: EventPickListItem[];
+  /**
+   * Chapter-scope key for localStorage namespacing (TSK-0076).
+   */
+  scopeKey: string;
 };
 
-export function EventProfileEditor({ events }: Props) {
+export function EventProfileEditor({ events, scopeKey }: Props) {
   const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -444,7 +449,7 @@ export function EventProfileEditor({ events }: Props) {
    * (which uploads a PNG snapshot + dataJson to the API).
    */
   const handleSetAsDefault = useCallback(() => {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     try {
       localStorage.setItem(key, JSON.stringify(data));
       setSavedDefaultFeedback(true);
@@ -452,10 +457,10 @@ export function EventProfileEditor({ events }: Props) {
     } catch {
       // ignore quota errors
     }
-  }, [data]);
+  }, [data, scopeKey]);
 
   function handleReset() {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     let savedDefault: EventProfileData | null = null;
     try {
       const saved = localStorage.getItem(key);

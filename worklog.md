@@ -13812,3 +13812,28 @@ Stage Summary:
     summary, chartData, Graphs view, KpiCard + SubTabButton components,
     initialRowId deep-link)
   * src/app/admin/email/email-tab-client.tsx (BarChart3 icon → link)
+
+---
+Task ID: TSK-0076 (chapter-scoping for email report + mockup defaults)
+Agent: main
+Task: Two fixes requested by user:
+  1. /admin/email/report shows all data (Tel Aviv + Montreal) instead of only Montreal. Flow + campaign data + KPI cards (Sent/Open/Clicked/etc.) must only show Montreal.
+  2. Mockup "Set as default" button saves to a global localStorage key — should only save for the admin's chapter (Montreal), not leak to other chapters.
+
+Work Log:
+- Explored Prisma schema: confirmed EmailCampaign, EmailQueue, EmailFlow, EmailAudience, Registrant, Event all have `chapterId` (denormalized V7 field). User has `chapterId` + `role`.
+- Found existing scope helpers in /src/lib/permissions.ts: getUserScope(), scopeChapterWhere(scope), getCoHostedEventIds(), canActOnChapter(). UserScope = global | country | chapter | none. SUPER_ADMIN=global, ADMIN=country, CHAPTER_ORGANIZER/CO_HOST=chapter.
+- Found existing /api/admin/email/seed-chapter/route.ts — already clones Tel Aviv audiences+flows+draft campaigns into target chapter (Montreal). Idempotent via [cloned-from:ID] marker in description. Templates stay global (chapterId=null). This was already built in a prior session, no changes needed.
+- Fixed /api/admin/email/report/list/route.ts: added getUserScope + scopeChapterWhere + getCoHostedEventIds. Applied chapterWhere to emailCampaign.findMany and emailQueue.findMany. CO_HOST role also filtered by co-hosted event IDs. SUPER_ADMIN sees all (scopeChapterWhere returns {}). KPI cards are computed client-side from rows, so they auto-scope once the API is scoped.
+- Fixed /api/admin/email/report/batch-action/route.ts: added getUserScope + scopeChapterWhere + canActOnChapter. Source-campaign fetch now uses `where: { AND: [{ id: { in: campaignIds } }, chapterWhere] }` so a Montreal admin can't duplicate a Tel Aviv campaign by manually passing its ID. Audience fetch now also verifies the audience's chapterId is in the admin's scope (or null=global shared). Out-of-scope campaign IDs are counted as skipped with a clear error message.
+- Created /src/lib/mockup-defaults-key.ts: buildScopeKey(scope) returns "global" | "country_<id>" | "chapter_<id>" | "none". Used to namespace localStorage keys per chapter.
+- Updated all 5 mockup server pages (speaker-intro, meet-the-speaker, event-profile, agenda-profile, qr-salon) to compute scopeKey = buildScopeKey(scope) and pass it to the editor as a prop.
+- Updated all 5 mockup editor components to accept `scopeKey: string` prop and use it in the localStorage key: `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-${suffix}` (was `${STYLE_DEFAULTS_KEY_PREFIX}${suffix}`). This prevents a Montreal admin's "Set as default" from leaking to a Tel Aviv admin on the same browser. Old keys are not migrated (harmless leftover in localStorage); first save after this change creates a new chapter-scoped key.
+- Verified: npx tsc --noEmit produces 120 errors before AND after my changes (identical). All 120 are pre-existing (recharts types in dashboard, taggedImageKey/scaleX/scaleY in event-profile canvas, old scripts). My changes introduce zero new errors.
+
+Stage Summary:
+- /admin/email/report now scopes all rows (campaigns + flows + manual queue sends) + KPI cards + flow/campaign filter dropdowns to the logged-in admin's chapter. Montreal admin sees only Montreal data.
+- /admin/email/report batch actions (duplicate, send-to-audience) now enforce chapter scope server-side — a Montreal admin cannot duplicate or resend Tel Aviv campaigns even by crafting rowIds manually.
+- Mockup "Set as default" (the local browser default, not the per-event server default) now saves per-chapter. Montreal admin's default only loads for Montreal admin. SUPER_ADMIN gets a "global" namespace.
+- The per-event "Save as event default" (handleSaveAsDefault, server-side) was already chapter-scoped implicitly via the event picker (which only shows the admin's chapter events). No change needed there.
+- Files changed: 12 modified + 1 new (/src/lib/mockup-defaults-key.ts).

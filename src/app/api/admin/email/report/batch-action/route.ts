@@ -39,6 +39,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
 import { resolveAudienceEmailsById } from "@/lib/email-orchestrator/audience-filter";
+import { getUserScope, scopeChapterWhere, canActOnChapter } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -70,16 +71,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "audienceId is required for send_to_audience" }, { status: 400 });
   }
 
+  // Resolve the admin's chapter scope. TSK-0076: a Montreal admin must
+  // only duplicate/send campaigns from their own chapter, and may only
+  // send to audiences in their own chapter. SUPER_ADMIN (scope.kind ===
+  // "global") is unrestricted.
+  const scope = await getUserScope(admin.id);
+  if (scope.kind === "none") {
+    return NextResponse.json(
+      { error: "Your account has no chapter scope." },
+      { status: 403 },
+    );
+  }
+  const chapterWhere = scopeChapterWhere(scope);
+
   // Resolve the audience's full email list up-front (only for send_to_audience).
   let audienceEmails: string[] = [];
   let audienceName = "";
   if (action === "send_to_audience") {
     const audience = await db.emailAudience.findUnique({
       where: { id: audienceId! },
-      select: { id: true, name: true, kind: true },
+      select: { id: true, name: true, kind: true, chapterId: true },
     });
     if (!audience) {
       return NextResponse.json({ error: "Audience not found" }, { status: 404 });
+    }
+    // TSK-0076: audience must be in the admin's chapter (or a global
+    // audience with chapterId=null, which is shared across chapters).
+    if (audience.chapterId && !canActOnChapter(scope, audience.chapterId)) {
+      return NextResponse.json(
+        { error: `Audience "${audience.name}" belongs to a different chapter. You can only send to audiences in your own chapter.` },
+        { status: 403 },
+      );
     }
     audienceName = audience.name;
     // resolveAudienceEmailsById handles both STATIC (parse emailsJson) and
@@ -111,18 +133,33 @@ export async function POST(req: NextRequest) {
   }
 
   const campaignIds = campaignRowIds.map((r) => r.split(":").slice(1).join(":"));
+
+  const errors: string[] = [];
+  const newCampaignIds: string[] = [];
+  let duplicated = 0;
+  let sent = 0;
+
+  // TSK-0076: scope the source-campaign fetch by chapter. This prevents a
+  // Montreal admin from duplicating a Tel Aviv campaign by manually passing
+  // its ID in rowIds. The `where` is the intersection of { id: { in } } and
+  // the chapter filter. For SUPER_ADMIN, chapterWhere is {} (no filter).
   const sourceCampaigns = await db.emailCampaign.findMany({
-    where: { id: { in: campaignIds } },
+    where: { AND: [{ id: { in: campaignIds } }, chapterWhere] },
     include: {
       template: { select: { id: true, name: true } },
       flow: { select: { id: true, name: true, status: true } },
     },
   });
 
-  const errors: string[] = [];
-  const newCampaignIds: string[] = [];
-  let duplicated = 0;
-  let sent = 0;
+  // If some campaign IDs were requested but not found in the admin's
+  // chapter, count them as skipped (with a clear error message).
+  const foundIds = new Set(sourceCampaigns.map((c) => c.id));
+  const outOfScopeIds = campaignIds.filter((id) => !foundIds.has(id));
+  if (outOfScopeIds.length > 0) {
+    errors.push(
+      `${outOfScopeIds.length} campaign(s) were skipped because they belong to a different chapter: ${outOfScopeIds.join(", ")}`,
+    );
+  }
 
   for (const src of sourceCampaigns) {
     try {

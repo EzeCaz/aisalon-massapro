@@ -64,13 +64,20 @@ const LEGACY_STORAGE_KEYS = [
 // "Set as default" button. Saves the ENTIRE current mockup state as the
 // local default. When the user clicks Reset, the saved default is loaded
 // instead of SAMPLE_DATA (mirrors speaker-intro's behavior).
+// TSK-0076: the key is namespaced by chapter (scopeKey) so a Montreal
+// admin's default doesn't leak to a Tel Aviv admin on the same browser.
 const STYLE_DEFAULTS_KEY_PREFIX = "meet-the-speaker-style-defaults-";
 
 type Props = {
   events: EventPickListItem[];
+  /**
+   * Chapter-scope key for localStorage namespacing (TSK-0076).
+   * e.g. "chapter_abc123" for a Montreal admin, "global" for SUPER_ADMIN.
+   */
+  scopeKey: string;
 };
 
-export function MeetTheSpeakerEditor({ events }: Props) {
+export function MeetTheSpeakerEditor({ events, scopeKey }: Props) {
   const [data, setData] = useState<MeetTheSpeakerData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -549,7 +556,7 @@ export function MeetTheSpeakerEditor({ events }: Props) {
    *  (which uploads a PNG snapshot + dataJson to the API).
    */
   const handleSetAsDefault = useCallback(() => {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     try {
       localStorage.setItem(key, JSON.stringify(data));
       setSavedDefaultFeedback(true);
@@ -557,10 +564,10 @@ export function MeetTheSpeakerEditor({ events }: Props) {
     } catch {
       // ignore quota errors
     }
-  }, [data]);
+  }, [data, scopeKey]);
 
   function handleReset() {
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}current`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-current`;
     let savedDefault: MeetTheSpeakerData | null = null;
     try {
       const saved = localStorage.getItem(key);

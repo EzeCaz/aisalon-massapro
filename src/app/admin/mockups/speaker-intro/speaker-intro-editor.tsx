@@ -58,17 +58,25 @@ const STORAGE_KEY = "speaker-intro-data-v4";
 // PER USER SPEC 2026-08-02 (TSK-0049): Per-style default storage keys.
 // When the user clicks "Set as default" (in the properties panel or the
 // toolbar next to Style 3), the ENTIRE current `data` is saved under
-// `speaker-intro-style-defaults-{style}`. When the user clicks "Reset",
-// if a saved default exists for the current style, it is loaded instead
-// of SAMPLE_DATA.
+// `speaker-intro-style-defaults-{scopeKey}-{style}`. When the user clicks
+// "Reset", if a saved default exists for the current style, it is loaded
+// instead of SAMPLE_DATA.
+// TSK-0076: scopeKey namespaces the default by chapter so a Montreal
+// admin's default doesn't leak to a Tel Aviv admin on the same browser.
 const STYLE_DEFAULTS_KEY_PREFIX = "speaker-intro-style-defaults-";
 
 type Props = {
   /** Lightweight event list for the dropdown (passed from server). */
   events: EventPickListItem[];
+  /**
+   * Chapter-scope key for localStorage namespacing (TSK-0076).
+   * e.g. "chapter_abc123" for a Montreal admin, "global" for SUPER_ADMIN.
+   * Passed from the server page via buildScopeKey(getUserScope(me.id)).
+   */
+  scopeKey: string;
 };
 
-export function SpeakerIntroEditor({ events }: Props) {
+export function SpeakerIntroEditor({ events, scopeKey }: Props) {
   const [data, setData] = useState<SpeakerIntroData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -558,8 +566,12 @@ export function SpeakerIntroEditor({ events }: Props) {
    * Save the ENTIRE current mockup state (style + all section properties +
    * image placements + hero gradient config + etc.) as the default for the
    * CURRENT style. Stored in localStorage under
-   * `speaker-intro-style-defaults-{style}`. When the user later clicks
-   * "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   * `speaker-intro-style-defaults-{scopeKey}-{style}`. When the user later
+   * clicks "Reset", this saved default is loaded instead of SAMPLE_DATA.
+   *
+   * TSK-0076: the scopeKey segment namespaces the default by chapter so
+   * a Montreal admin's default doesn't leak to a Tel Aviv admin on the
+   * same browser.
    *
    * This is LOCAL per-style default (browser-only). It is separate from
    * the per-event server-side default saved by `handleSaveAsDefault`
@@ -567,7 +579,7 @@ export function SpeakerIntroEditor({ events }: Props) {
    */
   const handleSetAsDefault = useCallback(() => {
     const style = data.style ?? "style1";
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-${style}`;
     try {
       localStorage.setItem(key, JSON.stringify(data));
       setSavedDefaultFeedback(true);
@@ -575,11 +587,11 @@ export function SpeakerIntroEditor({ events }: Props) {
     } catch {
       // ignore quota errors
     }
-  }, [data]);
+  }, [data, scopeKey]);
 
   function handleReset() {
     const style = data.style ?? "style1";
-    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${style}`;
+    const key = `${STYLE_DEFAULTS_KEY_PREFIX}${scopeKey}-${style}`;
     let savedDefault: SpeakerIntroData | null = null;
     try {
       const saved = localStorage.getItem(key);
