@@ -53,14 +53,35 @@ export function LoginForm({ callbackUrl }: Props) {
 
   const isDev = process.env.NODE_ENV !== "production";
 
+  // Both Google and email sign-in route through /api/auth/post-login-redirect
+  // so the server can inspect the user row and decide where to send them:
+  //   - mustSetPassword → /set-password
+  //   - importSource    → /events (auto-marks onboardedAt if missing)
+  //   - onboardedAt     → finalCallback (the original deep link, e.g. /events/some-slug)
+  //   - otherwise       → /onboarding (brand-new user, mandatory intake form)
+  //
+  // Previously both paths pushed directly to `finalCallback` (defaulting to
+  // /events), which completely bypassed the onboarding gate — so Google
+  // users like Moayad Abo Rya could register and browse the site without
+  // ever filling out the intake form, leaving company/title/bio/etc. null
+  // and onboardedAt null forever.
+  //
+  // The `next` param lets deep links work: if a user clicked "RSVP to this
+  // event" and got bounced to /login?callbackUrl=/events/xyz, we pass
+  // /events/xyz as `next` so the redirect endpoint sends them back there
+  // AFTER confirming they're already onboarded. New users still get forced
+  // to /onboarding regardless of `next`.
+  const redirectEndpoint = `/api/auth/post-login-redirect?next=${encodeURIComponent(finalCallback)}`;
+
   async function googleSignIn() {
     setError(null);
     setInfo(null);
     setLoading("google");
     try {
       // Use redirect:true (default) so the browser navigates to Google OAuth.
-      // We wrap in try/catch to surface any unexpected network errors.
-      await signIn("google", { callbackUrl: finalCallback });
+      // After OAuth completes, NextAuth redirects to `redirectEndpoint`, which
+      // returns a 302 to /onboarding, /set-password, or the original deep link.
+      await signIn("google", { callbackUrl: redirectEndpoint });
     } catch (err) {
       console.error(err);
       setError("Could not start Google sign-in. Please try again.");
@@ -78,13 +99,15 @@ export function LoginForm({ callbackUrl }: Props) {
       email: signinEmail,
       password: signinPassword,
       redirect: false,
-      callbackUrl: finalCallback,
+      callbackUrl: redirectEndpoint,
     });
     setLoading(null);
     if (res?.error) {
       setError("Incorrect email or password. If you forgot your password, use the Sign-up tab to receive a new one by email.");
     } else if (res?.ok) {
-      router.push(finalCallback);
+      // Navigate to the redirect endpoint — it will 302 the browser to the
+      // right destination based on the user's onboarding state.
+      router.push(redirectEndpoint);
       router.refresh();
     } else {
       setError("Sign-in failed. Please try again.");
@@ -274,8 +297,8 @@ export function LoginForm({ callbackUrl }: Props) {
             Dev sign-in (any email, no password)
           </summary>
           <DevSignIn
-            callbackUrl={finalCallback}
-            onDone={() => { router.push(finalCallback); router.refresh(); }}
+            callbackUrl={redirectEndpoint}
+            onDone={() => { router.push(redirectEndpoint); router.refresh(); }}
           />
         </details>
       )}
