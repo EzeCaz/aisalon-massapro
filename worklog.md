@@ -13229,3 +13229,71 @@ Stage Summary:
 - Known limitation: flows have no USER_SIGNUP trigger, so fully-automated
   recurring sends to new signups aren't possible without adding a new
   triggerKind + cron-based enrollment.
+
+---
+Task ID: 8
+Agent: main (continuation)
+Task: Fix chapter-aware branding for the login → onboarding flow.
+      User logged in via /login?chapterSlug=mtl (Montreal) but the
+      /onboarding page rendered with hardcoded Tel Aviv branding
+      (chapter name, hero text, footer, AND the Tel Aviv falafel-meerkat.jpg
+      logo instead of Montreal's). User requested:
+        1. /onboarding must also accept ?chapterSlug=mtl
+        2. All pages where it says "Tel Aviv" should use {{chapter_name}}
+        3. Logo should be chapter-specific, not the Tel Aviv mascot
+
+Work Log:
+- Read /onboarding/page.tsx → confirmed it was 100% hardcoded for Tel Aviv
+  (metadata, hero H1, body copy, footer, default AiSalonLogoServer with
+  no markSrc → falls back to /images/falafel-meerkat.jpg).
+- Read /login/page.tsx → already chapter-aware (uses
+  getEffectiveBrandImagesBySlug + chapterName lookup).
+- Read /login/login-form.tsx → only forwarded callbackUrl, NOT chapterSlug.
+- Read /api/auth/post-login-redirect/route.ts → only forwarded `next`
+  param, dropped chapterSlug when redirecting to /onboarding.
+- Read /profile/page.tsx + /community/page.tsx → hardcoded "Tel Aviv"
+  in body copy + footer.
+
+- Fix A: login-form.tsx now reads chapterSlug from useSearchParams and
+  appends &chapterSlug=<slug> to the post-login-redirect URL.
+- Fix B: post-login-redirect now reads chapterSlug and injects it into
+  the /onboarding redirect URL.
+- Fix C: /onboarding/page.tsx rewritten with resolveChapter() helper
+  (3-tier priority: URL slug → user.chapterId → default tel-aviv).
+  All hardcoded "Tel Aviv" replaced with {chapterName}. Logo mark now
+  uses chapter-specific loginBanner brand image via markSrc prop.
+  generateMetadata uses chapterName. OnboardingForm receives chapterName
+  + chapterSlug as props.
+- Fix D: /set-password/page.tsx — same resolveChapter() pattern + same
+  markSrc propagation + chapter-aware metadata.
+- Fix E: /profile/page.tsx — loads me.chapter.name via Prisma relation,
+  replaces "Tel Aviv" in body copy + footer. Falls back to "Tel Aviv"
+  for legacy users without chapterId.
+- Fix F: /community/page.tsx — same chapter.name lookup. Replaces
+  "Tel Aviv" in eyebrow, body copy, member-count line, footer.
+- Fix G: OnboardingForm now sends chapterSlug in the POST body.
+  /api/user/onboarding POST handler looks up the chapter by slug and
+  sets user.chapterId on the User row. This makes the chapter
+  association PERMANENT — after onboarding, every page that reads
+  me.chapter shows Montreal branding without needing ?chapterSlug=
+  in the URL.
+
+- Committed as e565d38 and pushed to main → Vercel auto-deploy triggered.
+- TypeScript: 0 new errors in the 8 modified files (verified via
+  npx tsc --noEmit — only pre-existing errors in unrelated files).
+
+Stage Summary:
+- /onboarding?chapterSlug=mtl now renders with Montreal chapter name,
+  Montreal logo mark, and Montreal-branded copy throughout.
+- The chapterSlug is propagated through the entire auth redirect chain:
+  /login?chapterSlug=mtl → post-login-redirect → /onboarding?chapterSlug=mtl
+- After onboarding, the user's chapterId is set to the Montreal chapter
+  row, so /profile, /community, /events (already chapter-aware) will
+  show Montreal branding going forward without needing URL params.
+- 4 user-facing pages now chapter-aware: /onboarding, /set-password,
+  /profile, /community.
+- Known limitation: other user-facing pages (/events/[slug] event pages,
+  /e/[slug] public event pages, /terms, /privacy) still have some
+  hardcoded "Tel Aviv" references. These would need similar treatment
+  but are lower priority since the user's primary complaint was about
+  the onboarding flow.
