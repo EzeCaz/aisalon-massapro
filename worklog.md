@@ -13368,3 +13368,48 @@ Stage Summary:
   matched), the clone is still created as a DRAFT and the admin
   sees a clear error toast — they can then open the clone and
   retry manually.
+
+---
+Task ID: 10
+Agent: main (continuation)
+Task: User reported the Edit Member dialog widening (commit 277b1a4)
+      and the Resend button (commit 5fd73dd) are NOT visible on
+      aisalon.massapro.com even after hard refresh in incognito mode
+      across Chrome + Edge. Pasted the live dialog HTML for diagnosis.
+
+Work Log:
+- Inspected pasted HTML → both `max-w-6xl` AND `sm:max-w-lg` are
+  present on the dialog-content element. So the widened class IS
+  deployed, but it's being overridden at desktop widths.
+- Root cause: Tailwind CSS specificity. The base DialogContent class
+  (src/components/ui/dialog.tsx) includes `sm:max-w-lg`, which lives
+  inside a `@media (min-width: 640px)` block. The override `max-w-6xl`
+  was added UNPREFIXED. Per CSS cascading rules, media-query rules at
+  the same specificity override non-media rules, so at >=640px the
+  dialog was still capped at 32rem (max-w-lg) — the widening never
+  took effect.
+- Fix: change the override classes to use the `sm:` prefix so they
+  win at the same breakpoint as the base class:
+    EditMemberDialog:     `max-w-6xl` -> `sm:max-w-6xl`
+    EditRegistrantDialog: `max-w-xl`  -> `sm:max-w-xl`
+  Also added `max-h-[92vh] overflow-y-auto` to Edit Registrant so the
+  new wider content scrolls properly on short viewports.
+- Resend button visibility: the original code only rendered the
+  button when `canResend` was true (SENT/FAILED). On a fresh admin
+  account with only DRAFT campaigns, the button was invisible —
+  making the feature look like it wasn't deployed. Changed to always
+  render the button, disabled with a tooltip explaining the
+  eligibility rule, so the feature is discoverable.
+- TypeScript: 0 new errors in the 3 modified files.
+- Committed as 6b3c656 and pushed to main -> Vercel auto-deploying.
+
+Stage Summary:
+- Edit Member dialog will now actually render at max-width 72rem
+  (1152px) on desktop, instead of being silently capped at 32rem.
+- Edit Registrant dialog will render at max-width 36rem (576px).
+- Resend button is now visible on every campaign row (greyed out +
+  tooltip on DRAFT/SCHEDULED/SENDING; clickable on SENT/FAILED).
+- This was a real CSS bug, not a caching issue. The previous
+  diagnosis (browser extension hydration mismatch) was a red
+  herring — the user reproduced the same narrow dialog in clean
+  incognito sessions across two browsers.
