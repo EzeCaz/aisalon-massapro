@@ -13559,3 +13559,76 @@ Stage Summary:
   * src/app/admin/email/email-tab-client.tsx (handleResendCampaign,
     CampaignsTable signature, Resend button, responsive column
     hiding, overflow-hidden)
+
+---
+Task ID: 12
+Agent: main
+Task: Fix the campaign table at /admin/email — after commit 5133836,
+the Actions column was being pushed off-screen (no scroll to reach
+it). User asked to make Name + Subject columns wrap their text so
+all columns are always visible.
+
+Work Log:
+- Diagnosed root cause: previous commit switched the table wrapper
+  from overflow-x-auto to overflow-hidden. In table-auto layout
+  (default), column widths are determined by content, and the sum
+  of all columns' natural widths exceeded the max-w-7xl (1280px)
+  container. The Actions column (rightmost) got clipped with no way
+  to scroll to it.
+- Fix: added `table-fixed` class to the <table> element. In fixed
+  layout, the browser uses the <th> widths from the first row,
+  ignoring content width. This makes the total table width
+  predictable and bounded by the container.
+- Set explicit percentage widths on each <th>:
+    Name 16% · Status 8% · Subject 20% · Flow 10% · Template 10% ·
+    Recipients 7% · Last sent 11% · Actions 18%
+  Visible-column sums:
+    mobile (5 cols, no Flow/Template/Last sent): 16+8+20+7+18 = 69%
+    md (6 cols, +Last sent): 80%
+    lg (7 cols, +Flow): 90%
+    xl (8 cols, +Template): 100%
+  Actions is always visible — guaranteed 18% of the container width.
+- Removed max-w-xs + truncate from Name cell. Removed max-w-[14rem]
+  + truncate from Subject cell. These were attempts to cap column
+  width in table-auto layout but the browser didn't always respect
+  them, leading to the overflow.
+- Added break-words + whitespace-normal to Name + Subject cells so
+  long text wraps to multiple lines (instead of being cut off with
+  an ellipsis). This is what the user asked for — text wraps so all
+  columns fit.
+- Added align-top to all cells so multi-line wrapped cells align
+  with the first line of other cells (instead of being vertically
+  centered, which looked awkward when Name wrapped to 2-3 lines but
+  Status stayed on 1 line).
+- Wrapped the action buttons in a flex justify-end gap-0.5 flex-wrap
+  container. With table-fixed giving Actions a guaranteed 18% width,
+  the buttons now have a bounded container and wrap to a second row
+  if there isn't enough horizontal space (rare — 5-6 buttons fit
+  comfortably in 18% of 1280px = 230px).
+- Verified: npx tsc --noEmit produces 0 new errors in the modified
+  file.
+- Committed as 32c9780 and pushed to origin/main. Vercel will auto-
+  deploy shortly.
+
+Stage Summary:
+- Campaign table at /admin/email now uses table-fixed with explicit
+  percentage column widths. Total visible widths always sum to ≤100%
+  of the container, so no column ever overflows.
+- Name + Subject cells wrap long text to multiple lines (break-words)
+  instead of using truncate. This was the user's explicit request:
+  "name, subject columns must have a text wrap function to always
+  display all the columns".
+- Actions column is guaranteed 18% of the container width — always
+  visible, never clipped. If a row has many action buttons (e.g.
+  SENT status: Resend + Test send + View + Stats + Save as template
+  = 5 buttons), they wrap to a second line within the Actions cell
+  instead of pushing other columns off-screen.
+- All cells use align-top for clean multi-line alignment.
+- After Vercel finishes deploying (1-2 min), hard-refresh /admin/email
+  and all 8 columns including Actions should be visible at once on
+  desktop, with progressive column hiding on narrower viewports
+  (mobile hides Last sent, Flow, Template).
+- Files modified:
+  * src/app/admin/email/email-tab-client.tsx (table-fixed, explicit
+    th widths, break-words on Name + Subject, align-top on all
+    cells, flex-wrap on Actions buttons)
