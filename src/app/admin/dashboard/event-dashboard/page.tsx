@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { canAny, getCoHostedEventIds, isSuperAdmin, getEffectiveRole} from "@/lib/permissions";
+import { canAny, getCoHostedEventIds, getUserScope, scopeEventWhere, scopeChapterWhere, isSuperAdmin, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import Link from "next/link";
@@ -50,15 +50,30 @@ export default async function EventDashboardPage() {
     redirect("/events");
   }
 
-  // Determine event-scoping. For ADMIN+ this is null (all events).
-  // For CO_HOST, this is the list of event IDs they co-host.
+  // TSK-0076: scope events + RSVPs by the admin's chapter/country.
+  // A Montreal admin only sees Montreal events + RSVPs. SUPER_ADMIN sees all.
+  // CO_HOST only sees events they co-host (scopedEventIds !== null).
+  // Previously this used `scopedEventIds === null ? undefined : ...` which
+  // meant ADMIN-role users (who get null from getCoHostedEventIds) saw ALL
+  // events globally — the same bug the email report had.
+  const scope = await getUserScope(me.id);
   const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
+  const eventsWhere =
+    scopedEventIds === null
+      ? scopeEventWhere(scope)
+      : { id: { in: scopedEventIds } };
+  // RSVPs use scopeChapterWhere (they have a denormalized chapterId, not
+  // a chapterRef relation like Event). EventRsvp.chapterId is set at RSVP
+  // creation time from the event's chapterId.
+  const rsvpsWhere =
+    scopedEventIds === null
+      ? scopeChapterWhere(scope)
+      : { eventId: { in: scopedEventIds } };
 
   // Fetch events for the event-picker dropdown, with their RSVP
   // counts so the admin can see how big each event is at a glance.
-  // Scope by event IDs for CO_HOST users.
   const events = await db.event.findMany({
-    where: scopedEventIds === null ? undefined : { id: { in: scopedEventIds } },
+    where: eventsWhere,
     orderBy: { startsAt: "desc" },
     select: {
       id: true,
@@ -72,13 +87,13 @@ export default async function EventDashboardPage() {
     },
   });
 
-  // Fetch RSVPs (scoped for CO_HOST) — the client will filter by event
-  // when an event is selected. Includes the linked user (with all the
-  // profile fields the charts care about: company, interestedIn, etc.)
-  // and the referring member (referredBy) so the dashboard can show
-  // "UTM UID" of the referrer as a column + filter (Item 2E).
+  // Fetch RSVPs (scoped for chapter/country + CO_HOST) — the client will
+  // filter by event when an event is selected. Includes the linked user
+  // (with all the profile fields the charts care about: company,
+  // interestedIn, etc.) and the referring member (referredBy) so the
+  // dashboard can show "UTM UID" of the referrer as a column + filter.
   const rsvps = await db.eventRsvp.findMany({
-    where: scopedEventIds === null ? undefined : { eventId: { in: scopedEventIds } },
+    where: rsvpsWhere,
     orderBy: [{ event: { startsAt: "desc" } }, { createdAt: "desc" }],
     select: {
       id: true,
