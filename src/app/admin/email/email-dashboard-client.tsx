@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
@@ -254,39 +253,51 @@ export function EmailDashboardClient({
         </div>
       </div>
 
-      {/* Campaign list */}
-      <Card className="p-0 overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/10 text-xs font-semibold uppercase tracking-wide text-black/80">
-          <div className="col-span-4">Campaign</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-1 text-center">Recipients</div>
-          <div className="col-span-2">Scheduled / Sent</div>
-          <div className="col-span-1 text-center">List source</div>
-          <div className="col-span-2 text-right">Actions</div>
-        </div>
-        {campaigns.length === 0 ? (
-          <div className="p-12 text-center">
-            <Mail className="h-10 w-10 mx-auto text-black/30 mb-3" />
-            <h3 className="font-bold text-black mb-1">No campaigns yet</h3>
-            <p className="text-sm text-black/80 mb-4">
-              Click "New campaign" to compose your first email.
-            </p>
-            <Button onClick={() => setView({ kind: "compose" })}>
-              <Plus className="h-4 w-4 mr-1.5" /> New campaign
-            </Button>
-          </div>
-        ) : (
-          campaigns.map((c) => (
-            <CampaignRow
-              key={c.id}
-              campaign={c}
-              onView={() => setView({ kind: "stats", campaignId: c.id })}
-              onResend={() => handleResend(c)}
-              resending={resendingId === c.id}
-            />
-          ))
-        )}
-      </Card>
+      {/* Campaign list — real <table> matching the templates section
+          layout. Avoids the horizontal-scroll problem the old
+          grid-cols-12 layout had (the Actions col-span-2 was too narrow
+          to fit two labeled buttons side-by-side, so the Resend button
+          was getting pushed off-screen on narrower viewports). Table
+          layout lets columns auto-size to their content and uses
+          truncate + max-w-* for long text wrapping. */}
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-neutral-700">
+            <tr>
+              <th className="px-3 py-2.5 text-left font-semibold">Campaign</th>
+              <th className="px-3 py-2.5 text-left font-semibold">Status</th>
+              <th className="px-3 py-2.5 text-right font-semibold">Recipients</th>
+              <th className="px-3 py-2.5 text-left font-semibold">Scheduled / Sent</th>
+              <th className="px-3 py-2.5 text-left font-semibold">List source</th>
+              <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campaigns.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-12 text-center text-neutral-500">
+                  <Mail className="mx-auto mb-2 h-10 w-10 text-neutral-300" />
+                  <div className="font-bold text-neutral-700 mb-1">No campaigns yet</div>
+                  <div className="text-sm mb-4">Click "New campaign" to compose your first email.</div>
+                  <Button onClick={() => setView({ kind: "compose" })}>
+                    <Plus className="h-4 w-4 mr-1.5" /> New campaign
+                  </Button>
+                </td>
+              </tr>
+            ) : (
+              campaigns.map((c) => (
+                <CampaignRow
+                  key={c.id}
+                  campaign={c}
+                  onView={() => setView({ kind: "stats", campaignId: c.id })}
+                  onResend={() => handleResend(c)}
+                  resending={resendingId === c.id}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -329,55 +340,61 @@ function CampaignRow({
   // discoverable instead of mysteriously absent.
   const canResend = status === "SENT" || status === "FAILED";
   const resendTooltip = canResend
-    ? "Create a new campaign with the same audience + content and send it now"
-    : `Resend is only available for SENT or FAILED campaigns (this one is ${status}). Open + send this campaign first.`;
+    ? "Resend to the same audience (creates a new campaign)"
+    : `Resend is only available for SENT or FAILED campaigns (this one is ${status})`;
 
+  // Icon-only action buttons save horizontal space so the row never
+  // overflows. Each button has a `title` attribute so hovering shows
+  // the action name (mirrors the email templates section's pattern).
   return (
-    <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-black/5 hover:bg-black/[0.02] items-center text-sm">
-      <div className="col-span-4">
-        <div className="font-semibold text-black truncate">{campaign.name}</div>
-        <div className="text-xs text-black/50 truncate">{campaign.subjectSnapshot}</div>
-      </div>
-      <div className="col-span-2">
+    <tr className="border-t border-neutral-100 hover:bg-neutral-50">
+      <td className="px-3 py-2.5">
+        <div className="font-semibold text-neutral-900 max-w-xs truncate">{campaign.name}</div>
+        <div className="text-xs text-neutral-500 max-w-xs truncate">{campaign.subjectSnapshot}</div>
+      </td>
+      <td className="px-3 py-2.5">
         <Badge className={statusColor}>{status}</Badge>
-      </div>
-      <div className="col-span-1 text-center text-xs">
+      </td>
+      <td className="px-3 py-2.5 text-right text-neutral-700">
         {campaign.recipientCount || campaign._count.recipients}
-      </div>
-      <div className="col-span-2 text-xs text-black/80">{dateLabel}</div>
-      <div className="col-span-1 text-center text-xs">
-        <code className="text-[0.65rem] bg-black/5 px-1 py-0.5 rounded">
+      </td>
+      <td className="px-3 py-2.5 text-xs text-neutral-700 whitespace-nowrap">{dateLabel}</td>
+      <td className="px-3 py-2.5">
+        <code className="text-[0.65rem] bg-neutral-100 text-neutral-700 px-1.5 py-0.5 rounded">
           {campaign.listSource.replace("_", " ")}
         </code>
-      </div>
-      <div className="col-span-2 flex justify-end gap-1">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onResend}
-          disabled={!canResend || resending}
-          title={resendTooltip}
-          className={!canResend ? "opacity-40 cursor-not-allowed" : ""}
-        >
-          {resending ? (
-            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3 w-3 mr-1" />
-          )}
-          Resend
-        </Button>
-        <Button size="sm" variant="outline" onClick={onView}>
-          {status === "DRAFT" ? (
-            <>
-              <Edit3 className="h-3 w-3 mr-1" /> Edit
-            </>
-          ) : (
-            <>
-              <Eye className="h-3 w-3 mr-1" /> View
-            </>
-          )}
-        </Button>
-      </div>
-    </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={onResend}
+            disabled={!canResend || resending}
+            title={resendTooltip}
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs ${
+              canResend
+                ? "text-[#004F98] hover:bg-[#004F98]/10"
+                : "text-neutral-300 cursor-not-allowed"
+            }`}
+          >
+            {resending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            onClick={onView}
+            title={status === "DRAFT" ? "Edit campaign" : "View campaign stats"}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-[#FF005A]"
+          >
+            {status === "DRAFT" ? (
+              <Edit3 className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

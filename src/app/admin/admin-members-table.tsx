@@ -929,8 +929,12 @@ function CardsView({
                       isSelected ? "bg-[#FF005A]/[0.04]" : ""
                     }`}
                   >
+                    {/* Row height reduction: was py-3 on every cell,
+                        now py-1.5 (50% less vertical padding) so the
+                        table fits more members per viewport. Avatar
+                        shrunk from h-9 w-9 to h-7 w-7 to match. */}
                     <td
-                      className="px-3 py-3"
+                      className="px-3 py-1.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Checkbox
@@ -941,7 +945,7 @@ function CardsView({
                       />
                     </td>
                     <td
-                      className="px-2 py-3 text-black/80 cursor-pointer"
+                      className="px-2 py-1.5 text-black/80 cursor-pointer"
                       onClick={() => onToggleExpanded(m.id)}
                     >
                       {isOpen ? (
@@ -951,13 +955,13 @@ function CardsView({
                       )}
                     </td>
                     <td
-                      className="px-4 py-3 cursor-pointer"
+                      className="px-4 py-1.5 cursor-pointer"
                       onClick={() => onToggleExpanded(m.id)}
                     >
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="h-7 w-7">
                           <AvatarImage src={m.photoUrl || m.image || undefined} alt={m.name || m.email} />
-                          <AvatarFallback className="bg-black text-white text-xs font-bold">
+                          <AvatarFallback className="bg-black text-white text-[0.6rem] font-bold">
                             {(m.name || m.email)
                               .split(/\s+|@/)
                               .filter(Boolean)
@@ -1031,7 +1035,7 @@ function CardsView({
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
+                    <td className="px-4 py-1.5 hidden md:table-cell">
                       {m.appliedFor ? (
                         <span
                           className={`text-xs font-semibold px-2 py-0.5 rounded ${
@@ -1046,7 +1050,7 @@ function CardsView({
                         <span className="text-xs text-black/30 italic">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
+                    <td className="px-4 py-1.5 hidden lg:table-cell">
                       {m.speakers.length === 0 ? (
                         <span className="text-xs text-black/30 italic">Not linked</span>
                       ) : (
@@ -1068,7 +1072,7 @@ function CardsView({
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-1.5 hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
                       {m.country || m.chapter ? (
                         <div className="flex flex-col gap-0.5 text-[0.7rem]">
                           <span className="inline-flex items-center gap-1 text-black/80">
@@ -1084,7 +1088,7 @@ function CardsView({
                         <span className="text-xs text-black/30 italic">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1 max-w-[280px]">
                         {m.tags.length === 0 ? (
                           <span className="text-xs text-black/30 italic">No tags</span>
@@ -1104,58 +1108,68 @@ function CardsView({
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-wrap gap-1 justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-[#FF005A]/40 text-[#FF005A] h-8"
+                    {/* Actions: icon-only buttons (label hidden, name
+                        shown on hover via the title attribute). Was a
+                        flex-wrap of 5-6 labeled buttons which wrapped
+                        to 2-3 lines and made the row ~3x taller than
+                        needed. Now flex-nowrap, single line, fixed
+                        28x28 button tiles so the column never forces
+                        horizontal scroll on the table either. */}
+                    <td className="px-4 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-nowrap gap-0.5 justify-end items-center">
+                        <button
+                          type="button"
                           onClick={() => onOpenEditDialog(m)}
                           title="Edit member info"
+                          aria-label="Edit member info"
+                          className="inline-flex items-center justify-center h-7 w-7 rounded text-[#FF005A] hover:bg-[#FF005A]/10 transition-colors"
                         >
-                          <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
-                        </Button>
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
                         <TagDialog
                           member={m}
                           pending={pending === m.id}
                           onSave={(tags) => onSaveTags(m.id, tags)}
+                          iconOnly
                         />
                         <LinkSpeakerDialog
                           member={m}
                           allSpeakers={allSpeakers}
                           pending={pending === m.id}
                           onLink={(sid) => onLinkSpeaker(m.id, sid)}
+                          iconOnly
                         />
                         <ConvertToSpeakerDialog
                           member={m}
                           events={events}
                           pending={pending === m.id}
                           onConvert={(payload) => onConvertToSpeaker(m.id, payload)}
+                          iconOnly
                         />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-[#820A7D]/40 text-[#820A7D] h-8"
+                        <button
+                          type="button"
                           onClick={() => onOpenEmailDialog(m)}
                           title="Manage secondary emails"
+                          aria-label="Manage secondary emails"
+                          className="relative inline-flex items-center justify-center h-7 w-7 rounded text-[#820A7D] hover:bg-[#820A7D]/10 transition-colors"
                         >
-                          <Mail className="h-3.5 w-3.5 mr-1" /> Emails
+                          <Mail className="h-3.5 w-3.5" />
                           {m.secondaryEmails && m.secondaryEmails.length > 0 && (
-                            <span className="ml-1 text-[0.6rem] font-bold bg-[#820A7D] text-white rounded-full h-4 min-w-4 px-1 inline-flex items-center justify-center">
+                            <span className="absolute -top-0.5 -right-0.5 text-[0.55rem] font-bold bg-[#820A7D] text-white rounded-full h-3.5 min-w-3.5 px-0.5 inline-flex items-center justify-center leading-none">
                               {m.secondaryEmails.length}
                             </span>
                           )}
-                        </Button>
+                        </button>
                         {canArchive && !isSuperAdminEmail(m.email) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-red-300 text-red-600 hover:bg-red-50 h-8"
+                          <button
+                            type="button"
                             onClick={() => onArchive(m)}
                             title="Archive member (Super Admin only)"
+                            aria-label="Archive member"
+                            className="inline-flex items-center justify-center h-7 w-7 rounded text-red-600 hover:bg-red-50 transition-colors"
                           >
-                            <Archive className="h-3.5 w-3.5 mr-1" /> Archive
-                          </Button>
+                            <Archive className="h-3.5 w-3.5" />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -3202,10 +3216,12 @@ function TagDialog({
   member,
   pending,
   onSave,
+  iconOnly = false,
 }: {
   member: Member;
   pending: boolean;
   onSave: (tags: string[]) => void;
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(
@@ -3230,9 +3246,20 @@ function TagDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-black/20 h-8">
-          <TagIcon className="h-3.5 w-3.5 mr-1" /> Tags
-        </Button>
+        {iconOnly ? (
+          <button
+            type="button"
+            title="Manage tags"
+            aria-label="Manage tags"
+            className="inline-flex items-center justify-center h-7 w-7 rounded text-black/70 hover:bg-black/10 transition-colors"
+          >
+            <TagIcon className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <Button size="sm" variant="outline" className="border-black/20 h-8">
+            <TagIcon className="h-3.5 w-3.5 mr-1" /> Tags
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -3295,11 +3322,13 @@ function LinkSpeakerDialog({
   allSpeakers,
   pending,
   onLink,
+  iconOnly = false,
 }: {
   member: Member;
   allSpeakers: SpeakerRow[];
   pending: boolean;
   onLink: (speakerId: string | null) => void;
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -3318,9 +3347,20 @@ function LinkSpeakerDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-[#004F98] text-[#004F98] h-8">
-          <Link2 className="h-3.5 w-3.5 mr-1" /> Link speaker
-        </Button>
+        {iconOnly ? (
+          <button
+            type="button"
+            title="Link to speaker"
+            aria-label="Link to speaker"
+            className="inline-flex items-center justify-center h-7 w-7 rounded text-[#004F98] hover:bg-[#004F98]/10 transition-colors"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <Button size="sm" variant="outline" className="border-[#004F98] text-[#004F98] h-8">
+            <Link2 className="h-3.5 w-3.5 mr-1" /> Link speaker
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -3430,6 +3470,7 @@ function ConvertToSpeakerDialog({
   events,
   pending,
   onConvert,
+  iconOnly = false,
 }: {
   member: Member;
   events: EventRow[];
@@ -3440,6 +3481,7 @@ function ConvertToSpeakerDialog({
     role?: string;
     bio?: string;
   }) => void;
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [eventId, setEventId] = useState(events[0]?.id || "");
@@ -3459,9 +3501,20 @@ function ConvertToSpeakerDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button size="sm" className="bg-[#FF005A] hover:bg-[#FF005A]/90 h-8">
-          <UserPlus className="h-3.5 w-3.5 mr-1" /> Make speaker
-        </Button>
+        {iconOnly ? (
+          <button
+            type="button"
+            title="Convert to speaker"
+            aria-label="Convert to speaker"
+            className="inline-flex items-center justify-center h-7 w-7 rounded text-[#FF005A] hover:bg-[#FF005A]/10 transition-colors"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <Button size="sm" className="bg-[#FF005A] hover:bg-[#FF005A]/90 h-8">
+            <UserPlus className="h-3.5 w-3.5 mr-1" /> Make speaker
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
