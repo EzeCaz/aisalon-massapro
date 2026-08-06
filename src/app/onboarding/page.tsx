@@ -82,7 +82,7 @@ async function resolveChapter(
  *   - This mirrors the /login?chapterSlug= behaviour so the chapter
  *     context is preserved through the entire login → onboarding flow.
  */
-export async function OnboardingPage({
+export default async function OnboardingPage({
   searchParams,
 }: {
   searchParams: Promise<{ chapterSlug?: string }>;
