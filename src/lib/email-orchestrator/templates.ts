@@ -185,6 +185,9 @@ export type TemplateContext = {
    *  Defaults to "Tel Aviv" when not provided, preserving backward compat
    *  with the original hardcoded templates. */
   chapterName: string;
+  /** Link to /onboarding so the recipient can finish filling out their
+   *  profile. Used by the {{finishOnboardingUrl}} merge tag. */
+  finishOnboardingUrl: string;
   /** Tracking pixel URL — injected by worker before send. */
   openPixelUrl: string;
   /** Function that wraps a URL with the click-redirect. */
@@ -214,6 +217,11 @@ export function buildContext(args: {
   const eventUrl = `${baseUrl}/e/${event.slug}`;
   const myCodeUrl = `${eventUrl}/my-code`;
   const openPixelUrl = `${baseUrl}/api/track/email-open?id=${queueId}`;
+  // Link to /onboarding so the recipient can finish filling out their
+  // profile. The post-login-redirect endpoint forces onboarding for users
+  // who haven't completed it, so this URL works whether the user is logged
+  // in or not (if not logged in → /login → after login → /onboarding).
+  const finishOnboardingUrl = `${baseUrl}/onboarding`;
 
   return {
     firstName,
@@ -229,6 +237,7 @@ export function buildContext(args: {
       .map((a) => `• ${formatTime(a.startsAt)} — ${a.title}`)
       .join("\n"),
     chapterName: args.chapterName ?? "Tel Aviv",
+    finishOnboardingUrl,
     openPixelUrl,
     wrapLink: (url: string) =>
       `${baseUrl}/api/track/email-click?id=${queueId}&target=${encodeURIComponent(url)}`,

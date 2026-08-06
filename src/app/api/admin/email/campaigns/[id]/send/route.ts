@@ -195,6 +195,11 @@ export async function POST(
       eventAddress: eventCtx?.address ?? "",
       eventUrl,
       myCodeUrl,
+      // Link to /onboarding so the recipient can finish filling out their
+      // profile. The post-login-redirect endpoint forces onboarding for
+      // users who haven't completed it, so this URL works whether the user
+      // is logged in or not.
+      finishOnboardingUrl: `${baseUrl}/onboarding`,
     };
     const personalizedSubject = renderUnifiedSubject(campaign.subjectSnapshot, renderCtx);
     const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe?t=${trackToken}&c=${id}`;

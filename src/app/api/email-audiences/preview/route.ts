@@ -37,6 +37,7 @@ import { db } from "@/lib/db";
 import {
   resolveAudienceEmails,
   resolveAudienceBaseEmails,
+  resolveExcludeRuleEmails,
   type AudienceFilterSpec,
 } from "@/lib/email-orchestrator/audience-filter";
 
@@ -83,14 +84,28 @@ export async function POST(req: NextRequest) {
     // receive" without re-running the resolver.
     const baseEmails = await resolveAudienceBaseEmails(body.filters);
     const finalEmails = await resolveAudienceEmails(body.filters);
-    const excludedCount = baseEmails.length - finalEmails.length;
+
+    // Resolve rule-based exclusions (excludeGroups) separately so the UI
+    // can distinguish "excluded by rule" from "excluded manually (per-user
+    // checkbox)". Rule-excluded emails are those matched by excludeGroups
+    // AND also in the base set (so we don't show users who wouldn't have
+    // been included anyway).
+    const ruleExcludeSet = await resolveExcludeRuleEmails(body.filters);
+    const ruleExcludedEmails = baseEmails.filter((e) => ruleExcludeSet.has(e));
+    const ruleExcludedCount = ruleExcludedEmails.length;
+
+    // Manually-excluded count = total excluded - rule-excluded
+    const totalExcludedCount = baseEmails.length - finalEmails.length;
+    const manualExcludedCount = Math.max(0, totalExcludedCount - ruleExcludedCount);
 
     if (!body.includeUserDetails) {
       return NextResponse.json({
         emails: finalEmails,
         count: finalEmails.length,
         baseCount: baseEmails.length,
-        excludedCount,
+        excludedCount: totalExcludedCount,
+        ruleExcludedCount,
+        manualExcludedCount,
       });
     }
 
@@ -114,15 +129,37 @@ export async function POST(req: NextRequest) {
           },
         });
 
-    // Also fetch the EXCLUDED users' details so the UI can show them as
-    // "deselected" rows (with a checkbox to re-include them).
-    const excludedEmails = baseEmails.filter(
-      (e) => !finalEmails.includes(e),
-    );
-    const excludedUsers = excludedEmails.length === 0
+    // Fetch the MANUALLY-excluded users' details (per-user checkbox
+    // exclusions from the live match preview). These show with a checkbox
+    // so the admin can re-include them.
+    const manuallyExcludedEmails = body.filters.excludedEmails
+      ? body.filters.excludedEmails.filter((e) => baseEmails.includes(e.toLowerCase()))
+      : [];
+    const excludedUsers = manuallyExcludedEmails.length === 0
       ? []
       : await db.user.findMany({
-          where: { email: { in: excludedEmails } },
+          where: { email: { in: manuallyExcludedEmails } },
+          select: {
+            email: true,
+            name: true,
+            company: true,
+            title: true,
+            interestedIn: true,
+            profileCategories: true,
+            appliedFor: true,
+            bio: true,
+            archivedAt: true,
+          },
+        });
+
+    // Fetch the RULE-excluded users' details (matched by excludeGroups).
+    // These show WITHOUT a checkbox — they're excluded by rule, not by
+    // manual selection. To re-include them, the admin must remove the
+    // exclude rule.
+    const ruleExcludedUsers = ruleExcludedEmails.length === 0
+      ? []
+      : await db.user.findMany({
+          where: { email: { in: ruleExcludedEmails } },
           select: {
             email: true,
             name: true,
@@ -141,8 +178,11 @@ export async function POST(req: NextRequest) {
       count: finalEmails.length,
       users,
       excludedUsers,
+      ruleExcludedUsers,
       baseCount: baseEmails.length,
-      excludedCount,
+      excludedCount: totalExcludedCount,
+      ruleExcludedCount,
+      manualExcludedCount,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

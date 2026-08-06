@@ -46,6 +46,14 @@ export type FlowAudience = {
   // Use `effectiveEmailCount()` helper to get the display count.
   emailCount?: number;
   emailPreview?: string[];
+  // For DYNAMIC audiences, the parsed filter spec (source + combinator +
+  // groups + optional excludeGroups + optional excludedEmails). Populated
+  // by the server in /admin/email/flows/page.tsx and by the
+  // GET /api/email-audiences endpoint. Consumed by AudiencesClient to
+  // load existing rules into the editor when the user clicks an audience.
+  // Without this field, the editor falls back to the default placeholder
+  // rule and the saved rules appear to be "reset" on every re-edit.
+  filters?: unknown;
 };
 
 /**

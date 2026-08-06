@@ -42,6 +42,9 @@ type FilterSpec = {
   source: "users" | "rsvps" | "users_and_rsvps";
   combinator: "AND" | "OR";
   groups: FilterGroup[];
+  /** Optional rule-based exclusion groups. A user matching ANY excludeGroup
+   *  (combined with OR) is subtracted from the resolved set. */
+  excludeGroups?: FilterGroup[];
   /** Optional list of emails to exclude from the resolved set, even when
    *  they match the filter rules. Used by the live match preview — the
    *  admin deselects individual users and they're stored here so the
@@ -1126,6 +1129,14 @@ function DynamicEditor({
         <Plus className="h-4 w-4" /> Add group
       </button>
 
+      {/* Exclude groups — rule-based exclusions. A user matching ANY
+          excludeGroup is subtracted from the resolved set. This is
+          different from the per-user checkbox exclusions in the live
+          match preview (which store individual emails in
+          spec.excludedEmails). ExcludeGroups let the admin say "match
+          all users EXCEPT those who match [rule]". */}
+      <ExcludeGroupsEditor filters={filters} setFilters={setFilters} events={events} />
+
       {/* Live match preview — shows every user the current filter resolves
           to, with checkboxes to deselect individuals. Deselected users are
           persisted in spec.excludedEmails and stay excluded on every
@@ -1156,10 +1167,140 @@ type PreviewResponse = {
   count: number;
   users?: PreviewUser[];
   excludedUsers?: PreviewUser[];
+  ruleExcludedUsers?: PreviewUser[];
   baseCount?: number;
   excludedCount?: number;
+  ruleExcludedCount?: number;
+  manualExcludedCount?: number;
   error?: string;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exclude groups editor — rule-based exclusions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ExcludeGroupsEditor — manages `spec.excludeGroups`.
+ *
+ * Each exclude group is a FilterGroup (same shape as inclusion groups).
+ * A user matching ANY excludeGroup (combined with OR) is subtracted from
+ * the resolved set — even if they match all inclusion groups.
+ *
+ * This is different from the per-user checkbox exclusions in
+ * LiveMatchPreview (which store individual emails in spec.excludedEmails).
+ * ExcludeGroups are rule-based: e.g. "match all users EXCEPT those who
+ * have linkedinUrl set" or "match all members EXCEPT those who RSVP'd
+ * to event X".
+ *
+ * The UI reuses FilterGroupEditor (same group editor as inclusion groups)
+ * so the admin gets the same field/operator/value dropdowns. The only
+ * difference is a red "EXCLUDE" badge on each group + a red "Add exclude
+ * group" button.
+ */
+function ExcludeGroupsEditor({
+  filters,
+  setFilters,
+  events = [],
+}: {
+  filters: FilterSpec;
+  setFilters: (f: FilterSpec) => void;
+  events?: { id: string; title: string; startsAt?: string }[];
+}) {
+  const fields = fieldsForSource(filters.source, events);
+  const excludeGroups = filters.excludeGroups ?? [];
+
+  // Load email-target options for engagement rules (same as DynamicEditor).
+  const [emailOptions, setEmailOptions] = React.useState<EmailOption[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/email-audiences/email-options");
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!cancelled && Array.isArray(data.options)) {
+          setEmailOptions(data.options);
+        }
+      } catch {
+        // silent
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const updateExcludeGroup = (idx: number, updater: (g: FilterGroup) => FilterGroup) => {
+    setFilters({
+      ...filters,
+      excludeGroups: excludeGroups.map((g, i) => (i === idx ? updater(g) : g)),
+    });
+  };
+
+  const addExcludeGroup = () => {
+    setFilters({
+      ...filters,
+      excludeGroups: [
+        ...excludeGroups,
+        { combinator: "AND", rules: [{ field: fields[0].field, op: "equals", value: "" }] },
+      ],
+    });
+  };
+
+  const removeExcludeGroup = (idx: number) => {
+    setFilters({
+      ...filters,
+      excludeGroups: excludeGroups.filter((_, i) => i !== idx),
+    });
+  };
+
+  return (
+    <section className="rounded-lg border border-red-200 bg-red-50/30 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <X className="h-4 w-4 text-red-600" />
+        <h3 className="text-sm font-bold text-neutral-800">Exclude rules</h3>
+        <span className="text-[10px] text-neutral-500">
+          (users matching ANY exclude group are removed from the audience)
+        </span>
+      </div>
+
+      {excludeGroups.length === 0 ? (
+        <p className="text-xs text-neutral-500">
+          No exclude rules. Add one to remove specific users from the matched set
+          (e.g. &ldquo;exclude users who already filled the form&rdquo; or
+          &ldquo;exclude users who RSVP&apos;d to event X&rdquo;).
+        </p>
+      ) : (
+        excludeGroups.map((group, gIdx) => (
+          <div key={gIdx} className="mb-3 rounded border border-red-200 bg-white p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                EXCLUDE {gIdx + 1}
+              </span>
+              <span className="text-[10px] text-neutral-500">
+                Users matching this group will be removed
+              </span>
+            </div>
+            <FilterGroupEditor
+              group={group}
+              fields={fields}
+              emailOptions={emailOptions}
+              onChange={(g) => updateExcludeGroup(gIdx, () => g)}
+              onRemove={() => removeExcludeGroup(gIdx)}
+              canRemove={true}
+              groupNumber={gIdx + 1}
+            />
+          </div>
+        ))
+      )}
+
+      <button
+        onClick={addExcludeGroup}
+        className="inline-flex items-center gap-1.5 rounded border border-dashed border-red-400 px-3 py-1.5 text-sm font-semibold text-red-700 hover:border-red-600 hover:text-red-800"
+      >
+        <Plus className="h-4 w-4" /> Add exclude rule
+      </button>
+    </section>
+  );
+}
 
 function LiveMatchPreview({
   filters,
@@ -1172,16 +1313,18 @@ function LiveMatchPreview({
   const [error, setError] = React.useState<string | null>(null);
   const [included, setIncluded] = React.useState<PreviewUser[]>([]);
   const [excluded, setExcluded] = React.useState<PreviewUser[]>([]);
+  const [ruleExcluded, setRuleExcluded] = React.useState<PreviewUser[]>([]);
   const [baseCount, setBaseCount] = React.useState(0);
+  const [ruleExcludedCount, setRuleExcludedCount] = React.useState(0);
   const [hasLoaded, setHasLoaded] = React.useState(false);
   const [filterHash, setFilterHash] = React.useState<string>("");
 
   // Compute a stable hash of the spec to detect changes (so we don't
   // re-fetch on every keystroke if the spec hasn't actually changed).
   // We deliberately EXCLUDE excludedEmails from the hash — the preview
-  // re-fetches when filter rules change, but toggling a checkbox only
-  // updates the excludedEmails list locally (no re-fetch needed; the
-  // backend resolver will apply the exclusion on save).
+  // re-fetches when filter rules OR excludeGroups change, but toggling a
+  // checkbox only updates the excludedEmails list locally (no re-fetch
+  // needed; the backend resolver applies the exclusion on save).
   const computeHash = (f: FilterSpec): string => {
     const { excludedEmails, ...rest } = f;
     return JSON.stringify(rest);
@@ -1212,13 +1355,16 @@ function LiveMatchPreview({
         const data: PreviewResponse = await r.json();
         setIncluded(data.users || []);
         setExcluded(data.excludedUsers || []);
+        setRuleExcluded(data.ruleExcludedUsers || []);
         setBaseCount(data.baseCount ?? data.count);
+        setRuleExcludedCount(data.ruleExcludedCount ?? 0);
         setFilterHash(newHash);
         setHasLoaded(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Preview failed");
         setIncluded([]);
         setExcluded([]);
+        setRuleExcluded([]);
       } finally {
         setLoading(false);
       }
@@ -1227,7 +1373,7 @@ function LiveMatchPreview({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.groups, filters.combinator, filters.source]);
+  }, [filters.groups, filters.combinator, filters.source, filters.excludeGroups]);
 
   const excludedEmailsSet = React.useMemo(
     () => new Set((filters.excludedEmails || []).map((e) => e.toLowerCase())),
@@ -1267,9 +1413,16 @@ function LiveMatchPreview({
     });
   };
 
-  const finalCount = baseCount - excludedEmailsSet.size;
+  const finalCount = baseCount - ruleExcludedCount - excludedEmailsSet.size;
+  // A rule "has a value" if either:
+  //   - it has a non-empty `value` string (for operators like equals/contains),
+  //   - OR it uses an operator that doesn't need a value (is_set / is_not_set).
+  // Without this, the LiveMatchPreview would never show for audiences built
+  // on "is_not_set" rules (e.g. "Didn't fill Reg-form" = linkedinUrl is_not_set
+  // AND companyUrl is_not_set), even though the filter resolves to 60 members.
+  const VALUELESS_OPS = new Set<FilterOp>(["is_set", "is_not_set"]);
   const hasAnyRules = filters.groups.some((g) =>
-    g.rules.some((r) => r.value && r.value.trim().length > 0),
+    g.rules.some((r) => VALUELESS_OPS.has(r.op) || (r.value && r.value.trim().length > 0)),
   );
 
   return (
@@ -1282,7 +1435,10 @@ function LiveMatchPreview({
             <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-500" />
           ) : hasLoaded && !error ? (
             <span className="rounded bg-white px-2 py-0.5 text-[10px] font-bold text-neutral-700 border border-neutral-200">
-              {baseCount} matched · {excludedEmailsSet.size} excluded · {finalCount} will receive
+              {baseCount} matched
+              {ruleExcludedCount > 0 && ` · ${ruleExcludedCount} excluded by rules`}
+              {excludedEmailsSet.size > 0 && ` · ${excludedEmailsSet.size} excluded manually`}
+              {` · ${finalCount} will receive`}
             </span>
           ) : null}
         </div>
@@ -1374,11 +1530,43 @@ function LiveMatchPreview({
             </div>
           )}
 
-          {/* Excluded users */}
+          {/* Rule-excluded users — matched by excludeGroups. No checkbox:
+              to re-include them, the admin must remove the exclude rule
+              in the ExcludeGroupsEditor above. */}
+          {ruleExcluded.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                Excluded by rules ({ruleExcluded.length}) — remove the exclude rule to re-include
+              </p>
+              <ul className="divide-y divide-neutral-100 rounded border border-red-200 bg-red-50/30 max-h-40 overflow-y-auto">
+                {ruleExcluded.map((u) => (
+                  <li
+                    key={u.email}
+                    className="flex items-center gap-2 px-2 py-1.5 text-xs opacity-70"
+                  >
+                    <span className="text-red-400" title="Excluded by rule">
+                      <X className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-neutral-900">
+                        {u.name || "(no name)"}
+                      </span>
+                      <span className="text-neutral-500"> · {u.email}</span>
+                      {u.company && (
+                        <span className="text-neutral-400"> · {u.company}</span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Manually-excluded users — per-user checkbox exclusions. */}
           {excluded.length > 0 && (
             <div>
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-                Excluded ({excluded.length})
+                Excluded manually ({excluded.length})
               </p>
               <ul className="divide-y divide-neutral-100 rounded border border-neutral-200 bg-white max-h-40 overflow-y-auto">
                 {excluded.map((u) => (

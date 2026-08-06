@@ -59,6 +59,20 @@ export type AudienceFilterSpec = {
   combinator: "AND" | "OR";
   groups: FilterGroup[];
   /**
+   * Optional rule-based exclusion groups. Each group is a FilterGroup
+   * (same shape as `groups`). A user matching ANY excludeGroup (combined
+   * with OR) is subtracted from the resolved set — even if they match
+   * all inclusion `groups`.
+   *
+   * This is different from `excludedEmails` (which is per-user manual
+   * exclusion via checkboxes). ExcludeGroups are rule-based: e.g.
+   * "match all users EXCEPT those who have linkedinUrl set" or
+   * "match all members EXCEPT those who RSVP'd to event X".
+   *
+   * Backward compat: missing/null/empty array = no rule-based exclusions.
+   */
+  excludeGroups?: FilterGroup[];
+  /**
    * Optional list of email addresses to EXCLUDE from the resolved set,
    * even when they match the filter rules. Each email is lowercased.
    *
@@ -283,6 +297,23 @@ export function parseSpec(json: string | null | undefined): AudienceFilterSpec |
     if (!["users", "rsvps", "users_and_rsvps"].includes(obj.source)) return null;
     if (!["AND", "OR"].includes(obj.combinator)) return null;
     if (!Array.isArray(obj.groups)) return null;
+    // Validate optional excludeGroups field — if present, must be an array
+    // of FilterGroup objects (same shape as `groups`). Drop invalid entries.
+    // If absent or invalid, omit it entirely.
+    if (obj.excludeGroups !== undefined && obj.excludeGroups !== null) {
+      if (!Array.isArray(obj.excludeGroups)) {
+        delete obj.excludeGroups;
+      } else {
+        const validGroups = obj.excludeGroups.filter(
+          (g: unknown): g is FilterGroup =>
+            typeof g === "object" &&
+            g !== null &&
+            Array.isArray((g as FilterGroup).rules) &&
+            ["AND", "OR"].includes((g as FilterGroup).combinator),
+        );
+        obj.excludeGroups = validGroups.length > 0 ? validGroups : undefined;
+      }
+    }
     // Validate optional excludedEmails field — if present, must be an
     // array of strings. Coerce to a clean string[] (drop non-strings,
     // lowercase). If absent or invalid, omit it entirely.
@@ -771,6 +802,15 @@ export async function resolveAudienceEmails(spec: AudienceFilterSpec): Promise<s
     rsvps.forEach((r) => emailSet.add(r.email.toLowerCase()));
   }
 
+  // Apply rule-based exclusions (excludeGroups). A user matching ANY
+  // excludeGroup (combined with OR) is subtracted from the set.
+  if (Array.isArray(spec.excludeGroups) && spec.excludeGroups.length > 0) {
+    const excludeSet = await resolveExcludeRuleEmails(spec);
+    for (const e of excludeSet) {
+      emailSet.delete(e);
+    }
+  }
+
   // Apply admin-curated exclusions (emails explicitly deselected in the
   // audience editor's live match preview). Lowercase + dedupe for safety.
   if (Array.isArray(spec.excludedEmails) && spec.excludedEmails.length > 0) {
@@ -785,6 +825,67 @@ export async function resolveAudienceEmails(spec: AudienceFilterSpec): Promise<s
   }
 
   return Array.from(emailSet).sort();
+}
+
+/**
+ * Resolve the set of emails matching ANY excludeGroup (combined with OR).
+ * Used by `resolveAudienceEmails` to subtract rule-based exclusions, and
+ * by the preview API to show which users were excluded by rules (vs.
+ * manual per-user exclusions).
+ *
+ * Returns lowercased de-duplicated emails. Returns empty set if
+ * `spec.excludeGroups` is absent or empty.
+ */
+export async function resolveExcludeRuleEmails(spec: AudienceFilterSpec): Promise<Set<string>> {
+  const excludeSet = new Set<string>();
+  if (!Array.isArray(spec.excludeGroups) || spec.excludeGroups.length === 0) {
+    return excludeSet;
+  }
+  // Build a temporary spec where `groups = excludeGroups` and
+  // `combinator = "OR"` (a user matching ANY excludeGroup is excluded).
+  // Reuse the existing buildUserWhere / buildRsvpWhere + engagement context.
+  const excludeSpec: AudienceFilterSpec = {
+    ...spec,
+    groups: spec.excludeGroups,
+    combinator: "OR",
+    excludeGroups: undefined,
+    excludedEmails: undefined,
+  };
+  const excludeCtx = await buildEngagementContext(excludeSpec);
+
+  if (spec.source === "users" || spec.source === "users_and_rsvps") {
+    const userWhere = buildUserWhere(excludeSpec, excludeCtx);
+    const users = await db.user.findMany({
+      where: { ...userWhere, archivedAt: null },
+      select: { email: true },
+    });
+    users.forEach((u) => excludeSet.add(u.email.toLowerCase()));
+
+    const userIds = users.map((u) => u.email);
+    if (userIds.length > 0) {
+      const secondary = await db.userEmail.findMany({
+        where: {
+          user: {
+            email: { in: userIds },
+            archivedAt: null,
+          },
+        },
+        select: { email: true },
+      });
+      secondary.forEach((e) => excludeSet.add(e.email.toLowerCase()));
+    }
+  }
+
+  if (spec.source === "rsvps" || spec.source === "users_and_rsvps") {
+    const rsvpWhere = buildRsvpWhere(excludeSpec, excludeCtx);
+    const rsvps = await db.eventRsvp.findMany({
+      where: rsvpWhere,
+      select: { email: true },
+    });
+    rsvps.forEach((r) => excludeSet.add(r.email.toLowerCase()));
+  }
+
+  return excludeSet;
 }
 
 /**

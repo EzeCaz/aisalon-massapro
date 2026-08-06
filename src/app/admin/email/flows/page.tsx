@@ -119,6 +119,12 @@ export default async function FlowBuilderPage() {
         emails: [] as string[],
         emailCount,
         emailPreview,
+        // Include the parsed filter spec so the AudiencesClient editor can
+        // load existing rules when the user clicks an audience to edit it.
+        // Without this, the editor receives `filters: undefined` and falls
+        // back to the default placeholder rule — making it look like the
+        // saved rules were "reset" every time the user re-opens the audience.
+        filters: a.filtersJson ? parseSpec(a.filtersJson) : null,
       };
     }),
   );

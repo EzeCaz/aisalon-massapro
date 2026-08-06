@@ -112,6 +112,15 @@ export type UnifiedRenderContext = {
   checkInCode?: string;
   speakers?: string;
   agenda?: string;
+  // Onboarding — link to /onboarding so the recipient can finish filling
+  // out their profile. Used by the {{finishOnboardingUrl}} /
+  // {{finish_onboarding_url}} merge tag. If the recipient hasn't onboarded
+  // yet (onboardedAt=null), this link takes them to the intake form. The
+  // post-login-redirect endpoint forces onboarding for users who haven't
+  // completed it, so this URL works whether the user is logged in or not
+  // (if not logged in → /login?callbackUrl=/onboarding → after login →
+  // /onboarding).
+  finishOnboardingUrl?: string;
   // Tracking — orchestrator path provides these directly
   openPixelUrl?: string;
   wrapLink?: (url: string) => string;
@@ -191,6 +200,7 @@ export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
   const checkInCode = ctx.checkInCode ?? "";
   const speakers = ctx.speakers ?? "";
   const agenda = ctx.agenda ?? "";
+  const finishOnboardingUrl = ctx.finishOnboardingUrl ?? "";
 
   // HTML-escape agenda newlines first → <br/>, then escape the rest.
   const agendaHtml = escapeHtml(agenda).replace(/\n/g, "<br/>");
@@ -211,6 +221,7 @@ export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
     .replace(/{{checkInCode}}/g, escapeHtml(checkInCode))
     .replace(/{{speakers}}/g, escapeHtml(speakers))
     .replace(/{{agenda}}/g, agendaHtml)
+    .replace(/{{finishOnboardingUrl}}/g, escapeHtml(finishOnboardingUrl))
     // snake_case tokens (backward compat with campaign-side templates)
     .replace(/\{\{\s*first_name\s*\}\}/g, escapeHtml(firstName))
     .replace(/\{\{\s*full_name\s*\}\}/g, escapeHtml(fullName))
@@ -225,7 +236,9 @@ export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
     .replace(/\{\{\s*myCodeUrl\s*\}\}/g, escapeHtml(myCodeUrl))
     .replace(/\{\{\s*checkInCode\s*\}\}/g, escapeHtml(checkInCode))
     .replace(/\{\{\s*speakers\s*\}\}/g, escapeHtml(speakers))
-    .replace(/\{\{\s*agenda\s*\}\}/g, agendaHtml);
+    .replace(/\{\{\s*agenda\s*\}\}/g, agendaHtml)
+    .replace(/\{\{\s*finishOnboardingUrl\s*\}\}/g, escapeHtml(finishOnboardingUrl))
+    .replace(/\{\{\s*finish_onboarding_url\s*\}\}/g, escapeHtml(finishOnboardingUrl));
 }
 
 /**
@@ -250,6 +263,7 @@ export function renderUnifiedSubject(
   const checkInCode = ctx.checkInCode ?? "";
   const speakers = ctx.speakers ?? "";
   const agenda = ctx.agenda ?? "";
+  const finishOnboardingUrl = ctx.finishOnboardingUrl ?? "";
 
   return subject
     .replace(/{{firstName}}/g, firstName)
@@ -266,6 +280,7 @@ export function renderUnifiedSubject(
     .replace(/{{checkInCode}}/g, checkInCode)
     .replace(/{{speakers}}/g, speakers)
     .replace(/{{agenda}}/g, agenda)
+    .replace(/{{finishOnboardingUrl}}/g, finishOnboardingUrl)
     .replace(/\{\{\s*first_name\s*\}\}/g, firstName)
     .replace(/\{\{\s*full_name\s*\}\}/g, fullName)
     .replace(/\{\{\s*email\s*\}\}/g, email)
@@ -279,7 +294,9 @@ export function renderUnifiedSubject(
     .replace(/\{\{\s*myCodeUrl\s*\}\}/g, myCodeUrl)
     .replace(/\{\{\s*checkInCode\s*\}\}/g, checkInCode)
     .replace(/\{\{\s*speakers\s*\}\}/g, speakers)
-    .replace(/\{\{\s*agenda\s*\}\}/g, agenda);
+    .replace(/\{\{\s*agenda\s*\}\}/g, agenda)
+    .replace(/\{\{\s*finishOnboardingUrl\s*\}\}/g, finishOnboardingUrl)
+    .replace(/\{\{\s*finish_onboarding_url\s*\}\}/g, finishOnboardingUrl);
 }
 
 // ----------------------------------------------------------------------------
