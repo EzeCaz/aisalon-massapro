@@ -10,9 +10,9 @@ import {
 } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
-import { EmailAdminNav } from "@/components/ais/email-admin-nav";
 import { ReportClient } from "./report-client";
-import { Globe2 } from "lucide-react";
+import { Globe2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 export const metadata = { title: "Email Report — AI Salon Admin" };
 
@@ -29,7 +29,11 @@ function scopeBadge(scope: UserScope): { label: string; color: string } {
   }
 }
 
-export default async function EmailReportPage() {
+export default async function EmailReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ row?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/email/report");
 
@@ -71,6 +75,12 @@ export default async function EmailReportPage() {
 
   const badge = scopeBadge(scope);
 
+  // Optional ?row=campaign:xxx — when the user clicks the report icon on
+  // a specific campaign row in /admin/email, they land here with that row
+  // pre-selected so they can immediately preview / act on it.
+  const sp = await searchParams;
+  const initialRowId = sp.row || null;
+
   const audiencesJson = audiences.map((a) => ({
     id: a.id,
     name: a.name,
@@ -85,6 +95,8 @@ export default async function EmailReportPage() {
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <AdminTabs role={effectiveRole} />
+
+        {/* Scope badge (same as other email admin pages) */}
         <div className="mb-4 flex items-center gap-2 text-xs text-black/60">
           <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider ${badge.color}`}>
             <Globe2 className="h-2.5 w-2.5" />
@@ -95,8 +107,21 @@ export default async function EmailReportPage() {
             manual queue sends in one filterable view.
           </span>
         </div>
-        <EmailAdminNav active="report" />
-        <ReportClient audiences={audiencesJson} />
+
+        {/* Back link — this is a standalone page, not a tab.
+            Clicking "Report" in the email admin nav (from /admin/email or
+            /admin/email/flows) or the campaign row's report icon lands here. */}
+        <div className="mb-4">
+          <Link
+            href="/admin/email"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF005A] hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to email admin
+          </Link>
+        </div>
+
+        <ReportClient audiences={audiencesJson} initialRowId={initialRowId} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

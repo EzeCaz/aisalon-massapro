@@ -60,7 +60,16 @@ import {
   Users,
   CheckCheck,
   Square,
+  Table as TableIcon,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
+import {
+  ToggleableChartCard,
+  ChartTypeButton,
+  useChartTypeState,
+  type ChartType,
+} from "@/components/admin/toggleable-chart-card";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,9 +130,37 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 
+// ── Chart constants (module scope so hook deps are stable) ──────────────────
+
+const REPORT_CHART_IDS = [
+  "sendsOverTime",
+  "typeSplit",
+  "statusSplit",
+  "topAudiences",
+  "topFlows",
+  "topTemplates",
+] as const;
+type ReportChartId = (typeof REPORT_CHART_IDS)[number];
+
+const REPORT_DEFAULT_CHART_TYPES: Record<ReportChartId, ChartType> = {
+  sendsOverTime: "bar",
+  typeSplit: "pie",
+  statusSplit: "pie",
+  topAudiences: "bar",
+  topFlows: "bar",
+  topTemplates: "bar",
+};
+
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
+export function ReportClient({
+  audiences,
+  initialRowId,
+}: {
+  audiences: AudienceInfo[];
+  /** Optional ?row=campaign:xxx from the URL — pre-selects that row. */
+  initialRowId?: string | null;
+}) {
   const [data, setData] = React.useState<ReportListResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -138,6 +175,16 @@ export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
   // Sort
   const [sortKey, setSortKey] = React.useState<SortKey>("sentAt");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+
+  // Sub-tab: Table vs Graphs
+  const [view, setView] = React.useState<"table" | "graphs">("table");
+
+  // Per-chart type state for the Graphs sub-tab (bar/pie/table toggle
+  // on each chart, plus a global "Set all" control — same pattern as
+  // the member dashboard). Constants are declared at module scope (above)
+  // so the hook's useCallback dependencies are stable across renders.
+  const { chartTypes, setChartType, setAllChartTypes, globalActive } =
+    useChartTypeState(REPORT_CHART_IDS, REPORT_DEFAULT_CHART_TYPES);
 
   // Selection (batch actions)
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -172,6 +219,23 @@ export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
   React.useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ── Pre-select row from ?row= query param ─────────────────────────────────
+  // When the user clicks the report icon on a specific campaign in
+  // /admin/email, they land here with ?row=campaign:xxx. We pre-select
+  // that row so the batch action bar appears immediately. Runs once
+  // after data loads.
+  React.useEffect(() => {
+    if (!data?.rows || !initialRowId) return;
+    const exists = data.rows.some((r) => r.id === initialRowId);
+    if (exists) {
+      setSelected((prev) => new Set(prev).add(initialRowId));
+      // Also set the search to the row's name so it's easy to find in
+      // the table.
+      const row = data.rows.find((r) => r.id === initialRowId);
+      if (row) setSearch(row.name);
+    }
+  }, [data, initialRowId]);
 
   // ── Derived: filtered + sorted rows ───────────────────────────────────────
   const rows = data?.rows ?? [];
@@ -310,6 +374,110 @@ export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
     }
   };
 
+  // ── KPI summary (computed from all rows, not just filtered) ──────────────
+  // Mirrors the flow report's 7 summary cards: Sent, Opened, Clicked,
+  // Failed, Pending, Total queue, Skipped. These are always visible
+  // above the sub-tabs so the admin sees the big picture at a glance.
+  const summary = React.useMemo(() => {
+    let sent = 0, opened = 0, clicked = 0, failed = 0, total = 0, pending = 0, skipped = 0;
+    for (const r of rows) {
+      sent += r.sentCount;
+      opened += r.openedCount;
+      clicked += r.clickedCount;
+      failed += r.failedCount;
+      total += r.recipients;
+      // Pending = recipients that haven't been sent yet (only meaningful
+      // for rows that are in-flight or scheduled). For SENT rows, this
+      // is 0. For DRAFT/SCHEDULED rows, recipients may be 0 (not yet
+      // computed) — so pending stays 0 there too.
+      if (r.recipients > r.sentCount && (r.status === "SENDING" || r.status === "SCHEDULED" || r.status === "PENDING")) {
+        pending += r.recipients - r.sentCount;
+      }
+      // Skipped — no skip data in our system; reserved for future use.
+    }
+    return { sent, opened, clicked, failed, total, pending, skipped };
+  }, [rows]);
+
+  // ── Chart data (computed from filteredRows so charts respect filters) ────
+  const chartData = React.useMemo(() => {
+    // Sends over time: group rows by month (from sentAt, fallback createdAt).
+    const byMonth = new Map<string, number>();
+    for (const r of filteredRows) {
+      const d = new Date(r.sentAt ?? r.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      byMonth.set(key, (byMonth.get(key) || 0) + Math.max(r.sentCount, 1));
+    }
+    const sendsOverTime = Array.from(byMonth.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-12) // last 12 months
+      .map(([k, v]) => ({
+        label: (() => {
+          const [y, m] = k.split("-");
+          const date = new Date(parseInt(y), parseInt(m) - 1, 1);
+          return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        })(),
+        count: v,
+      }));
+
+    // Type split: count rows by type.
+    const typeMap = new Map<string, number>();
+    for (const r of filteredRows) {
+      typeMap.set(r.type, (typeMap.get(r.type) || 0) + 1);
+    }
+    const typeSplit = [
+      { label: "Campaign", count: typeMap.get("campaign") || 0 },
+      { label: "Flow", count: typeMap.get("flow") || 0 },
+      { label: "Manual", count: typeMap.get("manual") || 0 },
+    ].filter((x) => x.count > 0);
+
+    // Status split: count rows by status.
+    const statusMap = new Map<string, number>();
+    for (const r of filteredRows) {
+      statusMap.set(r.status, (statusMap.get(r.status) || 0) + 1);
+    }
+    const statusSplit = Array.from(statusMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Top audiences: group by audienceName, sum recipients, top 10.
+    const audMap = new Map<string, number>();
+    for (const r of filteredRows) {
+      if (r.audienceName) {
+        audMap.set(r.audienceName, (audMap.get(r.audienceName) || 0) + Math.max(r.recipients, 1));
+      }
+    }
+    const topAudiences = Array.from(audMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Top flows: group by flowName, sum recipients, top 10.
+    const flowMap = new Map<string, number>();
+    for (const r of filteredRows) {
+      if (r.flowName) {
+        flowMap.set(r.flowName, (flowMap.get(r.flowName) || 0) + Math.max(r.recipients, 1));
+      }
+    }
+    const topFlows = Array.from(flowMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Top templates: group by templateName, sum recipients, top 10.
+    const tplMap = new Map<string, number>();
+    for (const r of filteredRows) {
+      if (r.templateName) {
+        tplMap.set(r.templateName, (tplMap.get(r.templateName) || 0) + Math.max(r.recipients, 1));
+      }
+    }
+    const topTemplates = Array.from(tplMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return { sendsOverTime, typeSplit, statusSplit, topAudiences, topFlows, topTemplates };
+  }, [filteredRows]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading && !data) {
     return (
@@ -334,7 +502,67 @@ export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Top toolbar: search + refresh + one-click type filter chips ── */}
+      {/* ── Page header (title + refresh) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-3">
+        <div>
+          <h1 className="text-lg font-bold text-black flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-[#007E72]" />
+            Email Report
+          </h1>
+          <p className="text-xs text-black/60 mt-0.5">
+            Breakdown by type → audience → flow → template. Filter, sort, and
+            act on every email send in one place.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchData}
+          disabled={loading}
+          className="h-9"
+        >
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Refresh
+        </Button>
+      </div>
+
+      {/* ── KPI summary cards (always visible, like flow report's summary) ── */}
+      <div>
+        <h3 className="mb-2 text-sm font-bold text-black/80">Summary</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <KpiCard icon={<Send className="h-3.5 w-3.5" />} label="Sent" value={summary.sent} color="text-blue-600" />
+          <KpiCard icon={<Eye className="h-3.5 w-3.5" />} label="Opened" value={summary.opened} color="text-emerald-600" sub={summary.sent > 0 ? `${Math.round((summary.opened / summary.sent) * 1000) / 10}%` : ""} />
+          <KpiCard icon={<Filter className="h-3.5 w-3.5" />} label="Clicked" value={summary.clicked} color="text-fuchsia-600" sub={summary.sent > 0 ? `${Math.round((summary.clicked / summary.sent) * 1000) / 10}%` : ""} />
+          <KpiCard icon={<X className="h-3.5 w-3.5" />} label="Failed" value={summary.failed} color="text-red-600" />
+          <KpiCard icon={<RefreshCw className="h-3.5 w-3.5" />} label="Pending" value={summary.pending} color="text-amber-600" />
+          <KpiCard icon={<Send className="h-3.5 w-3.5" />} label="Total queue" value={summary.total} color="text-neutral-700" />
+          <KpiCard icon={<X className="h-3.5 w-3.5" />} label="Skipped" value={summary.skipped} color="text-zinc-500" />
+        </div>
+      </div>
+
+      {/* ── Sub-tabs: Table / Graphs ── */}
+      <div className="flex items-center gap-1 border-b border-black/10">
+        <SubTabButton
+          active={view === "table"}
+          onClick={() => setView("table")}
+          icon={<TableIcon className="h-3.5 w-3.5" />}
+          label="Table"
+        />
+        <SubTabButton
+          active={view === "graphs"}
+          onClick={() => setView("graphs")}
+          icon={<BarChart3 className="h-3.5 w-3.5" />}
+          label="Graphs"
+        />
+      </div>
+
+      {view === "table" && (
+        <>
+      {/* ── Top toolbar: search + one-click type filter chips ── */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-black/60" />
@@ -626,6 +854,110 @@ export function ReportClient({ audiences }: { audiences: AudienceInfo[] }) {
           </span>
         )}
       </div>
+        </>
+      )}
+
+      {view === "graphs" && (
+        <div className="space-y-4">
+          {/* Charts toolbar — global "Set all" control */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-black flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-[#FF005A]" />
+                Charts
+              </h2>
+              <p className="text-xs text-black/50 mt-0.5">
+                Toggle each chart between bar, pie, and table — or switch them
+                all at once. Charts respect the current filters.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-1 rounded-md border border-black/15 bg-white p-0.5">
+              <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/50 px-2">
+                Set all
+              </span>
+              <ChartTypeButton
+                active={globalActive === "bar"}
+                onClick={() => setAllChartTypes("bar")}
+                icon={<BarChart3 className="h-3.5 w-3.5" />}
+                label="Bar"
+              />
+              <ChartTypeButton
+                active={globalActive === "pie"}
+                onClick={() => setAllChartTypes("pie")}
+                icon={<PieChartIcon className="h-3.5 w-3.5" />}
+                label="Pie"
+              />
+              <ChartTypeButton
+                active={globalActive === "table"}
+                onClick={() => setAllChartTypes("table")}
+                icon={<TableIcon className="h-3.5 w-3.5" />}
+                label="Table"
+              />
+            </div>
+          </div>
+
+          {/* Charts grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ToggleableChartCard
+              title="Sends over time"
+              subtitle={`${chartData.sendsOverTime.length} months`}
+              chartType={chartTypes.sendsOverTime}
+              onTypeChange={(t) => setChartType("sendsOverTime", t)}
+              data={chartData.sendsOverTime}
+              orientation="vertical"
+              height={240}
+            />
+            <ToggleableChartCard
+              title="Type split"
+              subtitle="Campaign vs Flow vs Manual"
+              chartType={chartTypes.typeSplit}
+              onTypeChange={(t) => setChartType("typeSplit", t)}
+              data={chartData.typeSplit}
+              orientation="vertical"
+              height={240}
+            />
+            <ToggleableChartCard
+              title="Status split"
+              subtitle="All rows by current status"
+              chartType={chartTypes.statusSplit}
+              onTypeChange={(t) => setChartType("statusSplit", t)}
+              data={chartData.statusSplit}
+              colorOffset={2}
+              orientation="vertical"
+              height={240}
+            />
+            <ToggleableChartCard
+              title="Top audiences"
+              subtitle="By total recipients (top 10)"
+              chartType={chartTypes.topAudiences}
+              onTypeChange={(t) => setChartType("topAudiences", t)}
+              data={chartData.topAudiences}
+              orientation="horizontal"
+              height={260}
+            />
+            <ToggleableChartCard
+              title="Top flows"
+              subtitle="By total recipients (top 10)"
+              chartType={chartTypes.topFlows}
+              onTypeChange={(t) => setChartType("topFlows", t)}
+              data={chartData.topFlows}
+              colorOffset={4}
+              orientation="horizontal"
+              height={260}
+            />
+            <ToggleableChartCard
+              title="Top templates"
+              subtitle="By total recipients (top 10)"
+              chartType={chartTypes.topTemplates}
+              onTypeChange={(t) => setChartType("topTemplates", t)}
+              data={chartData.topTemplates}
+              colorOffset={1}
+              orientation="horizontal"
+              height={260}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ── Preview modal ── */}
       <PreviewDialog row={previewRow} onClose={() => setPreviewRow(null)} />
@@ -720,6 +1052,69 @@ const STATUS_OPTIONS = [
   { id: "OPENED", name: "OPENED" },
   { id: "CLICKED", name: "CLICKED" },
 ];
+
+/**
+ * KpiCard — single summary card matching the flow report's style.
+ * Small icon + label at top, big number below, optional sub-text
+ * (e.g. open rate %).
+ */
+function KpiCard({
+  icon,
+  label,
+  value,
+  color,
+  sub,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  color: string;
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-black/10 bg-white p-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[0.65rem] font-bold uppercase tracking-widest text-black/80">
+          {label}
+        </span>
+        <span className={color}>{icon}</span>
+      </div>
+      <div className={`text-xl font-extrabold ${color}`}>{value}</div>
+      {sub && <div className="text-[0.6rem] text-black/50">{sub} of sent</div>}
+    </div>
+  );
+}
+
+/**
+ * SubTabButton — one of the two view toggles (Table / Graphs) below the
+ * KPI summary. Matches the EmailAdminNav TopTab style: pink underline +
+ * pink text when active, muted when inactive.
+ */
+function SubTabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${
+        active
+          ? "border-b-2 border-[#FF005A] text-[#FF005A] bg-[#FF005A]/5"
+          : "border-b-2 border-transparent text-black/60 hover:text-black hover:bg-black/[0.03]"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
 
 function TypeBadge({ type }: { type: ReportRow["type"] }) {
   const cfg = {

@@ -954,17 +954,15 @@ function CampaignsTable({
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    {/* Stats — for SENT (placeholder) */}
+                    {/* Stats — for SENT (links to the dedicated Report page) */}
                     {canViewStats && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toast.info("Stats coming soon")}
-                        className="h-7 px-2 text-[#007E72] hover:text-[#007E72]"
-                        title="View stats (coming soon)"
+                      <a
+                        href={`/admin/email/report?row=campaign:${c.id}`}
+                        className="inline-flex items-center justify-center h-7 px-2 text-[#007E72] hover:text-[#007E72] hover:bg-[#007E72]/10 rounded transition-colors"
+                        title="Open Report page"
                       >
                         <BarChart3 className="h-3.5 w-3.5" />
-                      </Button>
+                      </a>
                     )}
                     {/* Save as template — for SENT or FAILED */}
                     {(c.status === "SENT" || c.status === "FAILED") && (
