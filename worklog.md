@@ -13632,3 +13632,96 @@ Stage Summary:
   * src/app/admin/email/email-tab-client.tsx (table-fixed, explicit
     th widths, break-words on Name + Subject, align-top on all
     cells, flex-wrap on Actions buttons)
+
+---
+Task ID: report-tab-1
+Agent: main (super-z)
+Task: (1) Add text wrap to all email campaign columns (template + last sent looked weird). (2) Create new "Report" tab under email, right of Orchestrator, opening /admin/email/report with: Type col (flow/campaign/manual), filter+sort on each column, multi-select one-click filters for Flows/Campaigns with select-all/unselect-all, preview-email eye button per row, audience column, row checkbox + batch actions (duplicate / send to another audience).
+
+Work Log:
+- Read email-tab-client.tsx (2232 lines) — confirmed CampaignsTable already
+  uses table-fixed + break-words on Name/Subject cells (from prev commit
+  32c9780). Found the Flow, Template, and Last sent cells were still using
+  truncate / whitespace-nowrap, which made them look weird in narrow cols.
+- Edited email-tab-client.tsx:
+  * Flow cell: removed `truncate max-w-[120px]` from the inner span, added
+    `break-words whitespace-normal` + `flex-shrink-0` on the Workflow icon
+    so it stays put while the name wraps.
+  * Template cell: added `break-words whitespace-normal` to the Badge +
+    `align-top` on the td so long template names wrap inside the badge.
+  * Last sent cell: removed `whitespace-nowrap` (was forcing date+time
+    onto one line and clipping in narrow columns), replaced with
+    `break-words whitespace-normal` so the date string can wrap.
+- Read email-admin-nav.tsx — added "report" to EmailAdminTab union type.
+- Added new TopTab between Orchestrator and Flows, linking to
+  /admin/email/report with BarChart3 icon + green "New" badge.
+- Edited /admin/email/page.tsx — added redirect: /admin/email?tab=report
+  → /admin/email/report (clean dedicated URL, consistent with how the
+  Flows tab links to /admin/email/flows).
+- Created /api/admin/email/report/list/route.ts — returns unified rows:
+  * EmailCampaign (flowId null) → type "campaign"
+  * EmailCampaign (flowId set) → type "flow"
+  * EmailQueue (flowStepId null, grouped by subject+event) → type "manual"
+  Includes per-row stats (sent/opened/clicked/failed) via EmailRecipient
+  groupBy, audience name derived from listSource or flow's first step
+  audience, and the bodyHtml snapshot for the preview button.
+- Created /api/admin/email/report/batch-action/route.ts — handles two
+  actions: "duplicate" (creates a DRAFT copy) and "send_to_audience"
+  (clones + swaps audience + immediately sends via internal fetch to
+  /api/admin/email/campaigns/[id]/send). Uses resolveAudienceEmailsById
+  for both STATIC and DYNAMIC audiences.
+- Created /admin/email/report/page.tsx — server component, fetches all
+  audiences in scope for the batch-action audience picker, renders
+  EmailAdminNav with active="report" + ReportClient.
+- Created /admin/email/report/report-client.tsx (~800 lines) with all
+  6 features the user requested:
+  A) Type column (TypeBadge: flow=campaign=manual with distinct colors)
+  B) Sortable + filterable table — every column header is clickable for
+     sort asc/desc, with chevron icons. Search box at top filters across
+     name/subject/audience/flow/template/creator.
+  C) MultiSelectFilter component for Flows + Campaigns + Status at the
+     top — each opens a dropdown with search box, list of checkboxes,
+     select-all / unselect-all buttons, and a live "X of Y selected"
+     footer. Plus one-click type filter chips (Flows/Campaigns/Manual).
+  D) Preview email eye button per row → opens a Dialog with a sandboxed
+     iframe (sandbox="") that renders bodyHtml via srcdoc. The iframe
+     has no allow-scripts so embedded scripts can't run.
+  E) Audience column with derived audience name.
+  F) Checkbox on each row (CheckboxCell component with custom indeterminate
+     state for select-all) + select-all in header. When ≥1 row selected,
+     a batch action bar appears with Duplicate + Send to another audience
+     buttons. Send to another audience opens a Dialog with an audience
+     Select picker.
+- Ran `npx tsc --noEmit` — 0 type errors in any of the new/modified files.
+- Committed as 0990397 and pushed to origin/main. Vercel will auto-deploy.
+
+Stage Summary:
+- All 6 features implemented and shipped:
+  A) Type column (flow/campaign/manual) ✓
+  B) Filter + sort on every column ✓
+  C) Multi-select one-click filters for Flows/Campaigns with select-all/
+     unselect-all ✓
+  D) Preview email eye button → sandboxed iframe modal ✓
+  E) Audience column ✓
+  F) Row checkbox + batch actions (Duplicate / Send to another audience) ✓
+- Campaign table text wrapping fixed on Flow, Template, Last sent cells
+  (now uses break-words + whitespace-normal consistently with Name +
+  Subject cells from the previous commit).
+- New "Report" tab visible in the email admin nav between Orchestrator
+  and Flows. Clicking it goes to /admin/email/report.
+- Files created:
+  * src/app/admin/email/report/page.tsx (server component)
+  * src/app/admin/email/report/report-client.tsx (~800 LOC, full UI)
+  * src/app/api/admin/email/report/list/route.ts (unified data source)
+  * src/app/api/admin/email/report/batch-action/route.ts (duplicate / send)
+- Files modified:
+  * src/app/admin/email/email-tab-client.tsx (text wrap on Flow/Template/
+    Last sent cells)
+  * src/app/admin/email/page.tsx (redirect ?tab=report → /admin/email/report)
+  * src/components/ais/email-admin-nav.tsx (added "report" tab + type)
+- After Vercel deploys (1-2 min), hard-refresh /admin/email and:
+  * Click "Report" tab in the nav (right of Orchestrator) → opens report
+  * Sort by any column by clicking the header
+  * Use the Flows/Campaigns/Status multi-select dropdowns at the top
+  * Click the eye icon on any row to preview the email
+  * Check rows + click "Duplicate" or "Send to another audience"
