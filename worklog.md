@@ -13413,3 +13413,79 @@ Stage Summary:
   diagnosis (browser extension hydration mismatch) was a red
   herring — the user reproduced the same narrow dialog in clean
   incognito sessions across two browsers.
+
+---
+Task ID: 10
+Agent: main
+Task: Three follow-up fixes on /admin/email + /admin pages:
+  A. Make the Resend button visible on the campaign list (user reported
+     not seeing it despite being logged in as super admin).
+  B. Remove horizontal scrolling in the campaign section; use the same
+     format as the email templates section above (text wrapping).
+  C. Reduce members table row height by ~50%; avoid horizontal scroll
+     on the actions; suggested approach: icon-only buttons with hover
+     tooltips for the action name.
+
+Work Log:
+- Investigated why the Resend button wasn't visible despite commit 5fd73dd
+  being deployed. Root cause: the campaign row was a `grid grid-cols-12`
+  layout where Actions was `col-span-2` (~16% width = ~200px on a
+  max-w-7xl container). Two labeled `<Button size="sm">` ("Resend" +
+  "View"/"Edit") need ~240-280px side-by-side. They overflowed → caused
+  the horizontal scroll the user reported AND pushed the Resend button
+  off the right edge of the visible area.
+- Fix (Task A+B): rewrote the campaign list as a real `<table
+  className="w-full text-sm">` mirroring the email templates section
+  (`flows/templates-client.tsx`). Tables auto-size columns to their
+  content, so Actions gets exactly the space it needs without forcing
+  horizontal scroll. Long campaign name + subject now use `max-w-xs
+  truncate` for wrapping instead of overflowing.
+- Action buttons on the campaign row are now icon-only (RefreshCw +
+  Eye/Edit3) with native `title="..."` tooltips — same pattern the
+  templates section uses. Resend is rendered on all rows (disabled with
+  reduced opacity + explanatory tooltip for non-SENT/FAILED statuses).
+- Removed the now-unused `Card` import from email-dashboard-client.tsx.
+- Fix (Task C): the members table row was ~3x taller than needed
+  because actions used `flex flex-wrap` with 5-6 labeled buttons
+  (Edit, Tags, Link speaker, Make speaker, Emails, Archive). They
+  wrapped to 2-3 lines, inflating row height.
+- Converted members row actions to `flex flex-nowrap` with icon-only
+  28x28 tile buttons. Action name is shown via native `title` tooltip
+  on hover — exactly the pattern the user suggested.
+- Added `iconOnly?: boolean` prop to TagDialog, LinkSpeakerDialog,
+  ConvertToSpeakerDialog. When true, their DialogTrigger renders as a
+  28x28 icon button with `title="..."` instead of a labeled Button.
+  Default is `false` so other call sites (e.g. MemberDetail expanded
+  view) are unaffected.
+- Reduced row vertical padding on every members-table cell from `py-3`
+  to `py-1.5` (50% less height). Avatar shrunk from `h-9 w-9` to
+  `h-7 w-7` to match. AvatarFallback text from `text-xs` to
+  `text-[0.6rem]`.
+- Moved the secondary-emails count badge on the Emails action from an
+  inline label to an absolute-positioned dot badge in the top-right
+  corner of the icon (so it stays visible at 28x28 size).
+- Preserved action color coding (Edit=pink, Tags=neutral, Link=blue,
+  Convert=pink, Emails=purple, Archive=red) so admins can still
+  visually scan for the action they want.
+- Total actions width: 5-6 buttons × 28px = 140-168px (was ~400-480px
+  wrapped to 2-3 lines). Comfortably fits in the actions column with
+  no horizontal scroll.
+- Verified: `npx tsc --noEmit` produces 0 new errors in either
+  modified file. All remaining errors are pre-existing in unrelated
+  dashboard / skill files.
+- Committed as c2c9807 and pushed to origin/main. Vercel will auto-
+  deploy.
+
+Stage Summary:
+- Task A+B: Campaign list is now a `<table>` matching the templates
+  section format. No horizontal scroll. Resend button is visible on
+  all rows (disabled+greyed for non-SENT/FAILED with explanatory
+  tooltip; active pink/blue for SENT/FAILED).
+- Task C: Members table row height reduced ~50% (py-3 → py-1.5,
+  avatar 9→7). Actions are icon-only tiles with hover tooltips.
+  No horizontal scroll. TagDialog/LinkSpeakerDialog/ConvertToSpeakerDialog
+  gained an `iconOnly` prop.
+- Files modified:
+  * src/app/admin/email/email-dashboard-client.tsx
+  * src/app/admin/admin-members-table.tsx
+- Deploy: pushed to origin/main, Vercel will auto-deploy shortly.
