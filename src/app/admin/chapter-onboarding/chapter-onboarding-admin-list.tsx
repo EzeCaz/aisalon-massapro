@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import {
   Search, Copy, ExternalLink, Clock, CheckCircle2, AlertCircle,
-  Mail, Globe2, MessageCircle, Users, Calendar,
+  Mail, Globe2, MessageCircle, Users, Calendar, Loader2, Rocket,
 } from "lucide-react";
 import type { ChapterOnboardingFormData } from "@/lib/chapter-onboarding-types";
 
@@ -36,6 +36,7 @@ type Invite = {
   submittedAt: string | null;
   expiresAt: string;
   appliedChapterId: string | null;
+  appliedAt: string | null;
   submissionJson: string | null;
   invitedByName: string | null;
   userId: string;
@@ -81,6 +82,36 @@ export function ChapterOnboardingAdminList({
     typeof window !== "undefined"
       ? window.location.origin
       : "https://aisalon.massapro.com";
+
+  // Provisioning state lives at the list level so the button inside the
+  // detail dialog can drive it.
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionedChapterId, setProvisionedChapterId] = useState<string | null>(null);
+
+  const handleProvision = async (invite: Invite) => {
+    setProvisioning(true);
+    const t = toast.loading("Provisioning chapter…");
+    try {
+      const res = await fetch(`/api/admin/chapter-onboarding/${invite.id}/provision`, {
+        method: "POST",
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      toast.success(`Chapter "${d.chapter.name}" provisioned!`, { id: t, duration: 8000 });
+      setProvisionedChapterId(d.chapter.id);
+      // Reload after a short delay so the new state (appliedChapterId) shows up.
+      setTimeout(() => window.location.reload(), 2500);
+    } catch (err) {
+      toast.error(`Provision failed: ${err instanceof Error ? err.message : String(err)}`, {
+        id: t,
+        duration: 10000,
+      });
+    } finally {
+      setProvisioning(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -182,6 +213,11 @@ export function ChapterOnboardingAdminList({
                                 month: "short", day: "numeric", year: "numeric",
                               })
                             : "—"}
+                          {i.appliedChapterId && (
+                            <Badge className="ml-1.5 bg-green-100 text-green-700 hover:bg-green-100 border-0 text-[0.65rem]">
+                              Provisioned
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
@@ -224,6 +260,9 @@ export function ChapterOnboardingAdminList({
         invite={selected}
         onClose={() => setSelected(null)}
         siteUrl={siteUrl}
+        onProvision={handleProvision}
+        provisioning={provisioning}
+        provisionedChapterId={provisionedChapterId}
       />
     </div>
   );
@@ -261,16 +300,26 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function InviteDetailDialog({
-  invite, onClose, siteUrl,
+  invite, onClose, siteUrl, onProvision, provisioning, provisionedChapterId,
 }: {
   invite: Invite | null;
   onClose: () => void;
   siteUrl: string;
+  onProvision: (invite: Invite) => void;
+  provisioning: boolean;
+  provisionedChapterId: string | null;
 }) {
   if (!invite) return null;
   const submission: ChapterOnboardingFormData | null =
     invite.submissionJson ? JSON.parse(invite.submissionJson) : null;
   const formUrl = `${siteUrl}/chapter-onboarding/${invite.token}`;
+
+  const effectiveStatus =
+    invite.status === "PENDING" && new Date(invite.expiresAt) < new Date()
+      ? "EXPIRED"
+      : invite.status;
+  const canProvision = effectiveStatus === "SUBMITTED" && !invite.appliedChapterId;
+  const alreadyProvisioned = !!invite.appliedChapterId;
 
   return (
     <Dialog open={!!invite} onOpenChange={(v) => !v && onClose()}>
@@ -289,13 +338,7 @@ function InviteDetailDialog({
         <div className="space-y-4 py-2">
           {/* Status + meta */}
           <div className="flex items-center gap-3 flex-wrap">
-            <StatusBadge
-              status={
-                invite.status === "PENDING" && new Date(invite.expiresAt) < new Date()
-                  ? "EXPIRED"
-                  : invite.status
-              }
-            />
+            <StatusBadge status={effectiveStatus} />
             <span className="text-xs text-slate-500">
               Expires {new Date(invite.expiresAt).toLocaleDateString()}
             </span>
@@ -307,6 +350,11 @@ function InviteDetailDialog({
             {invite.submittedAt && (
               <span className="text-xs text-slate-500">
                 · Submitted {new Date(invite.submittedAt).toLocaleDateString()}
+              </span>
+            )}
+            {alreadyProvisioned && invite.appliedAt && (
+              <span className="text-xs text-green-700 font-medium">
+                · ✅ Provisioned {new Date(invite.appliedAt).toLocaleDateString()}
               </span>
             )}
           </div>
@@ -459,8 +507,34 @@ function InviteDetailDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={onClose}>Close</Button>
+          {alreadyProvisioned && invite.appliedChapterId ? (
+            <a
+              href={`/admin/chapters/${invite.appliedChapterId}`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900/90"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open chapter admin
+            </a>
+          ) : canProvision ? (
+            <Button
+              disabled={provisioning}
+              onClick={() => onProvision(invite)}
+              className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white font-semibold"
+            >
+              {provisioning ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Provisioning…</>
+              ) : (
+                <><Rocket className="w-4 h-4 mr-2" /> Approve & Provision chapter</>
+              )}
+            </Button>
+          ) : null}
+          {provisionedChapterId && (
+            <span className="text-xs text-green-700">
+              ✅ Chapter created — page reloading…
+            </span>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -489,11 +563,37 @@ function SubmissionSection({
               {label}
             </div>
             <div className="col-span-2 text-slate-900 break-words whitespace-pre-wrap">
-              {value}
+              {isImageUrl(value) ? (
+                <a href={value} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={value}
+                    alt={label}
+                    className="w-16 h-16 object-contain rounded border border-slate-200 bg-white"
+                  />
+                  <span className="text-xs text-slate-500 group-hover:text-slate-700 group-hover:underline break-all">
+                    {value.split("/").pop()}
+                  </span>
+                </a>
+              ) : (
+                value
+              )}
             </div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+/**
+ * Heuristic: returns true if the value looks like an image URL we can
+ * preview inline (http(s):// + image file extension). Used by
+ * SubmissionSection to render uploaded brand images as thumbnails in the
+ * admin review dialog.
+ */
+function isImageUrl(value: string | undefined): value is string {
+  if (!value) return false;
+  if (!/^https?:\/\//i.test(value)) return false;
+  return /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(value);
 }

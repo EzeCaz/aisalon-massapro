@@ -49,6 +49,7 @@ export default async function ChapterOnboardingAdminPage() {
       submittedAt: true,
       expiresAt: true,
       appliedChapterId: true,
+      appliedAt: true,
       submissionJson: true,
       userId: true,
       user: { select: { name: true } },
@@ -64,6 +65,7 @@ export default async function ChapterOnboardingAdminPage() {
     openedAt: i.openedAt?.toISOString() ?? null,
     submittedAt: i.submittedAt?.toISOString() ?? null,
     expiresAt: i.expiresAt.toISOString(),
+    appliedAt: i.appliedAt?.toISOString() ?? null,
     inviteeName: i.user?.name ?? null,
     invitedByName: i.invitedBy?.name ?? i.invitedBy?.email ?? null,
   }));

@@ -20,7 +20,7 @@
  * /api/chapter-onboarding/[token]. On success, show a thank-you view.
  */
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useRef } from "react";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import {
   Globe2, MessageCircle, Users, Image as ImageIcon,
   Mail, Calendar, FileText, Send, Loader2, CheckCircle2,
+  Upload,
 } from "lucide-react";
 import {
   AUDIENCE_OPTIONS, COMMON_TIMEZONES, COMMON_LANGUAGES,
@@ -344,41 +345,37 @@ export function ChapterOnboardingForm({
       <SectionCard
         icon={<ImageIcon className="w-5 h-5" />}
         title="Brand Assets"
-        description="Each asset has a global default — only provide URLs to override."
+        description="Upload your chapter's brand images. Each asset has a global default — leave blank to use the default. Uploaded images will appear on the Brand Images admin page once your chapter is provisioned."
       >
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Favicon URL" hint="optional — 32×32 px or larger, square">
-            <Input
-              type="url"
-              value={data.faviconUrl ?? ""}
-              onChange={(e) => set("faviconUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </Field>
-          <Field label="Login hero image URL" hint="optional — square, transparent PNG">
-            <Input
-              type="url"
-              value={data.loginHeroUrl ?? ""}
-              onChange={(e) => set("loginHeroUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </Field>
-          <Field label="Login banner URL" hint="optional — 1200×630, OG image">
-            <Input
-              type="url"
-              value={data.loginBannerUrl ?? ""}
-              onChange={(e) => set("loginBannerUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </Field>
-          <Field label="Landing page hero URL" hint="optional — landscape 4:3 or 16:9">
-            <Input
-              type="url"
-              value={data.landingHeroUrl ?? ""}
-              onChange={(e) => set("landingHeroUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </Field>
+          <ImageUploadField
+            label="Favicon"
+            hint="optional — 32×32 px or larger, square"
+            token={token}
+            value={data.faviconUrl ?? ""}
+            onChange={(url) => set("faviconUrl", url)}
+          />
+          <ImageUploadField
+            label="Login hero image"
+            hint="optional — square, transparent PNG"
+            token={token}
+            value={data.loginHeroUrl ?? ""}
+            onChange={(url) => set("loginHeroUrl", url)}
+          />
+          <ImageUploadField
+            label="Login banner"
+            hint="optional — 1200×630, OG image"
+            token={token}
+            value={data.loginBannerUrl ?? ""}
+            onChange={(url) => set("loginBannerUrl", url)}
+          />
+          <ImageUploadField
+            label="Landing page hero"
+            hint="optional — landscape 4:3 or 16:9"
+            token={token}
+            value={data.landingHeroUrl ?? ""}
+            onChange={(url) => set("landingHeroUrl", url)}
+          />
           <Field label="Brand color (primary)" hint="hex — optional">
             <Input
               value={data.brandColorPrimary ?? ""}
@@ -428,15 +425,14 @@ export function ChapterOnboardingForm({
               placeholder="montreal@aisalon.co"
             />
           </Field>
-          <Field label="Email logo URL" hint="optional — ~200×60 px">
-            <Input
-              type="url"
-              value={data.emailLogoUrl ?? ""}
-              onChange={(e) => set("emailLogoUrl", e.target.value)}
-              placeholder="https://..."
-            />
-          </Field>
         </div>
+        <ImageUploadField
+          label="Email logo"
+          hint="optional — ~200×60 px. Defaults to the standard AI Salon email logo when not provided."
+          token={token}
+          value={data.emailLogoUrl ?? ""}
+          onChange={(url) => set("emailLogoUrl", url)}
+        />
         <Field label="Email template notes" hint="optional">
           <Textarea
             value={data.emailTemplateOverrides ?? ""}
@@ -698,6 +694,156 @@ function Field({
         {required && <span className="text-[#FF005A] ml-1">*</span>}
       </Label>
       {children}
+      {hint && <p className="text-xs text-slate-400">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * ImageUploadField — file-upload replacement for the URL inputs that used
+ * to back each brand-asset field in the onboarding form.
+ *
+ * Behavior:
+ *   - Click "Upload" → opens file picker → uploads to
+ *     /api/chapter-onboarding/[token]/upload-image → stores returned URL
+ *     on the form data via `onChange`.
+ *   - If `value` is already set (e.g. a previously uploaded URL), show a
+ *     small preview thumbnail + a "Remove" button to clear it.
+ *   - Drag-and-drop supported on the drop zone.
+ *   - Errors surface as toast.error + inline red text.
+ *
+ * The actual upload bytes are stored under `chapter-onboarding/<token>/`
+ * (Vercel Blob prefix or local sandbox folder). The provision step later
+ * re-bundles them under the chapter's permanent `chapter-brand/<chapterId>/`
+ * prefix when the chapter is created.
+ */
+function ImageUploadField({
+  label, hint, token, value, onChange,
+}: {
+  label: string;
+  hint?: string;
+  token: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const upload = async (file: File) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/chapter-onboarding/${token}/upload-image`, {
+        method: "POST",
+        body: fd,
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      onChange(d.url);
+      toast.success(`${label} uploaded`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      toast.error(`Upload failed: ${msg}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFile = (file: File | null | undefined) => {
+    if (!file) return;
+    // Basic client-side validation (server validates too, but fast-fail here).
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif"];
+    if (!allowed.includes(file.type)) {
+      setError(`Unsupported file type: ${file.type}. Use JPG, PNG, WebP, GIF, or AVIF.`);
+      toast.error(`Unsupported file type for ${label}`);
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("File too large (max 8MB)");
+      toast.error(`${label}: file too large (max 8MB)`);
+      return;
+    }
+    void upload(file);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium text-slate-900">{label}</Label>
+
+      {value ? (
+        <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-2">
+          {/* Use plain <img> rather than next/image because uploaded
+              images live on Vercel Blob (different host) and we don't
+              want to deal with next/image remotePatterns config for an
+              admin-only flow. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value}
+            alt={label}
+            className="w-12 h-12 object-contain rounded border border-slate-200 bg-white"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-slate-600 truncate font-mono">{value.split("/").pop()}</div>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-xs text-red-600 hover:text-red-700 underline mt-0.5"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const f = e.dataTransfer.files?.[0];
+            handleFile(f);
+          }}
+          className={
+            "flex items-center gap-2 rounded-md border border-dashed px-3 py-2.5 cursor-pointer transition-colors " +
+            (dragOver
+              ? "border-[#FF005A] bg-[#FF005A]/5"
+              : "border-slate-300 hover:border-slate-400 hover:bg-slate-50")
+          }
+          onClick={() => inputRef.current?.click()}
+        >
+          <Upload className="w-4 h-4 text-slate-500" />
+          <span className="text-xs text-slate-600">
+            {uploading ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+              </span>
+            ) : (
+              "Click to upload or drag & drop"
+            )}
+          </span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              handleFile(f);
+              // Reset so the same file can be picked again after a remove.
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
       {hint && <p className="text-xs text-slate-400">{hint}</p>}
     </div>
   );
