@@ -13929,3 +13929,41 @@ Stage Summary:
 - Production URL pattern: https://aisalon.massapro.com/chapter-onboarding/{TOKEN}
 - Local dev URL pattern: http://localhost:3000/chapter-onboarding/{TOKEN}
 - No code changes were needed in this session — verification only.
+
+---
+Task ID: chapter-onboarding-finalization-extra
+Agent: main
+Task: User requested two additions on top of the chapter onboarding workflow:
+  (A) Add a confirmation dialog before the "Approve & Provision" action runs — review what will be created + require explicit confirm.
+  (B) Send a notification email to the chapter lead when their chapter goes live (provisioned).
+
+Work Log:
+- Added `sendChapterProvisionedEmail` helper at the end of src/lib/email.ts. Styled identically to the existing `sendChapterOnboardingEmail` (same fonts, brand gradient button, plain-text fallback). Subject line: "🎉 AI Salon {chapterName} is live! Your admin access is ready". Body lists what was provisioned (landing page, login page, brand images, email infra) + admin + login URLs.
+- Wired the helper into POST /api/admin/chapter-onboarding/[id]/provision as a new "step 7" after the invite is marked applied:
+  * Lead User lookup now also selects `name` + `email`.
+  * Builds `adminUrl = {siteUrl}/admin?chapterSlug={slug}` + `loginUrl = {siteUrl}/login?chapterSlug={slug}`.
+  * Calls `sendChapterProvisionedEmail` in try/catch — non-fatal on failure (provisioning itself already succeeded).
+  * Returns `lead.notificationEmail: { ok, error, sentTo }` in the JSON response so the UI can reflect email send status.
+- Updated src/app/admin/chapter-onboarding/chapter-onboarding-admin-list.tsx:
+  * Imported AlertDialog primitives + AlertTriangle icon.
+  * Renamed `handleProvision` → `handleProvisionRequest` which now sets `confirmTarget` state (opens the confirmation dialog) instead of immediately calling fetch.
+  * Added `confirmProvision` async function — the actual fetch that runs when the user clicks "Confirm" in the AlertDialog. Captures the `lead.notificationEmail` field from the response and surfaces a richer toast:
+    - email sent OK → green toast "Chapter provisioned! Notification email sent to {email}."
+    - email failed → amber warning toast "Chapter provisioned, but the notification email couldn't be sent ({error}). The lead can still be reached via the original onboarding email."
+    - no email field → neutral green toast (backward-compat).
+  * Added `ProvisionConfirmDialog` component at the end of the file. Uses AlertDialog (not Dialog) because this is a non-reversible action. Shows:
+    - Warning header "Approve & Provision chapter?"
+    - Plain-English description of what will happen (chapter created at /c/{slug}, lead granted admin access, not reversible)
+    - "Will be created" table: chapter name, slug, country, city, timezone, lead email, lead name, WhatsApp/LinkedIn URL status
+    - "Brand images · N uploaded, M defaults" panel listing each of the 5 brand assets with a ✓ (uploaded) or · (default) indicator
+    - Blue info box noting the lead will receive a "chapter is live" notification email + email infra will be cloned from Tel Aviv
+    - Two-button footer: "Cancel" (closes, no-op) + "Confirm & Provision chapter" (pink-styled, calls onConfirm)
+  * Changed the detail dialog's button label from "Approve & Provision chapter" → "Approve & Provision…" to signal that a confirmation step follows.
+- Verified with `npx tsc --noEmit` — ZERO TypeScript errors in src/app/admin/chapter-onboarding/*, src/app/api/admin/chapter-onboarding/*, src/lib/email.ts.
+- Verified with `npx eslint` on the 3 touched files — ZERO lint warnings.
+
+Stage Summary:
+- (A) Confirmation dialog ✅ — gating the Approve & Provision action behind a 2-step modal that previews what will be created.
+- (B) Notification email ✅ — `sendChapterProvisionedEmail` fires after provisioning, surfaces email send status in both the API response and the admin toast.
+- Both additions compile + lint cleanly. No regressions to the existing flow.
+- Workflow now: Super-admin opens invite → fills form → admin clicks "Approve & Provision…" → confirmation dialog shows summary → admin clicks "Confirm & Provision chapter" → backend creates chapter + clones email infra + sends "chapter is live" email to lead → toast confirms success + email status → page reloads showing the invite as Provisioned.

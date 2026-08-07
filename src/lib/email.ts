@@ -418,3 +418,110 @@ MassaPro · https://massapro.com`;
 
   return sendMail({ to: opts.to, subject, text, html });
 }
+
+/**
+ * Send the "your chapter is live" notification email to a chapter lead.
+ *
+ * Called by POST /api/admin/chapter-onboarding/[id]/provision AFTER the
+ * chapter has been fully provisioned (Chapter row created, brand images
+ * applied, lead User linked + role upgraded, email infra cloned). The
+ * email lets the lead know they can now sign in to the admin area.
+ *
+ * The adminUrl should be an absolute URL pointing to the chapter's admin
+ * landing page (e.g. https://aisalon.massapro.com/admin?chapterSlug=montreal).
+ * The loginUrl is the fallback for leads who haven't signed in before.
+ *
+ * If sendMail fails, the caller should treat it as non-fatal — the
+ * provisioning itself already succeeded; the lead can still be reached
+ * via the original onboarding email thread.
+ */
+export async function sendChapterProvisionedEmail(opts: {
+  to: string;
+  name: string | null;
+  chapterName: string;
+  chapterSlug: string;
+  adminUrl: string;
+  loginUrl: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const firstName = opts.name?.split(" ")[0] || "there";
+  const subject = `🎉 AI Salon ${opts.chapterName} is live! Your admin access is ready`;
+  const text = `Hi ${firstName},
+
+Great news — AI Salon ${opts.chapterName} is now live on the platform!
+
+Here's what's been set up for you:
+  - Public chapter landing page at /c/${opts.chapterSlug}
+  - Login page with your chapter's brand at /login?chapterSlug=${opts.chapterSlug}
+  - Your brand images (favicon, login hero, login banner, email logo)
+  - Email infrastructure (audiences, flows, and draft campaigns cloned
+    from the Tel Aviv source chapter — ready to customize and send)
+
+To access your admin dashboard, sign in at:
+${opts.loginUrl}
+
+Once signed in, you'll land on the admin home page where you can:
+  - Edit your chapter's events
+  - Manage email flows and audiences
+  - Update brand images and chapter settings
+
+If you have any questions, just reply to this email or reach out to
+aisalon@massapro.com.
+
+Welcome aboard, and welcome to the global AI Salon community!
+
+— The AI Salon global team
+MassaPro · https://massapro.com`;
+
+  const html = `
+<div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">
+    🎉 AI Salon ${opts.chapterName} is live!
+  </h1>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    Hi ${firstName},
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    Great news — your chapter has been fully provisioned on the AI Salon
+    platform. Everything is ready for you to start building your local
+    community.
+  </p>
+
+  <div style="padding: 16px; margin: 24px 0; background: #f6f6f6; border-radius: 8px; border: 1px solid #eee;">
+    <p style="font-size: 13px; line-height: 1.6; color: #555; margin: 0 0 8px;">
+      <strong>What's been set up for you:</strong>
+    </p>
+    <ul style="font-size: 13px; line-height: 1.7; color: #555; margin: 0; padding-left: 20px;">
+      <li>Public chapter landing page at <code style="background: #fff; padding: 1px 4px; border-radius: 3px; font-size: 12px;">/c/${opts.chapterSlug}</code></li>
+      <li>Login page with your chapter's brand at <code style="background: #fff; padding: 1px 4px; border-radius: 3px; font-size: 12px;">/login?chapterSlug=${opts.chapterSlug}</code></li>
+      <li>Your brand images (favicon, login hero, login banner, email logo)</li>
+      <li>Email infrastructure — audiences, flows, and draft campaigns cloned from the Tel Aviv source chapter, ready to customize and send</li>
+    </ul>
+  </div>
+
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 24px;">
+    <a href="${opts.adminUrl}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #FF005A 0%, #00E6FF 100%); color: #fff; text-decoration: none; font-weight: 700; border-radius: 8px; font-size: 15px;">
+      Go to admin dashboard →
+    </a>
+  </p>
+
+  <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 0 0 20px; word-break: break-all;">
+    If the button doesn't work, copy and paste this URL into your browser:<br/>
+    <a href="${opts.adminUrl}" style="color: #004F98; word-break: break-all;">${opts.adminUrl}</a>
+  </p>
+
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 12px;">
+    If you have any questions, just reply to this email or reach out to
+    <a href="mailto:aisalon@massapro.com" style="color: #004F98;">aisalon@massapro.com</a>.
+    Welcome aboard!
+  </p>
+
+  <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
+  <p style="font-size: 12px; color: #999; margin: 0;">
+    AI Salon · Empowering AI Connections<br/>
+    <a href="https://massapro.com" style="color: #999;">MassaPro</a> ·
+    <a href="https://aisalon.massapro.com" style="color: #999;">aisalon.massapro.com</a>
+  </p>
+</div>`;
+
+  return sendMail({ to: opts.to, subject, text, html });
+}

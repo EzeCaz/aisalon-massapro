@@ -57,6 +57,7 @@ import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { normalizeHttpUrl } from "@/lib/normalize-url";
+import { sendChapterProvisionedEmail } from "@/lib/email";
 import {
   setChapterBrandImage,
   type ChapterBrandImageKey,
@@ -311,7 +312,7 @@ export async function POST(
   // SUPER_ADMINs are never downgraded.
   const lead = await db.user.findUnique({
     where: { id: invite.userId },
-    select: { id: true, role: true },
+    select: { id: true, role: true, name: true, email: true },
   });
   if (lead) {
     const patch: { chapterId?: string; countryId?: string; role?: string } = {
@@ -352,6 +353,37 @@ export async function POST(
     },
   });
 
+  // ── 7. Send "your chapter is live" notification email to the lead ─
+  // Non-fatal — if SMTP fails, the provisioning still succeeded; the lead
+  // can be reached via the original onboarding email thread or directly.
+  let notifyResult: { ok: boolean; error?: string } | null = null;
+  if (lead?.email) {
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
+    const adminUrl = `${siteUrl}/admin?chapterSlug=${encodeURIComponent(chapter.slug)}`;
+    const loginUrl = `${siteUrl}/login?chapterSlug=${encodeURIComponent(chapter.slug)}`;
+    try {
+      notifyResult = await sendChapterProvisionedEmail({
+        to: lead.email,
+        name: lead.name,
+        chapterName: chapter.name,
+        chapterSlug: chapter.slug,
+        adminUrl,
+        loginUrl,
+      });
+    } catch (err) {
+      console.error("[chapter-onboarding/provision] sendChapterProvisionedEmail threw:", err);
+      notifyResult = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    if (!notifyResult.ok) {
+      console.error(
+        `[chapter-onboarding/provision] notification email to ${lead.email} failed:`,
+        notifyResult.error,
+      );
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     chapter: {
@@ -364,7 +396,13 @@ export async function POST(
     brandImagesApplied,
     emailInfra: emailInfraSummary,
     lead: lead
-      ? { id: lead.id, roleAssigned: lead.role !== ROLES.SUPER_ADMIN && lead.role !== ROLES.ADMIN ? ROLES.CHAPTER_ORGANIZER : lead.role }
+      ? {
+          id: lead.id,
+          roleAssigned: lead.role !== ROLES.SUPER_ADMIN && lead.role !== ROLES.ADMIN ? ROLES.CHAPTER_ORGANIZER : lead.role,
+          notificationEmail: notifyResult
+            ? { ok: notifyResult.ok, error: notifyResult.error ?? null, sentTo: lead.email }
+            : null,
+        }
       : null,
   });
 }

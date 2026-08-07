@@ -16,10 +16,21 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   Search, Copy, ExternalLink, Clock, CheckCircle2, AlertCircle,
   Mail, Globe2, MessageCircle, Users, Calendar, Loader2, Rocket,
+  AlertTriangle,
 } from "lucide-react";
 import type { ChapterOnboardingFormData } from "@/lib/chapter-onboarding-types";
 
@@ -87,8 +98,21 @@ export function ChapterOnboardingAdminList({
   // detail dialog can drive it.
   const [provisioning, setProvisioning] = useState(false);
   const [provisionedChapterId, setProvisionedChapterId] = useState<string | null>(null);
+  // Confirmation gate: when set, the AlertDialog is open and the user is
+  // reviewing the provisioning summary before clicking "Confirm".
+  const [confirmTarget, setConfirmTarget] = useState<Invite | null>(null);
 
-  const handleProvision = async (invite: Invite) => {
+  const handleProvisionRequest = (invite: Invite) => {
+    // Open the confirmation dialog — the actual fetch runs in confirmProvision.
+    setConfirmTarget(invite);
+  };
+
+  const confirmProvision = async () => {
+    const invite = confirmTarget;
+    if (!invite) return;
+    // Close the confirmation dialog immediately so the user sees the
+    // underlying detail dialog with the "Provisioning…" spinner state.
+    setConfirmTarget(null);
     setProvisioning(true);
     const t = toast.loading("Provisioning chapter…");
     try {
@@ -99,7 +123,23 @@ export function ChapterOnboardingAdminList({
       if (!res.ok) {
         throw new Error(d?.error || `HTTP ${res.status}`);
       }
-      toast.success(`Chapter "${d.chapter.name}" provisioned!`, { id: t, duration: 8000 });
+      // Build a richer success message that reflects whether the lead
+      // notification email was sent. The provisioning itself succeeded
+      // regardless — email failure is non-fatal.
+      const notify = d?.lead?.notificationEmail;
+      if (notify?.ok) {
+        toast.success(
+          `Chapter "${d.chapter.name}" provisioned! Notification email sent to ${notify.sentTo}.`,
+          { id: t, duration: 9000 },
+        );
+      } else if (notify && !notify.ok) {
+        toast.warning(
+          `Chapter "${d.chapter.name}" provisioned, but the notification email couldn't be sent (${notify.error || "unknown error"}). The lead can still be reached via the original onboarding email.`,
+          { id: t, duration: 12000 },
+        );
+      } else {
+        toast.success(`Chapter "${d.chapter.name}" provisioned!`, { id: t, duration: 8000 });
+      }
       setProvisionedChapterId(d.chapter.id);
       // Reload after a short delay so the new state (appliedChapterId) shows up.
       setTimeout(() => window.location.reload(), 2500);
@@ -260,9 +300,18 @@ export function ChapterOnboardingAdminList({
         invite={selected}
         onClose={() => setSelected(null)}
         siteUrl={siteUrl}
-        onProvision={handleProvision}
+        onProvision={handleProvisionRequest}
         provisioning={provisioning}
         provisionedChapterId={provisionedChapterId}
+      />
+
+      {/* Provisioning confirmation dialog — gated by `confirmTarget`. The
+          actual provision fetch only runs after the user clicks "Confirm
+          & Provision chapter" below. */}
+      <ProvisionConfirmDialog
+        invite={confirmTarget}
+        onCancel={() => setConfirmTarget(null)}
+        onConfirm={confirmProvision}
       />
     </div>
   );
@@ -526,7 +575,7 @@ function InviteDetailDialog({
               {provisioning ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Provisioning…</>
               ) : (
-                <><Rocket className="w-4 h-4 mr-2" /> Approve & Provision chapter</>
+                <><Rocket className="w-4 h-4 mr-2" /> Approve &amp; Provision…</>
               )}
             </Button>
           ) : null}
@@ -596,4 +645,152 @@ function isImageUrl(value: string | undefined): value is string {
   if (!value) return false;
   if (!/^https?:\/\//i.test(value)) return false;
   return /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(value);
+}
+
+/**
+ * ProvisionConfirmDialog — modal "are you sure?" gate before the
+ * Approve & Provision action actually fires.
+ *
+ * Shows a concise summary of what will be created:
+ *   - Chapter name + slug
+ *   - Country + city
+ *   - Lead email + role to be assigned (CHAPTER_ORGANIZER)
+ *   - Brand images uploaded vs falling back to defaults
+ *   - Email infra clone summary
+ *
+ * Confirms via the destructive-styled "Confirm & Provision chapter"
+ * button. Cancel closes the dialog without calling onConfirm.
+ *
+ * Uses AlertDialog (not Dialog) because this is a destructive /
+ * non-reversible action — Radix AlertDialog blocks pointer events
+ * outside the dialog and is the platform-correct pattern for
+ * confirmation modals.
+ */
+function ProvisionConfirmDialog({
+  invite,
+  onCancel,
+  onConfirm,
+}: {
+  invite: Invite | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!invite) return null;
+  const submission: ChapterOnboardingFormData | null =
+    invite.submissionJson ? JSON.parse(invite.submissionJson) : null;
+  if (!submission) {
+    // Defensive: should never happen because the trigger button is only
+    // shown for SUBMITTED invites. If we ever get here, just bail.
+    return null;
+  }
+
+  // Brand-image summary — which were uploaded vs which fall back to defaults.
+  const brandImages: Array<{ label: string; uploaded: boolean }> = [
+    { label: "Favicon", uploaded: !!submission.faviconUrl },
+    { label: "Login hero", uploaded: !!submission.loginHeroUrl },
+    { label: "Login banner", uploaded: !!submission.loginBannerUrl },
+    { label: "Landing hero", uploaded: !!submission.landingHeroUrl },
+    { label: "Email logo", uploaded: !!submission.emailLogoUrl },
+  ];
+  const uploadedCount = brandImages.filter((b) => b.uploaded).length;
+  const defaultCount = brandImages.length - uploadedCount;
+
+  const summaryRows: Array<[string, string]> = [
+    ["Chapter name", submission.chapterName],
+    ["Slug", submission.chapterSlug],
+    ["Country", submission.country],
+    ["City", submission.city || "—"],
+    ["Timezone", submission.timezone],
+    ["Lead email", submission.leadEmail],
+    ["Lead name", submission.leadName || "—"],
+    ["WhatsApp URL", submission.whatsappGroupUrl ? "✓ provided" : "—"],
+    ["LinkedIn URL", submission.linkedinUrl ? "✓ provided" : "—"],
+  ];
+
+  return (
+    <AlertDialog open={!!invite} onOpenChange={(v) => !v && onCancel()}>
+      <AlertDialogContent className="max-w-lg">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            Approve &amp; Provision chapter?
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3 text-sm text-slate-600">
+              <p>
+                This will <strong className="text-slate-900">permanently create a new chapter</strong>{" "}
+                on the platform from this onboarding submission. The action is
+                not reversible — once provisioned, the chapter is live at{" "}
+                <code className="rounded bg-slate-100 px-1 py-0.5 text-xs font-mono">
+                  /c/{submission.chapterSlug}
+                </code>{" "}
+                and the lead is granted admin access.
+              </p>
+
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+                    Will be created
+                  </h4>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {summaryRows.map(([label, value]) => (
+                    <div key={label} className="px-3 py-1.5 grid grid-cols-3 gap-3 text-xs">
+                      <div className="font-medium uppercase tracking-wider text-slate-500">
+                        {label}
+                      </div>
+                      <div className="col-span-2 text-slate-900 break-words">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+                    Brand images · {uploadedCount} uploaded, {defaultCount} defaults
+                  </h4>
+                </div>
+                <div className="px-3 py-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {brandImages.map((b) => (
+                    <div key={b.label} className="flex items-center gap-1.5">
+                      {b.uploaded ? (
+                        <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
+                      ) : (
+                        <span className="w-3 h-3 flex-shrink-0 text-slate-400 text-center leading-none">·</span>
+                      )}
+                      <span className="text-slate-700">{b.label}</span>
+                      <span className="text-slate-400 ml-auto">
+                        {b.uploaded ? "uploaded" : "default"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
+                <Rocket className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                After provisioning, the lead will receive a{" "}
+                <strong>&quot;chapter is live&quot;</strong> notification email with
+                a link to the admin dashboard. Email audiences, flows, and draft
+                campaigns will be cloned from the Tel Aviv source chapter.
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white font-semibold"
+          >
+            <Rocket className="w-4 h-4 mr-2" />
+            Confirm &amp; Provision chapter
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
