@@ -13967,3 +13967,28 @@ Stage Summary:
 - (B) Notification email ✅ — `sendChapterProvisionedEmail` fires after provisioning, surfaces email send status in both the API response and the admin toast.
 - Both additions compile + lint cleanly. No regressions to the existing flow.
 - Workflow now: Super-admin opens invite → fills form → admin clicks "Approve & Provision…" → confirmation dialog shows summary → admin clicks "Confirm & Provision chapter" → backend creates chapter + clones email infra + sends "chapter is live" email to lead → toast confirms success + email status → page reloads showing the invite as Provisioned.
+
+---
+Task ID: brand-plan-v1
+Agent: Main (Super Z)
+Task: Generate comprehensive Brand-Field Platform Plan as Word document — multi-tenant brand architecture for AI Salon + Coma + future client brands. Covers: Brand data model, host-based routing, login page replication guide, email/signature rebrand, admin UI mockups, single-sprint implementation plan, file-by-file change list, SQL migration, test plan, risks/rollback, full inventory of 565 "AI Salon" string occurrences across 185 files.
+
+Work Log:
+- Loaded docx skill + read create.md, report.md, common-rules.md, docx-js-core.md, toc.md, design-system.md (R1 cover recipe + GO-1 palette for proposal/plan)
+- Delegated codebase exploration to Explore subagent — mapped all 185 files / 565 occurrences of "AI Salon" brand strings, Prisma schema (44 models, no Brand/Tenant), middleware (UTM-only), email paths (transactional + orchestrator), login page hardcoded defaults, admin route map, existing image-only brand abstraction (SiteSetting + ChapterSetting)
+- AskUserQuestion: confirmed Word format, Product+Eng audience, full implementation spec depth (~20+ pages), 6 selected sections, Coma-above-chapter logo rule, brand-swap-only login guide, single-sprint timeline, English
+- Set Outline: 15 sections (Cover + TOC + 13 body sections)
+- Wrote /home/z/my-project/scripts/brand_plan.js (2,678 lines) in 4 chunks via Write + Edit appends
+- Used R1 cover recipe with GO-1 Graphite Orange palette; 3-section structure (cover margin 0 / front matter Roman / body Arabic)
+- Fixed template-literal escaping bug (${} inside backtick code blocks) — re-ran successfully
+- Generated 65KB docx with 369 body children + 4 TOC children
+- Ran add_toc_placeholders.py — 81 headings extracted, TOC populated, exit code 0
+- Ran postcheck.py — 0 errors, 2 minor warnings (PageBreak after TOC + intentional code-block line spacing variance)
+
+Stage Summary:
+- Deliverable: /home/z/my-project/download/Brand-Field-Platform-Plan.docx (65KB, ~30 pages)
+- Generation script preserved at /home/z/my-project/scripts/brand_plan.js for future revisions
+- 13 body sections covering all 6 user-selected topics + Brand data model + Host routing + Login guide + Email rebrand + Migration/rollback + Admin UI + Sprint plan + File-by-file change list + SQL migration + Test plan + Risks + Appendix inventory
+- 7 docx Tables (host resolution matrix, email tokens, brand form fields, sprint timeline, modified files, risk register, AI Salon surface inventory)
+- Code blocks for: Prisma Brand model, getEffectiveBrand resolver, middleware diff, buildLogoBlock with parent coexistence, email signature rebrand, login page.tsx, BrandLogoServer component, generateMetadata codemod pattern, full migration SQL, backfill SQL, rollback SQL, seed migration script
+- Boundary contract documented: platform agent owns schema/middleware/resolver/email/admin/metadata; parallel login agent owns ONLY /login UI/UX
