@@ -5,14 +5,32 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Mail, Lock, User, ArrowRight, Send } from "lucide-react";
 
-type Props = { callbackUrl?: string };
+type Props = {
+  callbackUrl?: string;
+  /** Brand slug — used to brand-aware the Google OAuth callback URL in error messages. */
+  brandSlug?: string;
+  /** Chapter slug — forwarded to /api/auth/post-login-redirect so onboarding renders the right chapter. */
+  chapterSlug?: string;
+  /** Brand primary color (hex) — applied to the Sign-up CTA button. */
+  primaryColor?: string;
+  /** Brand accent color (hex) — applied to info banners and links. */
+  accentColor?: string;
+  /** Brand secondary color (hex) — applied to error banners. */
+  secondaryColor?: string;
+};
 
 type Tab = "google" | "signin" | "signup";
 
 // Map next-auth error codes to human-readable messages.
+// NOTE: the OAuth redirect URI in the error message is dynamically
+// computed from the request host (so coma.massapro.com shows the
+// coma callback URL, aisalon.massapro.com shows the AIS one).
+function buildOAuthErrorMessage(host: string | null): string {
+  const baseHost = host || "aisalon.massapro.com";
+  return `Google rejected our sign-in request. The site admin needs to add this redirect URI to the Google Cloud Console: https://${baseHost}/api/auth/callback/google — meanwhile, please use the Sign up tab to sign in by email.`;
+}
+
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  OAuthCallbackError:
-    "Google rejected our sign-in request. The site admin needs to add this redirect URI to the Google Cloud Console: https://aisalon.massapro.com/api/auth/callback/google — meanwhile, please use the Sign up tab to sign in by email.",
   OAuthAccountNotLinked:
     "That email is already linked to a Google account. Please sign in with Google instead.",
   Callback:
@@ -25,7 +43,14 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   Default: "Something went wrong during sign-in. Please try again.",
 };
 
-export function LoginForm({ callbackUrl }: Props) {
+export function LoginForm({
+  callbackUrl,
+  brandSlug,
+  chapterSlug: chapterSlugProp,
+  primaryColor = "#004F98",
+  accentColor = "#00E6FF",
+  secondaryColor = "#FF005A",
+}: Props) {
   const router = useRouter();
   const params = useSearchParams();
   const finalCallback = callbackUrl || params.get("callbackUrl") || "/events";
@@ -35,7 +60,19 @@ export function LoginForm({ callbackUrl }: Props) {
   // correct chapter name + brand images. Without this, a user who logs
   // in via the Montreal login page lands on a Tel Aviv-branded
   // onboarding page.
-  const chapterSlug = params.get("chapterSlug") || "";
+  // Prefer the prop (passed from the server-rendered page, which resolved
+  // the brand's default chapter). Fall back to the URL `?chapterSlug=` param
+  // if the prop is missing (e.g. when this form is rendered standalone).
+  const chapterSlug = chapterSlugProp || params.get("chapterSlug") || "";
+
+  // Resolve the host (used to build brand-aware error messages for OAuth
+  // callback URI mismatches). On the client we read from window.location.
+  const [host, setHost] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setHost(window.location.host);
+    }
+  }, []);
 
   const [tab, setTab] = useState<Tab>("google");
   const [loading, setLoading] = useState<"google" | "email" | "signup" | null>(null);
@@ -46,9 +83,13 @@ export function LoginForm({ callbackUrl }: Props) {
   useEffect(() => {
     const errCode = params.get("error");
     if (errCode) {
-      setError(OAUTH_ERROR_MESSAGES[errCode] || OAUTH_ERROR_MESSAGES.Default);
+      if (errCode === "OAuthCallbackError") {
+        setError(buildOAuthErrorMessage(host));
+      } else {
+        setError(OAUTH_ERROR_MESSAGES[errCode] || OAUTH_ERROR_MESSAGES.Default);
+      }
     }
-  }, [params]);
+  }, [params, host]);
 
   // Sign-in (existing user) form
   const [signinEmail, setSigninEmail] = useState("");
@@ -257,7 +298,8 @@ export function LoginForm({ callbackUrl }: Props) {
             Forgot your password? Use the{" "}
             <button
               type="button"
-              className="underline text-[#004F98] hover:text-[#004F98]/80"
+              className="underline hover:opacity-80"
+              style={{ color: primaryColor }}
               onClick={() => { setTab("signup"); setError(null); }}
             >
               Sign up
@@ -293,7 +335,8 @@ export function LoginForm({ callbackUrl }: Props) {
           <button
             type="submit"
             disabled={loading !== null}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#004F98] text-white font-semibold px-5 py-3 text-sm hover:bg-[#004F98]/90 disabled:opacity-50 ais-lift"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-md text-white font-semibold px-5 py-3 text-sm hover:opacity-90 disabled:opacity-50 ais-lift"
+            style={{ backgroundColor: primaryColor }}
           >
             {loading === "signup" ? (
               <>
@@ -313,12 +356,26 @@ export function LoginForm({ callbackUrl }: Props) {
       )}
 
       {error && (
-        <div className="rounded-md border border-[#FF005A]/30 bg-[#FF005A]/5 px-3 py-2 text-sm text-[#FF005A]">
+        <div
+          className="rounded-md border px-3 py-2 text-sm"
+          style={{
+            borderColor: `${secondaryColor}4D`,
+            backgroundColor: `${secondaryColor}0D`,
+            color: secondaryColor,
+          }}
+        >
           {error}
         </div>
       )}
       {info && (
-        <div className="rounded-md border border-[#00E6FF]/40 bg-[#00E6FF]/10 px-3 py-2 text-sm text-[#004F98]">
+        <div
+          className="rounded-md border px-3 py-2 text-sm"
+          style={{
+            borderColor: `${accentColor}66`,
+            backgroundColor: `${accentColor}1A`,
+            color: primaryColor,
+          }}
+        >
           {info}
         </div>
       )}
