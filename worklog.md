@@ -14077,3 +14077,53 @@ Stage Summary:
 - /quiz/[sessionId] on coma.massapro.com (host-based) renders Coma amber — host chain still works
 - All changes are backwards compatible: QuizPlayer.brand prop is optional, defaults to AIS
 - To deploy: push to Vercel — the redirect on /quiz/page.tsx will take effect on the next build, and the brand-aware /quiz/[sessionId] will start rendering Coma colors for ?brand=coma visitors immediately
+
+---
+Task ID: fix-prod-brandSlug-migration
+Agent: main
+Task: Fix "Something went wrong" production error on aisalon.massapro.com (digest: 121720970) that started after pushing 4 commits including the User.brandSlug migration.
+
+Work Log:
+- Diagnosed by inspecting the 4 unpushed commits in c284cbc..c65acb2 range:
+  * c284cbc added prisma/migrations/20260811120000_add_user_brand_slug/migration.sql + updated auth.ts to query User.brandSlug on every JWT refresh
+  * c65acb2 was my quiz brand fix (not the cause)
+  * The smoking gun: c284cbc added a migration but did NOT add it to NEW_MIGRATIONS in scripts/baseline-migrations.cjs
+- Traced the failure path:
+  1. Previous Vercel build ran baseline-migrations.cjs
+  2. For each migration folder NOT in NEW_MIGRATIONS, the script INSERTed a row into _prisma_migrations marked as "applied" — WITHOUT running the SQL
+  3. 20260811120000_add_user_brand_slug was NOT in NEW_MIGRATIONS → got baselined as "applied" without running the SQL
+  4. Then prisma migrate deploy saw the row, considered the migration applied, and skipped it
+  5. Result: User.brandSlug column was NEVER added to the production DB
+  6. But the regenerated Prisma client (from the updated schema) expects the column to exist
+  7. auth.ts line 311-323 + 340-343 queries db.user.findUnique({ select: { ..., brandSlug: true } }) on every JWT refresh
+  8. Every authenticated request throws → global-error.tsx renders with "Something went wrong" + digest 121720970
+- Fix (3 parts):
+  1. Made migration SQL idempotent: changed `ADD COLUMN "brandSlug" TEXT` to `ADD COLUMN IF NOT EXISTS "brandSlug" TEXT` — safe to re-run whether or not the column already exists (defensive against the edge case where my hypothesis is wrong)
+  2. Added 20260811120000_add_user_brand_slug to NEW_MIGRATIONS in baseline-migrations.cjs so future baselining skips it
+  3. Added a PRE-PASS loop to baseline-migrations.cjs that detects migrations in NEW_MIGRATIONS with a BOGUS baseline-checksum row (created by a prior baseline-migrations run that didn't actually run the SQL) and DELETES the row. This unblocks prisma migrate deploy to actually run the SQL.
+- Safety analysis of the pre-pass delete:
+  * Baseline rows always have checksum = sha256(name + '-baseline') (computed by baselineChecksum())
+  * Real migrate-deploy rows have Prisma's actual checksum (different algorithm)
+  * So the DELETE only fires for rows that baseline-migrations itself created — never for rows that prisma migrate deploy created
+  * If migrate deploy had actually applied the migration in a prior build, the checksum wouldn't match and we leave the row alone
+- Committed as 8e05650 "fix(migrations): apply User.brandSlug migration to prod DB" and pushed to origin/main
+- New Vercel build will:
+  1. Run prisma generate (regenerates client from updated schema — same as before)
+  2. Run baseline-migrations.cjs:
+     - PRE-PASS detects 20260811120000_add_user_brand_slug has a baseline-checksum row → DELETES it
+     - Main loop sees no row exists for this migration + it's in NEW_MIGRATIONS → defers (does not baseline)
+  3. Run prisma migrate deploy:
+     - Sees no row for 20260811120000_add_user_brand_slug → runs the SQL
+     - SQL is `ADD COLUMN IF NOT EXISTS` → succeeds whether or not column exists
+     - Inserts a row with Prisma's real checksum
+  4. Runs next build → succeeds
+  5. Deploys → auth.ts queries can now find the brandSlug column → no more runtime errors
+
+Stage Summary:
+- Root cause: migration committed in c284cbc without being added to NEW_MIGRATIONS in baseline-migrations.cjs → prior Vercel build baselined it as "applied" without running SQL → production DB missing User.brandSlug column → auth.ts threw on every authenticated request
+- Fix committed as 8e05650 and pushed. New Vercel build will:
+  - Detect + delete the bogus baseline row (pre-pass in baseline-migrations.cjs)
+  - Actually run the migration SQL (because the row is gone, prisma migrate deploy will apply it)
+  - SQL is idempotent (ADD COLUMN IF NOT EXISTS) so it's safe regardless of current DB state
+- This was a build-process bug, not a code bug. The fix hardens baseline-migrations.cjs so the same failure mode can't recur for future migrations — any migration added to NEW_MIGRATIONS will have its bogus baseline row (if any) deleted automatically.
+- Expected recovery: after Vercel finishes the new build (~2-3 min), aisalon.massapro.com should load normally for authenticated users. The user can verify by reloading the page.
