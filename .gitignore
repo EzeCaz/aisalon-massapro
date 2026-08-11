@@ -52,6 +52,7 @@ old-deployment/
 # Dev/backup directories — not deployed to Vercel
 scripts/*
 !scripts/baseline-migrations.cjs
+!scripts/set-cazhype-coma-brand.cjs
 download/
 tool-results/
 agents/

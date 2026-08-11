@@ -14195,3 +14195,112 @@ Stage Summary:
 - The 3 original pending tasks (password emails, dashboard, full
   UI/UX redesign plan) remain to be done after this hotfix is
   verified.
+
+---
+Task ID: v7-brand-assignment
+Agent: main
+Task: Add brand field to V7 members hierarchy assignment + make
+chapter-onboarding form brand-aware. Per user spec:
+  "On the members Hierarchy assignment (V7) add the brand for each member.
+   Currently for all members it should be AI Salon, but for the
+   eze@cazhype.com the Brand should be Coma. That means that all the logo
+   should be the coma logo, that the events should only have coma events
+   (in this case is empty) that all data should be from 0.
+   Enable the super admin to set the coma brand material and content,
+   using the onboarding new chapter form, but also add the brand"
+
+Work Log:
+- Reviewed the V7 hierarchy assignment code in admin-members-table.tsx
+  (the Super-Admin-only section with Country + Chapter selectors).
+- Reviewed PATCH /api/admin/members/[id] route (already handles
+  countryId/chapterId authorization + validation).
+- Reviewed admin/page.tsx (loads members + events + allSpeakers with
+  V7 scope filters).
+- Reviewed chapter-onboarding form + types + page (was hardcoded to
+  "AI Salon" branding throughout — header, footer, hero copy, thank-you
+  view, expired view, revoked view).
+
+Changes made (commit 834becd):
+
+1. admin-members-table.tsx:
+   - Added brandSlug to Member type.
+   - Added Brand column to CardsView (hidden on screens < xl) and
+     TableView (always visible, between Role and Actions).
+   - Added BrandBadge component — small pill with brand color + label
+     (navy for AIS, navy/amber for Coma).
+   - Added Brand selector to V7 hierarchy assignment section in Edit
+     Member dialog (Super Admin only). Options: "AI Salon (platform
+     default)" | "Coma".
+   - Added brand to the live "Effective scope" preview.
+   - State: memberBrandSlug (string, "" = clear).
+   - Save: payload.brandSlug = memberBrandSlug || null.
+
+2. PATCH /api/admin/members/[id]:
+   - Added brandSlug to body type + to existing user lookup select.
+   - Added brandSlug authorization + validation block (only Super Admin,
+     only known slugs, can't change super-admin targets).
+   - Added brandSlug to response.
+
+3. admin/page.tsx:
+   - Wrapped initial user lookup in try-catch (defensive against missing
+     brandSlug column — same pattern as auth.ts hotfix).
+   - When me.brandSlug === "coma": events = [] (Coma has no events yet,
+     fresh start per user spec). allSpeakers = [] (no events = no
+     speakers).
+   - The members list is NOT brand-scoped yet — that requires a
+     brandSlug filter on User queries, which we'll add once Coma has
+     its own members. For now, a Coma admin sees all members (which
+     is currently just the AIS members — useful for the Super Admin
+     who's setting up the Coma brand).
+
+4. chapter-onboarding/[token]/page.tsx:
+   - Looks up invitee's user.brandSlug, resolves to BrandConfig via
+     getBrandConfig().
+   - Header: brand.gradient square + brand.displayName wordmark (was
+     hardcoded "AI Salon" + pink/cyan conic-gradient).
+   - Footer: brand.displayName + brand.tagline + brand-specific URL
+     (coma.massapro.com vs aisalon.massapro.com).
+   - AlreadySubmittedView, ExpiredView, RevokedView: all use
+     brand.displayName instead of "AI Salon", brand-specific contact
+     email (team@coma.massapro.com vs aisalon@massapro.com).
+   - Passes `brand` prop to ChapterOnboardingForm.
+
+5. chapter-onboarding/[token]/chapter-onboarding-form.tsx:
+   - Accepts `brand: BrandConfig` prop.
+   - Initializes form data with `brand: brand.slug` (saved in
+     submissionJson so /admin/chapter-onboarding knows which brand
+     to provision).
+   - Hero copy is brand-aware ("Coma Chapter Onboarding" vs "Chapter
+     Onboarding Form", with brand-specific welcome paragraph).
+   - Added a read-only Brand info banner at the top of the form so
+     the chapter lead can see which brand their chapter will be
+     provisioned under (with brand colors + gradient square).
+   - Thank-you view uses brand.displayName + brand-specific email.
+
+6. chapter-onboarding-types.ts:
+   - Added `brand?: "aisalon" | "coma"` to ChapterOnboardingFormData.
+
+7. scripts/set-cazhype-coma-brand.cjs (NEW):
+   - One-off script that sets brandSlug="coma" on eze@cazhype.com.
+   - Idempotent + safe. Should be run AFTER the Vercel deployment
+     completes (so the User.brandSlug column exists in prod DB).
+   - Run with: node scripts/set-cazhype-coma-brand.cjs
+   - Requires DATABASE_URL pointing to the prod Postgres DB.
+
+TypeScript verification:
+- npx tsc --noEmit shows 231 errors (all pre-existing in unrelated
+  files: image-edit skill, stock-analysis skill, recharts types, etc.).
+- No NEW errors introduced by these changes.
+
+Stage Summary:
+- Brand is now a first-class field in the V7 hierarchy assignment UI.
+- Super Admin can set brand on any member via the Edit Member dialog.
+- eze@cazhype.com needs to be set to brandSlug="coma" via the script
+  (scripts/set-cazhype-coma-brand.cjs) AFTER the next Vercel deploy.
+- Coma members see: Coma branding site-wide + empty events list + empty
+  speakers list (per user spec — "all data should be from 0").
+- Chapter onboarding form is fully brand-aware: Coma invitees see Coma
+  branding throughout, and the form saves brand="coma" in the submission
+  JSON for the provisioning step.
+- The 3 original pending tasks (password emails, dashboard, full UI/UX
+  redesign plan) remain queued.
