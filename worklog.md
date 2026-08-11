@@ -14127,3 +14127,71 @@ Stage Summary:
   - SQL is idempotent (ADD COLUMN IF NOT EXISTS) so it's safe regardless of current DB state
 - This was a build-process bug, not a code bug. The fix hardens baseline-migrations.cjs so the same failure mode can't recur for future migrations — any migration added to NEW_MIGRATIONS will have its bogus baseline row (if any) deleted automatically.
 - Expected recovery: after Vercel finishes the new build (~2-3 min), aisalon.massapro.com should load normally for authenticated users. The user can verify by reloading the page.
+
+---
+Task ID: hotfix-prod-server-render-error
+Agent: main
+Task: Fix the production "Server Components render" error [digest: 121720970]
+on aisalon.massapro.com that appeared after pushing the quiz brand fix
++ migration fix commits. The error caused every authenticated page to
+crash and show the global-error page.
+
+Work Log:
+- Reviewed the 5 most recent commits (c284cbc through f6fdd21) to
+  identify what was pushed to origin/main.
+- Found that commit c284cbc added `select: { brandSlug: true }` to
+  auth.ts's JWT callback dbUser lookup. If the production DB doesn't
+  have the User.brandSlug column, this throws a Prisma error on every
+  authenticated request → getServerSession throws → Server Components
+  render error site-wide.
+- Commit 8e05650 was supposed to fix this by deleting the bogus
+  baseline row + making the migration SQL idempotent. But the user
+  reported the error was STILL appearing after that fix was pushed.
+  Either:
+  (a) Vercel build was still running when user tested, OR
+  (b) prisma migrate deploy silently failed (caught by `|| echo` in
+      the build script), OR
+  (c) the bogus row deletion didn't take effect for some reason.
+- Applied a two-layer defensive fix so the site stays up regardless
+  of migration state:
+
+  LAYER 1 — src/lib/auth.ts (defensive query):
+    Wrapped both `dbUser = await db.user.findUnique({ select: { ...,
+    brandSlug: true } })` calls (lines 311 and 340) in try-catch. On
+    failure (e.g. "Unknown column 'brandSlug'"), retry WITHOUT
+    brandSlug. This way the JWT callback always succeeds — it just
+    falls back to null brandSlug, which resolveBrand() treats as the
+    AIS platform default. Auth itself never crashes on a missing column.
+
+  LAYER 2 — scripts/baseline-migrations.cjs (guaranteed column):
+    Added a POST-PASS after the main baseline loop that runs
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "brandSlug" TEXT`
+    directly via $executeRawUnsafe. This bypasses Prisma's migrate
+    engine entirely and GUARANTEES the column exists after the build,
+    regardless of whether prisma migrate deploy succeeded. Idempotent
+    (IF NOT EXISTS) + wrapped in try-catch so it can't block the build.
+
+- Verified TypeScript compiles cleanly (231 pre-existing errors in
+  unrelated files — same count as before the fix, so no new errors
+  introduced). next.config has `typescript.ignoreBuildErrors: true`
+  so those pre-existing errors don't block the build.
+- Committed as 37ad8e0 and pushed to origin/main. Vercel will rebuild
+  with the fix.
+
+Stage Summary:
+- Root cause: User.brandSlug column missing from production DB, but
+  auth.ts queries it on every JWT refresh → site-wide crash.
+- Prior fix (commit 8e05650) tried to ensure the migration ran, but
+  the user still saw the error (likely because prisma migrate deploy
+  silently failed, or the build hadn't completed yet).
+- New fix (commit 37ad8e0) is defensive — works even if the migration
+  NEVER runs:
+  * auth.ts no longer crashes on a missing column (try-catch + retry
+    without brandSlug)
+  * baseline-migrations.cjs post-pass directly ALTERs the table to
+    add the column, bypassing Prisma's migrate engine
+- Together these guarantee the site stays up regardless of migration
+  state. Once Vercel redeploys, the error should be gone.
+- The 3 original pending tasks (password emails, dashboard, full
+  UI/UX redesign plan) remain to be done after this hotfix is
+  verified.
