@@ -238,6 +238,42 @@ async function main() {
     skipped++;
   }
 
+  // ────────────────────────────────────────────────────────────────────────
+  // POST-PASS: GUARANTEE critical columns exist (belt-and-suspenders).
+  // ────────────────────────────────────────────────────────────────────────
+  // Even with the pre-pass deleting bogus baseline rows, `prisma migrate
+  // deploy` can STILL fail silently (caught by `|| echo` in the build
+  // script) if the DB state is weird — leaving the schema out of sync
+  // with the Prisma client. The most impactful case is `User.brandSlug`:
+  // auth.ts queries it on every authenticated request, so a missing
+  // column = site-wide crash.
+  //
+  // This post-pass runs the migration SQL DIRECTLY (bypassing Prisma's
+  // migrate engine) to guarantee the column exists. Idempotent — uses
+  // ADD COLUMN IF NOT EXISTS. Safe to run on every build.
+  //
+  // We ALSO do this for any future critical columns — add them here as
+  // needed. Each statement is wrapped in its own try-catch so one
+  // failure doesn't block the others.
+  const criticalColumnFixes = [
+    {
+      label: 'User.brandSlug',
+      sql: 'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "brandSlug" TEXT;',
+    },
+  ];
+
+  for (const fix of criticalColumnFixes) {
+    try {
+      await prisma.$executeRawUnsafe(fix.sql);
+      console.log(`[baseline] Post-pass: ensured ${fix.label} exists.`);
+    } catch (err) {
+      console.warn(`[baseline] Post-pass: FAILED to ensure ${fix.label} exists:`, err && (err.message || err));
+      // Don't throw — let the build continue. If the column really is
+      // missing, downstream code (auth.ts) has its own try-catch and
+      // will degrade gracefully.
+    }
+  }
+
   console.log(`[baseline] Done. Inserted: ${inserted}, Updated (self-healed): ${updated}, Skipped: ${skipped}, Deferred: ${deferred}, Bogus rows deleted: ${bogusDeleted}`);
   await prisma.$disconnect();
 }

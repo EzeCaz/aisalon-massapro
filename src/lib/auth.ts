@@ -308,10 +308,37 @@ export const authOptions: NextAuthOptions = {
         // For the JWT, we always re-resolve from the DB so role changes
         // by an admin take effect on the user's NEXT login (not the
         // current session — that requires a re-auth).
-        const dbUser = await db.user.findUnique({
-          where: { email: user.email.toLowerCase() },
-          select: { id: true, role: true, brandSlug: true },
-        });
+        //
+        // DEFENSIVE TRY-CATCH (added 2026-08-12):
+        // The `brandSlug` column was added in migration
+        // 20260811120000_add_user_brand_slug. If that migration did NOT
+        // apply to prod (e.g. baseline-migrations.cjs marked it applied
+        // without running the SQL — see commit 8e05650), Prisma throws
+        // "Unknown column 'brandSlug'" here. That crashes the JWT
+        // callback → getServerSession throws → every authenticated
+        // page renders the global-error page site-wide.
+        // Fix: catch the error, retry WITHOUT brandSlug, and continue.
+        // The brandSlug feature degrades gracefully (legacy users
+        // resolve to AIS brand via FALLBACK_DEFAULT_BRAND in
+        // resolveBrand()), but auth itself must NEVER crash on a
+        // missing column.
+        let dbUser: { id: string; role: string; brandSlug?: string | null } | null = null;
+        try {
+          dbUser = await db.user.findUnique({
+            where: { email: user.email.toLowerCase() },
+            select: { id: true, role: true, brandSlug: true },
+          });
+        } catch (err) {
+          console.warn("[auth.jwt] brandSlug query failed — retrying without brandSlug. Migration 20260811120000_add_user_brand_slug may not be applied:", (err as Error).message);
+          try {
+            dbUser = await db.user.findUnique({
+              where: { email: user.email.toLowerCase() },
+              select: { id: true, role: true },
+            });
+          } catch (err2) {
+            console.error("[auth.jwt] user lookup failed even without brandSlug:", (err2 as Error).message);
+          }
+        }
         if (dbUser) {
           token.role = dbUser.role;
           token.id = dbUser.id;
@@ -319,8 +346,10 @@ export const authOptions: NextAuthOptions = {
           // Persist brandSlug on the token so the session callback can
           // propagate it to session.user.brandSlug. Reads from DB on
           // every JWT refresh so admin brand changes take effect on
-          // next login (same pattern as role above).
-          token.brandSlug = dbUser.brandSlug;
+          // next login (same pattern as role above). Undefined if the
+          // column is missing (defensive fallback above) — downstream
+          // resolveBrand() treats undefined as the platform default.
+          token.brandSlug = (dbUser as { brandSlug?: string | null }).brandSlug ?? null;
         } else {
           // Fallback (shouldn't happen since signIn creates the row)
           token.role = resolveInitialRole(user.email);
@@ -337,14 +366,29 @@ export const authOptions: NextAuthOptions = {
         // `user` is undefined), re-resolve from the DB by email and
         // mark the token as resolved so we don't repeat the lookup
         // every request.
-        const dbUser = await db.user.findUnique({
-          where: { email: token.email as string },
-          select: { id: true, role: true, brandSlug: true },
-        });
+        //
+        // Same defensive try-catch as above — see comment there.
+        let dbUser: { id: string; role: string; brandSlug?: string | null } | null = null;
+        try {
+          dbUser = await db.user.findUnique({
+            where: { email: token.email as string },
+            select: { id: true, role: true, brandSlug: true },
+          });
+        } catch (err) {
+          console.warn("[auth.jwt self-heal] brandSlug query failed — retrying without brandSlug. Migration 20260811120000_add_user_brand_slug may not be applied:", (err as Error).message);
+          try {
+            dbUser = await db.user.findUnique({
+              where: { email: token.email as string },
+              select: { id: true, role: true },
+            });
+          } catch (err2) {
+            console.error("[auth.jwt self-heal] user lookup failed even without brandSlug:", (err2 as Error).message);
+          }
+        }
         if (dbUser) {
           token.id = dbUser.id;
           token.role = dbUser.role;
-          token.brandSlug = dbUser.brandSlug;
+          token.brandSlug = (dbUser as { brandSlug?: string | null }).brandSlug ?? null;
           token.idResolved = true;
         }
       }
