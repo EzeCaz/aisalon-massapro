@@ -13992,3 +13992,37 @@ Stage Summary:
 - 7 docx Tables (host resolution matrix, email tokens, brand form fields, sprint timeline, modified files, risk register, AI Salon surface inventory)
 - Code blocks for: Prisma Brand model, getEffectiveBrand resolver, middleware diff, buildLogoBlock with parent coexistence, email signature rebrand, login page.tsx, BrandLogoServer component, generateMetadata codemod pattern, full migration SQL, backfill SQL, rollback SQL, seed migration script
 - Boundary contract documented: platform agent owns schema/middleware/resolver/email/admin/metadata; parallel login agent owns ONLY /login UI/UX
+
+---
+Task ID: coma-brand-platform-phase1
+Agent: main
+Task: Three-part Coma brand platform work — (1) brand-aware password emails, (2) Coma-branded "new chapter" dashboard, (3) comprehensive UI/UX + admin tabs redesign plan.
+
+Work Log:
+- Audited the brand system: brand-config.ts, resolve-brand.ts, email-brand-context.ts are all in place. User.brandSlug column exists in Prisma schema.
+- Task 1 (password emails):
+  * Verified sendPasswordEmail() in src/lib/email.ts is already brand-aware — branches between Coma and AIS HTML templates. Coma path uses navy/amber palette, "coma" wordmark, Coma tagline, NO "AI Salon" or "Tel Aviv" mentions.
+  * Verified /api/auth/signup correctly forwards brandSlug (or falls back to existing user's brandSlug).
+  * FIXED /api/admin/members/[id]/reset-password: added brandSlug to select query + forwarded to sendPasswordEmail.
+  * FIXED /api/admin/members/bulk-reset-password: added brandSlug to bulk select + forwarded per-target brandSlug (each email branded per-recipient).
+  * Audited remaining email.ts functions: RSVP confirmation, chapter onboarding, chapter provisioned emails still hardcode AIS — flagged in plan as Phase 4 work (not password emails, out of scope for Task 1).
+- Task 2 (dashboard "new chapter" with Coma branding):
+  * src/app/admin/dashboard/page.tsx: resolved brand from me.brandSlug, made scopeBadge brand-aware, replaced #FF005A eyebrow with brand.accentColor, replaced "ais-gradient-text" with brand.primaryColor inline style, replaced footer credit "AI Salon · Empowering AI Connections" with brand.displayName + brand.tagline, removed "AI Salon" from metadata title.
+  * Added "new chapter" CTA card at top of dashboard for Coma admins with no chapter (showNewChapterCta = isComa && !me.chapterId). Card uses navy→amber gradient, Coma hero banner, links to /admin/chapter-onboarding + /admin/chapters/new.
+  * src/app/admin/dashboard/member-dashboard.tsx: added brandSlug + brandColors props, defined COMA_COLORS palette + getBrandPalette/getStatAccents/getAccentColor helpers, replaced AIS_COLORS stat card accents with brand-resolved values, replaced BarChart3 #FF005A with signatureAccent inline style, passed palette={palette} to all 6 ToggleableChartCard instances.
+  * src/components/admin/toggleable-chart-card.tsx: added optional palette prop, falls back to AIS_COLORS when omitted (backwards compat).
+  * src/app/admin/page.tsx: resolved brand from me.brandSlug, made scopeBadge brand-aware, replaced eyebrow text + color with brand.displayName + brand.accentColor, replaced role-label color, replaced 4 StatCard accents with brand colors, replaced footer credit, replaced "Manage all events" link color.
+  * src/components/ais/app-header.tsx: resolved brand from user.brandSlug, made logo image src brand-aware (Coma uses brand.heroBanner, AIS uses meerkat), made wordmark + tagline brand-aware (brand.wordmark + brand.tagline), made image alt brand-aware, Coma wordmark colored with brand.primaryColor.
+- Task 3 (UI/UX + admin tabs redesign plan):
+  * Loaded pdf skill, read report brief + fonts config.
+  * Wrote /home/z/my-project/scripts/coma_admin_redesign_plan.py — ReportLab script with Coma-branded cover (navy bg, amber accent, "coma" wordmark), TOC, 9 sections, brand-styled tables, callouts, bullet lists.
+  * Used NotoSerifSC (Regular/Bold/Light) for body + DejaVuSans (Regular/Bold) for headings (NotoSansSC is a variable font on this system, ReportLab can't read it).
+  * Generated /home/z/my-project/download/coma-admin-redesign-plan.pdf — 18 pages, 115 KB, proper metadata, TOC with page numbers, Coma-branded header/footer chrome on every page.
+
+Stage Summary:
+- Task 1 COMPLETE: All password emails (signup, admin reset, bulk reset) now render with the correct brand. Coma users get Coma-branded password emails with no "AI Salon"/"Tel Aviv" leaks.
+- Task 2 COMPLETE: /admin, /admin/dashboard, AppHeader, and MemberDashboard are all brand-aware. Coma admins see Coma wordmark/tagline/logo, navy/amber palette, Coma footer credit, and a "Launch your first chapter" CTA when they have no chapter. AIS users see no change (backwards compatible).
+- Task 3 COMPLETE: 18-page PDF plan delivered at /home/z/my-project/download/coma-admin-redesign-plan.pdf covering: executive summary, current state analysis, brand-scoped admin role architecture, UI/UX redesign principles, admin tab restructure (current vs proposed), 5-step new chapter onboarding wizard, 4-phase implementation roadmap (19 person-days total), file-level change inventory, open questions + risks + success metrics.
+- All code changes are backwards-compatible: legacy AIS users (brandSlug=null) fall back to the AIS brand via getBrandConfig(me.brandSlug ?? "aisalon").
+- TypeScript verified: no new errors introduced by these changes (pre-existing recharts type errors in non-member-dashboard.tsx and toggleable-chart-card.tsx are unrelated).
+- Deployment note: a new Vercel deployment is required for all changes to take effect on production (the current dpl_8WEUWwBkDnopiv5s5wUmiCp75rh2 deployment predates these changes).

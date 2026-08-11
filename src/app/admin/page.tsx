@@ -14,6 +14,7 @@ import {
   scopeEventWhere,
   type UserScope,
 } from "@/lib/permissions";
+import { getBrandConfig, type BrandConfig } from "@/lib/brand/brand-config";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminMembersTable } from "./admin-members-table";
@@ -21,16 +22,21 @@ import { AdminEventsList } from "./admin-events-list";
 import Link from "next/link";
 import { BarChart3, ArrowRight, Mail, Archive, Globe2 } from "lucide-react";
 
-export const metadata = { title: "Admin — AI Salon" };
+export const metadata = { title: "Admin" };
 
-function scopeBadge(scope: UserScope): { label: string; color: string } {
+function scopeBadge(scope: UserScope, brand: BrandConfig): { label: string; color: string } {
+  // Brand-aware scope badge — uses the active brand's palette instead of
+  // the legacy AIS pink/cyan. Same semantic meaning, brand-native colors.
   switch (scope.kind) {
     case "global":
-      return { label: "Global scope", color: "bg-[#820A7D] text-white" };
+      return { label: "Global scope", color: `bg-[${brand.primaryColor}] text-white` };
     case "country":
-      return { label: "Country scope", color: "bg-[#FF005A] text-white" };
+      return { label: "Country scope", color: `bg-[${brand.accentColor}] text-white` };
     case "chapter":
-      return { label: "Chapter scope", color: "bg-[#00E6FF]/20 text-[#007E72] border border-[#00E6FF]/40" };
+      return {
+        label: "Chapter scope",
+        color: `bg-[${brand.primaryColor}]/10 text-[${brand.primaryColor}] border border-[${brand.primaryColor}]/30`,
+      };
     case "none":
       return { label: "No scope", color: "bg-black/10 text-black/60" };
   }
@@ -45,6 +51,15 @@ export default async function AdminPage() {
     include: { tags: true, country: true, chapter: true },
   });
   if (!me) redirect("/login");
+
+  // BRAND RESOLUTION: resolve the active brand from the user's persisted
+  // brandSlug. A Coma admin sees a Coma-branded admin panel — navy/amber
+  // palette, "Coma" wordmark, Coma tagline in the footer, no "AI Salon"
+  // or "Tel Aviv" mentions. Legacy users with no brandSlug fall back to
+  // AIS (the platform default), preserving the original look for existing
+  // AI Salon admins.
+  const brand = getBrandConfig(me.brandSlug ?? "aisalon");
+  const isComa = brand.slug === "coma";
 
   // Auto-sync: if the user's email is in the SUPER_ADMIN_EMAILS allowlist
   // but their DB role isn't SUPER_ADMIN yet, upgrade it inline so the UI
@@ -170,7 +185,7 @@ export default async function AdminPage() {
   const allSpeakersJson = JSON.parse(JSON.stringify(allSpeakers));
 
   // Scope badge for the header
-  const badge = scopeBadge(scope);
+  const badge = scopeBadge(scope, brand);
   const myChapterName = me.chapter?.name;
   const myCountryName = me.country?.name;
 
@@ -182,15 +197,21 @@ export default async function AdminPage() {
         {/* Header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-              Admin Panel · V7 Hierarchy
+            <p
+              className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2"
+              style={{ color: brand.accentColor }}
+            >
+              {brand.displayName} Admin Panel · V7 Hierarchy
             </p>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
               Manage community & events
             </h1>
             <p className="mt-2 text-sm text-black/80 max-w-2xl">
               You are signed in as <strong className="font-mono">{me.email}</strong> with the{" "}
-              <span className="inline-flex items-center gap-1 font-semibold text-[#FF005A]">
+              <span
+                className="inline-flex items-center gap-1 font-semibold"
+                style={{ color: brand.accentColor }}
+              >
                 {roleLabel(effectiveRole)}
                 {isSuper && viewAsRole && (
                   <span className="ml-1 text-[0.65rem] font-normal text-black/50">
@@ -247,10 +268,10 @@ export default async function AdminPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
-          <StatCard label="Members" value={members.length} accent="#FF005A" />
-          <StatCard label="Imported" value={members.filter((m) => m.importSource).length} accent="#00E6FF" />
-          <StatCard label="Events" value={events.length} accent="#007E72" />
-          <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent="#820A7D" />
+          <StatCard label="Members" value={members.length} accent={brand.primaryColor} />
+          <StatCard label="Imported" value={members.filter((m) => m.importSource).length} accent={brand.accentColor} />
+          <StatCard label="Events" value={events.length} accent={brand.secondaryColor} />
+          <StatCard label="Linked to speaker" value={members.filter((m) => m.speakers.length > 0).length} accent={brand.primaryColor} />
         </div>
 
         {/* Super-Admin-only archive link — TSK-0058: gate on effectiveRole
@@ -302,7 +323,8 @@ export default async function AdminPage() {
             <h2 className="text-lg font-bold text-black">Events</h2>
             <Link
               href="/admin/events"
-              className="text-xs font-semibold text-[#FF005A] hover:underline"
+              className="text-xs font-semibold hover:underline"
+              style={{ color: brand.accentColor }}
             >
               Manage all events →
             </Link>
@@ -316,7 +338,7 @@ export default async function AdminPage() {
 
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+          <span>© {new Date().getFullYear()} {brand.displayName} · {brand.tagline}</span>
           <span>
             Platform by{" "}
             <a

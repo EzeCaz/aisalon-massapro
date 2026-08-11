@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
       email: true,
       name: true,
       role: true,
+      brandSlug: true,
       chapter: { select: { name: true } },
     },
   });
@@ -133,6 +134,11 @@ export async function POST(req: NextRequest) {
         password,
         siteUrl,
         chapterName: target.chapter?.name,
+        // Forward each target's own brandSlug so the email renders with
+        // their brand (Coma users get Coma branding, AIS users get AIS).
+        // A single bulk-reset batch may include users from multiple brands
+        // — each email is branded per-recipient, not per-batch.
+        brandSlug: target.brandSlug ?? undefined,
       });
       if (!result.ok) {
         failed.push({ id, email: target.email, error: result.error || "email send failed" });

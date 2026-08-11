@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canSeeAdminNav, getEffectiveRole, normalizeRole, ROLES } from "@/lib/permissions";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -35,6 +36,15 @@ export async function AppHeader() {
         include: { tags: true },
       })
     : null;
+
+  // BRAND RESOLUTION: resolve the active brand from the signed-in user's
+  // persisted brandSlug. A Coma user sees "coma" wordmark + Coma tagline
+  // + the Coma hero banner (transparent PNG) as the header logo — instead
+  // of the legacy "aisalon" wordmark + "Empowering AI Connections" tagline
+  // + falafel-meerkat mark. Anonymous visitors and legacy users (no
+  // brandSlug) fall back to AIS, preserving the original header.
+  const brand = getBrandConfig(user?.brandSlug ?? "aisalon");
+  const isComa = brand.slug === "coma";
 
   // TSK-0058: Compute the EFFECTIVE role for the Admin nav gate. When a
   // SUPER_ADMIN is using "View as" (e.g. viewing as a Member), the Admin
@@ -138,23 +148,33 @@ export async function AppHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo + tagline — chapter-scoped meerkat mark on the left, on every page */}
+          {/* Logo + tagline — brand-aware mark on the left, on every page.
+              For Coma: render the Coma hero banner (transparent PNG) + "coma"
+              wordmark + "Building the Operating System for Communities" tagline.
+              For AIS (legacy): keep the original meerkat mark + "aisalon" wordmark
+              + "Empowering AI Connections" tagline. */}
           <Link href="/events" className="flex items-center gap-2">
-            {/* TSK-0057: render the meerkat mark inline with the exact
-                alt + srcset pattern the user specified, so the chapter's
-                loginHero image is used (with global fallback). The
-                AiSalonLogoServer wrapper handles the wordmark + tagline. */}
             <span className="inline-flex flex-col items-start leading-none text-black text-[1.05rem]">
               <span className="inline-flex items-end">
                 <Image
-                  src={meerkatSrc || "/images/falafel-meerkat.jpg"}
-                  alt={chapterLabel ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat` : "AI Salon Falafel Meerkat"}
+                  src={
+                    isComa && brand.heroBanner
+                      ? brand.heroBanner
+                      : meerkatSrc || "/images/falafel-meerkat.jpg"
+                  }
+                  alt={
+                    isComa
+                      ? `${brand.displayName} brand mark`
+                      : chapterLabel
+                        ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat`
+                        : "AI Salon Falafel Meerkat"
+                  }
                   width={624}
                   height={1686}
                   className="object-contain align-middle mr-[0.2em]"
                   style={{
                     color: "transparent",
-                    height: "1.5em",
+                    height: isComa ? "2.2em" : "1.5em",
                     width: "auto",
                     maxWidth: "100%",
                     display: "inline-block",
@@ -163,10 +183,15 @@ export async function AppHeader() {
                   priority
                   unoptimized={(meerkatSrc || "").startsWith("http")}
                 />
-                <span className="text-[1.6em] font-extrabold tracking-tight lowercase">aisalon</span>
+                <span
+                  className="text-[1.6em] font-extrabold tracking-tight lowercase"
+                  style={isComa ? { color: brand.primaryColor } : undefined}
+                >
+                  {brand.wordmark}
+                </span>
               </span>
               <span className="mt-[0.45em] pl-[1.2em] text-[0.42em] font-semibold uppercase tracking-[0.18em] text-black/80">
-                Empowering AI Connections
+                {brand.tagline}
               </span>
             </span>
             {chapterLabel && (

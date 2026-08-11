@@ -49,6 +49,7 @@ export async function POST(
       email: true,
       name: true,
       role: true,
+      brandSlug: true,
       chapter: { select: { name: true } },
     },
   });
@@ -114,6 +115,11 @@ export async function POST(
     password,
     siteUrl,
     chapterName: target.chapter?.name,
+    // Forward the target user's brandSlug so the email renders with the
+    // correct brand (Coma users get a Coma-branded email — no "AI Salon"
+    // or "Tel Aviv" mentions). Falls back to AIS when brandSlug is null
+    // (legacy users), preserving backwards compatibility.
+    brandSlug: target.brandSlug ?? undefined,
   });
 
   if (!result.ok) {

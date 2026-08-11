@@ -75,6 +75,7 @@ export function ToggleableChartCard({
   useTagColors = false,
   activeValue,
   onSliceClick,
+  palette,
 }: {
   title: string;
   subtitle?: string;
@@ -95,11 +96,19 @@ export function ToggleableChartCard({
    * clicking sets the active selection to that label.
    */
   onSliceClick?: (label: string) => void;
+  /**
+   * Optional brand-specific color palette. When provided, replaces the
+   * default AIS_COLORS for chart slices/bars. Used by the brand-aware
+   * dashboard so a Coma admin sees navy/amber slices instead of pink/cyan.
+   * Falls back to AIS_COLORS when omitted (backwards compatibility).
+   */
+  palette?: string[];
 }) {
+  const resolvedPalette = palette && palette.length > 0 ? palette : AIS_COLORS;
   const colorFor = (label: string, i: number) =>
     useTagColors
-      ? tagColor(label) || AIS_COLORS[(i + colorOffset) % AIS_COLORS.length]
-      : AIS_COLORS[(i + colorOffset) % AIS_COLORS.length];
+      ? tagColor(label) || resolvedPalette[(i + colorOffset) % resolvedPalette.length]
+      : resolvedPalette[(i + colorOffset) % resolvedPalette.length];
 
   const total = data.reduce((sum, r) => sum + r.count, 0);
   // Table view can grow taller than the chart canvas — cap at height + 120

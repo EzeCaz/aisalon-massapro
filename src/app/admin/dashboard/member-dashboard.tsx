@@ -48,9 +48,20 @@ type Member = {
   _count: { images: number; presentations: number; speakers: number };
 };
 
-type Props = { members: Member[] };
+type Props = {
+  members: Member[];
+  /** Active brand slug. Drives the chart palette + accent colors. */
+  brandSlug?: string;
+  /** Brand colors resolved from BrandConfig (primary, accent, secondary). */
+  brandColors?: {
+    primary: string;
+    accent: string;
+    secondary: string;
+  };
+};
 
-// AIS brand palette for charts
+// AIS brand palette for charts — kept for backwards compatibility
+// (legacy users with no brandSlug fall back to AIS).
 const AIS_COLORS = [
   "#FF005A", // RED
   "#004F98", // navy
@@ -63,6 +74,52 @@ const AIS_COLORS = [
   "#f43f5e", // rose
   "#a855f7", // violet
 ];
+
+// Coma brand palette for charts — institutional navy + warm amber + a
+// harmonious supporting cast. Tuned for chart readability: enough
+// contrast between adjacent slices, but every color reads as part of
+// the Coma family (deep, warm, institutional).
+const COMA_COLORS = [
+  "#0A1F44", // navy (primary)
+  "#F5A623", // amber (accent)
+  "#E84855", // warm red (secondary)
+  "#1E3A6F", // lighter navy
+  "#8B5A2B", // warm bronze
+  "#2D5F8B", // mid blue
+  "#C7853B", // soft amber
+  "#5A1A23", // deep maroon
+  "#0F2D5C", // royal navy
+  "#D4A04A", // light gold
+];
+
+/**
+ * Resolve the chart palette for the active brand. Falls back to AIS when
+ * no brand is specified (legacy users), preserving the original dashboard
+ * look for existing AI Salon admins.
+ */
+function getBrandPalette(brandSlug?: string): string[] {
+  return brandSlug === "coma" ? COMA_COLORS : AIS_COLORS;
+}
+
+/**
+ * Resolve the 4 stat-card accent colors for the active brand. Returns a
+ * tuple of [primary, secondary, tertiary, quaternary] that matches the
+ * 4 stat cards (Total / Imported / Self-registered / Onboarded).
+ */
+function getStatAccents(brandSlug?: string): [string, string, string, string] {
+  return brandSlug === "coma"
+    ? ["#0A1F44", "#F5A623", "#E84855", "#1E3A6F"] // navy, amber, red, light navy
+    : ["#FF005A", "#00E6FF", "#007E72", "#820A7D"]; // AIS original
+}
+
+/**
+ * Resolve the prominent accent color (used for the BarChart3 icon, active
+ * filter indicators, etc.). This is the brand's "signature" color.
+ */
+function getAccentColor(brandSlug?: string, fallback?: string): string {
+  if (brandSlug === "coma") return "#F5A623"; // Coma amber
+  return fallback ?? "#FF005A"; // AIS pink
+}
 
 // Every column in the table is now sortable (Item 2B).
 type SortField =
@@ -114,7 +171,11 @@ const DIMENSION_LABELS: Record<string, string> = {
   utmUid: "UTM UID",
 };
 
-export function MemberDashboard({ members }: Props) {
+export function MemberDashboard({ members, brandSlug, brandColors }: Props) {
+  // Resolve the brand-aware palette + accents once per render.
+  const palette = getBrandPalette(brandSlug);
+  const [accentTotal, accentImported, accentSelf, accentOnboarded] = getStatAccents(brandSlug);
+  const signatureAccent = getAccentColor(brandSlug);
   // --- Per-column filters (Item 2C) --------------------------------------
   // One dropdown per column, plus a global search + From/To date range.
   const [search, setSearch] = useState("");
@@ -407,10 +468,10 @@ export function MemberDashboard({ members }: Props) {
     <div className="space-y-8">
       {/* Top stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total members" value={stats.total} accent="#FF005A" />
-        <StatCard label="Imported" value={stats.importedCount} accent="#00E6FF" />
-        <StatCard label="Self-registered" value={stats.selfCount} accent="#007E72" />
-        <StatCard label="Onboarded" value={stats.onboardedCount} accent="#820A7D" />
+        <StatCard label="Total members" value={stats.total} accent={accentTotal} />
+        <StatCard label="Imported" value={stats.importedCount} accent={accentImported} />
+        <StatCard label="Self-registered" value={stats.selfCount} accent={accentSelf} />
+        <StatCard label="Onboarded" value={stats.onboardedCount} accent={accentOnboarded} />
       </div>
 
       {/* Filters — dashboard-report canonical style (Item 2F) */}
@@ -603,7 +664,7 @@ export function MemberDashboard({ members }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-black flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-[#FF005A]" />
+            <BarChart3 className="h-4 w-4" style={{ color: signatureAccent }} />
             Charts
           </h2>
           <p className="text-xs text-black/50 mt-0.5">
@@ -646,6 +707,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.signups}
           onTypeChange={(t) => setChartType("signups", t)}
           data={stats.signupsOverTime.map((s) => ({ label: s.month, count: s.count }))}
+          palette={palette}
           colorOffset={0}
           orientation="vertical"
           height={240}
@@ -660,6 +722,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.source}
           onTypeChange={(t) => setChartType("source", t)}
           data={stats.sourceSplit.map((s) => ({ label: s.label, count: s.count }))}
+          palette={palette}
           colorOffset={0}
           orientation="vertical"
           height={240}
@@ -674,6 +737,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.interestedIn}
           onTypeChange={(t) => setChartType("interestedIn", t)}
           data={stats.interestedInCounts}
+          palette={palette}
           colorOffset={0}
           orientation="horizontal"
           height={260}
@@ -688,6 +752,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.profileCategories}
           onTypeChange={(t) => setChartType("profileCategories", t)}
           data={stats.profileCategoriesCounts}
+          palette={palette}
           colorOffset={2}
           orientation="horizontal"
           height={260}
@@ -702,6 +767,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.appliedFor}
           onTypeChange={(t) => setChartType("appliedFor", t)}
           data={stats.appliedForCounts}
+          palette={palette}
           colorOffset={4}
           orientation="vertical"
           height={240}
@@ -716,6 +782,7 @@ export function MemberDashboard({ members }: Props) {
           chartType={chartTypes.tags}
           onTypeChange={(t) => setChartType("tags", t)}
           data={stats.tagCounts}
+          palette={palette}
           colorOffset={0}
           orientation="horizontal"
           height={260}
