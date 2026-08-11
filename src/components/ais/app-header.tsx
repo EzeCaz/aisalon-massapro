@@ -140,7 +140,10 @@ export async function AppHeader() {
     { href: "/events", label: "Events" },
     { href: "/community", label: "Community" },
     { href: "/testimonials", label: "Testimonials" },
-    { href: "/resources/ai-human-flourishing", label: "AI & Human Flourishing" },
+    // AI & Human Flourishing microsite is an AI-Salon-only program.
+    // Hide the nav link for Coma members (they also get redirected at
+    // the page level if they type the URL directly).
+    ...(isComa ? [] : [{ href: "/resources/ai-human-flourishing", label: "AI & Human Flourishing" }]),
     ...(isAdmin ? [{ href: adminHref, label: "Admin" }] : []),
   ];
 

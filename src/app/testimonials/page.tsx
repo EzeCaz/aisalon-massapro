@@ -4,8 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { needsOnboarding, needsSetPassword } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
+import { SiteFooter } from "@/components/ais/site-footer";
 import { TestimonialFeed } from "@/components/testimonials/testimonial-feed";
 import type { EventOption, ChapterOption } from "@/components/testimonials/testimonial-form";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 import { MessageSquareHeart } from "lucide-react";
 
 export const metadata = { title: "Testimonials — AI Salon Tel Aviv" };
@@ -37,7 +39,7 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
   const { chapter: chapterSlugParam } = await searchParams;
 
   const session = await getServerSession(authOptions);
-  let me: { id: string; role: string } | null = null;
+  let me: { id: string; role: string; brandSlug?: string | null; chapterId?: string | null; chapterName?: string | null } | null = null;
   if (session?.user?.email) {
     const u = await db.user.findUnique({
       where: { email: session.user.email },
@@ -47,6 +49,9 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
         passwordHash: true,
         importSource: true,
         onboardedAt: true,
+        brandSlug: true,
+        chapterId: true,
+        chapter: { select: { name: true } },
       },
     });
     if (u) {
@@ -54,11 +59,23 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
       // they don't get stuck on the public feed with an unfinished profile.
       if (needsSetPassword(u)) redirect("/set-password");
       if (needsOnboarding(u)) redirect("/onboarding");
-      me = { id: u.id, role: u.role };
+      me = {
+        id: u.id,
+        role: u.role,
+        brandSlug: u.brandSlug,
+        chapterId: u.chapterId,
+        chapterName: u.chapter?.name ?? null,
+      };
     }
   }
 
   const isAdmin = me?.role === "ADMIN";
+
+  // BRAND RESOLUTION — used for the page header + footer copy. The
+  // signed-in user's brandSlug drives the displayed brand; anonymous
+  // visitors fall back to AIS (platform default).
+  const brand = getBrandConfig(me?.brandSlug ?? "aisalon");
+  const chapterName = me?.chapterName ?? "Tel Aviv";
 
   // Fetch the events catalog only when there's a signed-in user (the form
   // is hidden for anonymous visitors, so the data isn't needed). Include
@@ -134,14 +151,14 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
         <div className="mb-8">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
             <MessageSquareHeart className="inline h-3 w-3 mr-1" />
-            Community · Testimonials
+            {brand.displayName} {chapterName} · Testimonials
           </p>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
             What people are <span className="ais-gradient-text">saying</span>
           </h1>
           <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Real stories from our community about speakers, events, sessions,
-            and the AI Salon vibe. {me ? "Share your own — add a photo, pick a rating, and tell us what made it special." : "Sign in to share your own — add a photo, pick a rating, and tell us what made it special."}
+            and the {brand.displayName} vibe. {me ? "Share your own — add a photo, pick a rating, and tell us what made it special." : "Sign in to share your own — add a photo, pick a rating, and tell us what made it special."}
           </p>
         </div>
 
@@ -155,22 +172,7 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
         />
       </main>
 
-      <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
-          <span>
-            Platform by{" "}
-            <a
-              href="https://massapro.com"
-              className="text-black/80 underline-offset-4 hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              MassaPro
-            </a>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter brandName={brand.displayName} chapterName={chapterName} />
     </div>
   );
 }

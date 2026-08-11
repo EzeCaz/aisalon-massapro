@@ -5,9 +5,11 @@ import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
+import { SiteFooter } from "@/components/ais/site-footer";
 import { EventsList } from "./events-list";
 import { MyRegisteredEvents } from "./my-registered-events";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 import Link from "next/link";
 
 export const metadata = { title: "Events — AI Salon Tel Aviv" };
@@ -31,7 +33,7 @@ export const metadata = { title: "Events — AI Salon Tel Aviv" };
  */
 export default async function EventsPage() {
   const session = await getServerSession(authOptions);
-  let me: { id: string; email: string; name: string | null; utmUid: string | null; chapterName: string | null } | null = null;
+  let me: { id: string; email: string; name: string | null; utmUid: string | null; chapterName: string | null; brandSlug: string | null } | null = null;
   if (session?.user?.email) {
     const meRow = await db.user.findUnique({
       where: { email: session.user.email },
@@ -47,6 +49,7 @@ export default async function EventsPage() {
         name: meRow.name,
         utmUid: meRow.utmUid,
         chapterName: meRow.chapter?.name ?? null,
+        brandSlug: (meRow as { brandSlug?: string | null }).brandSlug ?? null,
       };
     }
     // Signed-in users must complete onboarding before browsing the
@@ -55,6 +58,13 @@ export default async function EventsPage() {
     // other member pages).
     if (meRow && needsOnboarding(meRow)) redirect("/onboarding");
   }
+
+  // BRAND RESOLUTION — prefer the signed-in user's brandSlug. Anonymous
+  // visitors fall back to AIS (platform default). Used for the page
+  // header eyebrow ("AI Salon Tel Aviv" → "{brand} {chapter}") and the
+  // footer text.
+  const brand = getBrandConfig(me?.brandSlug ?? "aisalon");
+  const chapterName = me?.chapterName ?? "Tel Aviv";
 
   const events = await db.event.findMany({
     orderBy: { startsAt: "desc" },
@@ -226,13 +236,13 @@ export default async function EventsPage() {
         {/* Page header */}
         <div className="mb-10">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
-            AI Salon {me?.chapterName ?? "Tel Aviv"}
+            {brand.displayName} {chapterName}
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
             Upcoming & past <span className="ais-gradient-text">gatherings</span>
           </h1>
           <p className="mt-3 text-base text-black/80 max-w-2xl">
-            Events at the leading {me?.chapterName ?? "Tel Aviv"} venues.
+            Events at the leading {chapterName} venues.
             Click any event to view the agenda, speakers, and shared photo gallery.
           </p>
         </div>
@@ -273,22 +283,7 @@ export default async function EventsPage() {
           />
         </Suspense>
       </main>
-      <footer className="mt-auto border-t border-black/10 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon {me?.chapterName ?? "Tel Aviv"} · Empowering AI Connections</span>
-          <span>
-            Platform by{" "}
-            <a
-              href="https://massapro.com"
-              className="text-black/80 underline-offset-4 hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              MassaPro
-            </a>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter brandName={brand.displayName} chapterName={chapterName} />
     </div>
   );
 }

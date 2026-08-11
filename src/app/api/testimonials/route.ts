@@ -32,13 +32,13 @@ export async function GET(req: NextRequest) {
     // Wrap the session lookup in try/catch — if next-auth throws for any
     // reason (e.g. misconfigured cookies, JWT secret rotation), we still
     // want the public feed to render for anonymous visitors.
-    let me: { id: string; role: string } | null = null;
+    let me: { id: string; role: string; brandSlug?: string | null; chapterId?: string | null } | null = null;
     try {
       const session = await getServerSession(authOptions);
       if (session?.user?.email) {
         const u = await db.user.findUnique({
           where: { email: session.user.email },
-          select: { id: true, role: true },
+          select: { id: true, role: true, brandSlug: true, chapterId: true },
         });
         if (u) me = u;
       }
@@ -71,6 +71,32 @@ export async function GET(req: NextRequest) {
       { speakerId: null },
       { agendaItemId: null },
     ];
+  }
+
+  // BRAND + CHAPTER SCOPING (per user spec — "Must only show the
+  // specific brand and chapter related to the user").
+  // For signed-in users: only show testimonials authored by users in
+  // the same brand + chapter. For anonymous users: no filter (show all,
+  // the page is public).
+  //
+  // We use a nested author filter so Prisma joins on the User table:
+  //   - Coma user → author.brandSlug = "coma"
+  //   - AIS/legacy user → author.brandSlug IN (null, "aisalon")
+  //   - chapterId: scoped to the same chapter, or both null
+  if (me) {
+    const isComa = me.brandSlug === "coma";
+    const authorBrandFilter = isComa
+      ? { brandSlug: "coma" }
+      : { OR: [{ brandSlug: null }, { brandSlug: "aisalon" }] };
+    const authorChapterFilter = me.chapterId
+      ? { chapterId: me.chapterId }
+      : { chapterId: null };
+    where.author = {
+      is: {
+        ...authorBrandFilter,
+        ...authorChapterFilter,
+      },
+    };
   }
 
   const orderBy =

@@ -16,6 +16,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ChapterOnboardingAdminList } from "./chapter-onboarding-admin-list";
+import { PreviewComaFormButton } from "./preview-coma-form-button";
 import { Globe2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,14 @@ export default async function ChapterOnboardingAdminPage() {
           <p className="text-sm text-slate-500 mb-6">
             Track every chapter onboarding form you&apos;ve sent. Click a row to see the full submission.
           </p>
+
+          {/* Quick preview button — opens the Coma-branded onboarding
+              form in a new tab without sending an email. Useful for the
+              Super Admin to review the Coma brand experience. */}
+          <div className="mb-4">
+            <PreviewComaFormButton />
+          </div>
+
           <ChapterOnboardingAdminList invites={serialized} currentAdminEmail={me.email} />
         </div>
       </div>
