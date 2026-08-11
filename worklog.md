@@ -14304,3 +14304,86 @@ Stage Summary:
   JSON for the provisioning step.
 - The 3 original pending tasks (password emails, dashboard, full UI/UX
   redesign plan) remain queued.
+
+---
+Task ID: brand-isolation-v2
+Agent: main
+Task: Five brand-isolation changes per user spec:
+  1. Events page header: "AI Salon {chapter}" → "{brand} {chapter}"
+  2. Global footer: "...AI Salon Tel Aviv · Empowering AI Connections" →
+     "...{brand} {chapter} · Empowering Human Connections" (all pages)
+  3. /community: only show members of the same brand + chapter
+  4. /testimonials: only show testimonials of the same brand + chapter
+  5. /resources/ai-human-flourishing: visible to AIS brand only
+  + show me the Coma onboarding form
+
+Work Log:
+- Created shared SiteFooter component (src/components/ais/site-footer.tsx)
+  that takes brandName + chapterName as props and renders the new footer
+  template.
+- Events page (src/app/events/page.tsx):
+  * Loads user.brandSlug during the me lookup.
+  * Resolves brand via getBrandConfig(me?.brandSlug ?? "aisalon").
+  * Page header eyebrow: "{brand.displayName} {chapterName}" (was "AI Salon ...")
+  * Footer replaced with <SiteFooter brandName={brand.displayName} chapterName={chapterName} />.
+- Community page (src/app/community/page.tsx):
+  * Loads user.brandSlug + chapterId.
+  * Builds brandFilter + chapterFilter and applies them to the members query.
+    - Coma user → { brandSlug: "coma" }
+    - AIS/legacy user → { OR: [{ brandSlug: null }, { brandSlug: "aisalon" }] }
+    - chapterId scoped when set, otherwise chapterId=null
+  * Empty-state copy updated ("No other community members in your {brand} {chapter} chapter yet.")
+  * Member-count footer uses brand+chapter.
+  * Footer replaced with SiteFooter.
+- Testimonials API (src/app/api/testimonials/route.ts):
+  * Session lookup now also selects brandSlug + chapterId.
+  * When signed-in, adds a nested `author: { is: { ...filters } }` to the
+    where clause so testimonials are scoped to the user's brand+chapter.
+  * Anonymous visitors still see all testimonials (page is public).
+- Testimonials page (src/app/testimonials/page.tsx):
+  * Loads user.brandSlug + chapterId + chapter.name.
+  * Resolves brand via getBrandConfig.
+  * Header eyebrow: "{brand} {chapter} · Testimonials" (was "Community · Testimonials").
+  * Body copy: "{brand.displayName} vibe" (was "AI Salon vibe").
+  * Footer replaced with SiteFooter.
+- /resources/ai-human-flourishing (src/app/resources/ai-human-flourishing/page.tsx):
+  * Added brand gate — Coma users (brandSlug='coma') are redirect("/events").
+  * Wrapped in try-catch so a missing column doesn't crash the page.
+  * Anonymous + AIS users still see the page.
+- AppHeader (src/components/ais/app-header.tsx):
+  * Nav link "AI & Human Flourishing" hidden when isComa is true.
+- Coma onboarding form preview:
+  * New API: POST /api/admin/chapter-onboarding/preview-invite
+    - SUPER_ADMIN only (server-side enforced).
+    - Body: { email: string }
+    - Creates or reuses a PENDING invite for that user.
+    - Does NOT send an email — just returns { ok, invite: { formUrl, ... } }.
+  * New client button: src/app/admin/chapter-onboarding/preview-coma-form-button.tsx
+    - Hardcoded to eze@cazhype.com (the Coma-branded member).
+    - On click: calls the new API, opens formUrl in a new tab.
+  * Wired into /admin/chapter-onboarding page above the invite list.
+  * New script: scripts/create-coma-onboarding-invite.cjs
+    - CLI version of the same logic. Useful for running directly against
+      the prod DB (sets brandSlug="coma" on the user if missing, creates
+      or reuses an invite, prints the URL).
+
+TypeScript verification:
+- npx tsc --noEmit shows 231 errors (all pre-existing in unrelated files).
+- Zero new errors introduced.
+
+Stage Summary:
+- All 5 user requirements are implemented and committed as 6c5c190.
+- Pushed to origin/main — Vercel will redeploy automatically.
+- After deploy:
+  * Events/community/testimonials pages will show "{brand} {chapter}" in
+    header + footer instead of "AI Salon Tel Aviv".
+  * Coma members (eze@cazhype.com) will see ONLY their own chapter's
+    members + testimonials (currently empty — fresh start per spec).
+  * Coma members will be redirected away from /resources/ai-human-flourishing
+    and won't see the nav link.
+  * The Super Admin can visit /admin/chapter-onboarding and click
+    "Preview Coma onboarding form" to see the Coma-branded form in a
+    new tab (no email sent, no SMTP needed).
+- SiteFooter is currently only wired into events/community/testimonials.
+  Other member-facing pages (profile, onboarding, set-password, public
+  event page) can be migrated to SiteFooter in a follow-up.
