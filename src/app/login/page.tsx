@@ -72,7 +72,12 @@ export async function generateMetadata({
 
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
-  const bannerUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
+  // Hero image resolution chain (per BrandConfig.heroBanner doc):
+  //   1. Chapter DB override (`ChapterSetting.loginBanner`)
+  //   2. Brand-level hero (`brand.heroBanner`)
+  //   3. Hard-coded fallback
+  const bannerUrl =
+    settings.loginBanner || brand.heroBanner || "/images/falafel-meerkat.jpg";
 
   // Look up the chapter name for the metadata title.
   let chapterName = "Tel Aviv";
@@ -142,13 +147,25 @@ export default async function LoginPage({
   // Load effective brand images — chapter-scoped overrides take
   // precedence when chapterSlug is present.
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
-  const heroUrl = settings.loginHero || "/images/falafel-meerkat.jpg";
+  // Hero image resolution chain (per BrandConfig.heroBanner doc):
+  //   1. Chapter DB override (`ChapterSetting.loginHero`) — admin can
+  //      upload a chapter-specific hero photo (e.g. a Tel Aviv skyline).
+  //   2. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
+  //      banner at /brand/coma/coma-hero.png.
+  //   3. Hard-coded fallback `/images/falafel-meerkat.jpg` — legacy AIS
+  //      mark, only fires when both tiers above are empty.
+  const heroUrl =
+    settings.loginHero || brand.heroBanner || "/images/falafel-meerkat.jpg";
   // The mark in the logo uses the admin-selected loginBanner brand
   // asset (falls back to the hardcoded falafel-meerkat.jpg if not set).
   const markUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
 
   // Is the hero an external URL (Vercel Blob) or a relative path?
   const heroIsExternal = heroUrl.startsWith("http");
+  // Is this brand-level hero a transparent PNG that floats on the panel
+  // (Coma), or a opaque photo that needs a card frame (AIS legacy)?
+  // We detect by checking if the hero resolves to a brand-level asset.
+  const heroIsBrandBanner = Boolean(brand.heroBanner) && !settings.loginHero;
 
   const callbackUrl = callbackParam;
 
@@ -204,17 +221,37 @@ export default async function LoginPage({
 
         {/* Center: dynamic brand hero image + chapter tagline */}
         <div className="relative z-10 text-white max-w-md">
-          <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10">
-            <Image
-              src={heroUrl}
-              alt={`${brand.displayName} ${chapterName} — brand image`}
-              fill
-              sizes="(max-width: 768px) 240px, 320px"
-              className="object-contain"
-              priority
-              unoptimized={heroIsExternal}
-            />
-          </div>
+          {heroIsBrandBanner ? (
+            // Brand-level hero (transparent PNG, e.g. Coma's banner):
+            // render unframed at full panel width so the artwork floats
+            // directly on the brand-colored background. No card, no
+            // border, no rounding — the image IS the banner.
+            <div className="mb-8 relative w-full aspect-[3/2]">
+              <Image
+                src={heroUrl}
+                alt={`${brand.displayName} — brand banner`}
+                fill
+                sizes="(max-width: 768px) 100vw, 480px"
+                className="object-contain"
+                priority
+                unoptimized={heroIsExternal}
+              />
+            </div>
+          ) : (
+            // Chapter-scoped photo or legacy fallback: render as a square
+            // card with subtle border (preserves the original AIS look).
+            <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10">
+              <Image
+                src={heroUrl}
+                alt={`${brand.displayName} ${chapterName} — brand image`}
+                fill
+                sizes="(max-width: 768px) 240px, 320px"
+                className="object-contain"
+                priority
+                unoptimized={heroIsExternal}
+              />
+            </div>
+          )}
           {/* Eyebrow */}
           <p
             className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-4"

@@ -76,6 +76,30 @@ export interface BrandConfig {
   gradient: string;
 
   /**
+   * Brand-level hero banner image — the primary visual on the login page's
+   * brand panel.
+   *
+   * Resolution chain (highest precedence first):
+   *   1. Chapter DB override (`ChapterSetting.loginHero`) — admin can
+   *      upload a chapter-specific hero (e.g. a Tel Aviv skyline for the
+   *      TLV chapter, a Montreal photo for the MTL chapter).
+   *   2. `brand.heroBanner` (this field) — brand-level default, e.g.
+   *      Coma's transparent PNG banner at /brand/coma/coma-hero.png.
+   *   3. Hard-coded fallback `/images/falafel-meerkat.jpg` — only fires
+   *      when both the chapter override and the brand default are absent
+   *      (e.g. the AIS brand currently has no brand-level hero).
+   *
+   * Empty string means "no brand-level hero — fall back to the next tier".
+   * This is used by AIS, which keeps the legacy falafel-meerkat fallback
+   * until a proper AIS brand hero is produced.
+   *
+   * The image is rendered as a wide banner (aspect-[3/2]) — NOT a square.
+   * It should be a landscape transparent PNG (artwork/logo on transparent
+   * background) so it floats on the brand-colored panel without a card.
+   */
+  heroBanner: string;
+
+  /**
    * Login page eyebrow template.
    * `{chapterName}` is replaced at render time.
    */
@@ -120,6 +144,10 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     secondaryColor: "#FF005A",
     gradient:
       "conic-gradient(from 180deg at 50% 50%, #FF005A, #820A7D, #004F98, #00E6FF, #FF005A)",
+    // AIS currently has no brand-level hero PNG — falls back to the
+    // legacy /images/falafel-meerkat.jpg (the original AI Salon mark).
+    // Replace with a proper AIS brand hero when one is produced.
+    heroBanner: "",
     loginEyebrowTemplate: "{chapterName} Chapter",
     loginHeadlineTemplate:
       "The community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}.",
@@ -145,6 +173,10 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     secondaryColor: "#E84855",
     gradient:
       "conic-gradient(from 180deg at 50% 50%, #E84855, #0A1F44, #F5A623, #E84855)",
+    // Coma brand hero — transparent PNG (1536×1024, 3:2 landscape).
+    // Artwork floats directly on the navy brand panel (no card frame).
+    // Source: /upload/Coma 2 trans.png → copied to /public/brand/coma/coma-hero.png.
+    heroBanner: "/brand/coma/coma-hero.png",
     loginEyebrowTemplate: "{chapterName} Chapter",
     loginHeadlineTemplate:
       "The home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",
