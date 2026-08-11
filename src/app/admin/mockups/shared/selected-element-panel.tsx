@@ -45,7 +45,7 @@
  */
 
 import { useCallback, useState, type ReactNode } from "react";
-import { Plus, Trash2, ChevronDown, X, ImageIcon, MousePointerClick } from "lucide-react";
+import { Plus, Trash2, ChevronDown, X, ImageIcon, MousePointerClick, GripVertical } from "lucide-react";
 import type { SpeakerIntroData, ImageSlot, Speaker } from "../speaker-intro/types";
 import { GradientColorPicker } from "./gradient-color-picker";
 import { SelectedElementShell } from "./selected-element-shell";
@@ -466,11 +466,63 @@ function SpeakersFields({
     .map((sp, origIdx) => ({ sp, origIdx }))
     .sort((a, b) => a.sp.order - b.sp.order);
 
+  // === Drag-and-drop reorder state ===
+  // dragSrcIdx: the sortedIdx of the card currently being dragged (null when not dragging).
+  // dropPosition: where the drop would land if released now.
+  //   0 = before card 0, 1 = between cards 0 and 1, ..., N = after the last card.
+  //   null when not hovering a valid drop zone.
+  //
+  // Per user spec 2026-08-11: dragging the ⋮⋮ handle reorders speakers and
+  // auto-updates the #N order badge. The numeric Order input field stays so
+  // users can still type a number directly for fine control.
+  const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<number | null>(null);
+
+  /**
+   * Move a speaker from one sorted position to another by reassigning `order`
+   * fields sequentially (1, 2, 3, ...). The `data.speakers` array order is
+   * NOT changed — only `speaker.order` fields are updated. This keeps React
+   * keys (origIdx) stable so card-local state (expanded/collapsed) survives
+   * the reorder.
+   */
+  function moveSpeaker(fromSortedIdx: number, toPosition: number) {
+    // No-op: dropping on yourself, or just below yourself (the gap you vacated).
+    if (fromSortedIdx === toPosition || fromSortedIdx + 1 === toPosition) return;
+    update((d) => {
+      // Sort a COPY (containing references to the SAME Speaker objects).
+      const sorted = [...d.speakers].sort((a, b) => a.order - b.order);
+      // Splice out the dragged speaker (still the same object reference).
+      const [moved] = sorted.splice(fromSortedIdx, 1);
+      // Compute insertion index in the post-removal array. If dragging DOWN
+      // (fromSortedIdx < toPosition), the indices shift down by 1 after removal.
+      const insertIdx =
+        toPosition > fromSortedIdx ? toPosition - 1 : toPosition;
+      sorted.splice(insertIdx, 0, moved);
+      // Reassign sequential order fields on the SAME Speaker objects.
+      // The d.speakers array order is UNCHANGED — only order fields are updated,
+      // so React keys (origIdx) stay stable → expanded/collapsed state preserved.
+      sorted.forEach((s, i) => {
+        s.order = i + 1;
+      });
+    });
+  }
+
+  function handleDrop() {
+    if (dragSrcIdx !== null && dropPosition !== null) {
+      moveSpeaker(dragSrcIdx, dropPosition);
+    }
+    setDragSrcIdx(null);
+    setDropPosition(null);
+  }
+
   return (
     <div className="space-y-2">
       <p className="text-[0.62rem] text-black/55 leading-snug">
         Speaker cards — edit names, titles, photos, bios, and session times. Click{" "}
         <strong>Replace</strong> to swap a photo from the brand library.
+        <br />
+        <strong>Drag the ⋮⋮ handle</strong> to reorder speakers — the #N order
+        badge updates automatically.
       </p>
 
       {/* Grid layout controls */}
@@ -529,25 +581,82 @@ function SpeakersFields({
         </label>
       </div>
 
-      {/* Per-speaker cards */}
-      {speakersSorted.map(({ sp, origIdx }) => (
-        <SpeakerCard
-          key={`sp-${origIdx}`}
-          speaker={sp}
-          onChange={(recipe) =>
-            update((d) => {
-              const target = d.speakers[origIdx];
-              if (target) recipe(target);
-            })
-          }
-          onDelete={() =>
-            update((d) => {
-              d.speakers.splice(origIdx, 1);
-            })
-          }
-          onReplacePhoto={() => onPickImage({ kind: "speaker", index: origIdx })}
-        />
-      ))}
+      {/* === Per-speaker cards with drag-and-drop drop indicators ===
+          The wrapping div is the drop target — onDrop fires whether the user
+          drops on a card or in the gap between cards. Each card's onDragOver
+          computes the cursor's position relative to its midpoint to decide
+          whether to insert ABOVE (dropPosition = sortedIdx) or BELOW
+          (dropPosition = sortedIdx + 1). The end-of-list drop zone catches
+          drops below the last card (dropPosition = N). */}
+      <div
+        onDragOver={(e) => {
+          // Required to allow drop — without preventDefault, the browser
+          // refuses to fire the drop event.
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          handleDrop();
+        }}
+      >
+        {speakersSorted.map(({ sp, origIdx }, sortedIdx) => (
+          <div key={`sp-wrap-${origIdx}`}>
+            {/* Drop indicator above this card */}
+            <DropIndicator
+              visible={dropPosition === sortedIdx && dragSrcIdx !== null}
+            />
+            <SpeakerCard
+              key={`sp-${origIdx}`}
+              speaker={sp}
+              isDragging={dragSrcIdx === sortedIdx}
+              onDragStart={() => setDragSrcIdx(sortedIdx)}
+              onDragOverCard={(e) => {
+                // Determine top-half vs bottom-half of this card.
+                const rect = (
+                  e.currentTarget as HTMLElement
+                ).getBoundingClientRect();
+                const midY = rect.top + rect.height / 2;
+                const before = e.clientY < midY;
+                setDropPosition(before ? sortedIdx : sortedIdx + 1);
+              }}
+              onDragEnd={() => {
+                // dragend always fires on the source element — clears state
+                // even if the user dropped outside any valid target.
+                setDragSrcIdx(null);
+                setDropPosition(null);
+              }}
+              onChange={(recipe) =>
+                update((d) => {
+                  const target = d.speakers[origIdx];
+                  if (target) recipe(target);
+                })
+              }
+              onDelete={() =>
+                update((d) => {
+                  d.speakers.splice(origIdx, 1);
+                })
+              }
+              onReplacePhoto={() => onPickImage({ kind: "speaker", index: origIdx })}
+            />
+          </div>
+        ))}
+
+        {/* End-of-list drop zone — catches drops below the last card. */}
+        <div
+          className="h-3"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropPosition(speakersSorted.length);
+          }}
+        >
+          <DropIndicator
+            visible={
+              dropPosition === speakersSorted.length && dragSrcIdx !== null
+            }
+          />
+        </div>
+      </div>
 
       <button
         type="button"
@@ -572,33 +681,87 @@ function SpeakersFields({
   );
 }
 
+/**
+ * DropIndicator — thin blue line shown between speaker cards during drag-and-drop.
+ * Renders as a 0-height invisible element when not active (so it doesn't take
+ * vertical space), and animates to a 2px blue line with small vertical margins
+ * when active. Per the preview at /speaker-drag-drop-preview.html.
+ */
+function DropIndicator({ visible }: { visible: boolean }) {
+  return (
+    <div
+      aria-hidden={!visible}
+      className={`rounded-full bg-[#004F98] transition-all duration-100 ${
+        visible ? "h-0.5 opacity-100 my-1" : "h-0 opacity-0"
+      }`}
+    />
+  );
+}
+
 function SpeakerCard({
   speaker,
+  isDragging,
+  onDragStart,
+  onDragOverCard,
+  onDragEnd,
   onChange,
   onDelete,
   onReplacePhoto,
 }: {
   speaker: Speaker;
+  /** True while this card is being dragged — applies opacity + shadow. */
+  isDragging: boolean;
+  /** Fired when the user starts dragging the ⋮⋮ handle. */
+  onDragStart: () => void;
+  /** Fired while dragging over this card — parent computes drop position. */
+  onDragOverCard: (e: React.DragEvent) => void;
+  /** Fired when the drag ends (drop or cancel) — always fires on the source. */
+  onDragEnd: () => void;
   onChange: (recipe: (draft: Speaker) => void) => void;
   onDelete: () => void;
   onReplacePhoto: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded border border-black/15 bg-white overflow-hidden">
+    <div
+      className={`rounded border border-black/15 bg-white overflow-hidden transition-opacity ${
+        isDragging ? "opacity-40" : "opacity-100"
+      }`}
+      onDragOver={onDragOverCard}
+    >
       <div className="flex items-center justify-between px-2 py-1.5 bg-black/[0.02]">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
-        >
-          <ChevronDown
-            className={`h-3 w-3 text-black/60 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-          <span className="text-[0.72rem] font-bold text-black truncate">
-            #{speaker.order} · {speaker.fullName || "Untitled"}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {/* Drag handle — the only draggable element on the card.
+              The rest of the header (chevron + name) stays as a toggle button
+              so expand/collapse still works. */}
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = "move";
+              // Required for Firefox to start the drag — without setData,
+              // Firefox fires dragstart but no further events.
+              e.dataTransfer.setData("text/plain", "speaker-card");
+              onDragStart();
+            }}
+            onDragEnd={onDragEnd}
+            className="cursor-grab text-black/35 hover:text-black/60 active:cursor-grabbing touch-none flex items-center"
+            title="Drag to reorder"
+          >
+            <GripVertical className="h-3 w-3" />
           </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+          >
+            <ChevronDown
+              className={`h-3 w-3 text-black/60 transition-transform ${open ? "rotate-180" : ""}`}
+            />
+            <span className="text-[0.72rem] font-bold text-black truncate">
+              #{speaker.order} · {speaker.fullName || "Untitled"}
+            </span>
+          </button>
+        </div>
         <button
           type="button"
           onClick={onDelete}
