@@ -12,6 +12,18 @@
 /** The full form submission, stored as `submissionJson` on
  *  `ChapterOnboardingInvite`. Mirrors the DOCX onboarding form fields. */
 export type ChapterOnboardingFormData = {
+  // ─── Section 0: Brand ──────────────────────────────────────────────
+  /** Which top-level brand this chapter belongs to ("aisalon" | "coma").
+   *  Set by the Super Admin when sending the onboarding invite — chapter
+   *  leads don't choose their own brand. Defaults to "aisalon" (platform
+   *  default) for backwards compat with invites created before this
+   *  field was added.
+   *
+   *  When brand="coma", the chapter is provisioned under the Coma brand:
+   *  navy/amber palette, Coma wordmark, Coma logo, Coma email from-name,
+   *  and coma.massapro.com URLs (vs aisalon.massapro.com). */
+  brand?: "aisalon" | "coma";
+
   // ─── Section 1: Chapter Basics ─────────────────────────────────────
   chapterName: string;
   chapterSlug: string;

@@ -9,6 +9,7 @@ import {
   ASSIGNABLE_ROLES,
 } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth-guards";
+import { isBrandSlug } from "@/lib/brand/brand-config";
 
 /**
  * PATCH /api/admin/members/[id]
@@ -74,7 +75,7 @@ export async function PATCH(
   const { id } = await params;
   const existing = await db.user.findUnique({
     where: { id },
-    select: { id: true, email: true, role: true, countryId: true, chapterId: true },
+    select: { id: true, email: true, role: true, countryId: true, chapterId: true, brandSlug: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
@@ -101,6 +102,13 @@ export async function PATCH(
     // When role=CHAPTER_ORGANIZER → both countryId AND chapterId should be set
     countryId?: string | null;
     chapterId?: string | null;
+    // V7 brand allocation (Super Admin only):
+    //   - brandSlug: which top-level brand this member belongs to
+    //     ("aisalon" | "coma" | null to clear → defaults to AIS)
+    //   - When brandSlug="coma", the member sees Coma branding across the app
+    //     (navy/amber palette, Coma wordmark, Coma logo) AND the admin page
+    //     scopes its queries to Coma-tagged data only (events, members).
+    brandSlug?: string | null;
   };
 
   // ---- Role change authorization ----
@@ -284,6 +292,35 @@ export async function PATCH(
     }
   }
 
+  // ---- V7 brand allocation (Super Admin only) ----
+  // Super Admin can assign a brand (aisalon | coma) to any non-super-admin
+  // member. This controls which brand the member sees across the app:
+  //   - brandSlug="coma"  → Coma branding (navy/amber, Coma wordmark) +
+  //                         Coma-scoped admin queries (events, members)
+  //   - brandSlug=null    → platform default (AIS)
+  //
+  // Validation:
+  //   - Only accepts known slugs ("aisalon" | "coma"). Unknown slugs are
+  //     rejected with 400 (defensive — the UI only offers these two, but
+  //     the API mustn't trust the client).
+  //   - Super Admin targets are immutable (same rule as role above).
+  if (body.brandSlug !== undefined && !isSuperAdminEmail(existing.email)) {
+    if (!isSuperAdmin({ email: me.email, role: me.role })) {
+      return NextResponse.json(
+        { error: "Only a Super Admin can assign a brand to a member." },
+        { status: 403 }
+      );
+    }
+    const brandVal = body.brandSlug === "" || body.brandSlug === null ? null : body.brandSlug;
+    if (brandVal !== null && !isBrandSlug(brandVal)) {
+      return NextResponse.json(
+        { error: `Invalid brand slug: "${brandVal}". Allowed values: "aisalon", "coma".` },
+        { status: 400 }
+      );
+    }
+    data.brandSlug = brandVal;
+  }
+
   const updated = await db.user.update({
     where: { id },
     data,
@@ -311,6 +348,7 @@ export async function PATCH(
       role: updated.role,
       countryId: updated.countryId,
       chapterId: updated.chapterId,
+      brandSlug: updated.brandSlug,
       tags: updated.tags,
     },
   });

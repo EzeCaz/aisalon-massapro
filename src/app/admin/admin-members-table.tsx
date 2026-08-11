@@ -123,6 +123,10 @@ type Member = {
   chapter?: { id: string; name: string; slug: string; city: string | null } | null;
   countryId?: string | null;
   chapterId?: string | null;
+  // Brand slug (aisalon | coma | null). Super Admin can assign a brand to
+  // any member via the V7 hierarchy assignment section in the edit dialog.
+  // null = platform default (aisalon). See src/lib/brand/brand-config.ts.
+  brandSlug?: string | null;
 };
 
 type EventRow = {
@@ -914,6 +918,7 @@ function CardsView({
               <th className="text-left px-4 py-3 font-bold hidden md:table-cell">Applied for</th>
               <th className="text-left px-4 py-3 font-bold hidden lg:table-cell">Linked speaker</th>
               <th className="text-left px-4 py-3 font-bold hidden xl:table-cell">Country · Chapter</th>
+              <th className="text-left px-4 py-3 font-bold hidden xl:table-cell">Brand</th>
               <th className="text-left px-4 py-3 font-bold">Tags</th>
               <th className="text-right px-4 py-3 font-bold">Actions</th>
             </tr>
@@ -1087,6 +1092,9 @@ function CardsView({
                       ) : (
                         <span className="text-xs text-black/30 italic">Unassigned</span>
                       )}
+                    </td>
+                    <td className="px-4 py-1.5 hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
+                      <BrandBadge slug={m.brandSlug} />
                     </td>
                     <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1 max-w-[280px]">
@@ -1271,6 +1279,7 @@ function TableView({
               <th className="text-left px-3 py-3 font-bold min-w-[140px]">Onboarded at</th>
               <th className="text-left px-3 py-3 font-bold min-w-[140px]">Created at</th>
               <th className="text-left px-3 py-3 font-bold min-w-[80px]">Role</th>
+              <th className="text-left px-3 py-3 font-bold min-w-[80px]">Brand</th>
               <th className="text-left px-3 py-3 font-bold min-w-[80px]">Actions</th>
             </tr>
           </thead>
@@ -1533,6 +1542,9 @@ function TableView({
                     </span>
                   </td>
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <BrandBadge slug={m.brandSlug} />
+                  </td>
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <Button
                         size="sm"
@@ -1569,7 +1581,7 @@ function TableView({
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={20} className="px-4 py-8 text-center text-black/80 text-sm">
+                <td colSpan={21} className="px-4 py-8 text-center text-black/80 text-sm">
                   No members match your filters.
                 </td>
               </tr>
@@ -1791,6 +1803,10 @@ function EditMemberDialog({
   // Initialized from member.countryId / member.chapterId on open.
   const [memberCountryId, setMemberCountryId] = useState<string>("");
   const [memberChapterId, setMemberChapterId] = useState<string>("");
+  // Selected brandSlug for THIS member (aisalon | coma | null).
+  // Super Admin can assign a brand to any member. null = platform default (AIS).
+  // Persisted via the same PATCH endpoint as country/chapter above.
+  const [memberBrandSlug, setMemberBrandSlug] = useState<string>("");
   // List of all countries + chapters available for assignment (loaded once).
   const [assignCountries, setAssignCountries] = useState<
     { id: string; name: string; code: string; flagEmoji: string | null; slug: string; isActive: boolean }[]
@@ -1842,6 +1858,7 @@ function EditMemberDialog({
       // V7: sync country/chapter assignment state
       setMemberCountryId(member.countryId ?? "");
       setMemberChapterId(member.chapterId ?? "");
+      setMemberBrandSlug(member.brandSlug ?? "");
       // Reset credential fields whenever the member changes — the email
       // field shows the current primary email as a starting point, and
       // the password field is always blank (we never re-display an
@@ -2059,6 +2076,9 @@ function EditMemberDialog({
         // The server validates existence + country/chapter consistency.
         payload.countryId = memberCountryId || null;
         payload.chapterId = memberChapterId || null;
+        // V7: Super Admin can assign a brand to this user.
+        // Empty string = "clear brand assignment" (member becomes AIS by default).
+        payload.brandSlug = memberBrandSlug || null;
       }
       const res = await fetch(`/api/admin/members/${member.id}`, {
         method: "PATCH",
@@ -2798,6 +2818,37 @@ function EditMemberDialog({
                   )}
                 </div>
 
+                {/* Brand selector — which top-level brand this member belongs to.
+                    This is a CODE-LEVEL concept (src/lib/brand/brand-config.ts),
+                    not a DB table — the slugs are hardcoded: "aisalon" | "coma".
+                    Setting brandSlug=coma makes the member see Coma branding
+                    (navy/amber palette, Coma wordmark, Coma logo) across the
+                    entire app: dashboard, admin, login redirect, emails.
+
+                    Empty string = "platform default" (treated as AIS by
+                    resolveBrand()'s FALLBACK_DEFAULT_BRAND). Most members
+                    should remain on AIS — only assign Coma to members who
+                    belong to the Coma brand (e.g. eze@cazhype.com). */}
+                <div>
+                  <label className="block text-xs font-semibold text-black/80 mb-1 flex items-center gap-1">
+                    <Globe2 className="h-3 w-3" />
+                    Brand
+                  </label>
+                  <select
+                    value={memberBrandSlug}
+                    onChange={(e) => setMemberBrandSlug(e.target.value)}
+                    className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#820A7D]/40"
+                  >
+                    <option value="">AI Salon (platform default)</option>
+                    <option value="coma">Coma</option>
+                  </select>
+                  <p className="mt-1 text-[0.6rem] text-black/50 leading-relaxed">
+                    Controls which brand the member sees across the app — logo,
+                    colors, events list, dashboard. <strong>Coma</strong> members
+                    see only Coma-scoped content (currently empty — fresh start).
+                  </p>
+                </div>
+
                 {/* Live scope preview */}
                 <div className="rounded bg-white/60 border border-black/10 px-2.5 py-1.5">
                   <div className="text-[0.6rem] font-bold uppercase tracking-wider text-black/60 mb-0.5">
@@ -2817,6 +2868,17 @@ function EditMemberDialog({
                           : memberCountryId
                             ? `Member — tagged to ${assignCountries.find((c) => c.id === memberCountryId)?.name ?? "Unknown country"}${memberChapterId ? ` / ${assignChapters.find((c) => c.id === memberChapterId)?.name ?? ""}` : ""}`
                             : "Member — no country/chapter tag"}
+                  </div>
+                  <div className="mt-1 text-[0.65rem] text-black/60">
+                    Brand:{" "}
+                    <span className="font-semibold" style={{ color: memberBrandSlug === "coma" ? "#0A1F44" : "#004F98" }}>
+                      {memberBrandSlug === "coma" ? "Coma" : "AI Salon"}
+                    </span>
+                    {memberBrandSlug === "coma" && (
+                      <span className="ml-1 text-black/40">
+                        (sees only Coma-scoped content — currently empty)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3017,6 +3079,41 @@ function EditMemberDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BrandBadge — small pill showing which brand a member belongs to.
+// Renders the brand's primary color as the pill background + the brand's
+// display name. Falls back to "AIS" (platform default) when brandSlug
+// is null/undefined — legacy users have no brandSlug and resolve to AIS
+// via FALLBACK_DEFAULT_BRAND in src/lib/brand/brand-config.ts.
+//
+// Kept inline (not imported from brand-config) so the client bundle
+// doesn't pull the whole brand registry. The colors here are hardcoded
+// duplicates of the BRANDS table — kept in sync manually.
+// ---------------------------------------------------------------------------
+
+function BrandBadge({ slug }: { slug?: string | null }) {
+  const brandInfo = slug === "coma"
+    ? { label: "Coma", bg: "#0A1F44", fg: "#F5A623" }
+    : { label: "AI Salon", bg: "#004F98", fg: "#00E6FF" };
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[0.6rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+      style={{
+        backgroundColor: `${brandInfo.bg}15`,
+        color: brandInfo.bg,
+        border: `1px solid ${brandInfo.bg}30`,
+      }}
+      title={`Brand: ${brandInfo.label}`}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: brandInfo.bg }}
+      />
+      {brandInfo.label}
+    </span>
   );
 }
 

@@ -46,10 +46,37 @@ export default async function AdminPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin");
 
-  let me = await db.user.findUnique({
-    where: { email: session.user.email },
-    include: { tags: true, country: true, chapter: true },
-  });
+  // DEFENSIVE: wrap the initial user lookup in try-catch so a missing
+  // User.brandSlug column (if migration 20260811120000_add_user_brand_slug
+  // didn't apply to prod) doesn't crash the admin page. The retry uses
+  // the same query — Prisma's generated client always selects all scalar
+  // fields by default, so even if brandSlug is in the Prisma schema but
+  // missing from the DB, the retry will throw the same error. The catch
+  // is here for safety: if anything goes wrong, we fall back to a
+  // brandSlug-omitted select so the page can still render.
+  let me: Awaited<ReturnType<typeof db.user.findUnique>> & {
+    tags: { id: string; label: string; color: string | null }[];
+    country: { id: string; name: string; code: string; flagEmoji: string | null } | null;
+    chapter: { id: string; name: string; slug: string; city: string | null } | null;
+  } | null;
+
+  try {
+    me = await db.user.findUnique({
+      where: { email: session.user.email },
+      include: { tags: true, country: true, chapter: true },
+    });
+  } catch (err) {
+    console.warn("[admin/page] user lookup failed (likely missing brandSlug column):", (err as Error).message);
+    // Last-resort fallback: query without include (just scalar fields).
+    // We lose tags/country/chapter relations, but the page can still render
+    // and the user can at least see the admin shell.
+    const fallback = await db.user.findUnique({
+      where: { email: session.user.email },
+    });
+    me = fallback
+      ? { ...fallback, tags: [], country: null, chapter: null }
+      : null;
+  }
   if (!me) redirect("/login");
 
   // BRAND RESOLUTION: resolve the active brand from the user's persisted
@@ -124,37 +151,50 @@ export default async function AdminPage() {
     where: { archivedAt: { not: null }, ...scopeUserFilter },
   });
 
-  const events = await db.event.findMany({
-    where: scopeEventFilter,
-    orderBy: { startsAt: "desc" },
-    include: {
-      chapterRef: { select: { id: true, name: true, slug: true, country: { select: { name: true, code: true, flagEmoji: true } } } },
-      _count: { select: { images: true, speakers: true } },
-    },
-  });
+  // BRAND-SCOPED EVENTS:
+  // For Coma admins, the events list is currently empty — Coma is a fresh
+  // brand with no events yet. They see "0 events" until events are created
+  // under the Coma brand. AIS admins see all events in their scope (legacy
+  // behavior). When events get a brandSlug column in the future, this will
+  // become a real filter; for now, Coma = empty list, AIS = all in scope.
+  const events = isComa
+    ? []
+    : await db.event.findMany({
+        where: scopeEventFilter,
+        orderBy: { startsAt: "desc" },
+        include: {
+          chapterRef: { select: { id: true, name: true, slug: true, country: { select: { name: true, code: true, flagEmoji: true } } } },
+          _count: { select: { images: true, speakers: true } },
+        },
+      });
 
   // All speakers across all events in scope — for the "Link user to speaker" picker
   // V7: scope speakers by chapter — either the chapterId on Speaker rows
   // (denormalized from Event.chapterId), or fall back to filtering by
   // the events in scope.
+  // BRAND-SCOPED: Coma admins see no speakers (no events = no speakers).
   const speakerScopeChapterIds =
-    scope.kind === "global"
+    isComa
+      ? []
+      : scope.kind === "global"
       ? null
       : scope.kind === "country"
       ? (await db.chapter.findMany({ where: { countryId: scope.countryId }, select: { id: true } })).map((c) => c.id)
       : scope.kind === "chapter"
       ? [scope.chapterId]
       : [];
-  const allSpeakers = await db.speaker.findMany({
-    where: speakerScopeChapterIds === null
-      ? {}
-      : { chapterId: { in: speakerScopeChapterIds } },
-    orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
-    include: {
-      event: { select: { id: true, title: true, slug: true, startsAt: true } },
-      user: { select: { id: true, email: true } },
-    },
-  });
+  const allSpeakers = isComa
+    ? []
+    : await db.speaker.findMany({
+        where: speakerScopeChapterIds === null
+          ? {}
+          : { chapterId: { in: speakerScopeChapterIds } },
+        orderBy: [{ event: { startsAt: "desc" } }, { order: "asc" }],
+        include: {
+          event: { select: { id: true, title: true, slug: true, startsAt: true } },
+          user: { select: { id: true, email: true } },
+        },
+      });
 
   // V7: load all countries + chapters (Super Admin only — used by the
   // CountryChapterScopeFilter on the Members table).

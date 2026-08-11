@@ -40,6 +40,7 @@ import {
   AUDIENCE_OPTIONS, COMMON_TIMEZONES, COMMON_LANGUAGES,
   type ChapterOnboardingFormData,
 } from "@/lib/chapter-onboarding-types";
+import type { BrandConfig } from "@/lib/brand/brand-config";
 
 type Props = {
   token: string;
@@ -48,15 +49,25 @@ type Props = {
   prefillChapterName: string | null;
   prefillChapterSlug: string | null;
   expiresAt: Date;
+  /** Brand config — drives the form's copy + colors. Set by the server
+   *  component from the invitee's user.brandSlug. Defaults to AIS. */
+  brand: BrandConfig;
 };
 
 export function ChapterOnboardingForm({
   token, inviteeName, inviteeEmail,
   prefillChapterName, prefillChapterSlug, expiresAt,
+  brand,
 }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [data, setData] = useState<ChapterOnboardingFormData>({
+    // Brand is set at invite time by the Super Admin (via the user's
+    // brandSlug). The chapter lead can see it (read-only) but cannot
+    // change it — brand is a Super Admin decision, not a chapter lead
+    // decision. Persisted in submissionJson so /admin/chapter-onboarding
+    // knows which brand to provision the chapter under.
+    brand: brand.slug as "aisalon" | "coma",
     chapterName: prefillChapterName ?? "",
     chapterSlug: prefillChapterSlug ?? "",
     country: "",
@@ -131,7 +142,7 @@ export function ChapterOnboardingForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md bg-slate-50 border border-slate-200 p-4 text-sm text-slate-700">
-            The global AI Salon team will review your submission within 2
+            The global {brand.displayName} team will review your submission within 2
             business days. We&apos;ll reach out to{" "}
             <span className="font-medium">{inviteeEmail}</span> with next steps
             and your admin access.
@@ -139,8 +150,11 @@ export function ChapterOnboardingForm({
           <p className="text-xs text-slate-500">
             Need to make changes? Just reply to the original onboarding email,
             or reach us at{" "}
-            <a href="mailto:aisalon@massapro.com" className="text-slate-700 underline">
-              aisalon@massapro.com
+            <a
+              href={brand.slug === "coma" ? "mailto:team@coma.massapro.com" : "mailto:aisalon@massapro.com"}
+              className="text-slate-700 underline"
+            >
+              {brand.slug === "coma" ? "team@coma.massapro.com" : "aisalon@massapro.com"}
             </a>.
           </p>
         </CardContent>
@@ -152,22 +166,58 @@ export function ChapterOnboardingForm({
     year: "numeric", month: "long", day: "numeric",
   });
 
+  // Brand-aware hero copy. Coma frames this as "operating system for
+  // communities"; AIS frames it as "AI builders community".
+  const heroHeadline = brand.slug === "coma"
+    ? "Coma Chapter Onboarding"
+    : "Chapter Onboarding Form";
+  const heroSubtitle = brand.slug === "coma"
+    ? `Welcome to the Coma platform! Fill out this form once and we'll provision your chapter — landing page, login page, brand assets, email templates, everything. Coma is the operating system for communities — your chapter will run on the same stack that powers every other Coma chapter worldwide.`
+    : `Welcome to the AI Salon global community! Fill out this form once and we'll provision your chapter — landing page, login page, brand assets, email templates, everything.`;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Hero */}
       <div className="text-center space-y-3">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-          Chapter Onboarding Form
+          {heroHeadline}
         </h1>
         <p className="text-base text-slate-600 max-w-xl mx-auto">
-          Welcome to the AI Salon global community! Fill out this form once and
-          we&apos;ll provision your chapter — landing page, login page, brand
-          assets, email templates, everything.
+          {heroSubtitle}
         </p>
         <p className="text-xs text-slate-400">
           For {inviteeName || inviteeEmail} · ⏱️ ~10–15 minutes · 🔒 Private
           to you + the global team · Link expires {expiresLabel}
         </p>
+      </div>
+
+      {/* Brand info banner — read-only. Tells the chapter lead which brand
+          their chapter will be provisioned under. Set by the Super Admin
+          at invite time; the lead can see it but can't change it. */}
+      <div
+        className="rounded-lg border p-4 flex items-start gap-3"
+        style={{
+          borderColor: `${brand.primaryColor}30`,
+          backgroundColor: `${brand.primaryColor}08`,
+        }}
+      >
+        <div
+          aria-hidden
+          className="w-8 h-8 rounded-lg flex-shrink-0"
+          style={{ background: brand.gradient }}
+        />
+        <div className="flex-1">
+          <div className="text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color: brand.primaryColor }}>
+            Brand
+          </div>
+          <div className="text-sm font-semibold text-slate-900">
+            {brand.displayName}
+          </div>
+          <div className="text-xs text-slate-600 mt-0.5">
+            {brand.tagline}. Your chapter will be provisioned under this brand.
+            {brand.slug === "coma" && " Coma chapters use the navy/amber palette and Coma logo across all member-facing pages."}
+          </div>
+        </div>
       </div>
 
       {/* ─── Section 1: Chapter Basics ─────────────────────────────────── */}
