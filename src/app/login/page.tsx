@@ -155,7 +155,7 @@ export default async function LoginPage({
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
   // Hero image resolution chain — BRAND IDENTITY TAKES PRECEDENCE:
   //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
-  //      banner at /brand/coma/coma-hero.png. Applied uniformly across
+  //      banner (hosted on Vercel Blob). Applied uniformly across
   //      all chapters of that brand (a Coma user in Montreal sees the
   //      same Coma banner as a Coma user in Tel Aviv).
   //   2. Chapter DB override (`ChapterSetting.loginHero`) — admin can

@@ -176,10 +176,13 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     secondaryColor: "#E84855",
     gradient:
       "conic-gradient(from 180deg at 50% 50%, #E84855, #0A1F44, #F5A623, #E84855)",
-    // Coma brand hero — transparent PNG (1536×1024, 3:2 landscape).
+    // Coma brand hero — transparent PNG hosted on Vercel Blob storage.
     // Artwork floats directly on the navy brand panel (no card frame).
-    // Source: /upload/Coma 2 trans.png → copied to /public/brand/coma/coma-hero.png.
-    heroBanner: "/brand/coma/coma-hero.png",
+    // Used in three places: (1) inline brand mark in app-header.tsx next
+    // to the "coma" wordmark, (2) large hero banner on the admin dashboard,
+    // (3) hero image on the login page left panel.
+    heroBanner:
+      "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1786481988015-r315qt.png",
     loginEyebrowTemplate: "{chapterName} Chapter",
     loginHeadlineTemplate:
       "The home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",

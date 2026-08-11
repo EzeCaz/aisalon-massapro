@@ -159,33 +159,41 @@ export async function AppHeader() {
           <Link href="/events" className="flex items-center gap-2">
             <span className="inline-flex flex-col items-start leading-none text-black text-[1.05rem]">
               <span className="inline-flex items-end">
-                <Image
-                  src={
+                {(() => {
+                  // Resolve the actual image source: Coma uses brand.heroBanner
+                  // (now an external Vercel Blob URL); AIS uses the chapter-scoped
+                  // meerkat mark (loginHero) or the hardcoded falafel-meerkat.
+                  const headerImgSrc =
                     isComa && brand.heroBanner
                       ? brand.heroBanner
-                      : meerkatSrc || "/images/falafel-meerkat.jpg"
-                  }
-                  alt={
-                    isComa
-                      ? `${brand.displayName} brand mark`
-                      : chapterLabel
-                        ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat`
-                        : "AI Salon Falafel Meerkat"
-                  }
-                  width={624}
-                  height={1686}
-                  className="object-contain align-middle mr-[0.2em]"
-                  style={{
-                    color: "transparent",
-                    height: isComa ? "2.2em" : "1.5em",
-                    width: "auto",
-                    maxWidth: "100%",
-                    display: "inline-block",
-                    verticalAlign: "middle",
-                  }}
-                  priority
-                  unoptimized={(meerkatSrc || "").startsWith("http")}
-                />
+                      : meerkatSrc || "/images/falafel-meerkat.jpg";
+                  const headerImgIsExternal = headerImgSrc.startsWith("http");
+                  return (
+                    <Image
+                      src={headerImgSrc}
+                      alt={
+                        isComa
+                          ? `${brand.displayName} brand mark`
+                          : chapterLabel
+                            ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat`
+                            : "AI Salon Falafel Meerkat"
+                      }
+                      width={624}
+                      height={1686}
+                      className="object-contain align-middle mr-[0.2em]"
+                      style={{
+                        color: "transparent",
+                        height: isComa ? "2.2em" : "1.5em",
+                        width: "auto",
+                        maxWidth: "100%",
+                        display: "inline-block",
+                        verticalAlign: "middle",
+                      }}
+                      priority
+                      unoptimized={headerImgIsExternal}
+                    />
+                  );
+                })()}
                 <span
                   className="text-[1.6em] font-extrabold tracking-tight lowercase"
                   style={isComa ? { color: brand.primaryColor } : undefined}
