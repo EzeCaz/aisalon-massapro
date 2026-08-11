@@ -73,11 +73,17 @@ export async function generateMetadata({
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
   // Hero image resolution chain (per BrandConfig.heroBanner doc):
-  //   1. Chapter DB override (`ChapterSetting.loginBanner`)
-  //   2. Brand-level hero (`brand.heroBanner`)
-  //   3. Hard-coded fallback
+  // BRAND IDENTITY TAKES PRECEDENCE — the brand-level hero banner is the
+  // canonical visual for the brand, applied uniformly across all chapters
+  // of that brand (a Coma user in Montreal sees the same Coma banner as a
+  // Coma user in Tel Aviv). Chapter DB overrides only kick in when the
+  // brand has no heroBanner (e.g. AIS today, which still uses per-chapter
+  // photos until a proper AIS brand hero is produced).
+  //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
+  //   2. Chapter DB override (`ChapterSetting.loginBanner`) — AIS only
+  //   3. Hard-coded fallback `/images/falafel-meerkat.jpg`
   const bannerUrl =
-    settings.loginBanner || brand.heroBanner || "/images/falafel-meerkat.jpg";
+    brand.heroBanner || settings.loginBanner || "/images/falafel-meerkat.jpg";
 
   // Look up the chapter name for the metadata title.
   let chapterName = "Tel Aviv";
@@ -147,15 +153,18 @@ export default async function LoginPage({
   // Load effective brand images — chapter-scoped overrides take
   // precedence when chapterSlug is present.
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
-  // Hero image resolution chain (per BrandConfig.heroBanner doc):
-  //   1. Chapter DB override (`ChapterSetting.loginHero`) — admin can
+  // Hero image resolution chain — BRAND IDENTITY TAKES PRECEDENCE:
+  //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
+  //      banner at /brand/coma/coma-hero.png. Applied uniformly across
+  //      all chapters of that brand (a Coma user in Montreal sees the
+  //      same Coma banner as a Coma user in Tel Aviv).
+  //   2. Chapter DB override (`ChapterSetting.loginHero`) — admin can
   //      upload a chapter-specific hero photo (e.g. a Tel Aviv skyline).
-  //   2. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
-  //      banner at /brand/coma/coma-hero.png.
+  //      Only kicks in when the brand has no heroBanner (e.g. AIS today).
   //   3. Hard-coded fallback `/images/falafel-meerkat.jpg` — legacy AIS
   //      mark, only fires when both tiers above are empty.
   const heroUrl =
-    settings.loginHero || brand.heroBanner || "/images/falafel-meerkat.jpg";
+    brand.heroBanner || settings.loginHero || "/images/falafel-meerkat.jpg";
   // The mark in the logo uses the admin-selected loginBanner brand
   // asset (falls back to the hardcoded falafel-meerkat.jpg if not set).
   const markUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
@@ -164,8 +173,9 @@ export default async function LoginPage({
   const heroIsExternal = heroUrl.startsWith("http");
   // Is this brand-level hero a transparent PNG that floats on the panel
   // (Coma), or a opaque photo that needs a card frame (AIS legacy)?
-  // We detect by checking if the hero resolves to a brand-level asset.
-  const heroIsBrandBanner = Boolean(brand.heroBanner) && !settings.loginHero;
+  // True whenever the brand declares a heroBanner — chapter overrides
+  // cannot un-brand the page once a brand hero is set in code.
+  const heroIsBrandBanner = Boolean(brand.heroBanner);
 
   const callbackUrl = callbackParam;
 

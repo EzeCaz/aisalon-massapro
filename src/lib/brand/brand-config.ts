@@ -80,14 +80,17 @@ export interface BrandConfig {
    * brand panel.
    *
    * Resolution chain (highest precedence first):
-   *   1. Chapter DB override (`ChapterSetting.loginHero`) — admin can
-   *      upload a chapter-specific hero (e.g. a Tel Aviv skyline for the
-   *      TLV chapter, a Montreal photo for the MTL chapter).
-   *   2. `brand.heroBanner` (this field) — brand-level default, e.g.
-   *      Coma's transparent PNG banner at /brand/coma/coma-hero.png.
+   *   1. `brand.heroBanner` (this field) — brand-level canonical visual.
+   *      Applied uniformly across ALL chapters of that brand (a Coma user
+   *      in Montreal sees the same Coma banner as a Coma user in Tel Aviv).
+   *      This is the whole point of brand identity: one consistent visual
+   *      per brand, regardless of chapter.
+   *   2. Chapter DB override (`ChapterSetting.loginHero`) — admin can
+   *      upload a chapter-specific hero photo. Only kicks in when the
+   *      brand has no heroBanner (e.g. AIS today, which still uses
+   *      per-chapter photos until a proper AIS brand hero is produced).
    *   3. Hard-coded fallback `/images/falafel-meerkat.jpg` — only fires
-   *      when both the chapter override and the brand default are absent
-   *      (e.g. the AIS brand currently has no brand-level hero).
+   *      when both the brand default and the chapter override are absent.
    *
    * Empty string means "no brand-level hero — fall back to the next tier".
    * This is used by AIS, which keeps the legacy falafel-meerkat fallback
