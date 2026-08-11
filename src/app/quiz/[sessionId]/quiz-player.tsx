@@ -93,9 +93,56 @@ interface LeaderboardParticipant {
   isPodium: boolean;
 }
 
+/**
+ * Brand context passed from the server page.
+ *
+ * The QuizPlayer is a client component — BrandConfig isn't directly
+ * serializable because it has functions in some paths, so the server
+ * page extracts just the rendering-relevant fields. Defaults to AIS
+ * pink when not provided (preserves backwards compatibility for any
+ * other caller that doesn't pass a brand).
+ */
+interface QuizBrand {
+  slug: string;
+  displayName: string;
+  primaryColor: string;
+  accentColor: string;
+  secondaryColor: string;
+}
+
 interface Props {
   initialSession: SessionInfo;
   user: UserInfo;
+  brand?: QuizBrand;
+}
+
+/**
+ * Default brand (AIS) used when the page doesn't pass a brand prop.
+ * Lets the player keep working if a future caller forgets to pass it.
+ */
+const DEFAULT_BRAND: QuizBrand = {
+  slug: "aisalon",
+  displayName: "AI Salon",
+  primaryColor: "004F98".padStart(7, "#"),
+  accentColor: "#FF005A",
+  secondaryColor: "#00E6FF",
+};
+
+/**
+ * Convert a #RRGGBB hex color to an `r, g, b` string for use in CSS
+ * `rgba()` calls. Returns "255, 0, 90" for the AIS pink default.
+ * Used to populate the --brand-accent-rgb CSS variable that lets us
+ * write Tailwind classes like `bg-[rgba(var(--brand-accent-rgb),0.05)]`
+ * which preserve the soft tint look that the original `bg-[#FF005A]/5`
+ * provided.
+ */
+function hexToRgbTriplet(hex: string): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return "255, 0, 90";
+  return `${r}, ${g}, ${b}`;
 }
 
 // Option colors — Kahoot-style
@@ -107,7 +154,18 @@ const OPTION_STYLES = [
 ];
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
-export function QuizPlayer({ initialSession, user }: Props) {
+export function QuizPlayer({ initialSession, user, brand = DEFAULT_BRAND }: Props) {
+  // CSS variables for brand accent color. Set on the wrapper div so
+  // children can reference via Tailwind arbitrary value classes:
+  //   - text-[var(--brand-accent)]              → solid accent text
+  //   - bg-[rgba(var(--brand-accent-rgb),0.05)]  → 5% tint background
+  //   - border-[rgba(var(--brand-accent-rgb),0.2)] → 20% tint border
+  // Defaults to AIS pink (#FF005A) when no brand is passed.
+  const accentRgb = hexToRgbTriplet(brand.accentColor);
+  const brandStyle = {
+    ["--brand-accent" as string]: brand.accentColor,
+    ["--brand-accent-rgb" as string]: accentRgb,
+  } as React.CSSProperties;
   const { toast } = useToast();
   const [session, setSession] = useState<SessionInfo>(initialSession);
   const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestion | null>(null);
@@ -348,12 +406,15 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-white to-gray-50">
+    <div
+      className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-white to-gray-50"
+      style={brandStyle}
+    >
       <main className="mx-auto max-w-5xl px-4 py-6 pb-24">
         {/* Header */}
         <div className="max-w-2xl mx-auto text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-1">
-            <Brain className="h-6 w-6 text-[#FF005A]" />
+            <Brain className="h-6 w-6 text-[var(--brand-accent)]" />
             <h1 className="text-xl font-bold">{session.title}</h1>
           </div>
           <div className="flex items-center justify-center gap-2 text-xs">
@@ -391,7 +452,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
 
         {/* My stats (if joined) */}
         {hasJoined && (
-          <Card className="mb-4 max-w-2xl mx-auto bg-gradient-to-br from-[#FF005A]/5 to-transparent border-[#FF005A]/20">
+          <Card className="mb-4 max-w-2xl mx-auto bg-gradient-to-br from-[rgba(var(--brand-accent-rgb),0.05)] to-transparent border-[rgba(var(--brand-accent-rgb),0.2)]">
             <CardContent className="p-4">
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
@@ -432,9 +493,9 @@ export function QuizPlayer({ initialSession, user }: Props) {
             session.status === "LIVE" ||
             session.status === "PAUSED" ||
             session.status === "BETWEEN") && (
-            <Card className="max-w-2xl mx-auto text-center border-[#FF005A]/30 bg-[#FF005A]/5">
+            <Card className="max-w-2xl mx-auto text-center border-[rgba(var(--brand-accent-rgb),0.3)] bg-[rgba(var(--brand-accent-rgb),0.05)]">
               <CardContent className="py-8">
-                <Radio className="h-10 w-10 mx-auto text-[#FF005A] mb-3 animate-pulse" />
+                <Radio className="h-10 w-10 mx-auto text-[var(--brand-accent)] mb-3 animate-pulse" />
                 <h2 className="text-lg font-semibold mb-1">
                   {session.status === "LIVE"
                     ? "Quiz is live — join now!"
@@ -453,7 +514,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                   size="lg"
                   onClick={handleJoin}
                   disabled={joining}
-                  className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+                  className="bg-[var(--brand-accent)] hover:opacity-90 text-white"
                 >
                   {joining ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -470,7 +531,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
         {session.status === "DRAFT" && !hasJoined && (
           <Card className="max-w-2xl mx-auto text-center">
             <CardContent className="py-12">
-              <Radio className="h-12 w-12 mx-auto text-[#FF005A] mb-3 animate-pulse" />
+              <Radio className="h-12 w-12 mx-auto text-[var(--brand-accent)] mb-3 animate-pulse" />
               <h2 className="text-lg font-semibold mb-1">
                 Waiting for host
               </h2>
@@ -486,7 +547,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
         {showWaiting && hasJoined && (
           <Card className="max-w-2xl mx-auto text-center">
             <CardContent className="py-12">
-              <Sparkles className="h-10 w-10 mx-auto text-[#FF005A] mb-3" />
+              <Sparkles className="h-10 w-10 mx-auto text-[var(--brand-accent)] mb-3" />
               <h2 className="text-lg font-semibold mb-1">
                 You&apos;re in!
               </h2>
@@ -698,7 +759,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
             <div className="space-y-3 lg:sticky lg:top-4">
               {/* My rank hero card */}
               {myRankInLeaderboard && (
-                <Card className="bg-gradient-to-br from-[#FF005A]/8 to-transparent border-[#FF005A]/30">
+                <Card className="bg-gradient-to-br from-[rgba(var(--brand-accent-rgb),0.08)] to-transparent border-[rgba(var(--brand-accent-rgb),0.3)]">
                   <CardContent className="p-4 text-center">
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
                       Your position
@@ -711,7 +772,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                         / {leaderboard.length}
                       </span>
                     </div>
-                    <p className="text-sm font-semibold mt-1 text-[#FF005A]">
+                    <p className="text-sm font-semibold mt-1 text-[var(--brand-accent)]">
                       {myRankInLeaderboard.totalScore.toLocaleString()} pts
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -743,7 +804,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                           key={p.id}
                           className={`flex items-center gap-2 rounded-md p-1.5 ${
                             isMe
-                              ? "bg-[#FF005A]/10 border border-[#FF005A]/30"
+                              ? "bg-[rgba(var(--brand-accent-rgb),0.1)] border border-[rgba(var(--brand-accent-rgb),0.3)]"
                               : p.isPodium
                               ? "bg-amber-50"
                               : "hover:bg-gray-50"
@@ -759,7 +820,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                               <span className="text-xs font-medium truncate">
                                 {p.displayName}
                                 {isMe && (
-                                  <span className="text-[10px] text-[#FF005A] ml-1">(you)</span>
+                                  <span className="text-[10px] text-[var(--brand-accent)] ml-1">(you)</span>
                                 )}
                               </span>
                             </div>
@@ -798,7 +859,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                     <span className="text-xs text-muted-foreground">
                       of {leaderboard.length} players
                     </span>
-                    <span className="text-sm font-semibold mt-1 text-[#FF005A]">
+                    <span className="text-sm font-semibold mt-1 text-[var(--brand-accent)]">
                       {myRankInLeaderboard.totalScore.toLocaleString()} pts
                     </span>
                   </div>
@@ -819,7 +880,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                     key={p.id}
                     className={`flex items-center gap-3 rounded-md p-2 ${
                       p.userId === user.id
-                        ? "bg-[#FF005A]/5 border border-[#FF005A]/20"
+                        ? "bg-[rgba(var(--brand-accent-rgb),0.05)] border border-[rgba(var(--brand-accent-rgb),0.2)]"
                         : p.isPodium
                         ? "bg-amber-50"
                         : "hover:bg-gray-50"
@@ -833,7 +894,7 @@ export function QuizPlayer({ initialSession, user }: Props) {
                         <span className="text-sm font-medium truncate">
                           {p.displayName}
                           {p.userId === user.id && (
-                            <span className="text-[10px] text-[#FF005A] ml-1">(you)</span>
+                            <span className="text-[10px] text-[var(--brand-accent)] ml-1">(you)</span>
                           )}
                         </span>
                       </div>

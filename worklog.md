@@ -14026,3 +14026,54 @@ Stage Summary:
 - All code changes are backwards-compatible: legacy AIS users (brandSlug=null) fall back to the AIS brand via getBrandConfig(me.brandSlug ?? "aisalon").
 - TypeScript verified: no new errors introduced by these changes (pre-existing recharts type errors in non-member-dashboard.tsx and toggleable-chart-card.tsx are unrelated).
 - Deployment note: a new Vercel deployment is required for all changes to take effect on production (the current dpl_8WEUWwBkDnopiv5s5wUmiCp75rh2 deployment predates these changes).
+
+---
+Task ID: quiz-brand-fix
+Agent: main
+Task: Fix "Not working aisalon.massapro.com/quiz?brand=coma" — the /quiz URL was returning 404 because no /quiz/page.tsx existed (only /quiz/[sessionId]/page.tsx), and even /quiz/[sessionId]?brand=coma was broken for branding (hardcoded "AI Salon" metadata, stripped ?brand= on login redirect, hardcoded AIS pink #FF005A in the player UI).
+
+Work Log:
+- Diagnosed the issue by mapping the route tree:
+  * /quiz/[sessionId]/page.tsx existed (requires a sessionId segment)
+  * /quiz/page.tsx did NOT exist → Next.js App Router returned 404 for /quiz (no sessionId)
+  * The ?brand=coma query param was irrelevant because the route didn't match
+- Created /home/z/my-project/src/app/quiz/page.tsx — a top-level quiz index page that:
+  * Reads ?brand= from the URL search params
+  * Resolves brand via the standard 4-layer chain (URL → host → env → default) using resolveBrand()
+  * Redirects to /events?brand=<resolved-slug> so a Coma visitor stays in the Coma experience
+  * Rationale: members don't browse quizzes from a list — they reach a quiz via an event's Quiz tab which already links to /quiz/<sessionId>. /quiz (no sessionId) has no natural member-facing content, so redirecting to /events (the canonical entry point for finding quizzes) is the cleanest fix.
+- Updated /home/z/my-project/src/app/quiz/[sessionId]/page.tsx to be brand-aware:
+  * Added generateMetadata() that resolves brand from URL + host and uses brand.displayName in the title (was hardcoded "Flourishing Quiz — AI Salon", now "Flourishing Quiz — Coma" for Coma visitors)
+  * Page now accepts searchParams and resolves brand via resolveBrand()
+  * Login redirect preserves ?brand= AND the exact quiz URL: /login?brand=<slug>&callbackUrl=/quiz/<id>?brand=<slug> — so a logged-out Coma visitor signs in and lands back on the Coma-branded quiz
+  * Other redirects (user not found, quiz not found) also preserve ?brand=
+  * Passes the resolved brand config (slug, displayName, primaryColor, accentColor, secondaryColor) as a `brand` prop to <QuizPlayer>
+- Refactored /home/z/my-project/src/app/quiz/[sessionId]/quiz-player.tsx to be brand-aware:
+  * Added QuizBrand interface + optional brand prop on QuizPlayer
+  * Added DEFAULT_BRAND constant (AIS pink #FF005A) for backwards compatibility if brand prop not passed
+  * Added hexToRgbTriplet() helper that converts #RRGGBB → "r, g, b" string
+  * Added brandStyle object that sets two CSS variables on the wrapper div:
+    - --brand-accent (solid hex, e.g. #F5A623 for Coma)
+    - --brand-accent-rgb (triplet string, e.g. "245, 166, 35" for Coma)
+  * Replaced every hardcoded #FF005A reference in className strings with CSS variable references:
+    - text-[#FF005A] → text-[var(--brand-accent)]
+    - bg-[#FF005A]/5 → bg-[rgba(var(--brand-accent-rgb),0.05)]
+    - border-[#FF005A]/20 → border-[rgba(var(--brand-accent-rgb),0.2)]
+    - bg-[#FF005A]/8 → bg-[rgba(var(--brand-accent-rgb),0.08)]
+    - border-[#FF005A]/30 → border-[rgba(var(--brand-accent-rgb),0.3)]
+    - bg-[#FF005A]/10 → bg-[rgba(var(--brand-accent-rgb),0.1)]
+    - bg-[#FF005A] (solid button) → bg-[var(--brand-accent)] with hover:opacity-90
+  * Affected UI elements now use brand accent color: Brain icon, My-stats card, Join button, "waiting for host" radio, "You're in!" sparkles, my-rank hero card, leaderboard "you" labels, leaderboard row highlights, final-leaderboard rank card
+  * Option button colors (Kahoot-style rose/amber/sky/emerald) intentionally NOT changed — these are gameplay-distinct colors, not brand colors
+- TypeScript verification: `npx tsc --noEmit` produces 231 errors project-wide (all pre-existing in unrelated files: image-edit skill, stock-analysis skill, recharts types in dashboard). Zero errors in any quiz file or any brand library file.
+
+Stage Summary:
+- /quiz (no sessionId) now redirects to /events?brand=<slug> instead of 404
+- /quiz/[sessionId]?brand=coma now renders with Coma branding:
+  * Page metadata: "Flourishing Quiz — Coma" (was hardcoded "Flourishing Quiz — AI Salon")
+  * Login redirect preserves ?brand=coma so post-login the user lands back on the Coma-branded quiz
+  * QuizPlayer UI uses Coma amber (#F5A623) for the Brain icon, Join button, my-rank card, leaderboard "you" highlights, and my-stats card border (was hardcoded AIS pink #FF005A)
+- /quiz/[sessionId] on aisalon.massapro.com (no ?brand=) still renders AIS pink — backwards compatible
+- /quiz/[sessionId] on coma.massapro.com (host-based) renders Coma amber — host chain still works
+- All changes are backwards compatible: QuizPlayer.brand prop is optional, defaults to AIS
+- To deploy: push to Vercel — the redirect on /quiz/page.tsx will take effect on the next build, and the brand-aware /quiz/[sessionId] will start rendering Coma colors for ?brand=coma visitors immediately
