@@ -4,10 +4,11 @@ import { sendPasswordEmail, emailConfigured } from "@/lib/email";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { generateUtmUid, attributeSignup, UTM_COOKIE_NAME } from "@/lib/utm";
+import { isBrandSlug } from "@/lib/brand/brand-config";
 
 /**
  * POST /api/auth/signup
- * Body: { email, name? }
+ * Body: { email, name?, chapterSlug?, brandSlug? }
  *
  * - Validates email format + name.
  * - If user already exists AND has a passwordHash, resets the password
@@ -19,12 +20,31 @@ import { generateUtmUid, attributeSignup, UTM_COOKIE_NAME } from "@/lib/utm";
  *
  * The plaintext password is NEVER stored — only the bcrypt hash.
  *
+ * BRAND CONTEXT (added 2026-08-11):
+ *   - `brandSlug` is forwarded by the brand-aware login form whenever
+ *     the user signed up via a brand-specific URL (e.g. /login?brand=coma
+ *     or coma.massapro.com/login). When present, we stamp it on the User
+ *     row so the brand follows the user across every page (dashboard,
+ *     admin, onboarding, emails) — not just the login page.
+ *   - For existing users, we DON'T overwrite brandSlug if they already
+ *     have one (an admin may have set it deliberately). We only set it
+ *     when their brandSlug is null (legacy user, treating them as the
+ *     default "aisalon" brand up to now).
+ *   - The brandSlug is also forwarded to `sendPasswordEmail` so the
+ *     transactional email renders with the correct brand wordmark,
+ *     colors, and copy — instead of hardcoding "AI Salon Tel Aviv".
+ *
  * All errors are caught and returned as JSON so the client can show a
  * meaningful message instead of "Could not reach the server".
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { email?: unknown; name?: unknown; chapterSlug?: unknown };
+    let body: {
+      email?: unknown;
+      name?: unknown;
+      chapterSlug?: unknown;
+      brandSlug?: unknown;
+    };
     try {
       body = await req.json();
     } catch {
@@ -34,6 +54,12 @@ export async function POST(req: NextRequest) {
     const email = (body.email as string | undefined)?.trim().toLowerCase();
     const name = (body.name as string | undefined)?.trim();
     const chapterSlug = (body.chapterSlug as string | undefined)?.trim().toLowerCase() || null;
+    // Validate brandSlug against the code-level registry. Unknown slugs
+    // are silently dropped (treated as "no brand specified") rather than
+    // rejected — we don't want to block signup just because a stale URL
+    // has an invalid ?brand= param.
+    const rawBrandSlug = (body.brandSlug as string | undefined)?.trim().toLowerCase() || null;
+    const brandSlug = rawBrandSlug && isBrandSlug(rawBrandSlug) ? rawBrandSlug : null;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
@@ -90,14 +116,20 @@ export async function POST(req: NextRequest) {
     let userExisted = false;
     let userHasPassword = false;
     let displayName = name;
+    // Hoist the existing user's brandSlug out of the try block so we can
+    // forward it to sendPasswordEmail below (for the "forgot password"
+    // path where the user has no brandSlug in the request body but
+    // already has one persisted on their row).
+    let existingBrandSlug: string | null = null;
 
     try {
       const existing = await db.user.findUnique({
         where: { email },
-        select: { id: true, passwordHash: true, countryId: true, chapterId: true, utmUid: true },
+        select: { id: true, passwordHash: true, countryId: true, chapterId: true, utmUid: true, brandSlug: true },
       });
       userExisted = !!existing;
       userHasPassword = !!existing?.passwordHash;
+      existingBrandSlug = existing?.brandSlug ?? null;
 
       // ----------------------------------------------------------------------
       // STEP 1: ALWAYS persist the new passwordHash for existing users.
@@ -119,13 +151,23 @@ export async function POST(req: NextRequest) {
         // For existing users signing up via a chapter URL: if they don't
         // already have a chapter scope, backfill it now. We DON'T overwrite
         // an existing scope (admin may have manually assigned them).
-        const updateData: { passwordHash: string; name: string; countryId?: string; chapterId?: string } = {
+        // Same logic for brandSlug: backfill when null, never overwrite.
+        const updateData: {
+          passwordHash: string;
+          name: string;
+          countryId?: string;
+          chapterId?: string;
+          brandSlug?: string;
+        } = {
           passwordHash,
           name: displayName,
         };
         if (chapterScope && !existing.countryId && !existing.chapterId) {
           updateData.countryId = chapterScope.countryId;
           updateData.chapterId = chapterScope.chapterId;
+        }
+        if (brandSlug && !existing.brandSlug) {
+          updateData.brandSlug = brandSlug;
         }
         await db.user.update({
           where: { id: existing.id },
@@ -135,6 +177,8 @@ export async function POST(req: NextRequest) {
         // Brand-new user — allocate utmUid with collision retry, then create.
         // V7: if chapterScope is set (user arrived via /c/[chapterSlug]),
         // tag them with that chapter's countryId + chapterId at creation.
+        // Brand: stamp brandSlug at creation so it's never null for new users
+        // who explicitly signed up under a brand-specific URL.
         let utmUid: string | undefined;
         for (let i = 0; i < 5; i++) {
           utmUid = generateUtmUid();
@@ -152,6 +196,7 @@ export async function POST(req: NextRequest) {
                       chapterId: chapterScope.chapterId,
                     }
                   : {}),
+                ...(brandSlug ? { brandSlug } : {}),
               },
             });
             break;
@@ -180,6 +225,7 @@ export async function POST(req: NextRequest) {
                     chapterId: chapterScope.chapterId,
                   }
                 : {}),
+              ...(brandSlug ? { brandSlug } : {}),
             },
           });
         }
@@ -270,6 +316,12 @@ export async function POST(req: NextRequest) {
       password,
       siteUrl,
       chapterName: chapterScope?.chapterName,
+      // Resolve the effective brand slug: prefer the one explicitly passed
+      // in the request body; fall back to the user's persisted brandSlug
+      // (for existing users who signed up under a brand previously).
+      // This ensures the password email is branded correctly even on a
+      // "forgot password" re-send from a non-brand-aware context.
+      brandSlug: brandSlug || existingBrandSlug || undefined,
     });
     if (!result.ok) {
       return NextResponse.json(

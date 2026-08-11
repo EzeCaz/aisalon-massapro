@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { isSuperAdminEmail, normalizeRole, ROLES, type Role } from "@/lib/permissions";
 import { generateUtmUid } from "@/lib/utm";
+import { isBrandSlug, type BrandSlug } from "@/lib/brand/brand-config";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "eze@massapro.com").toLowerCase();
 
@@ -120,6 +121,26 @@ export const authOptions: NextAuthOptions = {
       try {
         const lowerEmail = user.email.toLowerCase();
 
+        // Read the brand-slug cookie (set by the brand-aware login form
+        // before OAuth redirect). This is how the brand context survives
+        // the Google OAuth round-trip — Google's redirect doesn't let us
+        // pass arbitrary body params, so we stash the brand in a short-
+        // lived cookie and read it here. Valid for ~10 minutes (long
+        // enough for OAuth, short enough to be safe).
+        let signupBrandSlug: BrandSlug | null = null;
+        if (typeof document === "undefined") {
+          try {
+            const { cookies } = await import("next/headers");
+            const cookieStore = await cookies();
+            const rawBrand = cookieStore.get("ais_signup_brand")?.value;
+            if (rawBrand && isBrandSlug(rawBrand)) {
+              signupBrandSlug = rawBrand;
+            }
+          } catch {
+            // Non-fatal — cookie read failure shouldn't block sign-in.
+          }
+        }
+
         // 1. Direct lookup by primary email
         let existing = await db.user.findUnique({ where: { email: lowerEmail } });
 
@@ -154,6 +175,9 @@ export const authOptions: NextAuthOptions = {
                   image: user.image || null,
                   role,
                   utmUid,
+                  // Stamp the brand slug at creation so it's never null
+                  // for users who explicitly signed up under a brand URL.
+                  ...(signupBrandSlug ? { brandSlug: signupBrandSlug } : {}),
                 },
               });
               break;
@@ -178,6 +202,7 @@ export const authOptions: NextAuthOptions = {
                 name: user.name || null,
                 image: user.image || null,
                 role,
+                ...(signupBrandSlug ? { brandSlug: signupBrandSlug } : {}),
               },
             });
           }
@@ -190,6 +215,12 @@ export const authOptions: NextAuthOptions = {
           if (existing.role !== syncedRole) patch.role = syncedRole;
           if (!existing.name && user.name) patch.name = user.name;
           if (!existing.image && user.image) patch.image = user.image;
+          // Backfill brandSlug for legacy users (pre-2026-08-11 rows have
+          // brandSlug=null). Only set when the cookie says they're signing
+          // in under a specific brand AND they don't already have one.
+          if (signupBrandSlug && !existing.brandSlug) {
+            patch.brandSlug = signupBrandSlug;
+          }
           if (Object.keys(patch).length > 0) {
             await db.user.update({ where: { id: existing.id }, data: patch });
           }
@@ -279,12 +310,17 @@ export const authOptions: NextAuthOptions = {
         // current session — that requires a re-auth).
         const dbUser = await db.user.findUnique({
           where: { email: user.email.toLowerCase() },
-          select: { id: true, role: true },
+          select: { id: true, role: true, brandSlug: true },
         });
         if (dbUser) {
           token.role = dbUser.role;
           token.id = dbUser.id;
           token.email = user.email.toLowerCase();
+          // Persist brandSlug on the token so the session callback can
+          // propagate it to session.user.brandSlug. Reads from DB on
+          // every JWT refresh so admin brand changes take effect on
+          // next login (same pattern as role above).
+          token.brandSlug = dbUser.brandSlug;
         } else {
           // Fallback (shouldn't happen since signIn creates the row)
           token.role = resolveInitialRole(user.email);
@@ -303,11 +339,12 @@ export const authOptions: NextAuthOptions = {
         // every request.
         const dbUser = await db.user.findUnique({
           where: { email: token.email as string },
-          select: { id: true, role: true },
+          select: { id: true, role: true, brandSlug: true },
         });
         if (dbUser) {
           token.id = dbUser.id;
           token.role = dbUser.role;
+          token.brandSlug = dbUser.brandSlug;
           token.idResolved = true;
         }
       }
@@ -325,6 +362,13 @@ export const authOptions: NextAuthOptions = {
           (token.viewAsRole as string | null) ?? null;
         (session.user as { viewAsChapterId?: string | null }).viewAsChapterId =
           (token.viewAsChapterId as string | null) ?? null;
+        // Propagate brandSlug from the JWT to the session so server
+        // components can read it via session.user.brandSlug. Used by
+        // resolveBrand()'s layer 3 + by brand-aware pages (onboarding,
+        // admin, dashboard) to render the correct brand without needing
+        // ?brand= in the URL on every request.
+        (session.user as { brandSlug?: string | null }).brandSlug =
+          (token.brandSlug as string | null) ?? null;
       }
       return session;
     },

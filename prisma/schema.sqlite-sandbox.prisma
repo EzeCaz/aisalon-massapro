@@ -187,6 +187,9 @@ model User {
   chapterId          String?
   chapter            Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
+  // Brand association — see schema.prisma for full docs.
+  brandSlug          String?
+  // ----------------------------------------------------------------
   role               String                @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
   tags               MemberTag[] // tags assigned to this member (admin-managed)
   images             EventImage[]

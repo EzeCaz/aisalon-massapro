@@ -20,7 +20,10 @@ type Props = {
   /** Display name of the chapter the user is onboarding into
    *  (e.g. "Tel Aviv", "Montreal"). Used to personalize the success
    *  toast + submit button. Defaults to "Tel Aviv" for backwards
-   *  compatibility with callers that don't pass it. */
+   *  compatibility with callers that don't pass it.
+   *
+   *  For Coma users, this is "Coma" (brand name) since they don't
+   *  have a chapter yet. */
   chapterName?: string;
   /** Chapter slug (e.g. "mtl"). Sent to the onboarding API so the
    *  server can associate the user with the chapter row (sets
@@ -28,6 +31,11 @@ type Props = {
    *  behaviour — user stays unaffiliated until they RSVP to an
    *  event). */
   chapterSlug?: string;
+  /** Brand slug. When "coma", the success toast says "Welcome to Coma"
+   *  and the post-submit redirect goes to the chapter-creation flow
+   *  instead of /events. When absent or "aisalon", preserves the
+   *  existing AI Salon behavior. */
+  brandSlug?: string;
 };
 
 /**
@@ -55,6 +63,7 @@ export function OnboardingForm({
   profileCategoriesOptions,
   chapterName = "Tel Aviv",
   chapterSlug = "",
+  brandSlug,
 }: Props) {
   const router = useRouter();
 
@@ -117,10 +126,19 @@ export function OnboardingForm({
         return;
       }
 
-      toast.success(`Welcome to AI Salon ${chapterName}! Redirecting…`, { id: t });
+      // Brand-aware success toast + redirect.
+      //   - Coma users: "Welcome to Coma!" → /admin/chapters/new (create their chapter)
+      //   - AIS users: "Welcome to AI Salon {chapterName}!" → /events (existing behavior)
+      const isComa = brandSlug === "coma";
+      const successMsg = isComa
+        ? `Welcome to Coma! Your community builder account is ready.`
+        : `Welcome to AI Salon ${chapterName}! Redirecting…`;
+      toast.success(successMsg, { id: t });
       // Small delay so the toast has time to show before navigation.
       setTimeout(() => {
-        router.push("/events");
+        // Coma users land on the chapter-creation page (their next step).
+        // AIS users land on /events (existing behavior).
+        router.push(isComa ? "/admin/chapters/new?brand=coma" : "/events");
         router.refresh();
       }, 700);
     } catch (err) {

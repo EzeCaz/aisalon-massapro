@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { resolveEmailBrandContext, type EmailBrandContext } from "@/lib/email-brand-context";
 
 /**
  * Email sending utility.
@@ -113,30 +114,56 @@ export async function sendMail(opts: {
  * <a> tags or break them with link-protection wrappers, so the plain-
  * text fallback lets the user copy-paste if the button doesn't work.
  *
- * `chapterName` is optional and defaults to "Tel Aviv" for backward
- * compatibility. Pass the actual chapter display name when known so the
- * email subject + body render with the correct chapter branding. */
+ * BRAND CONTEXT (added 2026-08-11):
+ *   - `brandSlug` controls which brand's wordmark, colors, and copy are
+ *     used in the email. A Coma signup gets a Coma-branded email with
+ *     navy/amber colors, "coma" wordmark, and Coma tagline — no "AI Salon"
+ *     or "Tel Aviv" mentions at all.
+ *   - `chapterName` is now OPTIONAL and brand-dependent in meaning:
+ *       * AIS: chapter name ("Tel Aviv", "Montreal") is shown — same as before.
+ *       * Coma: chapter name is omitted (a Coma user signing up hasn't
+ *         created a chapter yet). The email is brand-only.
+ *     If you pass chapterName with a Coma brandSlug, it's still rendered
+ *     but the brand wordmark stays "Coma" (not "Coma Tel Aviv").
+ *   - For backwards compat, when no brandSlug is provided the email
+ *     falls back to the AIS brand — same behavior as before.
+ */
 export async function sendPasswordEmail(opts: {
   to: string;
   name: string | null;
   password: string;
   siteUrl: string;
-  /** Optional chapter display name. Defaults to "Tel Aviv". */
+  /** Optional chapter display name. Ignored for Coma (brand-only email). */
   chapterName?: string;
+  /** Brand slug. When "coma", renders a Coma-branded email (no "AI Salon"). */
+  brandSlug?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const firstName = opts.name?.split(" ")[0] || "there";
-  const chapterName = opts.chapterName ?? "Tel Aviv";
-  // Strip any trailing slash from siteUrl + append /login.
-  // Add ?callbackUrl=/events so the user lands on the events list
-  // (not the event page they may have come from) after a successful
-  // sign-in. This avoids the "I clicked Sign in and it took me to an
-  // event page instead of the login page" confusion.
-  const base = opts.siteUrl.replace(/\/$/, "");
-  const loginUrl = `${base}/login?callbackUrl=${encodeURIComponent("/events")}`;
-  const subject = `Your AI Salon ${chapterName} login`;
-  const text = `Hi ${firstName},
+  const brand = resolveEmailBrandContext(opts.brandSlug);
+  // For Coma: chapter name is not shown (Coma users sign up before they
+  // have a chapter). For AIS: chapter name is appended to the brand display
+  // name in the subject + headline (same as before).
+  const isComa = brand.slug === "coma";
+  const chapterName = opts.chapterName && !isComa ? opts.chapterName : null;
+  const brandDisplay = chapterName
+    ? `${brand.displayName} ${chapterName}`
+    : brand.displayName;
 
-Welcome to AI Salon ${chapterName} — the community for AI builders, founders, CMOs and investors in ${chapterName}.
+  // Strip any trailing slash from siteUrl + append /login.
+  // Use the brand-specific login URL (carries ?brand= param so the brand
+  // sticks even when the email is opened on a different domain).
+  // Add ?callbackUrl=/events so the user lands on the events list after login.
+  const base = opts.siteUrl.replace(/\/$/, "");
+  const loginUrl = `${base}/login?brand=${brand.slug}&callbackUrl=${encodeURIComponent("/events")}`;
+
+  const subject = isComa
+    ? `Your ${brand.displayName} login`
+    : `Your ${brand.displayName} ${chapterName ?? ""} login`.trim();
+
+  const text = isComa
+    ? `Hi ${firstName},
+
+Welcome to ${brand.displayName} — ${brand.tagline}.
 
 Here is your one-time password for your first login:
 
@@ -150,11 +177,126 @@ the URL into your browser.)
 
 After you sign in, you can change your password from your profile page.
 
-— The AI Salon ${chapterName} team
-MassaPro · https://massapro.com`;
-  const html = `
+— The ${brand.displayName} team
+${brand.siteUrl}`
+    : `Hi ${firstName},
+
+Welcome to ${brand.displayName} ${chapterName} — the community for AI builders, founders, CMOs and investors in ${chapterName}.
+
+Here is your one-time password for your first login:
+
+    ${opts.password}
+
+Go to the login page here:
+${loginUrl}
+
+(If the button above doesn't work in your email client, copy and paste
+the URL into your browser.)
+
+After you sign in, you can change your password from your profile page.
+
+— The ${brand.displayName} ${chapterName} team
+${brand.siteUrl}`;
+
+  const html = isComa
+    ? buildComaPasswordHtml({ firstName, password: opts.password, loginUrl, brand })
+    : buildAisPasswordHtml({
+        firstName,
+        password: opts.password,
+        loginUrl,
+        brand,
+        chapterName: chapterName ?? "",
+      });
+
+  return sendMail({
+    to: opts.to,
+    subject,
+    text,
+    html,
+    // Use the brand-specific From: address (overridable by SMTP_FROM env).
+    from: process.env.SMTP_FROM || brand.fromName,
+  });
+}
+
+/**
+ * Build the Coma-branded password email HTML.
+ *
+ * Coma brand identity:
+ *   - Navy primary (#0A1F44) — institutional, serious
+ *   - Amber accent (#F5A623) — energetic, warm
+ *   - Wordmark: "coma" lowercase, no chapter name appended
+ *   - No "Tel Aviv" mention anywhere — Coma is brand-first, chapter-less
+ *     at signup (chapter is created later in onboarding)
+ *   - Tagline: "Building the Operating System for Communities"
+ */
+function buildComaPasswordHtml(opts: {
+  firstName: string;
+  password: string;
+  loginUrl: string;
+  brand: EmailBrandContext;
+}): string {
+  const { firstName, password, loginUrl, brand } = opts;
+  return `
 <div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
-  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Welcome to AI Salon ${chapterName}</h1>
+  <div style="margin: 0 0 24px;">
+    <span style="font-size: 28px; font-weight: 800; letter-spacing: -0.02em; color: ${brand.primaryColor};">coma</span>
+  </div>
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px; color: ${brand.primaryColor};">
+    Welcome to Coma
+  </h1>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    Hi ${firstName},
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    Your Coma platform account is ready. Here is your one-time password for
+    your first login:
+  </p>
+  <div style="text-align: center; padding: 20px; margin: 24px 0; background: #FAF7F0; border-radius: 10px; border: 1px solid ${brand.accentColor}33;">
+    <div style="font-family: 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: 2px; color: ${brand.primaryColor};">
+      ${password}
+    </div>
+  </div>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 12px;">
+    <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background: ${brand.primaryColor}; color: #fff; text-decoration: none; font-weight: 600; border-radius: 6px;">
+      Go to login page →
+    </a>
+  </p>
+  <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 0 0 20px; word-break: break-all;">
+    If the button doesn't work, copy and paste this URL into your browser:<br/>
+    <a href="${loginUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${loginUrl}</a>
+  </p>
+  <p style="font-size: 13px; line-height: 1.5; color: #777; margin: 0 0 24px;">
+    After you sign in, you'll be guided through creating your chapter.
+    You can change your password anytime from your profile page.
+  </p>
+  <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
+  <p style="font-size: 12px; color: #999; margin: 0;">
+    <strong style="color: ${brand.primaryColor};">coma</strong> · ${brand.tagline}<br/>
+    <a href="${brand.siteUrl}" style="color: #999;">${brand.siteUrl.replace(/^https?:\/\//, "")}</a>
+  </p>
+</div>`;
+}
+
+/**
+ * Build the AI Salon-branded password email HTML.
+ *
+ * Preserves the original AIS look (pink #FF005A password box, gradient
+ * accents) but routes through the brand-context helper for consistency.
+ */
+function buildAisPasswordHtml(opts: {
+  firstName: string;
+  password: string;
+  loginUrl: string;
+  brand: EmailBrandContext;
+  chapterName: string;
+}): string {
+  const { firstName, password, loginUrl, brand, chapterName } = opts;
+  const brandDisplay = chapterName
+    ? `${brand.displayName} ${chapterName}`
+    : brand.displayName;
+  return `
+<div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px;">Welcome to ${brandDisplay}</h1>
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
     Hi ${firstName},
   </p>
@@ -162,8 +304,8 @@ MassaPro · https://massapro.com`;
     Here is your one-time password for your first login:
   </p>
   <div style="text-align: center; padding: 20px; margin: 24px 0; background: #f6f6f6; border-radius: 10px; border: 1px solid #eee;">
-    <div style="font-family: 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: 2px; color: #FF005A;">
-      ${opts.password}
+    <div style="font-family: 'SF Mono', Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: 2px; color: ${brand.secondaryColor};">
+      ${password}
     </div>
   </div>
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 12px;">
@@ -173,18 +315,17 @@ MassaPro · https://massapro.com`;
   </p>
   <p style="font-size: 12px; line-height: 1.5; color: #777; margin: 0 0 20px; word-break: break-all;">
     If the button doesn't work, copy and paste this URL into your browser:<br/>
-    <a href="${loginUrl}" style="color: #004F98; word-break: break-all;">${loginUrl}</a>
+    <a href="${loginUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${loginUrl}</a>
   </p>
   <p style="font-size: 13px; line-height: 1.5; color: #777; margin: 0;">
     After you sign in, you can change your password from your profile page.
   </p>
   <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 12px; color: #999; margin: 0;">
-    AI Salon ${chapterName} · Empowering AI Connections<br/>
-    <a href="https://massapro.com" style="color: #999;">MassaPro</a>
+    ${brandDisplay} · ${brand.tagline}<br/>
+    <a href="${brand.siteUrl}" style="color: #999;">${brand.siteUrl.replace(/^https?:\/\//, "")}</a>
   </p>
 </div>`;
-  return sendMail({ to: opts.to, subject, text, html });
 }
 
 /**

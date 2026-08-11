@@ -4,8 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { needsOnboarding, INTERESTED_IN_OPTIONS, PROFILE_CATEGORIES_OPTIONS } from "@/lib/onboarding";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+import { BrandLogo, BrandGradientText } from "@/components/brand/brand-logo";
 import { OnboardingForm } from "./onboarding-form";
 import { getEffectiveBrandImagesBySlug } from "@/lib/chapter-brand-images";
+import {
+  resolveBrand,
+  getEnvDefaultBrandSlug,
+} from "@/lib/brand/resolve-brand";
+import { isBrandSlug, type BrandSlug } from "@/lib/brand/brand-config";
 
 /** Default chapter slug when none is provided. Mirrors /login behaviour. */
 const DEFAULT_CHAPTER_SLUG = "tel-aviv";
@@ -25,11 +31,15 @@ const DEFAULT_CHAPTER_SLUG = "tel-aviv";
  * Returns `{ slug, name }` where `name` is the chapter's display name
  * (e.g. "Tel Aviv", "Montreal") — falls back to a humanized version of
  * the slug if the chapter row doesn't exist.
+ *
+ * NOTE: For Coma users (brandSlug === "coma"), chapterSlug is typically
+ * absent — they sign up before they have a chapter. The onboarding page
+ * still works; it just renders brand-only (no chapter name in the H1).
  */
 async function resolveChapter(
   urlSlug: string | undefined,
   userChapterId: string | null | undefined
-): Promise<{ slug: string; name: string }> {
+): Promise<{ slug: string; name: string | null }> {
   let slug = urlSlug || DEFAULT_CHAPTER_SLUG;
 
   // If no URL slug but the user has a chapterId, look up its slug.
@@ -48,7 +58,7 @@ async function resolveChapter(
   }
 
   // Look up the chapter by slug to get its display name.
-  let name = slug
+  let name: string | null = slug
     .split(/[-_]/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
@@ -74,18 +84,30 @@ async function resolveChapter(
  *      via importSource) → redirect to /events (no need to fill the form)
  *   3. Signed in and needs onboarding → render the form
  *
- * CHAPTER-SCOPED BEHAVIOR:
+ * CHAPTER-SCOPED BEHAVIOR (AIS only):
  *   - /onboarding?chapterSlug=mtl renders the page with the Montreal
  *     chapter name + Montreal brand images (hero/banner/logo mark).
  *   - /onboarding with no query param falls back to the user's chapterId
  *     (if set), otherwise to the Tel Aviv chapter (DEFAULT_CHAPTER_SLUG).
- *   - This mirrors the /login?chapterSlug= behaviour so the chapter
- *     context is preserved through the entire login → onboarding flow.
+ *
+ * BRAND-SCOPED BEHAVIOR (added 2026-08-11):
+ *   - /onboarding?brand=coma renders a Coma-branded page (navy/amber colors,
+ *     "coma" wordmark, "Building the Operating System for Communities" tagline,
+ *     Coma-specific copy about chapter creation). NO "AI Salon" or "Tel Aviv"
+ *     mentions.
+ *   - Brand is resolved via the same 4-layer chain as /login:
+ *       1. URL ?brand= param
+ *       2. (host header — not relevant here since onboarding is auth-gated)
+ *       3. User's persisted brandSlug (the sticky brand context)
+ *       4. BRAND_DEFAULT_SLUG env var (default: aisalon)
+ *   - For Coma users, the intake form is the same (name, email, company, etc.)
+ *     but the framing is "set up your chapter lead profile" instead of
+ *     "join the AI Salon community".
  */
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ chapterSlug?: string }>;
+  searchParams: Promise<{ chapterSlug?: string; brand?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -106,6 +128,7 @@ export default async function OnboardingPage({
       chapterId: true,
       importSource: true,
       onboardedAt: true,
+      brandSlug: true,
     },
   });
   if (!me) {
@@ -116,15 +139,30 @@ export default async function OnboardingPage({
     redirect("/events");
   }
 
-  const { chapterSlug: urlSlug } = await searchParams;
+  const { chapterSlug: urlSlug, brand: urlBrand } = await searchParams;
+
+  // Resolve brand via 4-layer chain (URL → user → env). Layer 3 (user
+  // session brandSlug) is now wired up — `me.brandSlug` is read from
+  // the DB and passed as the userBrandSlug input.
+  const userBrandSlug: BrandSlug | null =
+    me.brandSlug && isBrandSlug(me.brandSlug) ? me.brandSlug : null;
+  const brand = resolveBrand({
+    urlBrandSlug: urlBrand,
+    userBrandSlug,
+    envDefaultSlug: getEnvDefaultBrandSlug(),
+  });
+  const isComa = brand.slug === "coma";
+
+  // For Coma users, chapter context is typically absent (they haven't
+  // created a chapter yet). We still resolve it for the AIS path so the
+  // page renders the correct chapter name + brand images.
   const { slug: chapterSlug, name: chapterName } = await resolveChapter(
-    urlSlug,
+    isComa ? undefined : urlSlug,
     me.chapterId
   );
 
-  // Load chapter-scoped brand images. loginBanner is used as the meerkat
-  // mark in the logo (per /login page convention). Falls back to the
-  // global SiteSetting value, then to /images/falafel-meerkat.jpg.
+  // Load chapter-scoped brand images (AIS only — Coma uses its own
+  // brand hero from brand-config.ts).
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
   const markUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
 
@@ -140,6 +178,100 @@ export default async function OnboardingPage({
     title: me.title || "",
   };
 
+  // === COMA ONBOARDING ===
+  // Coma users are community builders, not members. The intake form
+  // collects their personal profile (which becomes their chapter lead
+  // profile), and the next step after onboarding is to create their
+  // chapter (handled in the post-onboarding redirect / dashboard).
+  if (isComa) {
+    return (
+      <main className="min-h-screen bg-white" style={{ ["--brand-primary" as string]: brand.primaryColor }}>
+        {/* Coma brand header strip */}
+        <div className="border-b border-black/10 bg-white">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between">
+            <BrandLogo
+              wordmark={brand.wordmark}
+              tagline={brand.tagline}
+              variant="horizontal-tagline"
+              color="black"
+              className="text-[1.05rem]"
+            />
+            <span
+              className="text-[0.65rem] font-semibold uppercase tracking-[0.2em]"
+              style={{ color: brand.accentColor }}
+            >
+              Community Builder
+            </span>
+          </div>
+        </div>
+
+        {/* Hero — Coma-branded title + welcome copy. No chapter name, no "Tel Aviv". */}
+        <section className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 pt-10 sm:pt-14 pb-8 text-center">
+          <p
+            className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-3"
+            style={{ color: brand.accentColor }}
+          >
+            Welcome to Coma
+          </p>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight mb-4">
+            Build your community with{" "}
+            <BrandGradientText gradient={brand.gradient}>Coma</BrandGradientText>
+          </h1>
+          <p className="text-lg sm:text-xl font-semibold text-black/80 mb-5">
+            The operating system for community builders.
+          </p>
+          <div className="space-y-4 text-sm sm:text-base text-black/70 leading-relaxed max-w-2xl mx-auto">
+            <p>
+              Coma gives you the tools to launch, grow, and orchestrate your
+              community chapter — events, members, email campaigns, and
+              analytics, all in one place.
+            </p>
+            <p>
+              Fill out your profile below to set up your community builder
+              account. After this, you&rsquo;ll be guided through creating your
+              first chapter — choosing your city, branding, and launch plan.
+            </p>
+            <p className="font-semibold text-black">
+              Let&rsquo;s build the operating system for communities, together.
+            </p>
+          </div>
+        </section>
+
+        {/* Form card — same intake form, Coma-branded context */}
+        <section className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 pb-16">
+          <OnboardingForm
+            initial={initial}
+            interestedInOptions={[...INTERESTED_IN_OPTIONS]}
+            profileCategoriesOptions={[...PROFILE_CATEGORIES_OPTIONS]}
+            chapterName="Coma"
+            chapterSlug={chapterSlug}
+            brandSlug={brand.slug}
+          />
+        </section>
+
+        <footer className="border-t border-black/10 bg-white">
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <span>
+              © {new Date().getFullYear()} {brand.displayName} · {brand.tagline}
+            </span>
+            <span>
+              Platform by{" "}
+              <a
+                href="https://massapro.com"
+                className="text-black/80 underline-offset-4 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                MassaPro
+              </a>
+            </span>
+          </div>
+        </footer>
+      </main>
+    );
+  }
+
+  // === AI SALON ONBOARDING (default, preserves existing behavior) ===
   return (
     <main className="min-h-screen bg-white">
       {/* Brand header strip — chapter mark + chapter tagline */}
@@ -190,8 +322,9 @@ export default async function OnboardingPage({
           initial={initial}
           interestedInOptions={[...INTERESTED_IN_OPTIONS]}
           profileCategoriesOptions={[...PROFILE_CATEGORIES_OPTIONS]}
-          chapterName={chapterName}
+          chapterName={chapterName ?? "Tel Aviv"}
           chapterSlug={chapterSlug}
+          brandSlug={brand.slug}
         />
       </section>
 
@@ -222,12 +355,19 @@ export default async function OnboardingPage({
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ chapterSlug?: string }>;
+  searchParams: Promise<{ chapterSlug?: string; brand?: string }>;
 }) {
-  const { chapterSlug: urlSlug } = await searchParams;
+  const { chapterSlug: urlSlug, brand: urlBrand } = await searchParams;
+  // For Coma, the title is brand-only (no chapter name).
+  if (urlBrand === "coma") {
+    return {
+      title: `Welcome — Coma`,
+      description: `Set up your Coma community builder account and create your first chapter.`,
+    };
+  }
   const { name: chapterName } = await resolveChapter(urlSlug, null);
   return {
-    title: `Welcome — AI Salon ${chapterName}`,
-    description: `Be a part of the AI Salon ${chapterName} community. Fill out this quick form to connect with a global network of AI founders, technologists, and investors.`,
+    title: `Welcome — AI Salon ${chapterName ?? "Tel Aviv"}`,
+    description: `Be a part of the AI Salon ${chapterName ?? "Tel Aviv"} community. Fill out this quick form to connect with a global network of AI founders, technologists, and investors.`,
   };
 }

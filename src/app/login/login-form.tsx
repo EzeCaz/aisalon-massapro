@@ -122,25 +122,51 @@ export function LoginForm({
   // The `chapterSlug` param is also forwarded so /onboarding (and any
   // other downstream page) can render the chapter-correct branding. The
   // post-login-redirect endpoint will inject it into the /onboarding URL.
+  //
+  // The `brandSlug` param is also forwarded so post-login-redirect can
+  // pass it to /onboarding?brand=coma, which renders Coma branding
+  // instead of the default AI Salon branding.
   const redirectEndpoint = (() => {
     const url = `/api/auth/post-login-redirect?next=${encodeURIComponent(finalCallback)}`;
-    if (chapterSlug) {
-      return `${url}&chapterSlug=${encodeURIComponent(chapterSlug)}`;
-    }
-    return url;
+    const params = new URLSearchParams();
+    if (chapterSlug) params.set("chapterSlug", chapterSlug);
+    if (brandSlug) params.set("brand", brandSlug);
+    const qs = params.toString();
+    return qs ? `${url}&${qs}` : url;
   })();
+
+  // Before Google OAuth redirect, stash the brand slug in a short-lived
+  // cookie. The signIn callback reads this cookie to stamp the brand on
+  // the User row at creation time — Google OAuth doesn't let us pass
+  // arbitrary body params, so a cookie is the only way to carry the
+  // brand context through the OAuth round-trip.
+  function setSignupBrandCookie() {
+    if (typeof document === "undefined" || !brandSlug) return;
+    // 10-minute expiry — long enough for Google OAuth, short enough
+    // to be safe. SameSite=Lax so it's sent on the OAuth callback.
+    document.cookie = `ais_signup_brand=${brandSlug}; path=/; max-age=600; SameSite=Lax`;
+  }
+
+  function clearSignupBrandCookie() {
+    if (typeof document === "undefined") return;
+    document.cookie = `ais_signup_brand=; path=/; max-age=0; SameSite=Lax`;
+  }
 
   async function googleSignIn() {
     setError(null);
     setInfo(null);
     setLoading("google");
     try {
+      // Stash brand slug in a cookie before OAuth redirect so the
+      // signIn callback can persist it on the new User row.
+      setSignupBrandCookie();
       // Use redirect:true (default) so the browser navigates to Google OAuth.
       // After OAuth completes, NextAuth redirects to `redirectEndpoint`, which
       // returns a 302 to /onboarding, /set-password, or the original deep link.
       await signIn("google", { callbackUrl: redirectEndpoint });
     } catch (err) {
       console.error(err);
+      clearSignupBrandCookie();
       setError("Could not start Google sign-in. Please try again.");
       setLoading(null);
     }
@@ -193,10 +219,16 @@ export function LoginForm({
         // row with chapterId=null — and every page that reads chapter
         // context from the user row (onboarding, profile, community,
         // email merge tags) falls back to "Tel Aviv".
+        //
+        // Forward brandSlug so the signup route can persist it on the
+        // User row AND pass it to sendPasswordEmail — which then renders
+        // the email with the correct brand wordmark, colors, and copy
+        // (Coma vs AI Salon) instead of hardcoding "AI Salon Tel Aviv".
         body: JSON.stringify({
           email: signupEmail,
           name: signupName,
           ...(chapterSlug ? { chapterSlug } : {}),
+          ...(brandSlug ? { brandSlug } : {}),
         }),
       });
       const data = await res.json();

@@ -199,6 +199,19 @@ model User {
   chapterId                  String?
   chapter                    Chapter?                  @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
+  // Brand association — which top-level brand this user belongs to.
+  // Nullable for backwards compatibility with V6 rows (which are all
+  // implicitly "aisalon"). When a user signs up via a brand-specific
+  // login URL (e.g. /login?brand=coma or coma.massapro.com/login), the
+  // signup route stamps their brand slug here. The session then exposes
+  // it as session.user.brandSlug, and resolveBrand()'s layer 3 reads it
+  // so the brand follows the user across every page (dashboard, admin,
+  // onboarding, emails) — not just the login page.
+  //
+  // Valid values: "aisalon" | "coma" (see src/lib/brand/brand-config.ts).
+  // NULL = legacy user, treat as "aisalon" (the platform default).
+  brandSlug                  String?
+  // ----------------------------------------------------------------
   role                       String                    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
   tags                       MemberTag[] // tags assigned to this member (admin-managed)
   images                     EventImage[]

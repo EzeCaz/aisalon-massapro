@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isBrandSlug } from "@/lib/brand/brand-config";
 
 /**
- * GET /api/auth/post-login-redirect[?next=<relative-path>]
+ * GET /api/auth/post-login-redirect[?next=<relative-path>&chapterSlug=<slug>&brand=<slug>]
  *
  * Called by the browser immediately after a successful sign-in to decide
  * where to send the user. Returns an HTTP 302 redirect (not JSON) so it
@@ -27,6 +28,18 @@ import { db } from "@/lib/db";
  *                                                  ignores `next` — onboarding
  *                                                  is mandatory before they
  *                                                  can browse the site)
+ *
+ * BRAND FORWARDING (added 2026-08-11):
+ *   The `?brand=` query param is forwarded by the brand-aware login form
+ *   so the onboarding page knows which brand to render. As a fallback,
+ *   we also read `user.brandSlug` from the DB — if the user already has
+ *   a brand persisted (e.g. they signed up via /login?brand=coma and are
+ *   now re-authenticating without the ?brand= param), we use that. The
+ *   URL ?brand= param takes precedence (lets an admin override).
+ *
+ *   The final brand slug is appended to the /onboarding URL as ?brand=<slug>
+ *   so the onboarding page renders the correct brand identity without
+ *   needing to read the user's brandSlug from the DB directly.
  *
  * NOTE: A previous version of this route had a `mustSetPassword` gate
  * that redirected to /set-password. That field was NEVER added to the
@@ -56,6 +69,7 @@ export async function GET(req: NextRequest) {
       id: true,
       importSource: true,
       onboardedAt: true,
+      brandSlug: true,
     },
   });
 
@@ -70,6 +84,16 @@ export async function GET(req: NextRequest) {
   const rawNext = req.nextUrl.searchParams.get("next") || "";
   const safeNext =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/events";
+
+  // Resolve the effective brand slug for the onboarding redirect.
+  //   1. URL ?brand= param (explicit, lets an admin override).
+  //   2. User's persisted brandSlug (sticky brand context for returning users).
+  //   3. null (no brand specified — onboarding falls back to AIS default).
+  const urlBrand = req.nextUrl.searchParams.get("brand") || "";
+  const effectiveBrandSlug =
+    (urlBrand && isBrandSlug(urlBrand) ? urlBrand : null) ||
+    me.brandSlug ||
+    null;
 
   // Propagate the chapterSlug (e.g. "mtl" from /login?chapterSlug=mtl)
   // to /onboarding so the page renders with the correct chapter name +
@@ -106,11 +130,14 @@ export async function GET(req: NextRequest) {
   //    mandatory. After they submit the form, the form's own redirect
   //    sends them to /events.
   //
-  //    Forward the chapterSlug (if any) so /onboarding renders with the
-  //    correct chapter branding (e.g. Montreal instead of the default
-  //    Tel Aviv).
-  const onboardingUrl = chapterSlug
-    ? new URL(`/onboarding?chapterSlug=${encodeURIComponent(chapterSlug)}`, req.url)
+  //    Forward the chapterSlug + brandSlug so /onboarding renders with
+  //    the correct branding (e.g. Coma instead of the default AIS).
+  const onboardingParams = new URLSearchParams();
+  if (chapterSlug) onboardingParams.set("chapterSlug", chapterSlug);
+  if (effectiveBrandSlug) onboardingParams.set("brand", effectiveBrandSlug);
+  const qs = onboardingParams.toString();
+  const onboardingUrl = qs
+    ? new URL(`/onboarding?${qs}`, req.url)
     : new URL("/onboarding", req.url);
   return NextResponse.redirect(onboardingUrl);
 }
