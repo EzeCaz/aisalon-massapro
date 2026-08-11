@@ -17,5 +17,15 @@
 -- slugs would couple the DB to the code-level brand registry, which
 -- we want to avoid until the Brand table is properly modeled.
 
+-- Idempotent: ADD COLUMN IF NOT EXISTS is safe to re-run.
+-- Originally committed as plain `ADD COLUMN`, but a prior baseline-
+-- migrations.cjs run marked this migration as "applied" in
+-- _prisma_migrations WITHOUT running the SQL (because it wasn't yet
+-- listed in NEW_MIGRATIONS). The fix adds this migration to
+-- NEW_MIGRATIONS AND deletes the bogus baseline row, so the next
+-- `prisma migrate deploy` will actually run this SQL. Using
+-- IF NOT EXISTS protects against the edge case where the column
+-- was already added by some other path (manual DB fix, etc.) —
+-- the migration will succeed as a no-op instead of failing.
 ALTER TABLE "User"
-  ADD COLUMN "brandSlug" TEXT;
+  ADD COLUMN IF NOT EXISTS "brandSlug" TEXT;

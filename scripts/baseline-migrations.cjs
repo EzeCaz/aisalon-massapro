@@ -52,12 +52,27 @@ const crypto = require('crypto');
 
 // Migrations that have NOT yet been applied to prod and should be applied
 // by `prisma migrate deploy`. These will NOT be baselined as "applied".
+//
+// IMPORTANT: If a migration was committed to the repo WITHOUT being added
+// to this set first, a prior Vercel build will have baselined it as
+// "applied" in _prisma_migrations WITHOUT actually running the SQL. The
+// loop below detects that case (migration in NEW_MIGRATIONS but has a
+// baseline-checksum row) and DELETES the bogus row so migrate deploy
+// will actually run the SQL.
 const NEW_MIGRATIONS = new Set([
   '20260804120000_email_unify_backend',
   // 2026-08-05: clears per-template email logo overrides + sets the global
   // SiteSetting[emailLogo] to the user's chosen URL. See migration SQL for
   // the full rationale.
   '20260805130000_clear_email_logo_overrides',
+  // 2026-08-11: adds User.brandSlug column. Was committed in c284cbc
+  // WITHOUT being added to this set, so the prior Vercel build baselined
+  // it as "applied" without running the SQL → production threw on every
+  // authenticated request because auth.ts queries brandSlug on every
+  // JWT refresh. Fix: delete the bogus row (below) + idempotent SQL
+  // (uses ADD COLUMN IF NOT EXISTS) so the next migrate deploy applies
+  // it safely whether or not the column already exists.
+  '20260811120000_add_user_brand_slug',
 ]);
 
 async function main() {
@@ -114,11 +129,51 @@ async function main() {
   let updated = 0;
   let skipped = 0;
   let deferred = 0;
+  let bogusDeleted = 0;
 
   // Synthetic checksum — same algorithm Prisma uses to detect migration file
   // changes. We use a fixed prefix so re-runs produce the same checksum.
   const baselineChecksum = (name) =>
     crypto.createHash('sha256').update(name + '-baseline').digest('hex');
+
+  // PRE-PASS: For migrations in NEW_MIGRATIONS that have a BOGUS baseline
+  // row (checksum = baselineChecksum), DELETE the row. This handles the
+  // case where a migration was committed WITHOUT being added to
+  // NEW_MIGRATIONS first — a prior build would have baselined it as
+  // "applied" without running the SQL. Without this deletion, prisma
+  // migrate deploy would see the row and skip the migration, leaving
+  // the schema out of sync with the code.
+  //
+  // Safe because:
+  //   - Baseline rows always have the baseline checksum (sha256(name+'-baseline'))
+  //   - Real migrate-deploy rows have Prisma's actual checksum (different)
+  //   - So we only delete rows that baseline-migrations itself created
+  //   - If migrate deploy had actually run, the checksum would NOT match
+  //     baselineChecksum, and we leave that row alone (migration was truly applied)
+  for (const name of migrationNames) {
+    if (!NEW_MIGRATIONS.has(name)) continue;
+    const existing = await prisma.$queryRawUnsafe(
+      `SELECT id, checksum, finished_at FROM _prisma_migrations WHERE migration_name = $1`,
+      name
+    );
+    if (!existing || existing.length === 0) continue;
+    const row = existing[0];
+    const bogusChecksum = baselineChecksum(name);
+    if (row.checksum === bogusChecksum) {
+      // This row was created by a prior baseline-migrations run (not by
+      // prisma migrate deploy). Delete it so migrate deploy will actually
+      // run the SQL.
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM _prisma_migrations WHERE migration_name = $1`,
+        name
+      );
+      bogusDeleted++;
+      console.log(`[baseline] Deleted bogus baseline row for NEW migration: ${name}`);
+    }
+  }
+  if (bogusDeleted > 0) {
+    console.log(`[baseline] Pre-pass: deleted ${bogusDeleted} bogus baseline rows so migrate deploy will re-apply them.`);
+  }
 
   for (const name of migrationNames) {
     const isNew = NEW_MIGRATIONS.has(name);
@@ -183,7 +238,7 @@ async function main() {
     skipped++;
   }
 
-  console.log(`[baseline] Done. Inserted: ${inserted}, Updated (self-healed): ${updated}, Skipped: ${skipped}, Deferred: ${deferred}`);
+  console.log(`[baseline] Done. Inserted: ${inserted}, Updated (self-healed): ${updated}, Skipped: ${skipped}, Deferred: ${deferred}, Bogus rows deleted: ${bogusDeleted}`);
   await prisma.$disconnect();
 }
 
