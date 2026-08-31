@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Style Variants Preview — AI Salon Mockup Studio</title>
+<style>
+  /* ---- Page chrome ---- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f4f6;
+    color: #1a1a1a;
+    line-height: 1.5;
+  }
+  .page { max-width: 1400px; margin: 0 auto; padding: 40px 28px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: #555; font-size: 14px; margin-bottom: 36px; }
+  section { margin-bottom: 56px; }
+  h2 { font-size: 19px; margin: 0 0 6px; letter-spacing: -0.005em; }
+  h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin: 0 0 12px; }
+  .caption { color: #555; font-size: 13px; margin: 8px 0 18px; }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .pill.new { background: #ff005a; color: #fff; }
+  .pill.existing { background: #e5e5ea; color: #555; }
+  .pill.before { background: #fbbf24; color: #1a1a1a; }
+  .pill.after { background: #10b981; color: #fff; }
+
+  /* ---- Mockup canvas frame (3:2 = 1200 × 800 scaled to 600 × 400) ---- */
+  .canvas-frame {
+    width: 600px;
+    height: 400px;
+    border: 1px solid #d4d4d8;
+    background: #fff;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    position: relative;
+    overflow: hidden;
+    font-size: 10px; /* scale text relative to 600×400 frame */
+  }
+  .canvas-row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .canvas-cell { display: flex; flex-direction: column; align-items: flex-start; }
+  .canvas-label { font-size: 11px; color: #555; margin-top: 8px; font-weight: 500; }
+
+  /* ============================================================
+     SPEAKER INTRO — STYLE 1 (current)
+     ============================================================ */
+  .si1 { display: grid; grid-template-columns: 42% 58%; height: 100%; background: #fff; }
+  .si1-left {
+    padding: 18px 16px 12px;
+    border-right: 1px solid #eee;
+    display: flex; flex-direction: column;
+  }
+  .si1-eyebrow { font-size: 8px; font-weight: 700; letter-spacing: 0.12em; color: #ff005a; text-transform: uppercase; margin-bottom: 4px; }
+  .si1-event-name { font-size: 16px; font-weight: 800; color: #111; line-height: 1.1; margin-bottom: 3px; }
+  .si1-event-topic { font-size: 9px; color: #555; margin-bottom: 8px; }
+  .si1-event-meta { font-size: 8px; color: #888; margin-bottom: 12px; line-height: 1.4; }
+  .si1-speakers-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #111; margin-bottom: 6px; border-top: 1px solid #eee; padding-top: 8px; }
+  .si1-speaker { display: flex; gap: 8px; margin-bottom: 7px; align-items: flex-start; }
+  .si1-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #c0c0c0, #888);
+    flex-shrink: 0;
+    background-size: cover; background-position: center;
+  }
+  .si1-speaker-info { flex: 1; min-width: 0; }
+  .si1-speaker-name { font-size: 9px; font-weight: 700; color: #111; }
+  .si1-speaker-title { font-size: 7.5px; color: #666; }
+  .si1-speaker-bio { font-size: 7px; color: #999; margin-top: 2px; line-height: 1.3; }
+  .si1-right {
+    position: relative;
+    background: linear-gradient(135deg, #2a1437 0%, #4b1e5a 50%, #7b2d8b 100%);
+    overflow: hidden;
+  }
+  .si1-hero-img {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #ff8a5b 0%, #c95792 40%, #5a2e63 100%);
+    opacity: 0.85;
+  }
+  .si1-triangle {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 50%, rgba(255,0,90,0.4) 50%);
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+  .si1-triangle2 {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(0,102,255,0.4) 50%, transparent 50%);
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  }
+  .si1-pin {
+    position: absolute;
+    width: 8px; height: 8px;
+    background: #ff005a;
+    border: 2px solid #fff;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .si1-pin-label {
+    position: absolute;
+    font-size: 7px; color: #fff; font-weight: 600;
+    background: rgba(0,0,0,0.5);
+    padding: 1px 4px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .si1-brand-corner {
+    position: absolute; bottom: 8px; right: 8px;
+    font-size: 8px; color: #fff; font-weight: 700;
+    background: rgba(0,0,0,0.4);
+    padding: 3px 6px;
+    border-radius: 2px;
+  }
+  .si1-qr {
+    position: absolute; top: 8px; right: 8px;
+    width: 24px; height: 24px;
+    background: #fff;
+    background-image:
+      linear-gradient(90deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%),
+      linear-gradient(0deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%);
+    background-size: 6px 6px;
+    border: 1px solid #000;
+  }
+
+  /* ============================================================
+     SPEAKER INTRO — STYLE 2 (NEW: purple-pink gradient header + 2×2 grid + dark map panel + dark footer)
+     Based on page 20 of original platform plan PDF
+     ============================================================ */
+  .si2 {
+    display: grid;
+    grid-template-rows: 36px 1fr 40px;
+    height: 100%;
+    background: #fff;
+  }
+  .si2-header {
+    background: linear-gradient(90deg, #5b0e7e 0%, #8b008b 35%, #d63384 70%, #e91e63 100%);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px;
+    color: #fff;
+  }
+  .si2-header-left { display: flex; align-items: center; gap: 8px; }
+  .si2-header-title { font-size: 9px; font-weight: 700; letter-spacing: 0.02em; }
+  .si2-header-topic { font-size: 8px; opacity: 0.85; }
+  .si2-header-right { font-size: 8px; opacity: 0.85; }
+  .si2-header-logo {
+    background: #fff; color: #5b0e7e;
+    font-weight: 800; font-size: 8px;
+    padding: 2px 5px; border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+  .si2-body { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+  .si2-left { background: #fafafa; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .si2-speaker-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    flex: 1;
+  }
+  .si2-card {
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 7px 7px;
+    display: flex; flex-direction: column; gap: 3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .si2-card-head { display: flex; align-items: center; gap: 6px; }
+  .si2-card-avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: linear-gradient(135deg, #d4a574, #8b5a3c);
+    flex-shrink: 0;
+    background-size: cover; background-position: center;
+  }
+  .si2-card-name { font-size: 8.5px; font-weight: 700; color: #111; line-height: 1.1; }
+  .si2-card-title { font-size: 7px; color: #666; line-height: 1.1; }
+  .si2-card-bio { font-size: 6.5px; color: #888; line-height: 1.35; margin-top: 2px; }
+  .si2-card-time {
+    display: inline-block;
+    font-size: 6.5px; font-weight: 600;
+    color: #5b0e7e;
+    background: #f3e8fa;
+    padding: 1px 4px; border-radius: 2px;
+    margin-top: 2px;
+    width: fit-content;
+  }
+  .si2-right {
+    position: relative;
+    background: linear-gradient(180deg, #3a0d42 0%, #1a0b21 100%);
+    overflow: hidden;
+  }
+  .si2-map-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 30% 60%, rgba(255,255,255,0.06) 0%, transparent 40%),
+      radial-gradient(circle at 70% 30%, rgba(255,255,255,0.04) 0%, transparent 50%);
+  }
+  .si2-mountains {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 35%;
+    background:
+      linear-gradient(135deg, transparent 49%, rgba(123,45,155,0.6) 50%, transparent 51%) 0 0/40px 100%,
+      linear-gradient(45deg, transparent 49%, rgba(91,14,126,0.8) 50%, transparent 51%) 0 0/40px 100%,
+      #2a0830;
+    clip-path: polygon(0 60%, 8% 45%, 16% 55%, 24% 30%, 32% 50%, 40% 35%, 48% 55%, 56% 25%, 64% 45%, 72% 30%, 80% 50%, 88% 35%, 96% 55%, 100% 40%, 100% 100%, 0 100%);
+  }
+  .si2-pin {
+    position: absolute;
+    width: 9px; height: 9px;
+    background: #ff4081;
+    border: 2px solid #fff;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    box-shadow: 0 0 8px rgba(255,64,129,0.6), 0 2px 4px rgba(0,0,0,0.4);
+    z-index: 2;
+  }
+  .si2-pin-label {
+    position: absolute;
+    font-size: 7px; color: #fff; font-weight: 600;
+    background: rgba(91,14,126,0.85);
+    padding: 1px 4px; border-radius: 2px;
+    white-space: nowrap;
+    z-index: 2;
+  }
+  .si2-mascot {
+    position: absolute; bottom: 8px; right: 8px;
+    width: 36px; height: 36px;
+    background: #ffd54f;
+    border-radius: 8px;
+    border: 2px solid #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .si2-footer {
+    background: #16162a;
+    color: #fff;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px;
+  }
+  .si2-footer-left { display: flex; align-items: center; gap: 10px; }
+  .si2-footer-logo { font-size: 9px; font-weight: 800; letter-spacing: 0.05em; }
+  .si2-footer-group { display: flex; flex-direction: column; gap: 1px; }
+  .si2-footer-label { font-size: 6.5px; text-transform: uppercase; letter-spacing: 0.1em; color: #888; }
+  .si2-footer-tags { display: flex; gap: 4px; }
+  .si2-footer-tag {
+    font-size: 7px; font-weight: 600;
+    background: rgba(255,255,255,0.1);
+    padding: 1px 5px; border-radius: 2px;
+  }
+  .si2-footer-qr {
+    width: 22px; height: 22px;
+    background: #fff;
+    background-image:
+      linear-gradient(90deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%),
+      linear-gradient(0deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%);
+    background-size: 5.5px 5.5px;
+    border: 1px solid #000;
+  }
+
+  /* ============================================================
+     MEET THE SPEAKER — STYLE 1 (current, geometric gradient triangles)
+     ============================================================ */
+  .mt1 { display: grid; grid-template-columns: 50% 50%; height: 100%; background: #fff; position: relative; }
+  .mt1-left { padding: 20px 18px; display: flex; flex-direction: column; background: #fafafa; }
+  .mt1-badge {
+    display: inline-block;
+    font-size: 7.5px; font-weight: 700; letter-spacing: 0.1em;
+    color: #ff005a; text-transform: uppercase;
+    background: rgba(255,0,90,0.08);
+    padding: 2px 7px; border-radius: 2px;
+    margin-bottom: 10px;
+    width: fit-content;
+  }
+  .mt1-name { font-size: 18px; font-weight: 800; color: #111; line-height: 1.1; margin-bottom: 4px; }
+  .mt1-title { font-size: 9px; color: #555; margin-bottom: 10px; }
+  .mt1-topic-label { font-size: 7.5px; font-weight: 700; color: #ff005a; text-transform: uppercase; letter-spacing: 0.08em; }
+  .mt1-topic { font-size: 11px; font-weight: 600; color: #111; margin-bottom: 8px; line-height: 1.25; }
+  .mt1-bio { font-size: 8px; color: #666; line-height: 1.5; margin-bottom: 8px; }
+  .mt1-expertise { font-size: 7.5px; color: #888; line-height: 1.5; border-top: 1px solid #eee; padding-top: 6px; }
+  .mt1-right {
+    position: relative;
+    background: linear-gradient(135deg, #ff005a 0%, #5b0e7e 100%);
+    overflow: hidden;
+  }
+  .mt1-photo {
+    position: absolute;
+    top: 12%; left: 8%; width: 84%; height: 76%;
+    background: linear-gradient(135deg, #d4a574, #8b5a3c);
+    background-size: cover; background-position: center top;
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  }
+  .mt1-tri1 {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+    clip-path: polygon(0 0, 60% 0, 0 60%);
+  }
+  .mt1-tri2 {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 40%, rgba(91,14,126,0.6) 100%);
+    clip-path: polygon(100% 40%, 100% 100%, 40% 100%);
+  }
+  .mt1-event-card {
+    position: absolute; bottom: 14px; right: 14px;
+    background: #fff;
+    padding: 7px 9px;
+    border-radius: 3px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    max-width: 75%;
+  }
+  .mt1-event-name { font-size: 8px; font-weight: 700; color: #111; line-height: 1.2; }
+  .mt1-event-when { font-size: 7px; color: #ff005a; font-weight: 600; margin-top: 1px; }
+  .mt1-event-where { font-size: 7px; color: #666; margin-top: 1px; }
+
+  /* ============================================================
+     MEET THE SPEAKER — STYLE 2 (existing, low-poly network image)
+     ============================================================ */
+  .mt2 { display: grid; grid-template-columns: 50% 50%; height: 100%; background: #fff; position: relative; }
+  .mt2-left { padding: 20px 18px; display: flex; flex-direction: column; background: #fafafa; }
+  .mt2-badge {
+    display: inline-block; font-size: 7.5px; font-weight: 700; letter-spacing: 0.1em;
+    color: #ff005a; text-transform: uppercase;
+    background: rgba(255,0,90,0.08); padding: 2px 7px; border-radius: 2px;
+    margin-bottom: 10px; width: fit-content;
+  }
+  .mt2-name { font-size: 18px; font-weight: 800; color: #111; line-height: 1.1; margin-bottom: 4px; }
+  .mt2-title { font-size: 9px; color: #555; margin-bottom: 10px; }
+  .mt2-topic-label { font-size: 7.5px; font-weight: 700; color: #ff005a; text-transform: uppercase; letter-spacing: 0.08em; }
+  .mt2-topic { font-size: 11px; font-weight: 600; color: #111; margin-bottom: 8px; }
+  .mt2-bio { font-size: 8px; color: #666; line-height: 1.5; }
+  .mt2-right {
+    position: relative;
+    background:
+      radial-gradient(circle at 20% 20%, #4b1e5a 0%, transparent 60%),
+      radial-gradient(circle at 80% 80%, #ff005a 0%, transparent 60%),
+      linear-gradient(135deg, #2a1437, #5b0e7e);
+    overflow: hidden;
+  }
+  .mt2-network {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(45deg, transparent 49%, rgba(255,255,255,0.12) 50%, transparent 51%),
+      linear-gradient(-45deg, transparent 49%, rgba(255,255,255,0.08) 50%, transparent 51%);
+    background-size: 30px 30px, 30px 30px;
+  }
+  .mt2-pin {
+    position: absolute;
+    width: 8px; height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px #ff005a, 0 0 12px rgba(255,255,255,0.4);
+  }
+  .mt2-pin-line {
+    position: absolute;
+    background: rgba(255,255,255,0.25);
+    height: 1px;
+    transform-origin: left center;
+  }
+  .mt2-photo {
+    position: absolute;
+    top: 18%; left: 50%; transform: translateX(-50%);
+    width: 60%; height: 64%;
+    background: linear-gradient(135deg, #d4a574, #8b5a3c);
+    background-size: cover; background-position: center top;
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .mt2-event-card {
+    position: absolute; bottom: 14px; right: 14px;
+    background: #fff; padding: 7px 9px; border-radius: 3px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2); max-width: 75%;
+  }
+  .mt2-event-name { font-size: 8px; font-weight: 700; color: #111; line-height: 1.2; }
+  .mt2-event-when { font-size: 7px; color: #ff005a; font-weight: 600; margin-top: 1px; }
+  .mt2-event-where { font-size: 7px; color: #666; margin-top: 1px; }
+
+  /* ============================================================
+     MEET THE SPEAKER — STYLE 3 (NEW: split purple-left / pink-right, arched stadium avatar, dark event card bottom-left, gold AI badge)
+     Based on page 21 of original 3-tier-platform-plan.pdf (uploaded reference)
+     ============================================================ */
+  .mt3 {
+    display: grid;
+    grid-template-columns: 50% 50%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Left panel: deep purple gradient */
+  .mt3-left {
+    background: linear-gradient(180deg, #6b1d7a 0%, #5b0e7e 100%);
+    padding: 18px 16px 14px;
+    color: #fff;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  /* RED pill badge "MEET THE SPEAKER" with mic icon */
+  .mt3-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 7px; font-weight: 800; letter-spacing: 0.12em;
+    color: #fff; text-transform: uppercase;
+    background: #ff2e63;
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+    width: fit-content;
+  }
+  .mt3-mic-icon {
+    width: 7px; height: 7px;
+    background: #fff;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(45deg);
+    flex-shrink: 0;
+  }
+  /* Big name + small title + smaller company */
+  .mt3-name { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 5px; letter-spacing: -0.015em; }
+  .mt3-title { font-size: 10px; color: #fff; font-weight: 500; margin-bottom: 1px; }
+  .mt3-company { font-size: 9px; color: #c0c0c8; font-weight: 400; margin-bottom: 14px; }
+  /* Topic block — RED label */
+  .mt3-topic-label {
+    font-size: 6.5px; font-weight: 800; color: #ff2e63;
+    text-transform: uppercase; letter-spacing: 0.15em;
+    margin-bottom: 3px;
+  }
+  .mt3-topic { font-size: 13px; font-weight: 700; line-height: 1.2; margin-bottom: 5px; }
+  .mt3-topic-desc { font-size: 7.5px; color: #c0c0c8; line-height: 1.4; margin-bottom: 14px; }
+  /* About + Expertise — RED and BLUE vertical accent lines on the LEFT */
+  .mt3-about {
+    border-left: 2px solid #ff2e63;
+    padding: 1px 0 1px 8px;
+    margin-bottom: 10px;
+  }
+  .mt3-about-label {
+    font-size: 6px; font-weight: 800; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #aaa;
+    margin-bottom: 3px;
+  }
+  .mt3-about-body {
+    font-size: 7.5px; color: #fff; line-height: 1.45;
+  }
+  .mt3-expertise {
+    border-left: 2px solid #6666aa;
+    padding: 1px 0 1px 8px;
+  }
+  .mt3-expertise-label {
+    font-size: 6px; font-weight: 800; letter-spacing: 0.15em;
+    text-transform: uppercase; color: #8888aa;
+    margin-bottom: 3px;
+  }
+  .mt3-expertise-body {
+    font-size: 7.5px; color: #c0c0c8; line-height: 1.4;
+  }
+  /* Right panel: pink → magenta gradient */
+  .mt3-right {
+    position: relative;
+    background: linear-gradient(135deg, #c94d8e 0%, #d63384 50%, #b0286f 100%);
+    overflow: hidden;
+  }
+  /* Subtle diagonal stripe overlay on right panel */
+  .mt3-right-deco {
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(45deg, transparent 0, transparent 14px, rgba(255,255,255,0.05) 14px, rgba(255,255,255,0.05) 15px);
+    pointer-events: none;
+  }
+  /* Top nav: AI SALON • TEL AVIV white pill (left-center) + QR (top-right) */
+  .mt3-top-nav {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 4;
+  }
+  .mt3-aisalon-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 7px; font-weight: 800; letter-spacing: 0.08em;
+    color: #6b1d7a;
+    background: #fff;
+    padding: 3px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  .mt3-diamond {
+    width: 6px; height: 6px;
+    background: #ff2e63;
+    transform: rotate(45deg);
+    flex-shrink: 0;
+  }
+  .mt3-qr {
+    width: 26px; height: 26px;
+    background: #fff;
+    background-image:
+      linear-gradient(90deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%),
+      linear-gradient(0deg, #000 25%, transparent 25%, transparent 50%, #000 50%, #000 75%, transparent 75%);
+    background-size: 6.5px 6.5px;
+    border-radius: 3px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  /* Avatar: arched stadium shape (semicircle top + rectangular bottom), beige bg, photo-fill */
+  .mt3-avatar {
+    position: absolute;
+    top: 14%; left: 50%; transform: translateX(-50%);
+    width: 62%; height: 66%;
+    background:
+      radial-gradient(circle at 50% 35%, #ebcba8 0%, #d4a574 60%, #8b5a3c 100%);
+    background-size: cover; background-position: center top;
+    border-top-left-radius: 999px;
+    border-top-right-radius: 999px;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    box-shadow: 0 16px 36px rgba(0,0,0,0.35);
+    z-index: 2;
+  }
+  /* Dark charcoal event card, bottom-LEFT of right panel (overlapping avatar base) */
+  .mt3-event-card {
+    position: absolute;
+    bottom: 18px; left: 12px;
+    width: 70%;
+    background: #2a2530;
+    color: #fff;
+    padding: 8px 11px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    z-index: 5;
+  }
+  .mt3-event-name {
+    font-size: 8.5px; font-weight: 700; line-height: 1.2;
+    margin-bottom: 4px;
+  }
+  .mt3-event-when {
+    font-size: 7px; color: #ff2e63; font-weight: 600;
+    margin-bottom: 2px;
+    display: block;
+  }
+  .mt3-event-where {
+    font-size: 7px; color: #ccc; font-weight: 400;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .mt3-event-pin {
+    width: 5px; height: 5px;
+    background: #ff2e63;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    flex-shrink: 0;
+  }
+  /* Gold AI badge — bottom-right corner */
+  .mt3-ai-badge {
+    position: absolute; bottom: 14px; right: 12px;
+    width: 28px; height: 28px;
+    background: #c4a35a;
+    color: #fff;
+    font-weight: 800; font-size: 10px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 6;
+    letter-spacing: 0.04em;
+  }
+
+  /* ============================================================
+     TOOLBAR BEFORE / AFTER
+     ============================================================ */
+  .toolbar-frame {
+    background: #fafafa;
+    border: 1px solid #d4d4d8;
+    border-radius: 6px;
+    padding: 14px 14px;
+    width: 600px;
+    position: relative;
+    height: 380px;
+    overflow: hidden;
+  }
+  .toolbar-frame-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #888; margin-bottom: 10px;
+  }
+  .toolbar-canvas {
+    width: 100%; height: 320px;
+    background: linear-gradient(135deg, rgba(0,0,0,0.03), rgba(0,0,0,0.06));
+    border-radius: 4px;
+    position: relative;
+    border: 1px solid #e4e4e7;
+  }
+  .toolbar-canvas-inner {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 70%; height: 80%;
+    background: linear-gradient(135deg, #5b0e7e, #ff005a);
+    border-radius: 3px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 11px; font-weight: 600;
+  }
+  .toolbar-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 9.5px; font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.15);
+    background: #fff; color: #111;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .toolbar-btn-blue { background: #0066FF; color: #fff; border-color: #0066FF; }
+  .toolbar-btn-pink { background: #FF005A; color: #fff; border-color: #FF005A; }
+  .toolbar-label {
+    font-size: 10px; color: #555;
+    margin-left: auto;
+  }
+  .toolbar-float-old {
+    position: absolute; top: 8px; right: 8px;
+    display: flex; gap: 5px;
+  }
+  /* Toolbar ABOVE the canvas frame (not floating on top of it) */
+  .toolbar-above {
+    display: flex; flex-direction: column; gap: 6px;
+    align-items: flex-end;
+    margin-bottom: 8px;
+  }
+  .toolbar-style-row {
+    display: flex; gap: 4px; align-items: center;
+    background: #fff;
+    padding: 4px 6px;
+    border-radius: 5px;
+    border: 1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .toolbar-style-label {
+    font-size: 8px; font-weight: 700; color: #888;
+    padding: 0 4px 0 2px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .toolbar-edit-row {
+    display: flex; gap: 5px;
+  }
+  .style-btn {
+    font-size: 9px; font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: #fff; color: #555;
+    cursor: pointer;
+  }
+  .style-btn-active {
+    background: #111; color: #fff; border-color: #111;
+  }
+  .style-btn-new {
+    background: #ff005a; color: #fff; border-color: #ff005a;
+    position: relative;
+  }
+  .style-btn-new::after {
+    content: "NEW";
+    position: absolute;
+    top: -6px; right: -6px;
+    background: #ffd54f; color: #111;
+    font-size: 6px; font-weight: 800;
+    padding: 1px 3px; border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+  .toolbar-formview-hint {
+    position: absolute; top: 80px; left: 14px;
+    background: #fff3cd;
+    border: 1px dashed #f59e0b;
+    color: #92400e;
+    font-size: 9px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    max-width: 200px;
+    line-height: 1.3;
+  }
+  .arrow-down {
+    display: inline-block;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #6b7280;
+    margin: 0 4px;
+    vertical-align: middle;
+  }
+  .check {
+    display: inline-block;
+    color: #10b981; font-weight: 800;
+    margin-right: 4px;
+  }
+  .x-mark {
+    display: inline-block;
+    color: #ef4444; font-weight: 800;
+    margin-right: 4px;
+  }
+  .summary-box {
+    background: #fff;
+    border: 1px solid #d4d4d8;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    max-width: 800px;
+  }
+  .summary-box h4 { margin: 0 0 8px; font-size: 13px; }
+  .summary-box ul { margin: 0; padding-left: 18px; font-size: 12px; color: #444; line-height: 1.7; }
+  .summary-box code {
+    background: #f3f4f6;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+  }
+  .cta {
+    margin-top: 28px;
+    background: linear-gradient(90deg, #ff005a, #5b0e7e);
+    color: #fff;
+    padding: 14px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-block;
+  }
+  .cta strong { font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Style Variants Preview — AI Salon Mockup Studio</h1>
+  <div class="sub">
+    Visual sign-off mock before implementation. Two new variants + toolbar restructure. No code changes have been made yet — this is just a preview of what will be built.
+  </div>
+
+  <!-- ============================================================
+       SECTION 1 — SPEAKER INTRO: Style 1 (current) vs Style 2 (new)
+       ============================================================ -->
+  <section>
+    <h2>1. Speaker Intro mockup — add <span class="pill new">NEW Style 2</span></h2>
+    <p class="caption">
+      Source: page 20 of original 3-tier-platform-plan.pdf — purple-pink gradient header, 2×2 speaker card grid, dark illustration panel with location pins, dark footer with QR.
+    </p>
+    <div class="canvas-row">
+      <div class="canvas-cell">
+        <h3>Style 1 — Current (geometric triangles)</h3>
+        <div class="canvas-frame">
+          <div class="si1">
+            <div class="si1-left">
+              <div class="si1-eyebrow">AI Salon · Tel Aviv</div>
+              <div class="si1-event-name">Marketing in the Age of AI</div>
+              <div class="si1-event-topic">An evening with industry leaders</div>
+              <div class="si1-event-meta">Oct 15, 2025 · 18:30 · Sarona Tech Hub</div>
+              <div class="si1-speakers-label">Speakers</div>
+              <div class="si1-speaker">
+                <div class="si1-avatar" style="background-image: linear-gradient(135deg, #f2d5a6, #8b5a3c);"></div>
+                <div class="si1-speaker-info">
+                  <div class="si1-speaker-name">Ohad Ronen</div>
+                  <div class="si1-speaker-title">VP Marketing · Amdocs</div>
+                  <div class="si1-speaker-bio">15 years scaling B2B SaaS marketing teams across EMEA.</div>
+                </div>
+              </div>
+              <div class="si1-speaker">
+                <div class="si1-avatar" style="background-image: linear-gradient(135deg, #d4a574, #5e3a1f);"></div>
+                <div class="si1-speaker-info">
+                  <div class="si1-speaker-name">Ellad Kushnir</div>
+                  <div class="si1-speaker-title">CMO · Alison.ai</div>
+                  <div class="si1-speaker-bio">Led GTM at three AI startups from seed to Series C.</div>
+                </div>
+              </div>
+              <div class="si1-speaker">
+                <div class="si1-avatar" style="background-image: linear-gradient(135deg, #c9b89a, #6e5430);"></div>
+                <div class="si1-speaker-info">
+                  <div class="si1-speaker-name">Boris Mergold</div>
+                  <div class="si1-speaker-title">Lead Cloud Strategist · Google</div>
+                  <div class="si1-speaker-bio">Helps enterprise teams adopt AI responsibly.</div>
+                </div>
+              </div>
+              <div class="si1-speaker">
+                <div class="si1-avatar" style="background-image: linear-gradient(135deg, #e8c5a0, #7a4e2a);"></div>
+                <div class="si1-speaker-info">
+                  <div class="si1-speaker-name">Miri Fenton</div>
+                  <div class="si1-speaker-title">Partner · Maverick Ventures</div>
+                  <div class="si1-speaker-bio">Invests in AI-native B2B companies.</div>
+                </div>
+              </div>
+            </div>
+            <div class="si1-right">
+              <div class="si1-hero-img"></div>
+              <div class="si1-triangle"></div>
+              <div class="si1-triangle2"></div>
+              <div class="si1-pin" style="top: 30%; left: 25%;"></div>
+              <div class="si1-pin-label" style="top: 32%; left: 30%;">Sarona</div>
+              <div class="si1-pin" style="top: 55%; left: 55%;"></div>
+              <div class="si1-pin-label" style="top: 57%; left: 60%;">Yafo</div>
+              <div class="si1-pin" style="top: 70%; left: 35%;"></div>
+              <div class="si1-pin-label" style="top: 72%; left: 40%;">Neve Tzedek</div>
+              <div class="si1-qr"></div>
+              <div class="si1-brand-corner">ai salon</div>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">Style 1 — currently the only variant for Speaker Intro</div>
+      </div>
+
+      <div class="canvas-cell">
+        <h3>Style 2 — NEW (page 20 reference)</h3>
+        <div class="canvas-frame">
+          <div class="si2">
+            <!-- Gradient header -->
+            <div class="si2-header">
+              <div class="si2-header-left">
+                <div class="si2-header-logo">AI SALON</div>
+                <div>
+                  <div class="si2-header-title">Tel Aviv · Marketing in the Age of AI</div>
+                  <div class="si2-header-topic">An evening with industry leaders · October 15, 2025</div>
+                </div>
+              </div>
+              <div class="si2-header-right">18:30 · Sarona Tech Hub</div>
+            </div>
+
+            <!-- Body: 2×2 grid (left) + dark map panel (right) -->
+            <div class="si2-body">
+              <div class="si2-left">
+                <div class="si2-speaker-grid">
+                  <div class="si2-card">
+                    <div class="si2-card-head">
+                      <div class="si2-card-avatar" style="background-image: linear-gradient(135deg, #f2d5a6, #8b5a3c);"></div>
+                      <div>
+                        <div class="si2-card-name">Ohad Ronen</div>
+                        <div class="si2-card-title">VP Marketing · Amdocs</div>
+                      </div>
+                    </div>
+                    <div class="si2-card-bio">15 years scaling B2B SaaS marketing teams across EMEA.</div>
+                    <div class="si2-card-time">18:45 · Fireside</div>
+                  </div>
+                  <div class="si2-card">
+                    <div class="si2-card-head">
+                      <div class="si2-card-avatar" style="background-image: linear-gradient(135deg, #d4a574, #5e3a1f);"></div>
+                      <div>
+                        <div class="si2-card-name">Ellad Kushnir</div>
+                        <div class="si2-card-title">CMO · Alison.ai</div>
+                      </div>
+                    </div>
+                    <div class="si2-card-bio">Led GTM at three AI startups from seed to Series C.</div>
+                    <div class="si2-card-time">19:15 · Talk</div>
+                  </div>
+                  <div class="si2-card">
+                    <div class="si2-card-head">
+                      <div class="si2-card-avatar" style="background-image: linear-gradient(135deg, #c9b89a, #6e5430);"></div>
+                      <div>
+                        <div class="si2-card-name">Boris Mergold</div>
+                        <div class="si2-card-title">Lead Cloud Strategist · Google</div>
+                      </div>
+                    </div>
+                    <div class="si2-card-bio">Helps enterprise teams adopt AI responsibly.</div>
+                    <div class="si2-card-time">19:45 · Panel</div>
+                  </div>
+                  <div class="si2-card">
+                    <div class="si2-card-head">
+                      <div class="si2-card-avatar" style="background-image: linear-gradient(135deg, #e8c5a0, #7a4e2a);"></div>
+                      <div>
+                        <div class="si2-card-name">Miri Fenton</div>
+                        <div class="si2-card-title">Partner · Maverick Ventures</div>
+                      </div>
+                    </div>
+                    <div class="si2-card-bio">Invests in AI-native B2B companies.</div>
+                    <div class="si2-card-time">20:15 · Panel</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="si2-right">
+                <div class="si2-map-bg"></div>
+                <div class="si2-mountains"></div>
+                <div class="si2-pin" style="top: 22%; left: 18%;"></div>
+                <div class="si2-pin-label" style="top: 14%; left: 16%;">Sarona</div>
+                <div class="si2-pin" style="top: 35%; left: 55%;"></div>
+                <div class="si2-pin-label" style="top: 27%; left: 53%;">Dizengoff</div>
+                <div class="si2-pin" style="top: 50%; left: 30%;"></div>
+                <div class="si2-pin-label" style="top: 42%; left: 28%;">Yafo</div>
+                <div class="si2-pin" style="top: 62%; left: 70%;"></div>
+                <div class="si2-pin-label" style="top: 54%; left: 68%;">Neve Tzedek</div>
+                <div class="si2-mascot">🦫</div>
+              </div>
+            </div>
+
+            <!-- Dark footer with collab/sponsor/QR -->
+            <div class="si2-footer">
+              <div class="si2-footer-left">
+                <div class="si2-footer-logo">ai salon</div>
+                <div class="si2-footer-group">
+                  <span class="si2-footer-label">In collab with</span>
+                  <div class="si2-footer-tags">
+                    <span class="si2-footer-tag">Amdocs</span>
+                    <span class="si2-footer-tag">Google</span>
+                  </div>
+                </div>
+                <div class="si2-footer-group">
+                  <span class="si2-footer-label">Sponsored by</span>
+                  <div class="si2-footer-tags">
+                    <span class="si2-footer-tag">Alison.ai</span>
+                  </div>
+                </div>
+              </div>
+              <div class="si2-footer-qr"></div>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">Style 2 — purple-pink header + 2×2 grid + dark map panel + dark footer</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SECTION 2 — MEET THE SPEAKER: Style 1 vs Style 2 vs Style 3
+       ============================================================ -->
+  <section>
+    <h2>2. Meet the Speaker mockup — add <span class="pill new">NEW Style 3</span></h2>
+    <p class="caption">
+      Source: page 21 of original 3-tier-platform-plan.pdf (uploaded reference) — split deep-purple left / pink-magenta right, arched stadium avatar, dark charcoal event card at bottom-left of right panel, gold AI badge bottom-right.
+    </p>
+    <div class="canvas-row">
+      <div class="canvas-cell">
+        <h3>Style 1 — Current (geometric gradient triangles)</h3>
+        <div class="canvas-frame">
+          <div class="mt1">
+            <div class="mt1-left">
+              <div class="mt1-badge">Meet the speaker</div>
+              <div class="mt1-name">Boris Mergold</div>
+              <div class="mt1-title">Lead Cloud Strategist · Google</div>
+              <div class="mt1-topic-label">Topic</div>
+              <div class="mt1-topic">Responsible AI in Enterprise Cloud</div>
+              <div class="mt1-bio">Boris leads Google Cloud's enterprise AI strategy across EMEA. Before Google, he built ML platforms at two unicorns.</div>
+              <div class="mt1-expertise">Expertise: enterprise AI · cloud strategy · responsible ML</div>
+            </div>
+            <div class="mt1-right">
+              <div class="mt1-tri1"></div>
+              <div class="mt1-tri2"></div>
+              <div class="mt1-photo"></div>
+              <div class="mt1-event-card">
+                <div class="mt1-event-name">Marketing in the Age of AI</div>
+                <div class="mt1-event-when">Oct 15, 2025 · 19:45</div>
+                <div class="mt1-event-where">Sarona Tech Hub, Tel Aviv</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">Style 1 — geometric gradient triangles (default)</div>
+      </div>
+
+      <div class="canvas-cell">
+        <h3>Style 2 — Existing (low-poly network image)</h3>
+        <div class="canvas-frame">
+          <div class="mt2">
+            <div class="mt2-left">
+              <div class="mt2-badge">Meet the speaker</div>
+              <div class="mt2-name">Boris Mergold</div>
+              <div class="mt2-title">Lead Cloud Strategist · Google</div>
+              <div class="mt2-topic-label">Topic</div>
+              <div class="mt2-topic">Responsible AI in Enterprise Cloud</div>
+              <div class="mt2-bio">Boris leads Google Cloud's enterprise AI strategy across EMEA.</div>
+            </div>
+            <div class="mt2-right">
+              <div class="mt2-network"></div>
+              <div class="mt2-pin" style="top: 22%; left: 18%;"></div>
+              <div class="mt2-pin" style="top: 35%; left: 60%;"></div>
+              <div class="mt2-pin" style="top: 65%; left: 35%;"></div>
+              <div class="mt2-pin" style="top: 50%; left: 78%;"></div>
+              <div class="mt2-photo"></div>
+              <div class="mt2-event-card">
+                <div class="mt2-event-name">Marketing in the Age of AI</div>
+                <div class="mt2-event-when">Oct 15, 2025 · 19:45</div>
+                <div class="mt2-event-where">Sarona Tech Hub, Tel Aviv</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">Style 2 — pre-designed low-poly network image (existing)</div>
+      </div>
+
+      <div class="canvas-cell">
+        <h3>Style 3 — NEW (page 21 reference)</h3>
+        <div class="canvas-frame">
+          <div class="mt3">
+            <!-- LEFT panel: deep purple gradient -->
+            <div class="mt3-left">
+              <div class="mt3-badge"><span class="mt3-mic-icon"></span>Meet the speaker</div>
+              <div class="mt3-name">Boris Mergold</div>
+              <div class="mt3-title">Lead Cloud Strategist</div>
+              <div class="mt3-company">Google</div>
+              <div class="mt3-topic-label">Topic</div>
+              <div class="mt3-topic">Responsible AI in Enterprise Cloud</div>
+              <div class="mt3-topic-desc">A practical look at how large orgs ship AI without losing trust.</div>
+              <div class="mt3-about">
+                <div class="mt3-about-label">About Boris</div>
+                <div class="mt3-about-body">Boris leads Google Cloud's enterprise AI strategy across EMEA. Before Google, he built ML platforms at two unicorns.</div>
+              </div>
+              <div class="mt3-expertise">
+                <div class="mt3-expertise-label">Expertise</div>
+                <div class="mt3-expertise-body">Enterprise AI · Cloud strategy · Responsible ML</div>
+              </div>
+            </div>
+            <!-- RIGHT panel: pink → magenta gradient -->
+            <div class="mt3-right">
+              <div class="mt3-right-deco"></div>
+              <div class="mt3-top-nav">
+                <div class="mt3-aisalon-pill"><span class="mt3-diamond"></span>AI Salon · Tel Aviv</div>
+                <div class="mt3-qr"></div>
+              </div>
+              <div class="mt3-avatar"></div>
+              <div class="mt3-event-card">
+                <div class="mt3-event-name">AI Salon Tel Aviv · Marketing in the Age of AI</div>
+                <span class="mt3-event-when">Wed, Oct 15 · 19:45 — 21:00</span>
+                <div class="mt3-event-where">
+                  <span class="mt3-event-pin"></span>
+                  Sarona Studio · 1 HaArba'a St, Tel Aviv
+                </div>
+              </div>
+              <div class="mt3-ai-badge">AI</div>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">Style 3 — split purple/pink, arched stadium avatar, dark event card bottom-left, gold AI badge</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SECTION 3 — TOOLBAR PLACEMENT: BEFORE vs AFTER
+       ============================================================ -->
+  <section>
+    <h2>3. Style button placement — <span class="pill before">BEFORE</span> → <span class="pill after">AFTER</span></h2>
+    <p class="caption">
+      Style selector moves OUT of the left form panel (where it currently lives buried inside the "Hero / Right-side visual" section) and sits ABOVE the canvas frame in a vertical stack: Style 1/2/3 buttons → Edit images → Edit sections. Not floating on top of the canvas — outside the frame. Canvas label unified on both editors.
+    </p>
+    <div class="canvas-row">
+      <div class="canvas-cell">
+        <h3>BEFORE — Style button buried in left form panel</h3>
+        <div class="toolbar-frame">
+          <div class="toolbar-frame-label">Live Preview</div>
+          <div class="toolbar-canvas">
+            <div class="toolbar-canvas-inner">Canvas (1200 × 800)</div>
+            <div class="toolbar-float-old">
+              <div class="toolbar-btn">📐 Edit sections</div>
+              <div class="toolbar-btn">🖼 Edit images</div>
+            </div>
+            <div class="toolbar-formview-hint">
+              <strong>Style 1 / Style 2</strong> radio buttons currently live here, inside the left form panel under "Hero / Right-side visual". Hard to discover, doesn't switch when canvas is the focus.
+            </div>
+          </div>
+        </div>
+        <div class="canvas-label">
+          <span class="x-mark">✗</span> Style selector buried inside form panel<br>
+          <span class="x-mark">✗</span> Not visible when preview is in focus<br>
+          <span class="x-mark">✗</span> Speaker Intro has no style selector at all
+        </div>
+      </div>
+
+      <div class="canvas-cell">
+        <h3>AFTER — Toolbar OUTSIDE canvas, stacked: Style → Edit images → Edit sections</h3>
+        <div class="toolbar-frame">
+          <div class="toolbar-frame-label">Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser</div>
+          <!-- Toolbar ABOVE the canvas frame, right-aligned, vertical stack -->
+          <div class="toolbar-above">
+            <div class="toolbar-style-row">
+              <span class="toolbar-style-label">Style</span>
+              <span class="style-btn style-btn-active">1</span>
+              <span class="style-btn">2</span>
+              <span class="style-btn style-btn-new">3</span>
+            </div>
+            <div class="toolbar-edit-row">
+              <div class="toolbar-btn">🖼 Edit images</div>
+            </div>
+            <div class="toolbar-edit-row">
+              <div class="toolbar-btn">📐 Edit sections</div>
+            </div>
+          </div>
+          <div class="toolbar-canvas" style="margin-top: 4px;">
+            <div class="toolbar-canvas-inner">Canvas (1200 × 800) — buttons live ABOVE this frame, not on top of it</div>
+          </div>
+        </div>
+        <div class="canvas-label">
+          <span class="check">✓</span> Toolbar sits ABOVE the canvas frame, not floating on top<br>
+          <span class="check">✓</span> Vertical order: Style 1/2/3 → Edit images → Edit sections<br>
+          <span class="check">✓</span> Right-aligned, doesn't cover canvas content<br>
+          <span class="check">✓</span> Canvas label unified: "Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser"
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SUMMARY
+       ============================================================ -->
+  <section>
+    <div class="summary-box">
+      <h4>What will change (implementation scope, not started yet)</h4>
+      <ul>
+        <li><strong>Speaker Intro</strong> — add <code>heroStyle: 1 | 2</code> to types.ts, add Style 2 canvas rendering (purple-pink gradient header, 2×2 speaker card grid, dark illustration panel with location pins, dark footer with QR + collab/sponsor tags), add floating Style selector above Edit buttons.</li>
+        <li><strong>Meet the Speaker</strong> — extend <code>heroStyle: 1 | 2 | 3</code>, add Style 3 canvas rendering (deep-purple left / pink-magenta right; red pill "MEET THE SPEAKER" badge with mic icon; big bold name + title + company; red topic label; <strong>red left-accent line</strong> on About Boris block; <strong>blue left-accent line</strong> on Expertise block; white "AI Salon · Tel Aviv" pill + QR at top of right panel; arched <strong>stadium-shape</strong> avatar centered; dark charcoal #2a2530 event card at bottom-left of right panel overlapping the avatar base; gold #c4a35a "AI" badge bottom-right), move Style 1/2/3 selector from form-view into the floating toolbar.</li>
+        <li><strong>Both editors</strong> — toolbar sits ABOVE the canvas frame (not floating on top of it), vertical order: Style 1/2/3 → Edit images → Edit sections, right-aligned. Canvas label unified to <code>Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser</code>.</li>
+        <li><strong>Files touched</strong> (estimate, ~600 LOC across 8 files):
+          <code>speaker-intro/types.ts</code>, <code>speaker-intro-canvas.tsx</code>, <code>speaker-intro-editor.tsx</code>,
+          <code>meet-the-speaker/types.ts</code>, <code>meet-the-speaker-canvas.tsx</code>, <code>meet-the-speaker-editor.tsx</code>,
+          <code>shared/meet-the-speaker-form-view.tsx</code> (remove the inline Style 1/2 selector block).
+        </li>
+        <li><strong>Backward compatibility</strong> — Style 1 remains the default for both mockups (existing saved JSON without <code>heroStyle</code> continues to render as Style 1).</li>
+      </ul>
+    </div>
+
+    <div class="cta">
+      <strong>Sign off on this preview</strong> &nbsp;·&nbsp; Reply "go ahead" or "approved" to start implementation. Reply with changes if anything needs tweaking (colors, layout, label wording, button shape).
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
