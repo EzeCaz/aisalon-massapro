@@ -14514,3 +14514,26 @@ Stage Summary:
 - signup, reset-password, bulk-reset-password are ALREADY effectively fixed by virtue of the sendPasswordEmail change (they pass brandSlug already; sendPasswordEmail now uses brand.loginUrl instead of opts.siteUrl).
 - REMAINING (lower priority): campaigns/[id]/send + test-send, cron/email, force-send-stage, send-chapter-onboarding, provision, chapter-onboarding preview, track/open, track/event, referral-share-card client component, chapter-editor client, public-event-page share, login-form OAuth error message.
 - Next session: continue with remaining URL builders, then move to Phase B (17 member-page branding leaks: set-password logo, my-code, public-event-page header, chapter-landing logo, etc.), Phase C (remaining email system — orchestrator SHELL is done but DM/RSVP copy + sender identity defaults + admin composer defaults still need work), Phase D (admin surfaces — 71 mechanical fixes).
+
+---
+Task ID: joincoma-revised-single-host
+Agent: Super Z (main)
+Task: Revise the joincoma.com architecture per user clarification — Interpretation A "centralized login". All brands (except AIS) live on platform.joincoma.com as a single host. Brand identity is URL-driven (?brand=<slug>), not host-driven. AIS is permanently grandfathered on aisalon.massapro.com.
+
+Work Log:
+- User clarified the architecture: platform.joincoma.com is the SINGLE host for all brands (except AIS). The split-domain design (joincoma.com apex for login + platform.joincoma.com subdomain for app) was DROPPED. New brands (Danone, HiTech AI, etc.) live on platform.joincoma.com and use ?brand=<slug> URL param to render their own branding on the login page (logo, hero banner, colors).
+- Code simplification (commit f43bc73):
+  * brand-config.ts: BRAND_HOST_MAP drops joincoma.com + www.joincoma.com. Keeps platform.joincoma.com + coma.massapro.com (legacy) for Coma, aisalon.massapro.com for AIS. FALLBACK_DEFAULT_BRAND flipped aisalon → coma (Coma is now the parent platform default).
+  * email-brand-context.ts: Coma loginHost = https://platform.joincoma.com (was https://joincoma.com). loginUrl now produces https://platform.joincoma.com/login?brand=coma.
+  * coma-site-url.ts: dropped split-domain routing logic. resolveBrandSiteUrl now just returns brand's single app host + path. Added resolveComaSiteUrl as backward-compat alias so existing call sites in worker.ts/flow-worker.ts/RSVP/DM/speaker/click-tracking routes keep working without edits.
+  * middleware.ts: dropped comaSubdomainRedirect (apex-vs-app rules). Dropped www.joincoma.com redirect. Replaced with a single comaLegacyDomainRedirect rule: coma.massapro.com/<path> → platform.joincoma.com/<path> (302).
+  * auth.ts: dropped the cross-subdomain cookies override (domain=.joincoma.com) — no longer needed with single-host architecture. NextAuth's default host-only cookies work for both brands.
+- TypeScript: clean on all 5 touched files (only pre-existing errors in unrelated routes remain).
+- Net code reduction: 304 deletions vs 199 insertions = 105 lines simpler.
+
+Stage Summary:
+- Single-host architecture deployed (commit f43bc73 on origin/main, Vercel auto-deploying).
+- External setup simplified: 1 DNS record (platform.joincoma.com), 1 Vercel domain, 1 Google OAuth redirect URI. Was 3/3/2 in the original Phase 1.
+- AIS users see ZERO change. Coma users now have login + app on the same host (platform.joincoma.com).
+- The ?brand= override (already in middleware + brand-metadata.ts) is the mechanism that lets future brands render their identity on the central login page — already wired, no extra code needed for Danone/etc. when their Brand rows are added in Phase 3.
+- Next: Phase 3A (DB schema — new Brand model + brandId on Chapter/User + data migration). Already drafted in the chat; awaiting user "go" to execute.
