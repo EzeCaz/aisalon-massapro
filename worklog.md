@@ -14427,3 +14427,19 @@ Stage Summary:
 - Code fix committed locally (bc8b6e3a) — same change as the auto-commit, just with a real commit message. Local main is 3 commits ahead of origin/main (4996f69, 6475199, bc8b6e3).
 - Local backups created and verified (FULL 416MB + SLIM 106MB).
 - BLOCKED on user: (a) provide fresh GitHub PAT to push, (b) upload either backup zip to Google Drive manually.
+
+---
+Task ID: deploy-with-fresh-pat
+Agent: Super Z (main)
+Task: Push commits with user-provided PAT (second attempt), and locate Drive OAuth credentials in project history for folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj.
+
+Work Log:
+- New PAT verified via GitHub API: GET /user returned login=EzeCaz (id=200097512). Repo access confirmed for EzeCaz/aisalon-massapro.
+- Pushed: `git push origin main` → c49fc61..2f36006 main -> main. Then amended the top UUID-only auto-commit to `docs(worklog): record hydration-fix + backup status` (new SHA 7afe128) and force-pushed with lease → clean history.
+- FINAL ORIGIN/MAIN: 4996f69 (Phase 2+3 brand isolation), 6475199 (worklog), bc8b6e3 (hydration fix), 7afe128 (worklog) — all on origin.
+- Drive OAuth credentials search: checked current .env (only DATABASE_URL — sandbox reset), git log --all -S "apps.googleusercontent.com" / "GOCSPX" / "GDRIVE_CLIENT_ID" (found only script template text + a docs/tasks.md mention of "GDRIVE_CLIENT_ID / GDRIVE_CLIENT_SECRET → none set"), git show earliest tracked .env commits (only DATABASE_URL). Conclusion: GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET were NEVER committed to git (env was gitignored from initial commit, .gitignore line ".env"), and the sandbox .env was wiped in the 04:02 platform reset. NO token file on disk (.gdrive-token.json / .gcp-service-account.json missing).
+- Folder ID provided by user: 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj (URL: https://drive.google.com/drive/folders/19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj).
+
+Stage Summary:
+- GitHub push: ✅ DONE — origin/main at 7afe128, 4 commits ahead of c49fc61.
+- Drive upload: BLOCKED — OAuth Client ID + Secret missing. Need user to either (a) provide existing GDRIVE_CLIENT_ID + GDRIVE_CLIENT_SECRET from their Google Cloud Console (https://console.cloud.google.com/apis/credentials), or (b) create new OAuth 2.0 Client ID (Desktop app type) and share with me. Once provided, I write to .env, run upload-to-drive.py --auth-url, give user the consent URL, user grants and pastes back redirect URL, I exchange + upload both backup zips (416MB FULL + 106MB slim).
