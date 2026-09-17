@@ -16,11 +16,36 @@ import { buildMetaPayload, recordAndSendMeta } from "@/lib/email-orchestrator/me
 export const dynamic = "force-dynamic";
 
 const ALLOWED_PROTOCOLS = ["http:", "https:"];
-const FALLBACK_URL = "https://aisalon.massapro.com";
+// Phase 2 (joincoma.com): the FALLBACK_URL is used when a click-tracking
+// link is malformed (missing ?target). Previously hard-coded to
+// aisalon.massapro.com — meant a Coma user clicking a corrupted link
+// landed on the AIS site. Now: resolve from the request host so the
+// fallback matches the brand the user was on when they clicked.
+function getFallbackUrl(req: NextRequest): string {
+  const host =
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    "";
+  const normalizedHost = host.toLowerCase().split(":")[0];
+  // Coma brand hosts → platform.joincoma.com (the app surface; /login
+  // would be apex, but the click fallback should go to the app root).
+  if (
+    normalizedHost === "joincoma.com" ||
+    normalizedHost === "platform.joincoma.com" ||
+    normalizedHost === "www.joincoma.com" ||
+    normalizedHost === "coma.massapro.com" ||
+    normalizedHost.endsWith(".joincoma.com")
+  ) {
+    return "https://platform.joincoma.com";
+  }
+  // AIS + unknown → aisalon.massapro.com (the legacy default).
+  return "https://aisalon.massapro.com";
+}
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const queueId = url.searchParams.get("id");
+  const FALLBACK_URL = getFallbackUrl(req);
   const target = url.searchParams.get("target") || FALLBACK_URL;
 
   // Validate target URL — must be http(s) and absolute. Otherwise fall back.

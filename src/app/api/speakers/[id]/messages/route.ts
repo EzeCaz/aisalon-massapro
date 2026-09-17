@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendMail } from "@/lib/email";
+import { resolveEmailBrandContext } from "@/lib/email-brand-context";
+import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
 
 /**
  * GET /api/speakers/[id]/messages
@@ -129,14 +131,29 @@ export async function POST(
   // Email the admin so they can forward to the speaker.
   // (We don't have the speaker's email directly — Speaker has no
   // email field. The admin acts as the relay.)
+  //
+  // Phase 2 (joincoma.com): brand this admin-relay email per SENDER
+  // (me.brandSlug) — the admin needs to know which brand the message
+  // came from so they can route the reply correctly. The sender is
+  // the one who chose which platform to message from.
   const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";
-  const eventUrl = `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://aisalon.massapro.com"}/events/${speaker.event.slug}`;
-  const chatFrom =
-    process.env.SMTP_FROM || "AI Salon Chat <chat@aisalon.massapro.com>";
+  const senderBrandSlug = me.brandSlug === "coma" ? "coma" : "aisalon";
+  const brand = resolveEmailBrandContext(senderBrandSlug);
+  const isLocalDev =
+    process.env.NODE_ENV !== "production" &&
+    (process.env.NEXTAUTH_URL?.includes("localhost") ||
+      process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost"));
+  const eventUrlBase = isLocalDev
+    ? (process.env.NEXTAUTH_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "http://localhost:3000")
+    : resolveComaSiteUrl(senderBrandSlug, "/");
+  const eventUrl = `${eventUrlBase.replace(/\/$/, "")}/events/${speaker.event.slug}`;
+  const chatFrom = process.env.SMTP_FROM || brand.fromName;
   const subject = `New message for ${speaker.name} — ${speaker.event.title}`;
   const textEmail = `Hi,
 
-${fromName} (${fromEmail}) sent a message to ${speaker.name} via the AI Salon platform.
+${fromName} (${fromEmail}) sent a message to ${speaker.name} via the ${brand.displayName} platform.
 
 Event: ${speaker.event.title}
 Speaker: ${speaker.name}${speaker.role ? ` (${speaker.role})` : ""}${speaker.company ? ` @ ${speaker.company}` : ""}
@@ -150,7 +167,7 @@ Reply directly to ${fromName} at ${fromEmail}, or forward this message to ${spea
 
 Event page: ${eventUrl}
 
-— AI Salon Tel Aviv platform`;
+— ${brand.displayName} platform`;
   const htmlEmail = `
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #0a0a0a;">
   <p style="font-size: 14px; color: #666; margin: 0 0 16px;">
@@ -160,7 +177,7 @@ Event page: ${eventUrl}
     Event: ${speaker.event.title}<br/>
     Speaker: ${speaker.name}${speaker.role ? ` (${speaker.role})` : ""}${speaker.company ? ` @ ${speaker.company}` : ""}
   </p>
-  <div style="padding: 16px; background: #f6f6f6; border-radius: 8px; border-left: 4px solid #FF005A; margin: 16px 0;">
+  <div style="padding: 16px; background: #f6f6f6; border-radius: 8px; border-left: 4px solid ${brand.accentColor}; margin: 16px 0;">
     <pre style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${text.replace(/</g, "&lt;")}</pre>
   </div>
   <p style="font-size: 13px; color: #666; margin: 16px 0 0;">
