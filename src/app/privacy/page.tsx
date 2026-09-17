@@ -1,9 +1,15 @@
 import { Suspense } from "react";
 
-export const metadata = {
-  title: "Privacy Policy — AI Salon Tel Aviv",
-  description: "How AI Salon Tel Aviv handles your personal data.",
-};
+/**
+ * BRAND-AWARE metadata (Phase 2): bare title + generic description —
+ * brand suffix comes from the root layout's template.
+ */
+export async function generateMetadata() {
+  return {
+    title: "Privacy Policy",
+    description: "How the platform handles your personal data.",
+  };
+}
 
 export default function PrivacyPage() {
   return (

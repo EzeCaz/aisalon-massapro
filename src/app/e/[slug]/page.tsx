@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PublicEventPage } from "./public-event-page";
 import type { Metadata } from "next";
+import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
 
 /**
  * /e/[slug] — PUBLIC event landing page.
@@ -31,16 +32,25 @@ import type { Metadata } from "next";
 
 type Params = { params: Promise<{ slug: string }> };
 
+/**
+ * BRAND-AWARE metadata (Phase 2 of Coma brand isolation):
+ *  - The event title is returned BARE — the root layout's brand-aware
+ *    template appends the active brand suffix ("<Event> — Coma Tel Aviv"
+ *    on coma.massapro.com, "<Event> — AI Salon Tel Aviv" on AIS).
+ *    Returning "${event.title} — AI Salon Tel Aviv" here caused a DOUBLE
+ *    suffix under the new template, so the suffix is dropped.
+ *  - Fallbacks no longer hard-code "AI Salon Tel Aviv".
+ */
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug } = await params;
   const event = await db.event.findUnique({
     where: { slug },
     select: { title: true, subtitle: true, description: true, mainImage: { select: { fileUrl: true } } },
   });
-  if (!event) return { title: "Event — AI Salon Tel Aviv" };
-  const description = event.subtitle || event.description?.slice(0, 160) || "AI Salon Tel Aviv event";
+  if (!event) return { title: "Event" };
+  const description = event.subtitle || event.description?.slice(0, 160) || "Community event";
   return {
-    title: `${event.title} — AI Salon Tel Aviv`,
+    title: event.title,
     description,
     openGraph: {
       title: event.title,
@@ -166,5 +176,9 @@ export default async function PublicEventPageRoute({ params }: Params) {
     rsvpsGoing,
   };
 
-  return <PublicEventPage event={serialized} me={me} />;
+  // BRAND-AWARE (Phase 3): resolve brand (host for anonymous visitors —
+  // cookies are host-scoped so host and brand always agree) and pass it
+  // down so the public event page never renders hard-coded AIS copy.
+  const { brand } = await resolveBrandMetadata();
+  return <PublicEventPage event={serialized} me={me} brand={brand} />;
 }

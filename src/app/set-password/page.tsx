@@ -174,8 +174,10 @@ export async function generateMetadata({
 }) {
   const { chapterSlug: urlSlug } = await searchParams;
   const { name: chapterName } = await resolveChapter(urlSlug, null);
+  // BRAND-AWARE (Phase 2): bare title — brand suffix comes from the root
+  // layout template ("Set Your Password — Coma Tel Aviv" on Coma).
   return {
-    title: `Set Your Password — AI Salon ${chapterName}`,
-    description: `Set a new password for your AI Salon ${chapterName} account.`,
+    title: "Set Your Password",
+    description: `Set a new password for your ${chapterName} community account.`,
   };
 }

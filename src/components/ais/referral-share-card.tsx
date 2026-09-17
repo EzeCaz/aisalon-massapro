@@ -30,6 +30,14 @@ type Props = {
   siteUrl?: string;
   /** Compact mode = single row (for the events page hero). Full = card with stats (for /profile). */
   variant?: "compact" | "full";
+  /** BRAND-AWARE (Phase 3): brand display name used in the native
+   *  share-sheet title/text. Defaults to the legacy AIS strings so
+   *  existing callers are unaffected; brand-aware parents pass the
+   *  resolved brand's displayName. */
+  brandName?: string;
+  /** Brand tagline used in the native share text (lowercase first word
+   *  reads naturally mid-sentence). */
+  brandTagline?: string;
 };
 
 type Stats = {
@@ -43,6 +51,8 @@ export function ReferralShareCard({
   utmUid,
   siteUrl,
   variant = "full",
+  brandName = "AI Salon Tel Aviv",
+  brandTagline = "empowering AI connections",
 }: Props) {
   const pathname = usePathname();
   const [copied, setCopied] = React.useState(false);
@@ -117,8 +127,8 @@ export function ReferralShareCard({
     }
     try {
       await navigator.share({
-        title: "AI Salon Tel Aviv",
-        text: "Join me at AI Salon Tel Aviv — empowering AI connections.",
+        title: brandName,
+        text: `Join me at ${brandName} — ${brandTagline}.`,
         url: shareUrl,
       });
     } catch {

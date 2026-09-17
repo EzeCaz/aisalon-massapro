@@ -351,13 +351,16 @@ export default async function OnboardingPage({
 }
 
 /** Metadata is generated dynamically so the browser tab + OG cards show
- *  the correct chapter name. */
+ *  the correct chapter name. BRAND-AWARE (Phase 2): the brand suffix is
+ *  appended by the root layout template — AIS branch returns a bare
+ *  "Welcome" so it renders "Welcome — AI Salon Tel Aviv", and the Coma
+ *  branch keeps its dedicated copy ("Welcome — Coma Tel Aviv"). */
 export async function generateMetadata({
   searchParams,
 }: {
   searchParams: Promise<{ chapterSlug?: string; brand?: string }>;
 }) {
-  const { chapterSlug: urlSlug, brand: urlBrand } = await searchParams;
+  const { brand: urlBrand } = await searchParams;
   // For Coma, the title is brand-only (no chapter name).
   if (urlBrand === "coma") {
     return {
@@ -365,9 +368,9 @@ export async function generateMetadata({
       description: `Set up your Coma community builder account and create your first chapter.`,
     };
   }
-  const { name: chapterName } = await resolveChapter(urlSlug, null);
   return {
-    title: `Welcome — AI Salon ${chapterName ?? "Tel Aviv"}`,
-    description: `Be a part of the AI Salon ${chapterName ?? "Tel Aviv"} community. Fill out this quick form to connect with a global network of AI founders, technologists, and investors.`,
+    title: "Welcome",
+    description:
+      "Be a part of the community. Fill out this quick form to connect with a global network of AI founders, technologists, and investors.",
   };
 }

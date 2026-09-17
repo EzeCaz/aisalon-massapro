@@ -19,9 +19,19 @@ type Props = {
   isAdmin: boolean;
   /** Admin landing URL tailored to the user's role. */
   adminHref?: string;
+  /** BRAND-AWARE (Phase 3): brand title shown in the sheet header.
+   *  Falls back to the legacy AIS label so existing callers are
+   *  unaffected. app-header passes the resolved brand's display name. */
+  brandTitle?: string;
 };
 
-export function MobileNav({ links, user, isAdmin, adminHref = "/admin" }: Props) {
+export function MobileNav({
+  links,
+  user,
+  isAdmin,
+  adminHref = "/admin",
+  brandTitle = "AI Salon TLV",
+}: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -34,7 +44,7 @@ export function MobileNav({ links, user, isAdmin, adminHref = "/admin" }: Props)
       </SheetTrigger>
       <SheetContent side="right" className="w-72">
         <SheetHeader>
-          <SheetTitle className="text-left">AI Salon TLV</SheetTitle>
+          <SheetTitle className="text-left">{brandTitle}</SheetTitle>
         </SheetHeader>
         <nav className="mt-6 flex flex-col gap-1">
           {links.map((l) => (

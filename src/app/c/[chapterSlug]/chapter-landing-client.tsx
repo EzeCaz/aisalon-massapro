@@ -58,7 +58,14 @@ type Chapter = {
   events: UpcomingEvent[];
 };
 
-type Props = { chapter: Chapter };
+type Props = {
+  chapter: Chapter;
+  /** BRAND-AWARE (Phase 3): resolved brand display name passed from the
+   *  server parent (c/[chapterSlug]/page.tsx). Drives the toast, hero
+   *  eyebrow, sign-up card, and footer so Coma visitors on
+   *  coma.massapro.com never see hard-coded "AI Salon" strings. */
+  brandName?: string;
+};
 
 // ------------------------------------------------------------------
 // Helpers
@@ -115,7 +122,7 @@ function fmtTime(d: Date, tz: string): string {
 // Component
 // ------------------------------------------------------------------
 
-export function ChapterLandingClient({ chapter }: Props) {
+export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props) {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -145,7 +152,7 @@ export function ChapterLandingClient({ chapter }: Props) {
       } else {
         setSuccess(
           data.message ||
-            `Welcome to AI Salon ${chapter.name}! Check your email for your password.`
+            `Welcome to ${brandName} ${chapter.name}! Check your email for your password.`
         );
         setName("");
         setEmail("");
@@ -196,7 +203,7 @@ export function ChapterLandingClient({ chapter }: Props) {
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
               <span className="text-2xl">{flag}</span>
-              AI Salon · {chapter.country.name}
+              {brandName} · {chapter.country.name}
             </p>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-3">
               {chapter.name} Chapter
@@ -379,7 +386,7 @@ export function ChapterLandingClient({ chapter }: Props) {
                       <Sparkles className="h-3 w-3" /> Join the chapter
                     </p>
                     <h3 className="text-xl font-bold text-black">
-                      Sign up for AI Salon {chapter.name}
+                      Sign up for {brandName} {chapter.name}
                     </h3>
                     <p className="text-xs text-black/60 mt-1">
                       Your account will be tagged to{" "}
@@ -470,7 +477,7 @@ export function ChapterLandingClient({ chapter }: Props) {
       <footer className="border-t border-black/10 bg-white mt-12">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/60 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>
-            © {new Date().getFullYear()} AI Salon · {chapter.name} Chapter
+            © {new Date().getFullYear()} {brandName} · {chapter.name} Chapter
           </span>
           <Link
             href="/"

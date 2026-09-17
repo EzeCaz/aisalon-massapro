@@ -92,6 +92,11 @@ type Me = { id: string; email: string; name: string | null; utmUid: string | nul
 type Props = {
   event: Event;
   me: Me;
+  /** BRAND-AWARE (Phase 3): resolved brand config passed from the server
+   *  parent (e/[slug]/page.tsx). Drives the members-only copy, footer,
+   *  and register CTA so Coma visitors on coma.massapro.com never see
+   *  hard-coded "AI Salon" strings. */
+  brand?: { displayName: string; tagline: string };
 };
 
 // ------------------------------------------------------------------
@@ -149,7 +154,12 @@ function isPastEvent(endsAt: string, now: Date = new Date()): boolean {
 // Main component
 // ------------------------------------------------------------------
 
-export function PublicEventPage({ event, me }: Props) {
+export function PublicEventPage({ event, me, brand }: Props) {
+  // Brand defaults preserve the legacy AIS look for any caller that
+  // doesn't pass a brand (all callers now pass it).
+  const brandName = brand?.displayName ?? "AI Salon";
+  const brandTagline = brand?.tagline ?? "Empowering AI Connections";
+  const brandDisplayLong = `${brandName} Tel Aviv`;
   const router = useRouter();
   const start = new Date(event.startsAt);
   const end = new Date(event.endsAt);
@@ -432,6 +442,7 @@ export function PublicEventPage({ event, me }: Props) {
             onRegister={handleRegisterClick}
             onCheckIn={handleCheckInClick}
             onCopyCode={handleCopyCode}
+            brandName={brandName}
           />
         </div>
       </section>
@@ -587,6 +598,7 @@ export function PublicEventPage({ event, me }: Props) {
               onRegister={handleRegisterClick}
               onCheckIn={handleCheckInClick}
               onCopyCode={handleCopyCode}
+              brandName={brandName}
             />
 
             <div className="rounded-xl border border-black/10 bg-white p-5">
@@ -644,7 +656,7 @@ export function PublicEventPage({ event, me }: Props) {
             <div className="rounded-xl border border-[#00E6FF]/30 bg-[#00E6FF]/5 p-5">
               <p className="text-xs text-black/70 leading-relaxed">
                 <strong className="text-black">Members-only community.</strong> Photos, presentations, and
-                recordings from this event are shared with registered AI Salon Tel Aviv members. Sign in to
+                recordings from this event are shared with registered {brandDisplayLong} members. Sign in to
                 access the full event experience including the photo gallery, speaker chat, and community
                 slideshow.
               </p>
@@ -653,7 +665,7 @@ export function PublicEventPage({ event, me }: Props) {
         </div>
       </main>
 
-      <PublicFooter />
+      <PublicFooter brandName={brandName} brandTagline={brandTagline} />
     </div>
   );
 }
@@ -704,11 +716,18 @@ function PublicHeader({ me }: { me: Me }) {
   );
 }
 
-function PublicFooter() {
+function PublicFooter({
+  brandName,
+  brandTagline,
+}: {
+  brandName: string;
+  brandTagline: string;
+}) {
+  const brandDisplayLong = `${brandName} Tel Aviv`;
   return (
     <footer className="mt-auto border-t border-black/10 bg-white">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-        <span>© {new Date().getFullYear()} AI Salon Tel Aviv · Empowering AI Connections</span>
+        <span>© {new Date().getFullYear()} {brandDisplayLong} · {brandTagline}</span>
         <span>
           Platform by{" "}
           <a
@@ -799,6 +818,7 @@ function CtaCard({
   onRegister,
   onCheckIn,
   onCopyCode,
+  brandName = "AI Salon",
 }: {
   event: Event;
   me: Me;
@@ -813,6 +833,8 @@ function CtaCard({
   onRegister: () => void;
   onCheckIn: () => void;
   onCopyCode: () => void;
+  /** BRAND-AWARE (Phase 3): brand display name for the register CTA. */
+  brandName?: string;
 }) {
   // ---------- State 4: Already checked in → show entry code ----------
   if (hasCheckedIn && rsvp?.checkInCode) {
@@ -902,7 +924,7 @@ function CtaCard({
         <div className="flex items-center gap-2 text-[#FF005A]">
           <Ticket className="h-5 w-5" />
           <span className="font-bold text-sm uppercase tracking-wider">
-            {me ? "Register to attend" : "Join AI Salon"}
+            {me ? "Register to attend" : `Join ${brandName}`}
           </span>
         </div>
         <p className="text-xs text-black/70 leading-relaxed">
@@ -922,7 +944,7 @@ function CtaCard({
             </>
           ) : (
             <>
-              {me ? "Register to event" : "Join AI Salon"} <ArrowRight className="h-4 w-4" />
+              {me ? "Register to event" : `Join ${brandName}`} <ArrowRight className="h-4 w-4" />
             </>
           )}
         </button>

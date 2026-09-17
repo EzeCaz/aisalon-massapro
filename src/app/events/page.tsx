@@ -10,9 +10,18 @@ import { EventsList } from "./events-list";
 import { MyRegisteredEvents } from "./my-registered-events";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { getBrandConfig } from "@/lib/brand/brand-config";
+import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
 import Link from "next/link";
 
-export const metadata = { title: "Events — AI Salon Tel Aviv" };
+/**
+ * BRAND-AWARE metadata (Phase 2 of Coma brand isolation): the title is
+ * a bare "Events" — the root layout's brand-aware template appends the
+ * active brand suffix ("Events — Coma Tel Aviv" on coma.massapro.com,
+ * "Events — AI Salon Tel Aviv" on aisalon.massapro.com).
+ */
+export async function generateMetadata() {
+  return { title: "Events" };
+}
 
 /**
  * /events — public events list.
@@ -60,10 +69,13 @@ export default async function EventsPage() {
   }
 
   // BRAND RESOLUTION — prefer the signed-in user's brandSlug. Anonymous
-  // visitors fall back to AIS (platform default). Used for the page
-  // header eyebrow ("AI Salon Tel Aviv" → "{brand} {chapter}") and the
+  // visitors resolve from the request HOST (Phase 3 brand isolation):
+  // an anonymous visitor on coma.massapro.com sees Coma branding on the
+  // Join banner instead of the previous hard-coded AIS default.
+  // Used for the page header eyebrow ("{brand} {chapter}") and the
   // footer text.
-  const brand = getBrandConfig(me?.brandSlug ?? "aisalon");
+  const { brand: hostBrand } = await resolveBrandMetadata();
+  const brand = getBrandConfig(me?.brandSlug ?? hostBrand.slug);
   const chapterName = me?.chapterName ?? "Tel Aviv";
 
   const events = await db.event.findMany({
@@ -207,7 +219,7 @@ export default async function EventsPage() {
           <div className="mb-8 rounded-xl border border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-[#00E6FF]/5 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <p className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-[#FF005A] mb-1">
-                Join AI Salon
+                Join {brand.displayName}
               </p>
               <h2 className="text-lg sm:text-xl font-extrabold text-black">
                 Sign up to RSVP, check in at the door, and upload photos.
@@ -221,7 +233,7 @@ export default async function EventsPage() {
                 href="/login?callbackUrl=/events"
                 className="inline-flex items-center justify-center rounded-md bg-[#FF005A] text-white font-semibold px-5 py-2.5 text-sm hover:bg-[#D8004D] ais-lift"
               >
-                Join AI Salon →
+                Join {brand.displayName} →
               </Link>
               <Link
                 href="/login?callbackUrl=/events"
@@ -253,7 +265,12 @@ export default async function EventsPage() {
             Salon banner above instead). */}
         {me?.utmUid && (
           <div className="mb-8">
-            <ReferralShareCard utmUid={me.utmUid} variant="compact" />
+            <ReferralShareCard
+              utmUid={me.utmUid}
+              variant="compact"
+              brandName={`${brand.displayName} ${chapterName}`}
+              brandTagline={brand.tagline.charAt(0).toLowerCase() + brand.tagline.slice(1)}
+            />
           </div>
         )}
 
@@ -280,6 +297,8 @@ export default async function EventsPage() {
             goingCounts={goingCounts}
             chapters={chapters}
             cities={cities}
+            brandName={brand.displayName}
+            chapterName={chapterName}
           />
         </Suspense>
       </main>

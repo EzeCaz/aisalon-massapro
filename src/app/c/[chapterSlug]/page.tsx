@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ChapterLandingClient } from "./chapter-landing-client";
 import { getEffectiveBrandImages } from "@/lib/chapter-brand-images";
 import type { Metadata } from "next";
+import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
 
 /**
  * /c/[chapterSlug] — PUBLIC chapter landing + registration page.
@@ -27,6 +28,10 @@ type Params = { params: Promise<{ chapterSlug: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { chapterSlug } = await params;
+  // BRAND-AWARE (Phase 2): resolve the active brand from host/?brand= so
+  // the chapter title reads "Coma Tel Aviv" on coma.massapro.com and
+  // "AI Salon Montreal" on AIS hosts — no more hard-coded "AI Salon".
+  const { brand } = await resolveBrandMetadata();
   const chapter = await db.chapter.findUnique({
     where: { slug: chapterSlug },
     select: {
@@ -36,9 +41,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       country: { select: { name: true, flagEmoji: true } },
     },
   });
-  if (!chapter) return { title: "Chapter — AI Salon" };
-  const title = `AI Salon ${chapter.name}`;
-  const description = `Join the AI Salon ${chapter.name} chapter${
+  if (!chapter) return { title: "Chapter" };
+  const title = `${brand.displayName} ${chapter.name}`;
+  const description = `Join the ${brand.displayName} ${chapter.name} chapter${
     chapter.city ? ` in ${chapter.city}` : ""
   }. Sign up to register for upcoming events and connect with the local AI community.`;
 
@@ -47,7 +52,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const settings = await getEffectiveBrandImages(chapter.id);
 
   return {
-    title: `${title} — AI Salon`,
+    // Bare chapter name — the root layout template appends the brand
+    // suffix ("Montreal — Coma Tel Aviv"). Avoids the old double-suffix
+    // ("AI Salon Montreal — AI Salon").
+    title: chapter.name,
     description,
     icons: {
       icon: [
@@ -150,5 +158,9 @@ export default async function ChapterLandingPage({ params }: Params) {
     })),
   };
 
-  return <ChapterLandingClient chapter={serialized} />;
+  // BRAND-AWARE (Phase 3): resolve brand for the client component's copy
+  // (hero eyebrow, sign-up card, footer). Host-based — cookies are
+  // host-scoped so host and brand always agree.
+  const { brand } = await resolveBrandMetadata();
+  return <ChapterLandingClient chapter={serialized} brandName={brand.displayName} />;
 }

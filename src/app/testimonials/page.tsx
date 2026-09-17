@@ -10,7 +10,13 @@ import type { EventOption, ChapterOption } from "@/components/testimonials/testi
 import { getBrandConfig } from "@/lib/brand/brand-config";
 import { MessageSquareHeart } from "lucide-react";
 
-export const metadata = { title: "Testimonials — AI Salon Tel Aviv" };
+/**
+ * BRAND-AWARE metadata (Phase 2): bare title — brand suffix comes from
+ * the root layout's template ("Testimonials — Coma Tel Aviv" on Coma).
+ */
+export async function generateMetadata() {
+  return { title: "Testimonials" };
+}
 
 /**
  * /testimonials — PUBLIC community testimonials feed.

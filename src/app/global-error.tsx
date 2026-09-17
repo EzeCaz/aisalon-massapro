@@ -27,6 +27,14 @@ export default function GlobalError({
     console.error("[global-error]", error);
   }, [error]);
 
+  // BRAND-AWARE (Phase 3): global-error renders client-only (it replaces
+  // the root layout), so window.location.host is always available at
+  // render time. Match the BRAND_HOST_MAP semantics from
+  // src/lib/brand/brand-config.ts without importing server-only modules.
+  const host =
+    typeof window !== "undefined" ? window.location.host : "";
+  const brandDisplay = host.startsWith("coma.") ? "Coma" : "AI Salon";
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-white text-black antialiased">
@@ -74,7 +82,7 @@ export default function GlobalError({
           </div>
 
           <p className="mt-6 text-xs text-black/80">
-            © {new Date().getFullYear()} AI Salon Tel Aviv
+            © {new Date().getFullYear()} {brandDisplay} Tel Aviv
           </p>
         </main>
       </body>

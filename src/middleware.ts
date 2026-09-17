@@ -8,6 +8,7 @@ import {
   recordReferralVisit,
 } from "@/lib/utm";
 import { db } from "@/lib/db";
+import { isBrandSlug } from "@/lib/brand/brand-config";
 
 /**
  * UTM referral capture middleware.
@@ -79,8 +80,28 @@ async function visitorHash(ip: string | null, ua: string | null): Promise<string
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
 
+  // BRAND OVERRIDE PROPAGATION (Phase 2 of Coma brand isolation):
+  // The `?brand=<slug>` URL param is a first-class brand override (see
+  // Brand-Field Platform Plan §2.5.1 — sales demo mode). Layout-level
+  // generateMetadata() cannot read searchParams, so the middleware
+  // forwards the param as a request header (x-brand-override) that
+  // resolveBrandMetadata() reads with highest priority. Host-based
+  // resolution still applies when the param is absent. The header is
+  // attached to EVERY pass-through below (including the UTM paths) so
+  // tracking and branding never conflict.
+  const brandOverride = searchParams.get("brand");
+  const hasBrandOverride = !!brandOverride && isBrandSlug(brandOverride);
+  const brandRequestHeaders = new Headers(req.headers);
+  if (hasBrandOverride) {
+    brandRequestHeaders.set("x-brand-override", brandOverride);
+  }
+  const brandNext = () =>
+    hasBrandOverride
+      ? NextResponse.next({ request: { headers: brandRequestHeaders } })
+      : NextResponse.next();
+
   if (shouldSkip(pathname)) {
-    return NextResponse.next();
+    return brandNext();
   }
 
   const utmFromUrl = parseUtmParams(req.nextUrl);
@@ -89,22 +110,26 @@ export async function middleware(req: NextRequest) {
 
   // No utm_uid in URL or cookie → nothing to attribute, pass through.
   if (!utmUid) {
-    return NextResponse.next();
+    return brandNext();
   }
 
   // Validate the utm_uid shape (12-char hex). If it's malformed, drop
   // the cookie so we don't keep re-attempting lookups.
   if (!/^[0-9a-f]{12}$/.test(utmUid)) {
-    const res = NextResponse.next();
+    const res = brandNext();
     res.cookies.delete(UTM_COOKIE_NAME);
     return res;
   }
 
   // Build the response. If utm_uid came from the URL, set/refresh the
   // cookie + strip utm_* params from the visible URL for cleaner sharing.
+  // The brand-override header (if present) rides along so downstream
+  // pages still resolve the overridden brand.
   const res = NextResponse.next({
     request: {
-      headers: new Headers(req.headers),
+      headers: hasBrandOverride
+        ? brandRequestHeaders
+        : new Headers(req.headers),
     },
   });
 

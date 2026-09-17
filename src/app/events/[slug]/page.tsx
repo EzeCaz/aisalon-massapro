@@ -10,8 +10,16 @@ import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { RsvpCheckInCard } from "@/components/events/rsvp-check-in-card";
 import { format } from "date-fns";
 import { Users } from "lucide-react";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 
-export const metadata = { title: "Event — AI Salon Tel Aviv" };
+/**
+ * BRAND-AWARE metadata (Phase 2): bare title — the root layout's
+ * brand-aware template appends the active brand suffix
+ * ("Event — Coma Tel Aviv" on coma.massapro.com).
+ */
+export async function generateMetadata() {
+  return { title: "Event" };
+}
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -579,7 +587,11 @@ export default async function EventDetailPage({ params }: Params) {
             Hidden for users without a utmUid (legacy accounts). */}
         {me.utmUid && (
           <div className="mb-6">
-            <ReferralShareCard utmUid={me.utmUid} variant="compact" />
+            <ReferralShareCard
+              utmUid={me.utmUid}
+              variant="compact"
+              brandName={`${getBrandConfig((me as { brandSlug?: string | null }).brandSlug ?? "aisalon").displayName}`}
+            />
           </div>
         )}
 

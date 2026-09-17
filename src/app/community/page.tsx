@@ -9,7 +9,13 @@ import { CommunityGrid } from "./community-grid";
 import { getBrandConfig } from "@/lib/brand/brand-config";
 import Link from "next/link";
 
-export const metadata = { title: "Community — AI Salon" };
+/**
+ * BRAND-AWARE metadata (Phase 2): bare title — brand suffix comes from
+ * the root layout's template ("Community — Coma Tel Aviv" on Coma).
+ */
+export async function generateMetadata() {
+  return { title: "Community" };
+}
 
 /** Default chapter name shown when the current user has no chapterId
  *  set (e.g. legacy accounts). The directory is scoped to the current

@@ -291,7 +291,13 @@ export async function AppHeader() {
             {/* TSK-0057: ViewAsSwitcher is desktop-only (the dropdown is
                 too wide for mobile). Super Admins can still use it from
                 a desktop. */}
-            <MobileNav links={navLinks} user={user} isAdmin={isAdmin} adminHref={adminHref} />
+            <MobileNav
+              links={navLinks}
+              user={user}
+              isAdmin={isAdmin}
+              adminHref={adminHref}
+              brandTitle={isComa ? brand.displayName : "AI Salon TLV"}
+            />
           </div>
         </div>
       </div>

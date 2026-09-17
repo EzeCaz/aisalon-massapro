@@ -7,6 +7,10 @@ import { Providers } from "@/components/providers";
 import { getPublicSettings } from "@/lib/site-settings";
 import { CookieConsentBanner } from "@/components/ais/cookie-consent-banner";
 import { AnalyticsScripts } from "@/components/ais/analytics-scripts";
+import {
+  resolveBrandMetadata,
+  brandDescription,
+} from "@/lib/brand/brand-metadata";
 
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta",
@@ -22,52 +26,58 @@ const inter = Inter({
   display: "swap",
 });
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
-
 /**
- * generateMetadata — pulls the current favicon + login banner from the
- * SiteSetting table so the Super Admin can change them at runtime via
- * /admin/images WITHOUT a redeploy.
+ * generateMetadata — BRAND-AWARE (Phase 2 of Coma brand isolation).
  *
- * The function is async + DB-backed, but the underlying getPublicSettings()
- * is wrapped in try/catch and returns sensible DEFAULTS if the DB is
- * unreachable (so the build never fails on a fresh DB).
+ * Previously this hard-coded "AI Salon Tel Aviv" in the default title,
+ * title template, description, and OG tags — which leaked AIS branding
+ * to every page a Coma user visited on coma.massapro.com (browser tab
+ * + social shares).
  *
- * Revalidated every 5 minutes (matches the /api/site-settings cache
- * header) — admin changes propagate within 5 minutes to all clients.
+ * Now: brand resolves from the request host (coma.massapro.com → coma)
+ * or `?brand=` param, and the per-host siteUrl drives metadataBase so
+ * OG URLs resolve against the domain the visitor is actually on.
+ *
+ * Child pages that return `{ title: "Events" }` inherit the brand-aware
+ * template → "Events — Coma Tel Aviv" / "Events — AI Salon Tel Aviv".
+ *
+ * The function remains async + DB-backed for the favicon/banner (admin
+ * editable at /admin/images), with try/catch-safe defaults so the build
+ * never fails on a fresh DB.
  */
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicSettings();
+  const { brand, siteUrl, displayTitle } = await resolveBrandMetadata();
 
   // Normalize the favicon URL — if it's a relative path ("/images/..."),
   // it works as-is. If it's an absolute URL (Vercel Blob), also works.
   // If the admin somehow cleared the row, fall back to the default.
   const faviconUrl = settings.favicon || "/images/favicon.webp";
-  const bannerUrl = settings.loginBanner || "/images/falafel-meerkat.jpg";
+  const bannerUrl =
+    (brand.slug === "coma" && brand.heroBanner) ||
+    settings.loginBanner ||
+    "/images/falafel-meerkat.jpg";
 
   return {
     metadataBase: new URL(siteUrl),
     title: {
-      default: "AI Salon Tel Aviv — MassaPro",
-      template: "%s — AI Salon Tel Aviv",
+      default: `${displayTitle} — MassaPro`,
+      template: `%s — ${displayTitle}`,
     },
-    description:
-      "AI Salon Tel Aviv — the community platform for AI Salon's Tel Aviv chapter. Empowering AI connections.",
+    description: brandDescription(brand),
     keywords: [
-      "AI Salon",
+      brand.displayName,
       "Tel Aviv",
       "MassaPro",
       "AI community",
       "Israel AI",
-      "Empowering AI Connections",
+      brand.tagline,
     ],
     authors: [{ name: "MassaPro" }],
     openGraph: {
-      title: "AI Salon Tel Aviv — MassaPro",
-      description: "Empowering AI connections. Tel Aviv chapter platform.",
-      siteName: "AI Salon Tel Aviv",
+      title: `${displayTitle} — MassaPro`,
+      description: brandDescription(brand),
+      siteName: displayTitle,
       type: "website",
       url: siteUrl,
       images: [
@@ -75,14 +85,14 @@ export async function generateMetadata(): Promise<Metadata> {
           url: bannerUrl,
           width: 1200,
           height: 630,
-          alt: "AI Salon Tel Aviv — brand image",
+          alt: `${displayTitle} — brand image`,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "AI Salon Tel Aviv — MassaPro",
-      description: "Empowering AI connections.",
+      title: `${displayTitle} — MassaPro`,
+      description: brandDescription(brand),
       images: [bannerUrl],
     },
     icons: {

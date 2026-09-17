@@ -6,6 +6,7 @@ import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { ProfileEditor } from "./profile-editor";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 
 export const metadata = { title: "My Profile" };
 
@@ -26,6 +27,12 @@ export default async function ProfilePage() {
   // Chapter display name — falls back to "Tel Aviv" for legacy users
   // without a chapterId, matching the original platform-wide default.
   const chapterName = me.chapter?.name ?? DEFAULT_CHAPTER_NAME;
+
+  // BRAND-AWARE (Phase 3): resolve the member's brand so profile copy +
+  // footer reflect Coma for Coma members and AIS for AIS members.
+  const brand = getBrandConfig(
+    (me as { brandSlug?: string | null }).brandSlug ?? "aisalon"
+  );
 
   // Brand-new users must fill the intake form before they can edit their
   // profile — otherwise they'd land on a half-empty profile page and miss
@@ -61,7 +68,7 @@ export default async function ProfilePage() {
             Edit your <span className="ais-gradient-text">community profile</span>
           </h1>
           <p className="mt-2 text-sm text-black/80 max-w-2xl">
-            Tell fellow AI Salon {chapterName} members who you are. Your photo, bio, company and
+            Tell fellow {brand.displayName} {chapterName} members who you are. Your photo, bio, company and
             links will be visible on your member card and any event photos you upload.
           </p>
         </div>
@@ -74,13 +81,18 @@ export default async function ProfilePage() {
             do; pre-existing users were backfilled by the script). */}
         {me.utmUid && (
           <div className="mt-8">
-            <ReferralShareCard utmUid={me.utmUid} variant="full" />
+            <ReferralShareCard
+              utmUid={me.utmUid}
+              variant="full"
+              brandName={`${brand.displayName} ${chapterName}`}
+              brandTagline={brand.tagline.charAt(0).toLowerCase() + brand.tagline.slice(1)}
+            />
           </div>
         )}
       </main>
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>© {new Date().getFullYear()} AI Salon {chapterName} · Empowering AI Connections</span>
+          <span>© {new Date().getFullYear()} {brand.displayName} {chapterName} · {brand.tagline}</span>
           <span>
             Platform by{" "}
             <a

@@ -79,6 +79,8 @@ export function EventsList({
   goingCounts,
   chapters,
   cities,
+  brandName = "AI Salon",
+  chapterName = "Tel Aviv",
 }: {
   events: EventCard[];
   // Map of eventId → number of RSVPs with status="GOING". Lookup is
@@ -88,6 +90,10 @@ export function EventsList({
   chapters?: ChapterOption[];
   /** Unique venue cities derived from the events list. */
   cities?: CityOption[];
+  /** Brand display name for the empty-state copy (brand isolation). */
+  brandName?: string;
+  /** Chapter display name for the empty-state copy (brand isolation). */
+  chapterName?: string;
 }) {
   // Chapter + city filter state. Both default to "" (all).
   const [chapterFilter, setChapterFilter] = useState<string>("");
@@ -156,7 +162,7 @@ export function EventsList({
     return (
       <Card className="p-12 text-center bg-white border border-black/10">
         <p className="text-black/80">
-          No events yet. Check back soon — the next AI Salon Tel Aviv gathering is being planned.
+          No events yet. Check back soon — the next {brandName} {chapterName} gathering is being planned.
         </p>
       </Card>
     );

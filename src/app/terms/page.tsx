@@ -1,7 +1,13 @@
-export const metadata = {
-  title: "Terms of Service — AI Salon Tel Aviv",
-  description: "Terms for participating in the AI Salon Tel Aviv community.",
-};
+/**
+ * BRAND-AWARE metadata (Phase 2): bare title + generic description —
+ * brand suffix comes from the root layout's template.
+ */
+export async function generateMetadata() {
+  return {
+    title: "Terms of Service",
+    description: "Terms for participating in the community.",
+  };
+}
 
 export default function TermsPage() {
   return (
