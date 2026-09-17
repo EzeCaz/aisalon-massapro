@@ -14443,3 +14443,27 @@ Work Log:
 Stage Summary:
 - GitHub push: ✅ DONE — origin/main at 7afe128, 4 commits ahead of c49fc61.
 - Drive upload: BLOCKED — OAuth Client ID + Secret missing. Need user to either (a) provide existing GDRIVE_CLIENT_ID + GDRIVE_CLIENT_SECRET from their Google Cloud Console (https://console.cloud.google.com/apis/credentials), or (b) create new OAuth 2.0 Client ID (Desktop app type) and share with me. Once provided, I write to .env, run upload-to-drive.py --auth-url, give user the consent URL, user grants and pastes back redirect URL, I exchange + upload both backup zips (416MB FULL + 106MB slim).
+
+---
+Task ID: drive-backup-upload
+Agent: Super Z (main)
+Task: Upload both backup zips to Google Drive folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj using OAuth flow (Client ID 581652243055-...apps.googleusercontent.com).
+
+Work Log:
+- Wrote GDRIVE_CLIENT_ID / GDRIVE_CLIENT_SECRET / GDRIVE_FOLDER_ID to .env (gitignored).
+- Installed google-auth-oauthlib + google-api-python-client (pip --break-system-packages initially installed to wrong Python 3.13 dir; reinstalled with python3 -m pip to match uv's 3.12).
+- First --auth-url attempt: generated consent URL. User authorized + pasted redirect URL. Exchange FAILED: `(invalid_grant) Missing code verifier.`
+- Root cause: scripts/upload-to-drive.py uses PKCE (code_challenge in URL) but google_auth_oauthlib auto-generates a new code_verifier per Flow instance. The --auth-url phase (which builds the challenge) and --code phase (which fetches the token) each created separate Flow instances → verifier mismatch.
+- FIX: persisted flow.code_verifier to .gdrive-pkce-verifier.txt after authorization_url() in phase 1, restored it onto the new Flow before fetch_token() in phase 2, deleted the one-time file after successful exchange. Added .gdrive-pkce-verifier.txt to .gitignore.
+- Second --auth-url attempt: PKCE verifier saved to disk. User re-authorized + pasted new redirect URL.
+- Exchange SUCCESS: token saved to .gdrive-token.json (chmod 600).
+- Upload: BOTH files successfully uploaded via resumable upload to Drive folder 19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj:
+  * aisalon-project-backup-FULL-20260917-071932.zip — 415.1 MB — Drive file id 1lHlRSCWcIZ8p_pP4_evRn9w7_KKhd5w_ — URL https://drive.google.com/file/d/1lHlRSCWcIZ8p_pP4_evRn9w7_KKhd5w_/view
+  * aisalon-project-backup-20260917-071958.zip — 105.8 MB — Drive file id 15p9cizPzdJdGSArRkkFk-8xjzI1JIYUD — URL https://drive.google.com/file/d/15p9cizPzdJdGSArRkkFk-8xjzI1JIYUD/view
+- Verified via Drive API list query (top 2 files in folder).
+- Pushed script fix to origin/main as commit fe56ae8.
+
+Stage Summary:
+- Drive backup: ✅ COMPLETE. Both zips live in Drive folder alongside existing V7.1, V5.x, and 2026-07-18 backups.
+- OAuth refresh token persisted (.gdrive-token.json) — future backup runs need no browser interaction.
+- Script bug (PKCE verifier not persisted across phases) FIXED and pushed so the next user who runs --auth-url won't hit the same failure.
