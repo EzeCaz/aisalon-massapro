@@ -14406,3 +14406,24 @@ Stage Summary:
 - Commits: 4996f69 (Phase 2+3, 21 files) + tags. Local only — push blocked by expired GitHub token.
 - Coma browser-tab/OG copy leaks: ELIMINATED for metadata + 8 user-facing surfaces.
 - Remaining for next session: Phase 4 (email branding — email.ts brandSlug params for RSVP/onboarding/provisioned emails, orchestrator worker/flow-worker baseUrl → email-brand-context, campaign fromName/fromEmail defaults, DM notification email, unsubscribe page, templates.ts SHELL tokens) + Phase 5 (7 signup/reset route siteUrl fallbacks). Also pending: user-side Phase 1 configs (Google OAuth redirect URI + static-project vercel.json rewrites) and token refresh to push.
+
+---
+Task ID: hydration-fix-deploy-backup
+Agent: Super Z (main)
+Task: (1) Fix React hydration-mismatch console error on <body> caused by browser-extension DOM injection. (2) Deploy to GitHub. (3) Backup project to Drive.
+
+Work Log:
+- DIAGNOSED hydration warning: error message diff showed `inject_newvt_svd="true"` on `<body>` — attribute injected by browser extension "NewVT" (Vietnamese translation tool) between SSR delivery and React hydration. Confirmed by React docs: "can happen if the client has a browser extension installed which messes with the HTML before React loaded".
+- FIX (src/app/layout.tsx): added `suppressHydrationWarning` to `<body>` element. `<html>` already had it; `<body>` did not. React now skips attribute-diff on `<body>` only (children still hydrate normally). Inline comment added explaining why so future devs don't remove it.
+- AMENDED commit: HEAD had UUID-only message (`74a92650-...`) from auto-commit; replaced with conventional `fix(layout): suppressHydrationWarning on <body> to silence browser-extension DOM injection` + body explaining root cause. New HEAD: bc8b6e3a.
+- PUSH ATTEMPT: `git push origin main` → FAILED: "Invalid username or token. Password authentication is not supported." Token embedded in remote URL (`https://EzeCaz:<token>@github.com/EzeCaz/aisalon-massapro.git`) is expired. No fresh PAT in .env, no ~/.git-credentials, no credential.helper, no GH_TOKEN env var. Cannot push without user providing a new PAT.
+- BACKUP (local — Drive upload not possible from this sandbox; no rclone, no OAuth token, no service account):
+  - FULL backup (incl .git history): download/aisalon-project-backup-FULL-20260917-071932.zip (416 MB, 8269 files).
+  - SLIM backup (no .git): download/aisalon-project-backup-20260917-071958.zip (106 MB, 2709 files).
+  - Both verified: `unzip -t` clean, fix present in source, .git log includes latest commit bc8b6e3a.
+  - User must upload to Drive manually (drag-drop) OR run scripts/upload-to-drive.py after one-time OAuth.
+
+Stage Summary:
+- Code fix committed locally (bc8b6e3a) — same change as the auto-commit, just with a real commit message. Local main is 3 commits ahead of origin/main (4996f69, 6475199, bc8b6e3).
+- Local backups created and verified (FULL 416MB + SLIM 106MB).
+- BLOCKED on user: (a) provide fresh GitHub PAT to push, (b) upload either backup zip to Google Drive manually.
