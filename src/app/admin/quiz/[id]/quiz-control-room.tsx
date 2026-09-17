@@ -106,6 +106,9 @@ interface Props {
     event: { id: string; title: string; slug: string } | null;
   };
   hostUser: { id: string; name: string; email: string; role: string };
+  /** Brand slug for the quiz join URL display + clipboard copy.
+   *  Appends ?brand=<slug>. Defaults to "aisalon". Phase 2 (2026-09-17). */
+  brandSlug?: string;
 }
 
 /**
@@ -126,7 +129,7 @@ const STATUS_COLORS: Record<string, string> = {
   ABORTED: "bg-gray-200 text-gray-600 border-gray-300 line-through",
 };
 
-export function QuizControlRoom({ initialSession, hostUser }: Props) {
+export function QuizControlRoom({ initialSession, hostUser, brandSlug = "aisalon" }: Props) {
   const { toast } = useToast();
   const [session, setSession] = useState<SessionState>(initialSession);
   const [questions, setQuestions] = useState<Question[]>(initialSession.questions);
@@ -1235,14 +1238,14 @@ export function QuizControlRoom({ initialSession, hostUser }: Props) {
             <CardContent>
               <div className="rounded-md bg-gray-100 p-2.5 font-mono text-xs break-all">
                 {typeof window !== "undefined" ? window.location.origin : ""}
-                /quiz/{sessionId}
+                /quiz/{sessionId}?brand={encodeURIComponent(brandSlug)}
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full mt-2"
                 onClick={() => {
-                  const url = `${window.location.origin}/quiz/${sessionId}`;
+                  const url = `${window.location.origin}/quiz/${sessionId}?brand=${encodeURIComponent(brandSlug)}`;
                   navigator.clipboard.writeText(url);
                   toast({ title: "Link copied" });
                 }}

@@ -289,6 +289,7 @@ export default async function EventsPage() {
                 endsAt: r.event.endsAt.toISOString(),
               },
             }))}
+            brandSlug={brand.slug}
           />
         )}
 

@@ -62,6 +62,7 @@ export default async function QuizControlRoomPage({
             email: me.email,
             role: me.role,
           }}
+          brandSlug={me.brandSlug ?? "aisalon"}
         />
       </main>
     </>

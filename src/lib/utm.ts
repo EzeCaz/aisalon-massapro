@@ -94,13 +94,21 @@ export function buildShareUrl(opts: {
   medium?: string;
   source?: string;
   content?: string;
+  /** Brand slug (e.g. "coma" | "aisalon") — appended as `?brand=<slug>`
+   * so the recipient sees the right brand when they click. Also drives
+   * the `utm_campaign` default when `campaign` is not provided (was
+   * hardcoded to "aisalon" — Coma members' shares were tagged as AIS
+   * in analytics attribution). Phase 2 (2026-09-17). */
+  brandSlug?: string;
 }): string {
   const url = new URL(opts.path, opts.baseUrl);
   url.searchParams.set(UTM_UID_PARAM, opts.utmUid);
   url.searchParams.set("utm_source", opts.source ?? "member");
   url.searchParams.set("utm_medium", opts.medium ?? "referral");
-  url.searchParams.set("utm_campaign", opts.campaign ?? "aisalon");
+  // Default utm_campaign to the brand slug (was hardcoded "aisalon").
+  url.searchParams.set("utm_campaign", opts.campaign ?? opts.brandSlug ?? "aisalon");
   if (opts.content) url.searchParams.set("utm_content", opts.content);
+  if (opts.brandSlug) url.searchParams.set("brand", opts.brandSlug);
   return url.toString();
 }
 

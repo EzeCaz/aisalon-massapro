@@ -847,6 +847,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
           getPngDataUrl={getPngDataUrl}
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`speaker-intro-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+          brandSlug={brandSlug}
         />
       </div>
 

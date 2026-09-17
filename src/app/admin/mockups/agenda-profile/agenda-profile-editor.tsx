@@ -642,6 +642,7 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon" }:
           getPngDataUrl={getPngDataUrl}
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`agenda-profile-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+          brandSlug={brandSlug}
         />
         <span className="ml-auto text-xs text-black/80">
           Canvas: 1200 × 1500 (4:5) · Edits auto-saved to this browser

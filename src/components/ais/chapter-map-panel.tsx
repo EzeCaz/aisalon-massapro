@@ -21,9 +21,14 @@ export type ChapterTreeNode = MapChapter;
 export function ChapterMapPanel({
   chapters,
   isSuperAdmin,
+  brandSlug = "aisalon",
 }: {
   chapters: ChapterTreeNode[];
   isSuperAdmin: boolean;
+  /** Brand slug for the chapter URL display + clipboard copy. Appends
+   *  ?brand=<slug> so the copied link renders the right brand. Defaults
+   *  to "aisalon" for backward compat. Phase 2 (2026-09-17). */
+  brandSlug?: string;
 }) {
   const [view, setView] = useState<"tree" | "map">("map");
   const [filter, setFilter] = useState<{ countryId: string; chapterId: string }>({
@@ -147,7 +152,7 @@ export function ChapterMapPanel({
                         </p>
                         <p className="text-xs text-black/60 flex items-center gap-1.5">
                           <code className="bg-black/5 px-1 rounded text-[0.65rem]">/c/{chapter.slug}</code>
-                          <ChapterUrlButtons slug={chapter.slug} />
+                          <ChapterUrlButtons slug={chapter.slug} brandSlug={brandSlug} />
                         </p>
                       </div>
                     </div>
@@ -191,12 +196,14 @@ function CountPill({ label, value }: { label: string; value: number }) {
  * in the tree view. Lets admins quickly grab the share link without
  * leaving the chapters list.
  */
-function ChapterUrlButtons({ slug }: { slug: string }) {
+function ChapterUrlButtons({ slug, brandSlug = "aisalon" }: { slug: string; brandSlug?: string }) {
   const [copied, setCopied] = useState(false);
+  // Phase 2: append ?brand=<slug> to the URL so the copied link renders
+  // the right brand at the recipient. Idempotent — won't double-add.
   const url =
     typeof window !== "undefined"
-      ? `${window.location.origin}/c/${slug}`
-      : `/c/${slug}`;
+      ? `${window.location.origin}/c/${slug}?brand=${encodeURIComponent(brandSlug)}`
+      : `/c/${slug}?brand=${encodeURIComponent(brandSlug)}`;
 
   async function copy(e: React.MouseEvent) {
     e.preventDefault();
@@ -213,7 +220,7 @@ function ChapterUrlButtons({ slug }: { slug: string }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       <a
-        href={`/c/${slug}`}
+        href={`/c/${slug}?brand=${encodeURIComponent(brandSlug)}`}
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}

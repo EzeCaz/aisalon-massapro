@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { appendBrandParam } from "@/lib/brand/coma-site-url";
 import {
   Linkedin,
   Facebook,
@@ -112,6 +113,10 @@ type Props = {
   shareUrl?: string;
   /** Filename to use when downloading the PNG. */
   filename?: string;
+  /** Brand slug — appended to the share URL as `?brand=<slug>` so the
+   *  recipient sees the right brand when they click. Defaults to
+   *  "aisalon" for backward compat. Phase 2 (2026-09-17). */
+  brandSlug?: string;
 };
 
 export function ShareButtons({
@@ -119,6 +124,7 @@ export function ShareButtons({
   title,
   shareUrl,
   filename = "mockup.png",
+  brandSlug = "aisalon",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -133,10 +139,13 @@ export function ShareButtons({
       const blob = await (await fetch(pngDataUrl)).blob();
       const file = new File([blob], filename, { type: "image/png" });
       const pageUrl = shareUrl ?? (typeof window !== "undefined" ? window.location.href : "");
+      // Phase 2: append ?brand=<slug> so the share URL renders the right
+      // brand at the recipient. Idempotent.
+      const brandedPageUrl = appendBrandParam(pageUrl, brandSlug);
       const shareData: ShareData = {
         title,
         text: title,
-        url: pageUrl,
+        url: brandedPageUrl,
       };
       // Try Web Share API with files (mobile only — desktop browsers usually
       // don't support sharing files via navigator.share yet)
@@ -168,13 +177,15 @@ export function ShareButtons({
     setBusy(true);
     try {
       const pageUrl = shareUrl ?? (typeof window !== "undefined" ? window.location.href : "");
+      // Phase 2: append ?brand=<slug> for the platform share URL.
+      const brandedPageUrl = appendBrandParam(pageUrl, brandSlug);
 
       if (platform.buildShareUrl) {
         // For platforms with proper share URLs (LinkedIn, WhatsApp, Facebook,
         // Telegram): just open the share URL. Do NOT auto-download the PNG —
         // the user clicked Share, not Download. The share URL contains the
         // page URL + title, which is what these platforms actually accept.
-        window.open(platform.buildShareUrl(pageUrl, title), "_blank", "noopener,noreferrer");
+        window.open(platform.buildShareUrl(brandedPageUrl, title), "_blank", "noopener,noreferrer");
       } else if (platform.downloadOnly) {
         // For platforms that don't support web share URLs (Instagram, TikTok,
         // WeChat): we MUST download the PNG first so the user can manually

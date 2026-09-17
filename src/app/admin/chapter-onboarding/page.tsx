@@ -27,7 +27,8 @@ export default async function ChapterOnboardingAdminPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true, name: true },
+    // Phase 2: include brandSlug so ChapterOnboardingAdminList can build brand-aware URLs.
+    select: { id: true, email: true, role: true, name: true, brandSlug: true },
   });
   if (!me) redirect("/login?callbackUrl=/admin/chapter-onboarding");
 
@@ -92,7 +93,7 @@ export default async function ChapterOnboardingAdminPage() {
             <PreviewComaFormButton />
           </div>
 
-          <ChapterOnboardingAdminList invites={serialized} currentAdminEmail={me.email} />
+          <ChapterOnboardingAdminList invites={serialized} currentAdminEmail={me.email} brandSlug={me.brandSlug ?? "aisalon"} />
         </div>
       </div>
     </>

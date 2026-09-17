@@ -60,9 +60,11 @@ type Props = {
    * e.g. "chapter_abc123" for a Montreal admin, "global" for SUPER_ADMIN.
    */
   scopeKey: string;
+  /** Brand slug for the share URL. Defaults to "aisalon". Phase 2. */
+  brandSlug?: string;
 };
 
-export function QrSalonEditor({ scopeKey }: Props) {
+export function QrSalonEditor({ scopeKey, brandSlug = "aisalon" }: Props) {
   const [data, setData] = useState<QrSalonData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(JSON.stringify(SAMPLE_DATA, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
@@ -598,6 +600,7 @@ export function QrSalonEditor({ scopeKey }: Props) {
           getPngDataUrl={getPngDataUrl}
           title="AI Salon QR Mockup"
           filename="qr-salon-mockup.png"
+          brandSlug={brandSlug}
         />
       </div>
 

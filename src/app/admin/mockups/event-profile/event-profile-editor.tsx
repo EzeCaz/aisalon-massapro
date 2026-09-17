@@ -662,6 +662,7 @@ export function EventProfileEditor({ events, scopeKey }: Props) {
           getPngDataUrl={getPngDataUrl}
           title={`${data.event.name} — ${data.event.topic}`}
           filename={`event-profile-${(data.event.name || "mockup").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+          brandSlug={brandSlug}
         />
         <span className="ml-auto text-xs text-black/80">
           Canvas: 1200 × 1200 (1:1 square — visual-first) · Edits auto-saved to this browser

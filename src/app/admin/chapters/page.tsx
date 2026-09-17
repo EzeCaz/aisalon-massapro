@@ -19,7 +19,8 @@ export default async function ChaptersPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true, countryId: true, chapterId: true },
+    // Phase 2: include brandSlug so ChapterMapPanel can build brand-aware share URLs.
+    select: { id: true, email: true, role: true, countryId: true, chapterId: true, brandSlug: true },
   });
   if (!me) redirect("/login");
 
@@ -292,7 +293,7 @@ export default async function ChaptersPage() {
             </div>
           </div>
         ) : (
-          <ChapterMapPanel chapters={chapters} isSuperAdmin={isSuperAdmin} />
+          <ChapterMapPanel chapters={chapters} isSuperAdmin={isSuperAdmin} brandSlug={me.brandSlug ?? "aisalon"} />
         )}
 
         {/* Footer info */}

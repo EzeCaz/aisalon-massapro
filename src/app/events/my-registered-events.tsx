@@ -22,7 +22,12 @@ type MyRsvp = {
   };
 };
 
-type Props = { rsvps: MyRsvp[] };
+type Props = {
+  rsvps: MyRsvp[];
+  /** Brand slug for the calendar embed URL — appended as `?brand=<slug>`.
+   *  Defaults to "aisalon". Phase 2 (2026-09-17). */
+  brandSlug?: string;
+};
 
 function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -47,7 +52,7 @@ function fmtTime(iso: string): string {
  * Save-to-Calendar buttons. Shown at the top of /events for signed-in
  * users who have at least one "GOING" RSVP.
  */
-export function MyRegisteredEvents({ rsvps }: Props) {
+export function MyRegisteredEvents({ rsvps, brandSlug = "aisalon" }: Props) {
   return (
     <section className="mb-10">
       <div className="flex items-center gap-2 mb-4">
@@ -121,7 +126,7 @@ export function MyRegisteredEvents({ rsvps }: Props) {
                 country: event.country,
                 url:
                   typeof window !== "undefined"
-                    ? `${window.location.origin}/events/${event.slug}`
+                    ? `${window.location.origin}/events/${event.slug}?brand=${encodeURIComponent(brandSlug)}`
                     : null,
               }}
               variant="outline"

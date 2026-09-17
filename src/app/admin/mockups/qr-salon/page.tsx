@@ -89,7 +89,7 @@ export default async function QrSalonMockupPage() {
           </p>
         </div>
 
-        <QrSalonEditor scopeKey={scopeKey} />
+        <QrSalonEditor scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

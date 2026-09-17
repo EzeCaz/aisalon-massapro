@@ -55,9 +55,15 @@ type Invite = {
 
 export function ChapterOnboardingAdminList({
   invites,
+  brandSlug = "aisalon",
 }: {
   invites: Invite[];
   currentAdminEmail: string;
+  /** Brand slug for the invite form URL display + clipboard copy.
+   *  Appends ?brand=<slug> so the copied link renders the right brand
+   *  at the recipient (the invitee). Defaults to "aisalon".
+   *  Phase 2 (2026-09-17). */
+  brandSlug?: string;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -93,6 +99,10 @@ export function ChapterOnboardingAdminList({
     typeof window !== "undefined"
       ? window.location.origin
       : "https://aisalon.massapro.com";
+  // Phase 2: append ?brand=<slug> to invite URLs so the invitee sees the
+  // right brand when they open the form. Used in the row display, the
+  // detail dialog, and the open-in-new-tab click.
+  const brandQs = `?brand=${encodeURIComponent(brandSlug)}`;
 
   // Provisioning state lives at the list level so the button inside the
   // detail dialog can drive it.
@@ -266,7 +276,7 @@ export function ChapterOnboardingAdminList({
                               variant="ghost"
                               className="h-8 px-2 text-xs"
                               onClick={() => {
-                                const url = `${siteUrl}/chapter-onboarding/${i.token}`;
+                                const url = `${siteUrl}/chapter-onboarding/${i.token}${brandQs}`;
                                 navigator.clipboard.writeText(url);
                                 toast.success("Form URL copied");
                               }}
@@ -278,7 +288,7 @@ export function ChapterOnboardingAdminList({
                               size="sm"
                               variant="ghost"
                               className="h-8 px-2 text-xs"
-                              onClick={() => window.open(`${siteUrl}/chapter-onboarding/${i.token}`, "_blank")}
+                              onClick={() => window.open(`${siteUrl}/chapter-onboarding/${i.token}${brandQs}`, "_blank")}
                               title="Open form"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
@@ -303,6 +313,7 @@ export function ChapterOnboardingAdminList({
         onProvision={handleProvisionRequest}
         provisioning={provisioning}
         provisionedChapterId={provisionedChapterId}
+        brandSlug={brandSlug}
       />
 
       {/* Provisioning confirmation dialog — gated by `confirmTarget`. The
@@ -349,7 +360,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function InviteDetailDialog({
-  invite, onClose, siteUrl, onProvision, provisioning, provisionedChapterId,
+  invite, onClose, siteUrl, onProvision, provisioning, provisionedChapterId, brandSlug = "aisalon",
 }: {
   invite: Invite | null;
   onClose: () => void;
@@ -357,11 +368,13 @@ function InviteDetailDialog({
   onProvision: (invite: Invite) => void;
   provisioning: boolean;
   provisionedChapterId: string | null;
+  /** Brand slug for the form URL display + copy. Phase 2. */
+  brandSlug?: string;
 }) {
   if (!invite) return null;
   const submission: ChapterOnboardingFormData | null =
     invite.submissionJson ? JSON.parse(invite.submissionJson) : null;
-  const formUrl = `${siteUrl}/chapter-onboarding/${invite.token}`;
+  const formUrl = `${siteUrl}/chapter-onboarding/${invite.token}?brand=${encodeURIComponent(brandSlug)}`;
 
   const effectiveStatus =
     invite.status === "PENDING" && new Date(invite.expiresAt) < new Date()
