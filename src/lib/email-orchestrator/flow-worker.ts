@@ -31,6 +31,7 @@ import type { Prisma } from "@prisma/client";
 import { sendEmail, type SendResult } from "./sender";
 import { buildContext, buildLogoBlock, resolveEmailLogoDefault } from "./templates";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
+import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
 
 export type WorkerResult = {
   sent: number;
@@ -71,6 +72,10 @@ export async function runFlowWorker(): Promise<WorkerResult> {
               id: true,
               email: true,
               name: true,
+              // Phase 2 (joincoma.com): include brandSlug so we can resolve
+              // per-recipient brand for brand-aware rendering + per-brand
+              // site URLs.
+              brandSlug: true,
             },
           },
           event: {
@@ -130,6 +135,7 @@ type DueQueueRow = Prisma.EmailQueueGetPayload<{
             id: true;
             email: true;
             name: true;
+            brandSlug: true;
           };
         };
         event: {
@@ -224,7 +230,15 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
       : (step.subjectVariantA ?? step.template.subject);
 
   // Build context.
-  const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+  // Phase 2 (joincoma.com): resolve baseUrl per-recipient brand. Coma
+  // users get https://platform.joincoma.com, AIS users get
+  // https://aisalon.massapro.com. Local dev keeps NEXTAUTH_URL=localhost.
+  const flowBrandSlug =
+    row.rsvp?.user?.brandSlug === "coma" ? "coma" : "aisalon";
+  const baseUrl =
+    process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.startsWith("http://localhost")
+      ? process.env.NEXTAUTH_URL
+      : resolveComaSiteUrl(flowBrandSlug, "/");
 
   // Look up the chapter name + chapterId for the {{chapter_name}} merge
   // token AND the per-chapter email-logo override (ChapterSetting[emailLogo]).
@@ -262,6 +276,7 @@ async function processQueueRow(row: DueQueueRow): Promise<ProcessOutcome> {
     baseUrl,
     queueId: row.id,
     chapterName,
+    brandSlug: flowBrandSlug,
   });
 
   // TSK-0074: FIX THE LOGO BUG. Previously `renderTemplate(step.template.htmlBody, ctx)`

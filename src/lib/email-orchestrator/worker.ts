@@ -41,6 +41,7 @@ import {
   DEFAULT_TEMPLATES,
 } from "./templates";
 import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-unified";
+import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
 import { sendEmail } from "./sender";
 
 export type WorkerResult = {
@@ -141,6 +142,13 @@ async function processDuePending(result: WorkerResult): Promise<void> {
     include: {
       rsvp: {
         include: {
+          // TSK-0075 (Phase 2 of joincoma.com architecture): include the
+          // RSVP's user so we can resolve the recipient's brandSlug for
+          // brand-aware email rendering (Coma vs AIS) AND build per-brand
+          // site URLs (https://platform.joincoma.com vs https://aisalon.massapro.com).
+          // Without this, the orchestrator emails hard-code AIS branding
+          // + aisalon.massapro.com links even for Coma recipients.
+          user: { select: { id: true, brandSlug: true } },
           event: {
             select: {
               id: true,
@@ -284,6 +292,12 @@ async function sendStageEmail(
       name: string | null;
       email: string;
       checkInCode: string | null;
+      /** Phase 2 (joincoma.com): recipient's user — used to resolve
+       *  brandSlug for brand-aware rendering + per-brand site URLs.
+       *  Optional on the type so legacy callers (which don't include
+       *  the user relation) still type-check; sendStageEmail falls back
+       *  to "aisalon" when user is absent. */
+      user?: { brandSlug: string | null } | null;
       event: {
         title: string;
         startsAt: Date;
@@ -343,7 +357,20 @@ async function sendStageEmail(
     }),
   ]);
 
-  const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+  // Resolve the base URL for this recipient's brand. For Coma users,
+  // links go to https://platform.joincoma.com (the app surface); for AIS
+  // users, to https://aisalon.massapro.com. Falls back to NEXTAUTH_URL
+  // env var (for local dev / cron context) and finally to the AIS URL
+  // (legacy default) when no brand info is available.
+  //
+  // resolveComaSiteUrl(brandSlug, "/") returns the app host for the brand:
+  //   - "coma" → https://platform.joincoma.com
+  //   - "aisalon" (or unknown) → https://aisalon.massapro.com
+  const recipientBrandSlug = rsvp.user?.brandSlug === "coma" ? "coma" : "aisalon";
+  const baseUrl =
+    process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.startsWith("http://localhost")
+      ? process.env.NEXTAUTH_URL // local dev — keep localhost so links work in dev
+      : resolveComaSiteUrl(recipientBrandSlug, "/");
   // TSK-0075: resolve chapter name from the V7 Chapter relation (preferred)
   // rather than the legacy free-form `Event.chapter` String field (which
   // defaults to "Tel Aviv" in the schema and was the root cause of Montreal
@@ -359,6 +386,7 @@ async function sendStageEmail(
     baseUrl,
     queueId: row.id,
     chapterName: resolvedChapterName,
+    brandSlug: recipientBrandSlug,
   });
 
   // ─── Feature 2: inject brand logo (top-right) at render time ─────
@@ -462,6 +490,10 @@ async function processAltResends(result: WorkerResult): Promise<void> {
     include: {
       rsvp: {
         include: {
+          // Phase 2: include the recipient's user so we can resolve
+          // brandSlug for brand-aware rendering on the alt-resend path
+          // (same as the primary send in processDuePending).
+          user: { select: { id: true, brandSlug: true } },
           event: { select: { title: true, startsAt: true, venue: true, address: true, slug: true } },
         },
       },
@@ -504,7 +536,16 @@ async function processAltResends(result: WorkerResult): Promise<void> {
       // the open pixel + click redirects point to the alt row (independent
       // tracking — opens on the alt send are tracked separately from the
       // original). Same body template, just the subject line changes.
-      const baseUrl = process.env.NEXTAUTH_URL || "https://aisalon.massapro.com";
+      //
+      // Phase 2 (joincoma.com): resolve baseUrl per-recipient brand so
+      // Coma users get platform.joincoma.com links, AIS users get
+      // aisalon.massapro.com. Local dev keeps NEXTAUTH_URL=localhost:3000.
+      const altBrandSlug =
+        row.rsvp.user?.brandSlug === "coma" ? "coma" : "aisalon";
+      const baseUrl =
+        process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.startsWith("http://localhost")
+          ? process.env.NEXTAUTH_URL
+          : resolveComaSiteUrl(altBrandSlug, "/");
 
       // Create the alt row first (PENDING), then render + send using its id.
       const altRow = await db.emailQueue.create({
@@ -562,6 +603,7 @@ async function processAltResends(result: WorkerResult): Promise<void> {
         baseUrl,
         queueId: altRow.id,
         chapterName: altChapterName,
+        brandSlug: altBrandSlug,
       });
       // PER USER SPEC 2026-08-05: resolve the default email logo for the
       // alt-subject re-send (chapter override → global SiteSetting → env →
