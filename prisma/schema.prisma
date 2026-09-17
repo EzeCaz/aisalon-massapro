@@ -33,6 +33,104 @@ datasource db {
 // All V6 records are backfilled to Country=Israel + Chapter=Tel Aviv.
 // See core/v7/plan.md for the full design.
 
+// ─────────────────────────────────────────────────────────────────────
+// Brand — the parent-platform / white-label brand entity.
+//
+// REVISED 2026-09-17: Brand is now a DB entity (was previously a code-
+// level concept in src/lib/brand/brand-config.ts). The code-level
+// BRANDS registry is still kept for backward compat during Phase 3 —
+// it's the seed source for the 2 initial Brand rows (Coma + AIS).
+// Phase 3B will switch code reads from the hardcoded BRANDS to the DB.
+// Phase 3E will drop the hardcoded BRANDS registry entirely.
+//
+// Hierarchy:
+//   - Coma is the PARENT PLATFORM (parentBrandId = null).
+//   - AIS is a CHILD BRAND of Coma (parentBrandId = <Coma.id>).
+//   - Future brands (Danone, HiTech AI, etc.) will be onboarded as
+//     children of Coma through the admin UI (Phase 3C).
+//
+// Domain architecture (per user decision 2026-09-17 — Interpretation A
+// "centralized login"): all brands except AIS live on platform.joincoma.com
+// as a single host. Brand identity is URL-driven (?brand=<slug>), not
+// host-driven. AIS is grandfathered on aisalon.massapro.com permanently.
+//
+// Status:
+//   - "DRAFT" = brand is being onboarded; renders using parent's branding
+//     (Coma by default) as a placeholder until admin uploads the brand's
+//     own assets + flips status to "ACTIVE".
+//   - "ACTIVE" = brand renders its own branding.
+//
+// See:
+//   - src/lib/brand/brand-config.ts (hardcoded seed values for Coma + AIS)
+//   - src/lib/email-brand-context.ts (per-brand email config)
+//   - src/lib/brand/coma-site-url.ts (per-brand URL helpers)
+//   - src/lib/brand/resolve-brand.ts (4-layer brand resolution chain)
+// ─────────────────────────────────────────────────────────────────────
+model Brand {
+  id              String   @id @default(cuid())
+  slug            String   @unique // "coma" | "aisalon" | "danone" | "hitechai" | ...
+
+  // ── Identity ──
+  displayName     String   // "Coma" | "AI Salon" | "HiTech AI"
+  wordmark        String   // "coma" | "aisalon" | "hitechai" (lowercase by convention)
+  tagline         String   // "Building the Operating System for Communities"
+
+  // ── Color palette ──
+  primaryColor    String   // "#0A1F44"
+  accentColor     String   // "#F5A623"
+  secondaryColor  String   // "#E84855"
+  gradient        String   // CSS conic-gradient string
+
+  // ── Brand assets (URLs — admin-uploaded via /admin/brands/[id]/images) ──
+  heroBannerUrl   String?  // wide hero PNG (login left panel)
+  faviconUrl      String?  // browser tab icon
+  logoUrl         String?  // square logo mark (legacy email clients, etc.)
+  emailLogoUrl    String?  // email header logo
+
+  // ── Login copy ──
+  loginEyebrowTemplate        String   // "{chapterName} Chapter"
+  loginHeadlineTemplate        String   // "The home for {accent}community builders{/accent} in {chapterName}."
+  loginSubtitle               String   // plain text
+  loginFormHeading            String   // "Welcome to Coma"
+  loginFormSubheadingTemplate String   // "Sign in with Google, or use your email..."
+  footerCredit                String   // "Platform by MassaPro · Powered by Coma"
+
+  // ── Email config ──
+  emailFromName     String   // "Coma <coma@massapro.com>"
+  emailContactEmail String   // "coma@massapro.com"
+
+  // ── Domain architecture ──
+  // "single" = brand lives on one host (login + app + admin + API).
+  // "split"  = apex hosts login + auth; subdomain hosts app. (Currently
+  //           unused — was the original joincoma.com design, dropped
+  //           2026-09-17 in favor of single-host for all new brands.)
+  // Kept in the schema for forward-compat in case we add split-domain
+  // opt-in for specific brands later.
+  domainArchitecture String   @default("single") // "single" | "split"
+  apexDomain         String?  // "platform.joincoma.com" or "aisalon.massapro.com"
+  appDomain          String?  // same as apex (single) OR "platform.<apex>" (split)
+  legacyDomains      String[] @default([]) // ["coma.massapro.com"] — aliases kept working via 302
+
+  // ── Onboarding status ──
+  status      String    @default("DRAFT") // "DRAFT" (uses parent's branding) | "ACTIVE"
+  onboardedAt DateTime?
+
+  // ── Hierarchy (self-reference — Coma is the root, parentBrandId = null) ──
+  parentBrandId String?
+  parentBrand   Brand?    @relation("BrandChildren", fields: [parentBrandId], references: [id], onDelete: Restrict)
+  childBrands   Brand[]   @relation("BrandChildren")
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // ── Relations ──
+  chapters Chapter[]
+  users    User[]
+
+  @@index([parentBrandId])
+  @@index([status])
+}
+
 model Country {
   id                 String    @id @default(cuid())
   name               String    @unique // "Israel"
@@ -52,9 +150,18 @@ model Country {
 model Chapter {
   id                   String                         @id @default(cuid())
   name                 String // "Tel Aviv"
-  slug                 String                         @unique // "tel-aviv"
+  // Phase 3A (2026-09-17): dropped the global `@unique` on `slug` to
+  // allow the same chapter slug under different brands (e.g. "tel-aviv"
+  // under both AIS + Coma). The composite `@@unique([brandId, countryId, slug])`
+  // below enforces uniqueness per brand+country.
+  slug                 String
   countryId            String
   country              Country                        @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  // Phase 3A: brand binding. Nullable for the migration period — existing
+  // chapters get backfilled to brandId=<aisalon.id> in the data migration
+  // (Phase 3B). Made non-null in Phase 3E.
+  brandId              String?
+  brand                Brand?                         @relation(fields: [brandId], references: [id], onDelete: Restrict)
   city                 String? // "Tel Aviv-Yafo"
   timezone             String                         @default("Asia/Jerusalem")
   whatsappGroupUrl     String? // per-chapter override
@@ -83,8 +190,13 @@ model Chapter {
   createdAt            DateTime                       @default(now())
   updatedAt            DateTime                       @updatedAt
 
-  @@unique([countryId, slug])
+  // Phase 3A: changed from `@@unique([countryId, slug])` to allow the same
+  // slug under different brands in the same country (e.g. AIS Tel Aviv
+  // + Coma Tel Aviv both in country=Israel). The new constraint enforces
+  // uniqueness per brand+country+slug combo.
+  @@unique([brandId, countryId, slug])
   @@index([countryId])
+  @@index([brandId])
 }
 
 /// Per-chapter branding overrides (mirrors the V6 SiteSetting key/value
@@ -210,7 +322,20 @@ model User {
   //
   // Valid values: "aisalon" | "coma" (see src/lib/brand/brand-config.ts).
   // NULL = legacy user, treat as "aisalon" (the platform default).
+  //
+  // PHASE 3A (2026-09-17): `brandId` (below) is the new canonical FK to
+  // the Brand table. `brandSlug` is kept as a denormalized cache of
+  // `Brand.slug` for the migration period — it's redundant once `brandId`
+  // is non-null, but dropping it now would require a coordinated schema
+  // + code change across many call sites. It'll be dropped in Phase 3E.
   brandSlug                  String?
+  // Phase 3A: FK to the Brand table. Nullable for the migration period —
+  // existing users get backfilled to brandId=<aisalon.id> in the data
+  // migration (Phase 3B). NULL = legacy user, treat as AIS (the original
+  // platform default before Coma became the parent). Made non-null in
+  // Phase 3E.
+  brandId                    String?
+  brand                      Brand?                     @relation(fields: [brandId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
   role                       String                    @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
   tags                       MemberTag[] // tags assigned to this member (admin-managed)
@@ -277,6 +402,9 @@ model User {
   @@index([chapterId])
   @@index([role, countryId])
   @@index([role, chapterId])
+  // Phase 3A: brand indexes for filtering members by brand in the admin UI.
+  @@index([brandId])
+  @@index([role, brandId])
 }
 
 /// A secondary email attached to a User. The User.email column is

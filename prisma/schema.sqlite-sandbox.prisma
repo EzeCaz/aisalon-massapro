@@ -33,6 +33,62 @@ datasource db {
 // All V6 records are backfilled to Country=Israel + Chapter=Tel Aviv.
 // See core/v7/plan.md for the full design.
 
+// ─────────────────────────────────────────────────────────────────────
+// Brand — the parent-platform / white-label brand entity.
+// Phase 3A (2026-09-17): see prisma/schema.prisma for full documentation.
+// SQLite sandbox: legacyDomains is a Json field (was String[] on Postgres,
+// which SQLite doesn't support). Same shape otherwise.
+// ─────────────────────────────────────────────────────────────────────
+model Brand {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+
+  displayName     String
+  wordmark        String
+  tagline         String
+
+  primaryColor    String
+  accentColor     String
+  secondaryColor  String
+  gradient        String
+
+  heroBannerUrl   String?
+  faviconUrl      String?
+  logoUrl         String?
+  emailLogoUrl    String?
+
+  loginEyebrowTemplate        String
+  loginHeadlineTemplate        String
+  loginSubtitle               String
+  loginFormHeading            String
+  loginFormSubheadingTemplate String
+  footerCredit                String
+
+  emailFromName     String
+  emailContactEmail String
+
+  domainArchitecture String   @default("single")
+  apexDomain         String?
+  appDomain          String?
+  legacyDomains      Json?    // was String[] on Postgres — SQLite uses Json
+
+  status      String    @default("DRAFT")
+  onboardedAt DateTime?
+
+  parentBrandId String?
+  parentBrand   Brand?    @relation("BrandChildren", fields: [parentBrandId], references: [id], onDelete: Restrict)
+  childBrands   Brand[]   @relation("BrandChildren")
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  chapters Chapter[]
+  users    User[]
+
+  @@index([parentBrandId])
+  @@index([status])
+}
+
 model Country {
   id                 String    @id @default(cuid())
   name               String    @unique // "Israel"
@@ -52,9 +108,15 @@ model Country {
 model Chapter {
   id                   String                         @id @default(cuid())
   name                 String // "Tel Aviv"
-  slug                 String                         @unique // "tel-aviv"
+  // Phase 3A: dropped the global `@unique` on `slug` to allow the same
+  // chapter slug under different brands. See prisma/schema.prisma for
+  // full documentation.
+  slug                 String
   countryId            String
   country              Country                        @relation(fields: [countryId], references: [id], onDelete: Restrict)
+  // Phase 3A: brand binding. Nullable for the migration period.
+  brandId              String?
+  brand                Brand?                         @relation(fields: [brandId], references: [id], onDelete: Restrict)
   city                 String? // "Tel Aviv-Yafo"
   timezone             String                         @default("Asia/Jerusalem")
   whatsappGroupUrl     String? // per-chapter override
@@ -79,8 +141,11 @@ model Chapter {
   createdAt            DateTime                       @default(now())
   updatedAt            DateTime                       @updatedAt
 
-  @@unique([countryId, slug])
+  // Phase 3A: changed to allow the same slug under different brands in
+  // the same country (e.g. AIS Tel Aviv + Coma Tel Aviv).
+  @@unique([brandId, countryId, slug])
   @@index([countryId])
+  @@index([brandId])
 }
 
 /// Per-chapter branding overrides (mirrors the V6 SiteSetting key/value
@@ -188,7 +253,11 @@ model User {
   chapter            Chapter?              @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
   // Brand association — see schema.prisma for full docs.
+  // Phase 3A: brandId is the new canonical FK; brandSlug is kept as a
+  // denormalized cache for the migration period (dropped in Phase 3E).
   brandSlug          String?
+  brandId            String?
+  brand              Brand?                @relation(fields: [brandId], references: [id], onDelete: SetNull)
   // ----------------------------------------------------------------
   role               String                @default("MEMBER") // "SUPER_ADMIN" | "ADMIN" | "CHAPTER_ORGANIZER" | "CO_HOST" (legacy) | "MEMBER"
   tags               MemberTag[] // tags assigned to this member (admin-managed)
@@ -254,6 +323,9 @@ model User {
   @@index([chapterId])
   @@index([role, countryId])
   @@index([role, chapterId])
+  // Phase 3A: brand indexes for filtering members by brand in the admin UI.
+  @@index([brandId])
+  @@index([role, brandId])
 }
 
 /// A secondary email attached to a User. The User.email column is
