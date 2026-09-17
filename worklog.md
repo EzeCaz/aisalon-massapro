@@ -14537,3 +14537,26 @@ Stage Summary:
 - AIS users see ZERO change. Coma users now have login + app on the same host (platform.joincoma.com).
 - The ?brand= override (already in middleware + brand-metadata.ts) is the mechanism that lets future brands render their identity on the central login page — already wired, no extra code needed for Danone/etc. when their Brand rows are added in Phase 3.
 - Next: Phase 3A (DB schema — new Brand model + brandId on Chapter/User + data migration). Already drafted in the chat; awaiting user "go" to execute.
+
+---
+Task ID: share-links-brand-param
+Agent: Super Z (main)
+Task: Before Phase 3A, add ?brand=<slug> to ALL share links across the platform so the brand travels with every shared URL — when a Coma user shares an event/page, the recipient sees Coma branding when they click.
+
+Work Log:
+- Audit (agent-d07b5216): identified 28 share-link construction sites across 23 file:line locations, grouped by share type (client-copy, web-share, email-link, qr-code, display-url, utility).
+- Added helper `appendBrandParam(url, brandSlug)` to coma-site-url.ts — handles URL objects, absolute URLs, and relative paths. Idempotent.
+- Batch 1 (commit f5a8771): referral-share-card.tsx + 3 callers (profile/events list/event page) + public-event-page.tsx share + testimonial-card.tsx + testimonial-feed.tsx + 2 tab callers. Also fixed hardcoded `utm_campaign="aisalon"` → brandSlug.
+- Batch 2 (commit 5707219): 4 mockup event-mappers (CRITICAL — were hard-coded to aisalon.massapro.com host even for Coma events). 4 mockup editors + 4 mockup pages updated to pass brandSlug. RSVP email eventUrl now uses appendBrandParam.
+- Batch 3 (commit eebd964): provisioned-chapter email URLs + send-chapter-onboarding form URL + preview-invite URL — all now brand-aware (host + ?brand=).
+- Batch 4 (commit 9dce829): admin-members-table sample referral URL + chapter-editor registration/admin URLs.
+- Batch 5 (commit 49d8f5c): share-buttons.tsx + 6 mockup editor callers + chapter-map-panel + chapter-onboarding-admin-list + quiz-control-room + my-registered-events + lib/utm.ts buildShareUrl utility.
+
+Stage Summary:
+- 5 commits pushed to origin/main: f5a8771, 5707219, eebd964, 9dce829, 49d8f5c.
+- 28 share-link sites fixed across ~30 files.
+- Every share link across the platform now carries ?brand=<slug> so the brand travels with the URL. Coma members' shares no longer leak AIS branding.
+- Mockup QR codes (critical) now point to platform.joincoma.com?brand=coma when a Coma admin generates them (was hard-coded aisalon.massapro.com).
+- utm_campaign now uses brandSlug as default (was hardcoded 'aisalon' — Coma members' share attribution was being tagged as AIS in analytics).
+- All changes are backward-compat: brandSlug defaults to 'aisalon' when not provided, so existing AIS behavior is preserved.
+- Phase 3A (DB schema — new Brand model + brandId on Chapter/User + data migration) is the next step.
