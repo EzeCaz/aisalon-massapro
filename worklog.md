@@ -14387,3 +14387,22 @@ Stage Summary:
 - SiteFooter is currently only wired into events/community/testimonials.
   Other member-facing pages (profile, onboarding, set-password, public
   event page) can be migrated to SiteFooter in a follow-up.
+
+---
+Task ID: coma-brand-isolation-optionA
+Agent: Super Z (main)
+Task: Fix 40+ AI Salon brand leaks for Coma users on coma.massapro.com (Option A: domain routing later, fix leaks in priority order). Backup first.
+
+Work Log:
+- Phase 0 BACKUP: tarball download/backups/aisalon-massapro-BACKUP-20260917-0409.tar.gz (105MB) + git tags pre-coma-brand-fix-20260917-0409. GitHub push FAILED (embedded token expired) — remote backup pending until user refreshes token.
+- Phase 1 AUTH (investigation, ZERO code changes needed): read node_modules/next-auth 4.24.13 source — detectOrigin() trusts x-forwarded-host when VERCEL is set (NEXTAUTH_URL ignored for origin); client signIn() uses relative URLs; cookies are __Secure-prefixed + host-scoped; post-login-redirect uses req.url. OAuth flow is host-preserving natively. Remaining Phase 1 items are EXTERNAL configs (user): add coma.massapro.com callback to Google Cloud Console + apply rewrites in the static project's vercel.json.
+- ENV INCIDENT: discovered .env.local (postgres) was deleted and .env replaced with SQLite sandbox path (04:02, platform reset between sessions — not agent-caused). Restored dev by generating prisma client from schema.sqlite-sandbox.prisma + db push → db/custom.db.
+- Phase 2 METADATA (11 files): NEW src/lib/brand/brand-metadata.ts (resolveBrandMetadata: host + x-brand-override header + per-host metadataBase + displayTitle). layout.tsx brand-aware title/template/description/OG/twitter. events/community/testimonials/terms/privacy → bare titles. e/[slug] + c/[chapterSlug] + set-password + onboarding brand-aware; fixed double-suffix bug (child titles now bare under template).
+- Phase 3 IN-PAGE COPY (10 files): events Join banner + anonymous host-brand fallback; events-list empty-state props; profile copy+footer via member brandSlug; public-event-page copy/footer/CTA via brand prop (fixed PublicFooter/CtaCard scope bugs found by tsc); chapter-landing-client toast/eyebrow/signup/footer; mobile-nav brandTitle; global-error window.location.host sniff; referral-share-card brand props + 3 parents.
+- MIDDLEWARE: forwards ?brand= as x-brand-override header (layouts can't read searchParams); header attached to ALL pass-throughs incl. UTM paths so tracking is unaffected.
+- VERIFIED (dev, SQLite sandbox): coma host → "Events — Coma Tel Aviv"; aisalon host → "AI Salon Tel Aviv"; ?brand=coma overrides host; all pages 200 (community/onboarding 307 = correct anon redirects). tsc clean on all touched files (remaining errors pre-existing).
+
+Stage Summary:
+- Commits: 4996f69 (Phase 2+3, 21 files) + tags. Local only — push blocked by expired GitHub token.
+- Coma browser-tab/OG copy leaks: ELIMINATED for metadata + 8 user-facing surfaces.
+- Remaining for next session: Phase 4 (email branding — email.ts brandSlug params for RSVP/onboarding/provisioned emails, orchestrator worker/flow-worker baseUrl → email-brand-context, campaign fromName/fromEmail defaults, DM notification email, unsubscribe page, templates.ts SHELL tokens) + Phase 5 (7 signup/reset route siteUrl fallbacks). Also pending: user-side Phase 1 configs (Google OAuth redirect URI + static-project vercel.json rewrites) and token refresh to push.
