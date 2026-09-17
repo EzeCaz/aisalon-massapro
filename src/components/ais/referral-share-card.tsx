@@ -38,6 +38,12 @@ type Props = {
   /** Brand tagline used in the native share text (lowercase first word
    *  reads naturally mid-sentence). */
   brandTagline?: string;
+  /** Brand slug (e.g. "coma" | "aisalon") — used to append `?brand=<slug>`
+   * to the share URL so the recipient sees the correct brand when they
+   * click. Also drives the `utm_campaign` value (was hardcoded "aisalon").
+   * Defaults to "aisalon" for backward compat with pre-existing callers
+   * that don't pass it — preserves existing AIS share analytics. */
+  brandSlug?: string;
 };
 
 type Stats = {
@@ -53,6 +59,7 @@ export function ReferralShareCard({
   variant = "full",
   brandName = "AI Salon Tel Aviv",
   brandTagline = "empowering AI connections",
+  brandSlug = "aisalon",
 }: Props) {
   const pathname = usePathname();
   const [copied, setCopied] = React.useState(false);
@@ -79,14 +86,19 @@ export function ReferralShareCard({
   // the member is on. Fall back to "/events" if pathname is unexpectedly
   // empty (shouldn't happen in practice, but defensive).
   const sharePath = pathname || "/events";
+  // Brand-aware share URL: append `?brand=<slug>` (so the recipient sees
+  // the right brand when they click) and use `utm_campaign=<slug>` (was
+  // hardcoded "aisalon" — even Coma members' shares were tagged as AIS
+  // in analytics attribution, which is now fixed).
   const shareUrl = React.useMemo(() => {
     const u = new URL(sharePath, origin);
     u.searchParams.set("utm_source", "member");
     u.searchParams.set("utm_medium", "referral");
-    u.searchParams.set("utm_campaign", "aisalon");
+    u.searchParams.set("utm_campaign", brandSlug);
     u.searchParams.set("utm_uid", utmUid);
+    u.searchParams.set("brand", brandSlug);
     return u.toString();
-  }, [origin, sharePath, utmUid]);
+  }, [origin, sharePath, utmUid, brandSlug]);
 
   // Load stats on mount (full variant only)
   React.useEffect(() => {

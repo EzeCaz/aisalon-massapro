@@ -270,6 +270,7 @@ export default async function EventsPage() {
               variant="compact"
               brandName={`${brand.displayName} ${chapterName}`}
               brandTagline={brand.tagline.charAt(0).toLowerCase() + brand.tagline.slice(1)}
+              brandSlug={brand.slug}
             />
           </div>
         )}

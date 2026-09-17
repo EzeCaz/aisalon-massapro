@@ -591,6 +591,7 @@ export default async function EventDetailPage({ params }: Params) {
               utmUid={me.utmUid}
               variant="compact"
               brandName={`${getBrandConfig((me as { brandSlug?: string | null }).brandSlug ?? "aisalon").displayName}`}
+              brandSlug={(me as { brandSlug?: string | null }).brandSlug ?? "aisalon"}
             />
           </div>
         )}

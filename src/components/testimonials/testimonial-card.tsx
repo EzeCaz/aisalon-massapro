@@ -75,6 +75,23 @@ type Props = {
     venue: string | null;
     mainImageUrl: string | null;
   };
+  /**
+   * Brand display name (e.g. "AI Salon" | "Coma") — used in the share
+   * text when there's event context ("this great AI Salon event about
+   * ..." → "this great Coma event about ..."). Defaults to "AI Salon"
+   * for backward compat.
+   *
+   * Phase 2 (2026-09-17).
+   */
+  brandName?: string;
+  /**
+   * Brand slug (e.g. "aisalon" | "coma") — appended to the share URL
+   * as `?brand=<slug>` so the recipient sees the right brand when they
+   * click. Defaults to "aisalon" for backward compat.
+   *
+   * Phase 2 (2026-09-17).
+   */
+  brandSlug?: string;
 };
 
 /**
@@ -92,7 +109,7 @@ type Props = {
  * only share remains (it just copies a link). The card itself is fully
  * readable so the public feed works without login.
  */
-export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged, eventContext }: Props) {
+export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged, eventContext, brandName = "AI Salon", brandSlug = "aisalon" }: Props) {
   const isAnonymous = !meId;
   const [liked, setLiked] = useState(t.likedByMe);
   const [likeCount, setLikeCount] = useState(t.likeCount);
@@ -123,18 +140,20 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged, even
   }
 
   async function handleShare() {
-    const shareUrl = `${window.location.origin}/testimonials?t=${t.id}`;
+    // Phase 2 (2026-09-17): brand-aware share URL — append `?brand=<slug>`
+    // so the recipient sees the right brand when they click.
+    const shareUrl = `${window.location.origin}/testimonials?t=${t.id}&brand=${encodeURIComponent(brandSlug)}`;
     // Curated event-branded message — used when this card is rendered
     // inside an event-scoped feed (eventContext passed from the parent)
     // OR when the testimonial itself is attached to an event (t.event
     // present, which the API populates with title + venue + mainImageUrl).
-    // Format: "I had an amazing time on this great AI Salon event about
-    // <event name>, at <venue name>, join the community."
+    // Format: "I had an amazing time on this great <brandName> event
+    // about <event name>, at <venue name>, join the community."
     // Falls back to the testimonial quote + author when no event context.
     const ev = eventContext ?? t.event;
     const venuePart = ev?.venue ? `, at ${ev.venue}` : "";
     const shareText = ev
-      ? `I had an amazing time on this great AI Salon event about ${ev.title}${venuePart}, join the community.`
+      ? `I had an amazing time on this great ${brandName} event about ${ev.title}${venuePart}, join the community.`
       : `"${t.body.slice(0, 140)}${t.body.length > 140 ? "…" : ""}" — ${t.author.name || t.author.email}`;
     // Share image — prefer the event's profile picture (eventContext's
     // mainImageUrl, then the testimonial's own event.mainImageUrl, then
@@ -164,7 +183,7 @@ export function TestimonialCard({ testimonial: t, meId, isAdmin, onChanged, even
       }
       try {
         const shareData: ShareData = {
-          title: ev ? `AI Salon — ${ev.title}` : "AI Salon — Testimonial",
+          title: ev ? `${brandName} — ${ev.title}` : `${brandName} — Testimonial`,
           text: shareText,
           url: shareUrl,
         };

@@ -95,8 +95,12 @@ type Props = {
   /** BRAND-AWARE (Phase 3): resolved brand config passed from the server
    *  parent (e/[slug]/page.tsx). Drives the members-only copy, footer,
    *  and register CTA so Coma visitors on coma.massapro.com never see
-   *  hard-coded "AI Salon" strings. */
-  brand?: { displayName: string; tagline: string };
+   *  hard-coded "AI Salon" strings.
+   *
+   *  Phase 2 addendum (2026-09-17): `slug` is also passed so the share
+   *  URL builder can append `?brand=<slug>` (recipient sees the right
+   *  brand when they click the shared link). */
+  brand?: { displayName: string; tagline: string; slug: string };
 };
 
 // ------------------------------------------------------------------
@@ -271,6 +275,12 @@ export function PublicEventPage({ event, me, brand }: Props) {
     // still get the public experience, while logged-in ones go straight
     // to the full member event page. This matches the URLs shown in the
     // ReferralShareCard on /events/[slug].
+    //
+    // Phase 2 (2026-09-17): brand-aware share URL. The brand slug is
+    // appended as `?brand=<slug>` so the recipient sees the correct
+    // brand when they click (was hardcoded "aisalon" — Coma members'
+    // shares were tagged as AIS in both attribution AND brand rendering).
+    const shareBrandSlug = brand?.slug ?? "aisalon";
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     const path = `/events/${event.slug}`;
     let url: string;
@@ -278,11 +288,24 @@ export function PublicEventPage({ event, me, brand }: Props) {
       const u = new URL(path, baseUrl || "https://aisalon.massapro.com");
       u.searchParams.set("utm_source", "member");
       u.searchParams.set("utm_medium", "referral");
-      u.searchParams.set("utm_campaign", "aisalon");
+      u.searchParams.set("utm_campaign", shareBrandSlug);
       u.searchParams.set("utm_uid", me.utmUid);
+      u.searchParams.set("brand", shareBrandSlug);
       url = u.toString();
     } else {
-      url = typeof window !== "undefined" ? window.location.href : path;
+      // Anonymous visitor — use current page URL but ensure ?brand= is set.
+      url = (() => {
+        if (typeof window === "undefined") return path;
+        try {
+          const u = new URL(window.location.href);
+          if (!u.searchParams.has("brand")) {
+            u.searchParams.set("brand", shareBrandSlug);
+          }
+          return u.toString();
+        } catch {
+          return path;
+        }
+      })();
     }
     try {
       if (navigator.share) {

@@ -52,6 +52,10 @@ type Props = {
     venue: string | null;
     mainImageUrl: string | null;
   };
+  /** Brand display name for the share button text. Defaults to "AI Salon". */
+  brandName?: string;
+  /** Brand slug for the share URL `?brand=<slug>` param. Defaults to "aisalon". */
+  brandSlug?: string;
 };
 
 /**
@@ -83,6 +87,8 @@ export function TestimonialFeed({
   compactForm = false,
   formOnTop = true,
   eventContext,
+  brandName = "AI Salon",
+  brandSlug = "aisalon",
 }: Props) {
   const isAnonymous = !meId;
   const [items, setItems] = useState<Testimonial[]>([]);
@@ -209,6 +215,8 @@ export function TestimonialFeed({
           isAdmin={isAdmin}
           onChanged={fetchItems}
           eventContext={eventContext}
+          brandName={brandName}
+          brandSlug={brandSlug}
         />
       ))}
     </div>

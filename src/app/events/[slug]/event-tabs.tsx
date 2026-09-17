@@ -113,6 +113,9 @@ type Me = {
   email: string;
   name: string | null;
   role: string;
+  /** Brand slug — used to brand share URLs with `?brand=<slug>`. Optional
+   *  for backward compat (callers that don't pass it get the AIS default). */
+  brandSlug?: string | null;
 };
 
 export function EventTabs({
@@ -270,7 +273,7 @@ export function EventTabs({
         <PresentationsTab event={event} me={me} isAdmin={isAdmin} />
       </TabsContent>
       <TabsContent value="testimonials" className="mt-6">
-        <TestimonialsTab event={event} me={me} isAdmin={isAdmin} />
+        <TestimonialsTab event={event} me={me} isAdmin={isAdmin} brandSlug={me.brandSlug ?? "aisalon"} />
       </TabsContent>
       {(quizzes.length > 0 || canHostQuiz) && (
         <TabsContent value="quiz" className="mt-6">

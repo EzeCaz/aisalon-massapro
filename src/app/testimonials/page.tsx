@@ -175,6 +175,8 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
           chapters={chapters}
           defaultChapterSlug={chapterSlugParam}
           defaultSort="recent"
+          brandName={brand.displayName}
+          brandSlug={brand.slug}
         />
       </main>
 

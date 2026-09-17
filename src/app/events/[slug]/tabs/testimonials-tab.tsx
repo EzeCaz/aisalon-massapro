@@ -31,6 +31,9 @@ type Props = {
   };
   me: { id: string; email: string; name: string | null; role: string };
   isAdmin: boolean;
+  /** Brand slug for the share URL `?brand=<slug>` param + brand-aware share text.
+   *  Defaults to "aisalon" for backward compat. Phase 2 (2026-09-17). */
+  brandSlug?: string;
 };
 
 /**
@@ -42,7 +45,7 @@ type Props = {
  * feed → card so that the share button on each testimonial uses the
  * curated event-branded message + the event's profile picture.
  */
-export function TestimonialsTab({ event, me, isAdmin }: Props) {
+export function TestimonialsTab({ event, me, isAdmin, brandSlug = "aisalon" }: Props) {
   // Build the speaker picker options — show name + company for context.
   const speakerOptions: AttachmentOption[] = event.speakers.map((s) => ({
     id: s.id,
@@ -82,6 +85,7 @@ export function TestimonialsTab({ event, me, isAdmin }: Props) {
         agendaItems={agendaOptions}
         defaultSort="recent"
         compactForm
+        brandSlug={brandSlug}
         // Pass the event context for the share-button branding
         // (curated message + event profile picture).
         eventContext={{

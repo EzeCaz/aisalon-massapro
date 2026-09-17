@@ -117,3 +117,71 @@ export function getBrandAppHost(brandSlug: BrandSlug | string): string {
 // Will be cleaned up in Phase 3E once all callers are migrated.
 // ─────────────────────────────────────────────────────────────────────
 export const resolveComaSiteUrl = resolveBrandSiteUrl;
+
+// ─────────────────────────────────────────────────────────────────────
+// `?brand=<slug>` appending helper
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Append `?brand=<slug>` to a URL or path string, preserving any existing
+ * query string. Used by share-link builders (referral cards, public-event
+ * page, testimonial share, email-body links, admin display URLs, etc.)
+ * so that when a Coma user shares a link, the recipient sees Coma
+ * branding when they click — instead of the platform default.
+ *
+ * Behavior:
+ *   - If the URL already has `?brand=...`, leave it alone (don't override).
+ *   - If the URL has a query string (`?...`), append `&brand=<slug>`.
+ *   - If the URL has no query string, append `?brand=<slug>`.
+ *   - Works on both absolute URLs (`https://...`) and relative paths (`/events/...`).
+ *
+ * Examples:
+ *   appendBrandParam("https://platform.joincoma.com/events/foo", "coma")
+ *     → "https://platform.joincoma.com/events/foo?brand=coma"
+ *   appendBrandParam("/events/foo?utm_uid=abc123", "aisalon")
+ *     → "/events/foo?utm_uid=abc123&brand=aisalon"
+ *   appendBrandParam("https://x.com/e/bar?brand=coma", "aisalon")
+ *     → "https://x.com/e/bar?brand=coma" (unchanged — brand already set)
+ *
+ * @param urlOrPath  - The URL or path to append to. Can be a string OR a
+ *                     URL object (the function returns a string in both
+ *                     cases for simplicity).
+ * @param brandSlug  - The brand slug to set (e.g. "coma", "aisalon").
+ *                     Pass an empty string to skip (returns the URL unchanged).
+ * @returns The URL with `?brand=<slug>` appended (if not already present).
+ */
+export function appendBrandParam(
+  urlOrPath: string | URL,
+  brandSlug: string,
+): string {
+  if (!brandSlug) return urlOrPath.toString();
+
+  // URL object case — use the URL API directly.
+  if (urlOrPath instanceof URL) {
+    if (!urlOrPath.searchParams.has("brand")) {
+      urlOrPath.searchParams.set("brand", brandSlug);
+    }
+    return urlOrPath.toString();
+  }
+
+  // String case — try to parse as URL; if it fails, treat as a path.
+  const str = urlOrPath;
+  try {
+    if (str.startsWith("http://") || str.startsWith("https://")) {
+      const u = new URL(str);
+      if (!u.searchParams.has("brand")) {
+        u.searchParams.set("brand", brandSlug);
+      }
+      return u.toString();
+    }
+  } catch {
+    // fall through to path handling
+  }
+
+  // Relative path case — manual append.
+  if (str.includes("?brand=") || str.includes("&brand=")) {
+    return str; // already has brand param
+  }
+  const separator = str.includes("?") ? "&" : "?";
+  return `${str}${separator}brand=${encodeURIComponent(brandSlug)}`;
+}
