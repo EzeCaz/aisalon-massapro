@@ -14560,3 +14560,22 @@ Stage Summary:
 - utm_campaign now uses brandSlug as default (was hardcoded 'aisalon' — Coma members' share attribution was being tagged as AIS in analytics).
 - All changes are backward-compat: brandSlug defaults to 'aisalon' when not provided, so existing AIS behavior is preserved.
 - Phase 3A (DB schema — new Brand model + brandId on Chapter/User + data migration) is the next step.
+
+---
+Task ID: phase-3a-brand-schema
+Agent: Super Z (main)
+Task: Phase 3A — DB schema migration. Add Brand Prisma model + brandId FK on Chapter + User. Backfill existing data to AIS. Pure schema change, no behavior change.
+
+Work Log:
+- Added Brand model to prisma/schema.prisma + prisma/schema.sqlite-sandbox.prisma with full field set: slug, identity (displayName/wordmark/tagline), colors (primary/accent/secondary/gradient), brand assets (heroBanner/favicon/logo/emailLogo URLs), login copy (6 templates), email config (fromName/contactEmail), domain architecture (single/split, apex/app/legacy domains), onboarding status (DRAFT/ACTIVE + onboardedAt), hierarchy (parentBrandId self-reference — Coma root, AIS child), timestamps, chapters + users relations. SQLite uses Json? for legacyDomains (was String[] on Postgres — SQLite doesn't support arrays).
+- Chapter model: added brandId String? (FK to Brand, onDelete: Restrict). Dropped @unique on slug (was preventing 'tel-aviv' under both AIS + Coma). Changed @@unique([countryId, slug]) → @@unique([brandId, countryId, slug]) so the same chapter slug is allowed under different brands in the same country. Added @@index([brandId]).
+- User model: added brandId String? (FK to Brand, onDelete: SetNull). Kept brandSlug as denormalized cache of Brand.slug for migration period (dropped in Phase 3E). Added @@index([brandId]) + @@index([role, brandId]) for admin UI brand filtering.
+- Created scripts/seed-brands.ts: idempotent data migration. Upserts 2 Brand rows (Coma parent + AIS child of Coma, both ACTIVE). Backfills chapters: brandId=AIS.id where null. Backfills users: brandId=AIS.id for legacy (brandSlug=null or 'aisalon'), brandId=Coma.id for brandSlug='coma'. Idempotent (upsert + conditional updateMany).
+- Validated both schemas (npx prisma validate). SQLite sandbox: pushed schema to local DB successfully. Ran seed-brands.ts: 2 Brand rows created (Coma id=cmu5yz9xs... + AIS id=cmu5yz9xv...), 0 chapters/users backfilled (empty local sandbox — script is ready for production).
+- TypeScript: zero NEW errors introduced. 17 pre-existing ChapterWhereUniqueInput errors (code using findUnique({where:{slug}}) which was already broken on SQLite sandbox — will be fixed in Phase 3B when code reads from DB).
+- Commits: 2bdc6ae (schema) + 55997a0 (seed script + gitignore exceptions).
+
+Stage Summary:
+- ✅ Phase 3A complete. Brand table exists with 2 rows (Coma + AIS). Chapter + User have new nullable brandId column. All existing data preserves its current experience (chapters → AIS, users → AIS or Coma based on brandSlug).
+- AIS users see ZERO change. Coma users see ZERO change.
+- Next: Phase 3B — switch code reads from the hardcoded BRANDS registry in brand-config.ts to the DB. This is the step that makes the Brand table actually USED at runtime. Then Phase 3C — admin UI for /admin/brands list + edit + new + onboarding wizard (so SUPER_ADMINs can provision new brands like Danone/HiTech AI through the UI).
