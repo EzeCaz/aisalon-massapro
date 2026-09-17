@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { sendRsvpConfirmationEmail, emailConfigured } from "@/lib/email";
 import { generateIcs } from "@/lib/calendar";
 import { getReferrerUserId, UTM_COOKIE_NAME } from "@/lib/utm";
+import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
 
 /**
  * RSVP API for the public event page (/e/[slug]).
@@ -34,7 +35,10 @@ async function getUser(req: NextRequest, slug: string) {
   if (!session?.user?.email) return { user: null, event: null, status: 401 as const };
   const user = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, name: true },
+    // Phase 2 (joincoma.com): include brandSlug so the RSVP confirmation
+    // email can be brand-aware (Coma vs AIS) — passes through to
+    // sendRsvpConfirmationEmail via opts.brandSlug.
+    select: { id: true, email: true, name: true, brandSlug: true },
   });
   if (!user) return { user: null, event: null, status: 401 as const };
   const event = await db.event.findUnique({
@@ -131,9 +135,20 @@ export async function POST(_req: NextRequest, { params }: Params) {
   // We don't email on every click — only the first time the user registers.
   if (!wasAlreadyRegistered && emailConfigured()) {
     try {
-      const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
+      // Phase 2 (joincoma.com): resolve baseUrl per-recipient brand.
+      // Coma users → https://platform.joincoma.com (event page links +
+      // .ics URL). AIS users → https://aisalon.massapro.com. Local dev
+      // keeps NEXT_PUBLIC_SITE_URL/VERCEL_URL/localhost.
+      const recipientBrandSlug =
+        user!.brandSlug === "coma" ? "coma" : "aisalon";
+      const isLocalDev =
+        process.env.NODE_ENV !== "production" &&
+        (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
+          process.env.VERCEL_URL?.includes("localhost"));
+      const siteUrl = isLocalDev
+        ? (process.env.NEXT_PUBLIC_SITE_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"))
+        : resolveComaSiteUrl(recipientBrandSlug, "/");
       const eventUrl = `${siteUrl.replace(/\/$/, "")}/events/${slug}`;
       const icsContent = generateIcs({
         title: event.title,
@@ -160,6 +175,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
         eventUrl,
         icsContent,
         chapterName: event.chapter,
+        brandSlug: recipientBrandSlug,
       });
     } catch (err) {
       // Don't fail the RSVP if the email fails — the registration is

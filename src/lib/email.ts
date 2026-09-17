@@ -149,12 +149,31 @@ export async function sendPasswordEmail(opts: {
     ? `${brand.displayName} ${chapterName}`
     : brand.displayName;
 
-  // Strip any trailing slash from siteUrl + append /login.
-  // Use the brand-specific login URL (carries ?brand= param so the brand
-  // sticks even when the email is opened on a different domain).
-  // Add ?callbackUrl=/events so the user lands on the events list after login.
-  const base = opts.siteUrl.replace(/\/$/, "");
-  const loginUrl = `${base}/login?brand=${brand.slug}&callbackUrl=${encodeURIComponent("/events")}`;
+  // Build the login URL.
+  //
+  // Phase 2 (joincoma.com architecture): use the brand context's loginUrl
+  // (which points to the correct apex host per brand) instead of the
+  // caller-provided opts.siteUrl. This means:
+  //   - Coma users → https://joincoma.com/login?brand=coma&callbackUrl=...
+  //   - AIS users → https://aisalon.massapro.com/login?brand=aisalon&...
+  //
+  // The brand.loginUrl field already includes the ?brand= param. We just
+  // need to append &callbackUrl=/events so the user lands on the events
+  // list after login. opts.siteUrl is kept for backward compat but no
+  // longer drives the login URL — it's only used for the footer link
+  // (which is also being phased out in favor of brand.siteUrl).
+  //
+  // Note: brand.loginUrl uses the LOGIN HOST (apex for Coma), not the app
+  // host. This is critical because /login lives on the apex in the
+  // joincoma.com split-domain architecture (middleware redirects
+  // platform.joincoma.com/login → joincoma.com/login). Sending users
+  // straight to the apex avoids the redirect round-trip.
+  const loginUrl = `${brand.loginUrl}&callbackUrl=${encodeURIComponent("/events")}`;
+
+  // Old approach (kept for reference / fallback if some caller relies on it):
+  // const base = opts.siteUrl.replace(/\/$/, "");
+  // const loginUrl = `${base}/login?brand=${brand.slug}&callbackUrl=...`;
+  void opts.siteUrl; // explicitly mark as intentionally unused
 
   const subject = isComa
     ? `Your ${brand.displayName} login`
@@ -355,9 +374,19 @@ export async function sendRsvpConfirmationEmail(opts: {
   icsContent: string;
   /** Optional chapter display name. Defaults to "Tel Aviv". */
   chapterName?: string;
+  /** Brand slug. When "coma", renders a Coma-branded email (Coma wordmark,
+   *  Coma tagline, Coma brand colors, no "AI Salon" mentions). Defaults
+   *  to "aisalon" for backward compat. Added 2026-09-17 as part of the
+   *  joincoma.com split-domain architecture. */
+  brandSlug?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const firstName = opts.name?.split(" ")[0] || "there";
-  const chapterName = opts.chapterName ?? "Tel Aviv";
+  // Resolve brand context for brand-aware copy, colors, and URLs.
+  const brand = resolveEmailBrandContext(opts.brandSlug);
+  const isComa = brand.slug === "coma";
+  // For Coma: no chapter name in the email (Coma is brand-first, chapter-less
+  // at the RSVP level). For AIS: chapter name stays (preserves existing behavior).
+  const chapterName = isComa ? "" : (opts.chapterName ?? "Tel Aviv");
   const start = new Date(opts.eventStartsAt);
   const end = new Date(opts.eventEndsAt);
 
@@ -401,8 +430,16 @@ event page and click "Save to Calendar".
 
 See you at the event!
 
-— The AI Salon ${chapterName} team
-MassaPro · https://massapro.com`;
+— The ${brand.displayName}${chapterName ? ` ${chapterName}` : ""} team
+${brand.footerCredit}`;
+
+  // Brand-specific gradient banner. AIS uses the legacy pink→cyan
+  // gradient (#FF005A → #00E6FF). Coma uses its navy→amber gradient
+  // (extracted from brand.gradient — simpler: use brand.primaryColor
+  // + brand.accentColor as a 2-stop linear gradient).
+  const bannerGradient = isComa
+    ? `linear-gradient(135deg, ${brand.primaryColor} 0%, ${brand.accentColor} 100%)`
+    : "linear-gradient(135deg, #FF005A 0%, #00E6FF 100%)";
 
   const html = `
 <div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
@@ -413,7 +450,7 @@ MassaPro · https://massapro.com`;
   <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 24px;">
     You're registered for:
   </p>
-  <div style="padding: 20px; margin: 24px 0; background: linear-gradient(135deg, #FF005A 0%, #00E6FF 100%); border-radius: 10px; color: #fff;">
+  <div style="padding: 20px; margin: 24px 0; background: ${bannerGradient}; border-radius: 10px; color: #fff;">
     <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">${opts.eventTitle}</div>
     <div style="font-size: 14px; opacity: 0.95;">
       📅 ${fmtDate(start)}<br/>
@@ -439,8 +476,8 @@ MassaPro · https://massapro.com`;
   </p>
   <hr style="margin: 32px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 12px; color: #999; margin: 0;">
-    AI Salon ${chapterName} · Empowering AI Connections<br/>
-    <a href="https://massapro.com" style="color: #999;">MassaPro</a>
+    ${brand.displayName}${chapterName ? ` ${chapterName}` : ""} · ${brand.tagline}<br/>
+    <a href="${brand.siteUrl}" style="color: #999;">${brand.siteUrl.replace(/^https?:\/\//, "")}</a>
   </p>
 </div>`;
 

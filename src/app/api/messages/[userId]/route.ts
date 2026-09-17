@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendMail } from "@/lib/email";
 import { getMeId, getMe } from "@/lib/session-user";
+import { resolveEmailBrandContext } from "@/lib/email-brand-context";
+import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
 
 /**
  * GET /api/messages/[userId]
@@ -131,7 +133,10 @@ export async function POST(
     email: true,
     photoUrl: true,
     image: true,
-  })) as { id: string; name: string | null; email: string; photoUrl: string | null; image: string | null } | null;
+    // Phase 2 (joincoma.com): include brandSlug so the DM notification
+    // email can be brand-aware (recipient's brand, not hardcoded AIS).
+    brandSlug: true,
+  })) as { id: string; name: string | null; email: string; photoUrl: string | null; image: string | null; brandSlug: string | null } | null;
   if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
 
   const { userId: partnerId } = await params;
@@ -143,7 +148,10 @@ export async function POST(
   const [partner, payload] = await Promise.all([
     db.user.findUnique({
       where: { id: partnerId },
-      select: { id: true, name: true, email: true },
+      // Phase 2: include partner.brandSlug — the recipient's brand is
+      // what drives the email branding (they're the one receiving the
+      // email notification).
+      select: { id: true, name: true, email: true, brandSlug: true },
     }),
     req.json().catch(() => null as unknown as { body?: unknown }),
   ]);
@@ -173,32 +181,45 @@ export async function POST(
   // We send to BOTH the recipient and the platform admin (ADMIN_EMAIL)
   // — the admin gets CC'd on every DM so they can monitor the
   // conversation flow on the platform. Failures are logged only.
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXTAUTH_URL ||
-    "https://aisalon.massapro.com";
+  //
+  // Phase 2 (joincoma.com): brand the email per RECIPIENT (partner),
+  // not the sender. The recipient is the one who gets the email, so
+  // their brandSlug determines the wordmark, colors, and links.
+  const recipientBrandSlug = partner.brandSlug === "coma" ? "coma" : "aisalon";
+  const brand = resolveEmailBrandContext(recipientBrandSlug);
+  const isLocalDev =
+    process.env.NODE_ENV !== "production" &&
+    (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
+      process.env.NEXTAUTH_URL?.includes("localhost"));
+  const siteUrl = isLocalDev
+    ? (process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXTAUTH_URL ||
+      "http://localhost:3000")
+    : resolveComaSiteUrl(recipientBrandSlug, "/");
   const fromName = me.name || me.email.split("@")[0];
   const recipientName = partner.name || partner.email.split("@")[0];
   const adminEmail = process.env.ADMIN_EMAIL || "eze@massapro.com";
-  const chatFrom =
-    process.env.SMTP_FROM || "AI Salon Chat <chat@aisalon.massapro.com>";
+  // Use the brand's From address (e.g. "Coma <coma@massapro.com>" for
+  // Coma, "AI Salon <noreply@aisalon.massapro.com>" for AIS) unless
+  // SMTP_FROM is explicitly set in env (operator override).
+  const chatFrom = process.env.SMTP_FROM || brand.fromName;
 
-  const subject = `New message from ${fromName} on AI Salon TLV`;
+  const subject = `New message from ${fromName} on ${brand.displayName}`;
   const textEmail = `Hi ${recipientName},
 
-${fromName} sent you a message on AI Salon Tel Aviv.
+${fromName} sent you a message on ${brand.displayName}.
 
 "${text}"
 
 Reply on the platform: ${siteUrl}/events
 
-— AI Salon Tel Aviv`;
+— ${brand.displayName}`;
   const htmlEmail = `
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #0a0a0a;">
   <p style="font-size: 14px; color: #666; margin: 0 0 16px;">
-    <strong>${fromName}</strong> sent you a message on AI Salon Tel Aviv.
+    <strong>${fromName}</strong> sent you a message on ${brand.displayName}.
   </p>
-  <div style="padding: 16px; background: #f6f6f6; border-radius: 8px; border-left: 4px solid #FF005A; margin: 16px 0;">
+  <div style="padding: 16px; background: #f6f6f6; border-radius: 8px; border-left: 4px solid ${brand.accentColor}; margin: 16px 0;">
     <pre style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6; white-space: pre-wrap; margin: 0;">${text.replace(/</g, "&lt;")}</pre>
   </div>
   <p style="font-size: 13px; color: #666; margin: 16px 0 0;">
@@ -206,7 +227,7 @@ Reply on the platform: ${siteUrl}/events
   </p>
   <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;">
   <p style="font-size: 11px; color: #999; margin: 0;">
-    Sent from <strong>${chatFrom}</strong> · AI Salon Tel Aviv
+    Sent from <strong>${chatFrom}</strong> · ${brand.displayName}
   </p>
 </div>`;
   sendMail({

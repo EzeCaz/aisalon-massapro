@@ -84,6 +84,12 @@ export async function PATCH(
       email: true,
       name: true,
       role: true,
+      // Phase 2 (joincoma.com): include brandSlug so the password email
+      // sent below can be brand-aware (Coma vs AIS). Previously this
+      // route was the only password-email caller that did NOT pass
+      // brandSlug — Coma users reset via this admin endpoint got AIS
+      // branding by default.
+      brandSlug: true,
       chapter: { select: { name: true } },
     },
   });
@@ -254,6 +260,9 @@ export async function PATCH(
         password: newPassword,
         siteUrl,
         chapterName: target.chapter?.name,
+        // Phase 2 (joincoma.com): forward the target's brandSlug so the
+        // password email renders Coma branding for Coma users (not AIS).
+        brandSlug: target.brandSlug ?? undefined,
       });
       if (!result.ok) {
         return NextResponse.json({
