@@ -2520,8 +2520,8 @@ function EditMemberDialog({
                     </div>
                     <code className="block font-mono text-[0.7rem] text-[#004F98] bg-white/60 border border-black/10 rounded px-2 py-1.5 break-all">
                       {typeof window !== "undefined"
-                        ? `${window.location.origin}/events?utm_uid=${member.utmUid}`
-                        : `/events?utm_uid=${member.utmUid}`}
+                        ? `${window.location.origin}/events?utm_uid=${member.utmUid}${member.brandSlug ? `&brand=${encodeURIComponent(member.brandSlug)}` : ""}`
+                        : `/events?utm_uid=${member.utmUid}${member.brandSlug ? `&brand=${encodeURIComponent(member.brandSlug)}` : ""}`}
                     </code>
                   </div>
                   <p className="text-[0.65rem] text-black/50 leading-relaxed flex items-start gap-1.5">

@@ -52,7 +52,9 @@ export async function ChapterEditContent({
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true, countryId: true, chapterId: true },
+    // Phase 2: include brandSlug so ChapterEditor can build brand-aware
+    // share URLs (?brand=<slug>).
+    select: { id: true, email: true, role: true, countryId: true, chapterId: true, brandSlug: true },
   });
   if (!me) redirect("/login");
 
@@ -150,6 +152,7 @@ export async function ChapterEditContent({
           }}
           countries={countries}
           isSuperAdmin={isSuperAdmin}
+          brandSlug={me.brandSlug ?? "aisalon"}
         />
       </main>
     </div>

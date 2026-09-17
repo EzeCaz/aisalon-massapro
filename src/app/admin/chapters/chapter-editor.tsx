@@ -15,6 +15,7 @@ export function ChapterEditor({
   initial,
   countries,
   isSuperAdmin,
+  brandSlug = "aisalon",
 }: {
   mode: "new" | "edit";
   chapterId?: string;
@@ -31,6 +32,12 @@ export function ChapterEditor({
   };
   countries: Country[];
   isSuperAdmin: boolean;
+  /** Brand slug for the registration + admin URL display + clipboard
+   *  copy. Appends ?brand=<slug> so a Super Admin on platform.joincoma.com
+   *  copying a chapter URL for a Coma chapter doesn't end up with an
+   *  AIS-tagged link. Defaults to "aisalon" for backward compat.
+   *  Phase 2 (2026-09-17). */
+  brandSlug?: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -65,8 +72,12 @@ export function ChapterEditor({
       ? window.location.origin
       : process.env.NEXT_PUBLIC_SITE_URL ||
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  const registrationUrl = form.slug ? `${siteUrl}/c/${form.slug}` : "";
-  const adminUrl = form.slug ? `${siteUrl}/admin/c/${form.slug}` : "";
+  // Phase 2: append ?brand=<slug> to admin-shareable URLs so the recipient
+  // (e.g. a chapter lead getting the registration URL) sees the right brand
+  // when they click. Idempotent — won't double-add if ?brand= already there.
+  const brandQs = `?brand=${encodeURIComponent(brandSlug)}`;
+  const registrationUrl = form.slug ? `${siteUrl}/c/${form.slug}${brandQs}` : "";
+  const adminUrl = form.slug ? `${siteUrl}/admin/c/${form.slug}${brandQs}` : "";
 
   async function copyToClipboard(text: string, setter: (v: boolean) => void) {
     if (!text) return;

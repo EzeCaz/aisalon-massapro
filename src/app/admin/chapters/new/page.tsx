@@ -15,7 +15,8 @@ export default async function NewChapterPage() {
 
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true, countryId: true },
+    // Phase 2: include brandSlug so ChapterEditor can build brand-aware share URLs.
+    select: { id: true, email: true, role: true, countryId: true, brandSlug: true },
   });
   if (!me) redirect("/login");
 
@@ -45,7 +46,7 @@ export default async function NewChapterPage() {
             email flows to this chapter.
           </p>
         </div>
-        <ChapterEditor mode="new" countries={countries} isSuperAdmin={isSuperAdmin} />
+        <ChapterEditor mode="new" countries={countries} isSuperAdmin={isSuperAdmin} brandSlug={me.brandSlug ?? "aisalon"} />
       </main>
     </div>
   );
