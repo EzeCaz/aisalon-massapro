@@ -261,33 +261,41 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
  * default brand based on the request's Host header. The mapping is checked
  * against the hostname (case-insensitive, port-stripped).
  *
- * Per the Brand-Field Platform Plan §2.5.2 (Host-Based Brand Defaults):
+ * Architecture (revised 2026-09-17 — Interpretation A "centralized login"):
  *
- *   - coma.massapro.com        → coma (legacy alias, still works)
- *   - joincoma.com             → coma (new apex — login surface)
- *   - platform.joincoma.com    → coma (new subdomain — app surface)
- *   - www.joincoma.com         → coma (redirects to apex)
- *   - aisalon.massapro.com     → aisalon
+ *   - platform.joincoma.com   → coma (single host for everything: login + app + admin + API)
+ *   - coma.massapro.com        → coma (legacy alias, redirected to platform.joincoma.com by middleware)
+ *   - aisalon.massapro.com     → aisalon (grandfathered standalone — own login + own app on one domain)
  *
- * The joincoma.com split (apex=login, platform=app) is enforced by
- * middleware.ts. This map just resolves "what brand does this host
- * belong to?" — the routing decision (which path belongs on which
- * subdomain) is made separately in middleware.
+ * All future brands (Danone, HiTech AI, etc.) will live on platform.joincoma.com
+ * too — brand identity is resolved from the URL ?brand=<slug> parameter (set
+ * by referral links, chapter landing pages, admin provisioning flows). No
+ * per-brand DNS, no per-brand apex domain, no per-brand Google OAuth redirect.
  *
- * Any other host falls back to BRAND_DEFAULT_SLUG from env, or "aisalon"
- * as the hard-coded last-resort default.
+ * AIS is the only exception: it keeps its standalone aisalon.massapro.com
+ * domain permanently (grandfathered white-label legacy).
+ *
+ * Any other host falls back to BRAND_DEFAULT_SLUG from env, or "coma"
+ * (the parent platform brand) as the hard-coded last-resort default.
+ *
+ * NOTE: the FALLBACK_DEFAULT_BRAND was flipped from "aisalon" to "coma"
+ * in this revision to reflect the new architecture where Coma is the parent
+ * platform. Unauthenticated visitors on unknown hosts now see Coma branding
+ * instead of AIS branding. Existing AIS users on aisalon.massapro.com are
+ * unaffected (host header resolves to aisalon explicitly).
  */
 export const BRAND_HOST_MAP: Record<string, BrandSlug> = {
-  // Coma brand — legacy + new domains. All four map to "coma" so brand
-  // resolution (logo, copy, colors) is consistent regardless of which
-  // Coma domain the visitor landed on. The subdomain routing is handled
-  // separately in middleware.ts (apex → /login only, platform → everything
-  // else).
-  "coma.massapro.com": "coma",
-  "joincoma.com": "coma",
+  // Coma brand — single host (was split-domain until 2026-09-17 revision).
+  // platform.joincoma.com hosts login + app + admin + API. The legacy
+  // coma.massapro.com host is kept as an alias (middleware 302-redirects
+  // every path to platform.joincoma.com).
   "platform.joincoma.com": "coma",
-  "www.joincoma.com": "coma",
-  // AI Salon brand — single domain.
+  "coma.massapro.com": "coma",
+  // AI Salon brand — grandfathered standalone single domain. AIS is the
+  // only brand that doesn't live on platform.joincoma.com. This is
+  // permanent (per user decision 2026-09-17): AIS was the original
+  // white-label deployment on a massapro.com subdomain, and migrating
+  // its users to the central login would break bookmarks + email links.
   "aisalon.massapro.com": "aisalon",
   // Local dev aliases (so brand resolution works against localhost:3000
   // with explicit Host headers, or when testing via /etc/hosts).
@@ -308,16 +316,26 @@ export const BRAND_DEFAULT_SLUG_ENV = "BRAND_DEFAULT_SLUG";
  * Hard-coded last-resort default brand (used when BRAND_DEFAULT_SLUG env
  * var is not set AND the host doesn't match BRAND_HOST_MAP).
  *
- * Defaults to "aisalon" to preserve backwards compatibility with the
- * original platform (which was AI Salon-only before Coma was added).
+ * REVISED 2026-09-17: flipped from "aisalon" to "coma" to reflect the
+ * new architecture where Coma is the PARENT PLATFORM and all new brands
+ * (including unauthenticated/unknown-host visitors) land on Coma branding
+ * by default. AIS is a grandfathered child brand that explicitly resolves
+ * via the aisalon.massapro.com host header — so this fallback only fires
+ * for unknown hosts (e.g. someone visiting the app via an IP address or
+ * a stale Vercel preview URL). In those cases, showing Coma (the parent)
+ * is more correct than showing AIS (a child brand).
+ *
+ * Existing AIS users on aisalon.massapro.com are unaffected — the host
+ * header explicitly resolves to aisalon before this fallback is reached.
  */
-export const FALLBACK_DEFAULT_BRAND: BrandSlug = "aisalon";
+export const FALLBACK_DEFAULT_BRAND: BrandSlug = "coma";
 
 /**
- * Get a BrandConfig by slug. Returns the AIS brand (platform default)
- * if the slug is unknown — this is a defensive fallback that should
- * never fire in normal operation but prevents crashes if a stale
- * `?brand=` parameter references a deleted brand.
+ * Get a BrandConfig by slug. Returns the Coma brand (platform parent
+ * default since the 2026-09-17 architecture revision) if the slug is
+ * unknown — this is a defensive fallback that should never fire in
+ * normal operation but prevents crashes if a stale `?brand=` parameter
+ * references a deleted brand.
  */
 export function getBrandConfig(slug: string): BrandConfig {
   if (isBrandSlug(slug)) {

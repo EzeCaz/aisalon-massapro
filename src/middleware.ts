@@ -11,28 +11,32 @@ import { db } from "@/lib/db";
 import { isBrandSlug } from "@/lib/brand/brand-config";
 
 /**
- * UTM referral capture middleware.
+ * Middleware: brand override + UTM referral capture + Coma legacy redirect.
  *
- * Runs on EVERY request. Two responsibilities:
+ * Runs on EVERY request. Three responsibilities:
  *
- *   1. COOKIE SYNC — if `?utm_uid=<hex>` is in the URL (i.e. the visitor
- *      clicked a member's share link), set the `ais_utm_uid` cookie (30-day
- *      expiry) so subsequent visits within the attribution window still
- *      attribute to the same referrer — even without the query param.
+ *   1. COMA LEGACY DOMAIN REDIRECT (added 2026-09-17, simplified same day) —
+ *      if the request is on coma.massapro.com (the old Coma host), 302-
+ *      redirect to the same path on platform.joincoma.com (the new central
+ *      host). All other hosts (platform.joincoma.com, aisalon.massapro.com)
+ *      pass through untouched. The earlier split-domain architecture
+ *      (joincoma.com apex + platform.joincoma.com subdomain) was dropped
+ *      in favor of a single host per brand. AIS is permanently grandfathered
+ *      on aisalon.massapro.com.
  *
- *   2. VISIT RECORDING — if utm_uid is present (either in the URL or in
- *      the cookie), record a ReferralVisit row. Deduped per visitorHash
- *      within 24h (so refreshes don't inflate counts).
+ *   2. BRAND OVERRIDE PROPAGATION — the `?brand=<slug>` URL param is
+ *      forwarded as a request header (x-brand-override) so layout-level
+ *      generateMetadata() can read it (layouts can't read searchParams).
+ *      This is what makes the central login at platform.joincoma.com/login
+ *      render per-brand (e.g. platform.joincoma.com/login?brand=danone
+ *      shows Danone's logo + hero banner + colors).
  *
- * The middleware is read-only with respect to the response — it never
- * blocks the request, never rewrites the URL (except stripping utm_*
- * params from the visible URL for cleaner sharing after the first hit),
- * and never throws (attribution failures must not break page loads).
+ *   3. UTM REFERRAL CAPTURE — `?utm_uid=<hex>` is captured in a 30-day
+ *      cookie and a ReferralVisit row is recorded (async, fire-and-forget).
  *
- * Performance: the only DB write is the ReferralVisit insert, which runs
- * AFTER the response is sent (via `waitUntil` when available, otherwise
- * via a fire-and-forget promise). The cookie sync happens in the response
- * headers, which is essentially free.
+ * The middleware is read-only with respect to the response body — it
+ * never blocks the request, never throws (attribution failures must not
+ * break page loads).
  */
 
 // Paths that don't need UTM tracking (avoid wasting DB writes on asset
@@ -51,29 +55,13 @@ function shouldSkip(pathname: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Coma subdomain routing (added 2026-09-17)
+// Coma legacy domain redirect (revised 2026-09-17 — single-host architecture)
 // ─────────────────────────────────────────────────────────────────────
-// The joincoma.com brand is split across two hosts:
-//   - joincoma.com (apex) → login surface only
-//   - platform.joincoma.com (subdomain) → everything else
-// www.joincoma.com redirects to whichever of the two is correct for the
-// path. coma.massapro.com is kept as an alias (no redirect, brand still
-// resolves to "coma"). AIS is single-domain, untouched.
-
-const COMA_APEX_ALLOWED_PATHS = [
-  "/login",
-  "/api/auth/",
-  "/api/site-settings",
-  "/_next/",
-  "/favicon.ico",
-  "/robots.txt",
-  "/sitemap.xml",
-];
-
-function isApexAllowedPath(pathname: string): boolean {
-  if (pathname === "/login") return true; // exact match
-  return COMA_APEX_ALLOWED_PATHS.some((p) => pathname.startsWith(p));
-}
+// The split-domain architecture (joincoma.com apex for login, platform.joincoma.com
+// subdomain for app) was DROPPED in favor of a single host. All Coma traffic
+// (login + app + admin + API) lives on platform.joincoma.com. The legacy
+// coma.massapro.com host is kept as an alias — middleware 302-redirects every
+// path to platform.joincoma.com/<path>. AIS (aisalon.massapro.com) is untouched.
 
 function getHost(req: NextRequest): string {
   return (
@@ -86,48 +74,25 @@ function getHost(req: NextRequest): string {
 }
 
 /**
- * Coma subdomain routing — returns a 302 redirect if the request is on
- * the wrong Coma host for its path, or null if no redirect is needed.
- * Uses 302 (not 301) so routing changes don't get cached by browsers.
+ * Coma legacy domain redirect — if the request is on coma.massapro.com
+ * (the old Coma host, pre-joincoma migration), 302-redirect to the same
+ * path on platform.joincoma.com. Preserves query strings (including
+ * ?brand=, UTM params) through the redirect.
+ *
+ * Uses 302 (not 301) so we can change the target later without browser
+ * caching. AIS hosts (aisalon.massapro.com) and the central host
+ * (platform.joincoma.com) are NOT redirected — they serve directly.
  */
-function comaSubdomainRedirect(req: NextRequest): NextResponse | null {
+function comaLegacyDomainRedirect(req: NextRequest): NextResponse | null {
   const host = getHost(req);
+  if (host !== "coma.massapro.com") {
+    return null;
+  }
   const { pathname, search } = req.nextUrl;
-
-  // www.joincoma.com → redirect to apex (or platform for non-apex paths)
-  if (host === "www.joincoma.com") {
-    const targetHost = isApexAllowedPath(pathname)
-      ? "joincoma.com"
-      : "platform.joincoma.com";
-    return NextResponse.redirect(
-      new URL(`https://${targetHost}${pathname}${search}`),
-      302,
-    );
-  }
-
-  // joincoma.com (apex) — only /login, /api/auth/*, static assets allowed.
-  // Everything else → redirect to platform.joincoma.com.
-  if (host === "joincoma.com" && !isApexAllowedPath(pathname)) {
-    return NextResponse.redirect(
-      new URL(`https://platform.joincoma.com${pathname}${search}`),
-      302,
-    );
-  }
-
-  // platform.joincoma.com — /login and /api/auth/* must redirect to apex
-  // (so Google OAuth callbacks land on the registered host).
-  if (host === "platform.joincoma.com") {
-    if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
-      return NextResponse.redirect(
-        new URL(`https://joincoma.com${pathname}${search}`),
-        302,
-      );
-    }
-  }
-
-  // coma.massapro.com — no redirect (legacy alias, kept working).
-  // aisalon.massapro.com — no redirect (AIS single domain).
-  return null;
+  return NextResponse.redirect(
+    new URL(`https://platform.joincoma.com${pathname}${search}`),
+    302,
+  );
 }
 
 /**
@@ -160,11 +125,13 @@ async function visitorHash(ip: string | null, ua: string | null): Promise<string
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
 
-  // COMA SUBDOMAIN ROUTING — runs FIRST, before any other logic, so a
-  // request on the wrong Coma host gets redirected before we do any DB
-  // work or cookie sync. This is a 302 redirect, so it doesn't get
-  // cached long-term and we can change the routing rules later.
-  const comaRedirect = comaSubdomainRedirect(req);
+  // COMA LEGACY DOMAIN REDIRECT — runs FIRST, before any other logic.
+  // If the request is on coma.massapro.com (the old Coma host), redirect
+  // to the same path on platform.joincoma.com (the new central host).
+  // This is a 302 redirect — not cached long-term, so we can change the
+  // target later. All other hosts (platform.joincoma.com, aisalon.massapro.com)
+  // pass through untouched.
+  const comaRedirect = comaLegacyDomainRedirect(req);
   if (comaRedirect) {
     return comaRedirect;
   }

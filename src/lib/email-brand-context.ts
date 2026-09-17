@@ -92,20 +92,25 @@ export function resolveEmailBrandContext(
   // brand identity decisions, not runtime values — same as the brand
   // colors and wordmark.
   //
-  // COMA: after the joincoma.com migration, Coma's primary domain is
-  // joincoma.com (apex, login surface) + platform.joincoma.com (app
-  // surface). The siteUrl below is the APP surface (used for most email
-  // links — events, admin, community, etc.). Login-specific links use
-  // the loginUrl field which points to the apex (joincoma.com/login).
-  // The legacy coma.massapro.com still works (BRAND_HOST_MAP maps it to
-  // coma), but new emails default to the new domains.
+  // REVISED 2026-09-17 (Interpretation A "centralized login"):
+  // Coma's loginHost is now the SAME as siteUrl — both point to
+  // https://platform.joincoma.com. The split-domain architecture (apex
+  // for login, subdomain for app) was dropped in favor of a single host
+  // that serves login + app + admin + API. The loginUrl derivation below
+  // still appends ?brand=<slug> so the brand sticks across requests.
+  //
+  // All future brands (Danone, HiTech AI, etc.) will live on
+  // platform.joincoma.com too — they don't get their own apex domain.
+  // Brand identity is URL-driven (?brand=<slug>), not host-driven.
+  //
+  // AIS is the only exception: it keeps its standalone single domain
+  // (aisalon.massapro.com) permanently — both loginHost and siteUrl
+  // point to it.
   //
   // From: per user decision (2026-09-17), Coma uses coma@massapro.com
   // (shared massapro.com mail server, no per-brand SPF/DKIM needed).
   // Upgradeable to noreply@joincoma.com later by changing this one line
   // after DNS verification.
-  //
-  // AIS: unchanged — single domain aisalon.massapro.com.
   const brandSiteConfig: Record<BrandSlug, {
     siteUrl: string;
     loginHost: string;
@@ -114,7 +119,7 @@ export function resolveEmailBrandContext(
   }> = {
     coma: {
       siteUrl: "https://platform.joincoma.com",
-      loginHost: "https://joincoma.com",
+      loginHost: "https://platform.joincoma.com",
       fromName: "Coma <coma@massapro.com>",
       contactEmail: "coma@massapro.com",
     },
@@ -127,11 +132,12 @@ export function resolveEmailBrandContext(
   };
 
   const site = brandSiteConfig[slug];
-  // Login URL points to the LOGIN HOST (the apex for Coma, the single
-  // domain for AIS). The ?brand= param is kept so the brand sticks even
-  // if the user opens the link from a different domain (e.g. an AIS
-  // user gets a link to aisalon.massapro.com/login?brand=aisalon —
-  // redundant but harmless; a Coma user gets joincoma.com/login?brand=coma).
+  // Login URL — same host as the app surface (single-domain architecture).
+  // The ?brand= param is kept so the brand sticks even when the user
+  // opens the link from a different context (e.g. an AIS user gets a
+  // link to aisalon.massapro.com/login?brand=aisalon — redundant but
+  // harmless; a Coma user gets platform.joincoma.com/login?brand=coma;
+  // a future Danone user gets platform.joincoma.com/login?brand=danone).
   const loginUrl = `${site.loginHost}/login?brand=${slug}`;
 
   return {

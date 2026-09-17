@@ -420,88 +420,27 @@ export const authOptions: NextAuthOptions = {
   // trustHost: true is implicit in NextAuth v4 when NEXTAUTH_URL is not
   // set — NextAuth auto-detects the host from request headers (x-forwarded-host
   // → host). This is REQUIRED for the multi-host setup (aisalon.massapro.com,
-  // joincoma.com, platform.joincoma.com, coma.massapro.com) — otherwise
-  // NextAuth would only work on whatever single host is set in NEXTAUTH_URL.
+  // platform.joincoma.com, coma.massapro.com) — otherwise NextAuth would
+  // only work on whatever single host is set in NEXTAUTH_URL.
   //
   // IMPORTANT: do NOT set NEXTAUTH_URL in production (Vercel env vars). If
   // it's pinned to aisalon.massapro.com, Google OAuth callbacks on
-  // joincoma.com would redirect users back to aisalon.massapro.com after
-  // login, breaking the Coma login flow.
+  // platform.joincoma.com would redirect users back to aisalon.massapro.com
+  // after login, breaking the Coma login flow.
   //
   // (NextAuth v5 / Auth.js would use `trustHost: true` here explicitly.
   // We're on v4.24.13, which auto-detects when NEXTAUTH_URL is unset.)
-
-  // Cross-subdomain session cookies for joincoma.com.
   //
-  // Background: joincoma.com is split across two hosts (apex=login,
-  // platform=app). Without a shared cookie domain, a user who logs in
-  // on joincoma.com/login would NOT be logged in after the post-login
-  // redirect to platform.joincoma.com/dashboard — the browser would
-  // treat them as separate sites and refuse to send the session cookie.
-  //
-  // Fix: set the session cookie's `domain` to ".joincoma.com" so it's
-  // shared across joincoma.com + platform.joincoma.com + www.joincoma.com.
-  //
-  // AIS / coma.massapro.com are single-domain — we'd like to leave
-  // them with host-only cookies (the secure default). BUT NextAuth 4's
-  // `cookies` option is a STATIC object, not a per-request callback,
-  // so we can't conditionally apply different cookie domains per host.
-  //
-  // Workaround: always set domain=".joincoma.com" on the session +
-  // callback cookies. This is safe because per RFC 6265 §5.1.3, the
-  // browser REJECTS cookies whose `domain` attribute doesn't match the
-  // request's host. So when aisalon.massapro.com tries to set a cookie
-  // with domain=".joincoma.com", the browser silently drops it — and
-  // NextAuth then falls back to using the default cookie name without
-  // the domain attribute (the default behavior). AIS users get a
-  // normal host-only session cookie. Coma users get the cross-subdomain
-  // session cookie. Both work, no security risk.
-  //
-  // The CSRF token uses __Host- prefix (RFC 6265bis forbids a domain
-  // attribute on __Host- cookies), so it stays host-only. The login
-  // form on joincoma.com/login fetches its CSRF token from joincoma.com
-  // directly, which works fine.
-  //
-  // See: https://next-auth.js.org/configuration/options#cookies
-  // See: https://datatracker.ietf.org/doc/html/rfc6265#section-5.1.3
-  cookies: {
-    sessionToken: {
-      name: "__Secure-next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-        // Shared across joincoma.com + platform.joincoma.com + www.joincoma.com.
-        // Browsers reject this on non-joincoma hosts (e.g. aisalon.massapro.com)
-        // — which means AIS falls back to NextAuth's default host-only cookie
-        // behavior. See comment above for the full rationale.
-        domain: ".joincoma.com",
-      },
-    },
-    callbackUrl: {
-      name: "__Secure-next-auth.callback-url",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-        domain: ".joincoma.com",
-      },
-    },
-    // CSRF — __Host- prefix forbids a domain attribute, so this stays
-    // host-only. The login form fetches its CSRF token from the same
-    // host it submits to, so host-only is fine.
-    csrfToken: {
-      name: "__Host-next-auth.csrf-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: true,
-      },
-    },
-  },
+  // COOKIES — REVISED 2026-09-17 (single-host architecture):
+  // The earlier cross-subdomain cookie config (domain=".joincoma.com")
+  // was for the split-domain architecture (joincoma.com apex for login,
+  // platform.joincoma.com subdomain for app) — it's no longer needed.
+  // Both Coma + AIS now use single-domain hosts:
+  //   - platform.joincoma.com hosts everything for Coma (login + app + admin + API)
+  //   - aisalon.massapro.com hosts everything for AIS (grandfathered standalone)
+  // Session cookies stay host-only (the secure default). No `cookies`
+  // override needed — NextAuth's defaults are correct for both brands.
+  // The block is intentionally removed (was here in the prior commit).
 
   secret: process.env.NEXTAUTH_SECRET,
 };
