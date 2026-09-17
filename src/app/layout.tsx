@@ -121,6 +121,16 @@ export default async function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${plusJakarta.variable} ${inter.variable} font-sans antialiased bg-background text-foreground`}
+        // `suppressHydrationWarning` is REQUIRED on <body> because browser
+        // extensions (e.g. Vietnamese-translation tool "NewVT" injects
+        // `inject_newvt_svd="true"`) mutate the <body> attributes after SSR
+        // but before React hydrates. Without this, React throws a
+        // "tree hydrated but attributes didn't match" console error on
+        // every page load for users with that extension installed. The
+        // warning is benign (the injected attribute is cosmetic) and
+        // suppressing it is the documented React/Next.js pattern for
+        // third-party DOM mutation.
+        suppressHydrationWarning
       >
         <Providers>
           {children}
