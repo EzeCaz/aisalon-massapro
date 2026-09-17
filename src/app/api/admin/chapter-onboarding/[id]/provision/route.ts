@@ -58,6 +58,7 @@ import { isSuperAdmin, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { normalizeHttpUrl } from "@/lib/normalize-url";
 import { sendChapterProvisionedEmail } from "@/lib/email";
+import { resolveBrandSiteUrl } from "@/lib/brand/coma-site-url";
 import {
   setChapterBrandImage,
   type ChapterBrandImageKey,
@@ -312,7 +313,11 @@ export async function POST(
   // SUPER_ADMINs are never downgraded.
   const lead = await db.user.findUnique({
     where: { id: invite.userId },
-    select: { id: true, role: true, name: true, email: true },
+    // Phase 2: include brandSlug so the provisioned-chapter email URLs
+    // can be brand-aware (host + ?brand= param). Previously the URLs
+    // used the global env fallback (aisalon.massapro.com) regardless of
+    // the lead's brand.
+    select: { id: true, role: true, name: true, email: true, brandSlug: true },
   });
   if (lead) {
     const patch: { chapterId?: string; countryId?: string; role?: string } = {
@@ -358,11 +363,22 @@ export async function POST(
   // can be reached via the original onboarding email thread or directly.
   let notifyResult: { ok: boolean; error?: string } | null = null;
   if (lead?.email) {
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
-    const adminUrl = `${siteUrl}/admin?chapterSlug=${encodeURIComponent(chapter.slug)}`;
-    const loginUrl = `${siteUrl}/login?chapterSlug=${encodeURIComponent(chapter.slug)}`;
+    // Phase 2 (joincoma.com): brand-aware URLs — use the lead's brand
+    // host + append ?brand=<slug> so the chapter-provisioned email
+    // links land the lead on the right brand's site. Local dev keeps
+    // the env fallback (localhost).
+    const leadBrandSlug = lead.brandSlug === "coma" ? "coma" : "aisalon";
+    const isLocalDev =
+      process.env.NODE_ENV !== "production" &&
+      (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
+        process.env.VERCEL_URL?.includes("localhost"));
+    const siteUrl = isLocalDev
+      ? (process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"))
+      : resolveBrandSiteUrl(leadBrandSlug, "/");
+    const chapterQs = `chapterSlug=${encodeURIComponent(chapter.slug)}&brand=${encodeURIComponent(leadBrandSlug)}`;
+    const adminUrl = `${siteUrl.replace(/\/$/, "")}/admin?${chapterQs}`;
+    const loginUrl = `${siteUrl.replace(/\/$/, "")}/login?${chapterQs}`;
     try {
       notifyResult = await sendChapterProvisionedEmail({
         to: lead.email,

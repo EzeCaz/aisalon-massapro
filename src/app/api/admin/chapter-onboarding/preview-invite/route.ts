@@ -28,6 +28,7 @@ import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { generateOnboardingToken } from "@/lib/chapter-onboarding-types";
+import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 const EXPIRES_DAYS = 30;
 
@@ -102,10 +103,22 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Build form URL ──
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
-  const formUrl = `${siteUrl}/chapter-onboarding/${invite.token}`;
+  // Phase 2 (joincoma.com): brand-aware URL — uses the target's brand
+  // host + appends ?brand=<slug>. The target.brandSlug is already loaded
+  // earlier in the route (line ~56). Local dev keeps env fallback.
+  const previewBrandSlug = target.brandSlug === "coma" ? "coma" : "aisalon";
+  const isLocalDev =
+    process.env.NODE_ENV !== "production" &&
+    (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
+      process.env.VERCEL_URL?.includes("localhost"));
+  const siteUrl = isLocalDev
+    ? (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"))
+    : resolveBrandSiteUrl(previewBrandSlug, "/");
+  const formUrl = appendBrandParam(
+    `${siteUrl.replace(/\/$/, "")}/chapter-onboarding/${invite.token}`,
+    previewBrandSlug,
+  );
 
   return NextResponse.json({
     ok: true,

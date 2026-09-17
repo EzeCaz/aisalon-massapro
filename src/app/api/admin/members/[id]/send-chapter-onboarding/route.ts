@@ -26,6 +26,7 @@ import { isSuperAdmin } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { emailConfigured, sendChapterOnboardingEmail } from "@/lib/email";
 import { generateOnboardingToken } from "@/lib/chapter-onboarding-types";
+import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 const EXPIRES_DAYS = 30;
 
@@ -51,6 +52,11 @@ export async function POST(
       email: true,
       name: true,
       chapterId: true,
+      // Phase 2: include brandSlug so the onboarding invite email URL
+      // can be brand-aware (host + ?brand= param). Previously the URL
+      // used the global env fallback (aisalon.massapro.com) regardless
+      // of the target's brand.
+      brandSlug: true,
       chapter: { select: { id: true, name: true, slug: true } },
     },
   });
@@ -103,10 +109,22 @@ export async function POST(
   });
 
   // ── Build form URL + send email ──
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://aisalon.massapro.com");
-  const formUrl = `${siteUrl}/chapter-onboarding/${token}`;
+  // Phase 2 (joincoma.com): brand-aware URL — use the target's brand
+  // host + append ?brand=<slug> so the onboarding invite email lands
+  // the invitee on the right brand's site. Local dev keeps env fallback.
+  const targetBrandSlug = target.brandSlug === "coma" ? "coma" : "aisalon";
+  const isLocalDev =
+    process.env.NODE_ENV !== "production" &&
+    (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
+      process.env.VERCEL_URL?.includes("localhost"));
+  const siteUrl = isLocalDev
+    ? (process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"))
+    : resolveBrandSiteUrl(targetBrandSlug, "/");
+  const formUrl = appendBrandParam(
+    `${siteUrl.replace(/\/$/, "")}/chapter-onboarding/${token}`,
+    targetBrandSlug,
+  );
 
   const emailResult = await sendChapterOnboardingEmail({
     to: target.email,
