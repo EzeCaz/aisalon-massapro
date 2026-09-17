@@ -50,6 +50,86 @@ function shouldSkip(pathname: string): boolean {
   return SKIP_PATHS.some((p) => pathname.startsWith(p));
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Coma subdomain routing (added 2026-09-17)
+// ─────────────────────────────────────────────────────────────────────
+// The joincoma.com brand is split across two hosts:
+//   - joincoma.com (apex) → login surface only
+//   - platform.joincoma.com (subdomain) → everything else
+// www.joincoma.com redirects to whichever of the two is correct for the
+// path. coma.massapro.com is kept as an alias (no redirect, brand still
+// resolves to "coma"). AIS is single-domain, untouched.
+
+const COMA_APEX_ALLOWED_PATHS = [
+  "/login",
+  "/api/auth/",
+  "/api/site-settings",
+  "/_next/",
+  "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
+];
+
+function isApexAllowedPath(pathname: string): boolean {
+  if (pathname === "/login") return true; // exact match
+  return COMA_APEX_ALLOWED_PATHS.some((p) => pathname.startsWith(p));
+}
+
+function getHost(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    ""
+  )
+    .toLowerCase()
+    .split(":")[0];
+}
+
+/**
+ * Coma subdomain routing — returns a 302 redirect if the request is on
+ * the wrong Coma host for its path, or null if no redirect is needed.
+ * Uses 302 (not 301) so routing changes don't get cached by browsers.
+ */
+function comaSubdomainRedirect(req: NextRequest): NextResponse | null {
+  const host = getHost(req);
+  const { pathname, search } = req.nextUrl;
+
+  // www.joincoma.com → redirect to apex (or platform for non-apex paths)
+  if (host === "www.joincoma.com") {
+    const targetHost = isApexAllowedPath(pathname)
+      ? "joincoma.com"
+      : "platform.joincoma.com";
+    return NextResponse.redirect(
+      new URL(`https://${targetHost}${pathname}${search}`),
+      302,
+    );
+  }
+
+  // joincoma.com (apex) — only /login, /api/auth/*, static assets allowed.
+  // Everything else → redirect to platform.joincoma.com.
+  if (host === "joincoma.com" && !isApexAllowedPath(pathname)) {
+    return NextResponse.redirect(
+      new URL(`https://platform.joincoma.com${pathname}${search}`),
+      302,
+    );
+  }
+
+  // platform.joincoma.com — /login and /api/auth/* must redirect to apex
+  // (so Google OAuth callbacks land on the registered host).
+  if (host === "platform.joincoma.com") {
+    if (pathname === "/login" || pathname.startsWith("/api/auth/")) {
+      return NextResponse.redirect(
+        new URL(`https://joincoma.com${pathname}${search}`),
+        302,
+      );
+    }
+  }
+
+  // coma.massapro.com — no redirect (legacy alias, kept working).
+  // aisalon.massapro.com — no redirect (AIS single domain).
+  return null;
+}
+
 /**
  * Lightweight visitor fingerprint — SHA-256 of (IP + User-Agent), truncated
  * to 16 hex chars. Used for deduping repeat visits within 24h. NOT a
@@ -79,6 +159,15 @@ async function visitorHash(ip: string | null, ua: string | null): Promise<string
 
 export async function middleware(req: NextRequest) {
   const { pathname, searchParams } = req.nextUrl;
+
+  // COMA SUBDOMAIN ROUTING — runs FIRST, before any other logic, so a
+  // request on the wrong Coma host gets redirected before we do any DB
+  // work or cookie sync. This is a 302 redirect, so it doesn't get
+  // cached long-term and we can change the routing rules later.
+  const comaRedirect = comaSubdomainRedirect(req);
+  if (comaRedirect) {
+    return comaRedirect;
+  }
 
   // BRAND OVERRIDE PROPAGATION (Phase 2 of Coma brand isolation):
   // The `?brand=<slug>` URL param is a first-class brand override (see

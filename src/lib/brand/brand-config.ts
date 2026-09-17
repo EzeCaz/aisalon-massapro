@@ -103,6 +103,48 @@ export interface BrandConfig {
   heroBanner: string;
 
   /**
+   * Brand-level favicon — the browser tab + home-screen icon.
+   *
+   * Resolution chain (highest precedence first):
+   *   1. `brand.favicon` (this field) — brand-level canonical icon.
+   *   2. Chapter DB override (`ChapterSetting.favicon`) — only on
+   *      chapter landing (/c/[slug]).
+   *   3. Site-wide `SiteSetting.favicon` — admin-editable, single global
+   *      row (today: AIS Blob URL).
+   *   4. Hard-coded fallback `/images/favicon.webp` (AIS).
+   *
+   * Empty string means "no brand-level favicon — fall back to the next
+   * tier". Used by AIS today (still uses the global SiteSetting default).
+   * Coma points to /brand/coma/favicon-32.png so every Coma browser tab
+   * shows the Coma mark, not the AIS meerkat.
+   *
+   * Note: the static file `/public/favicon.ico` is served as a fallback
+   * by Next.js when no other favicon route matches. A future cleanup
+   * could move that file to /public/brand/aisalon/favicon.ico and let
+   * the BrandConfig field be the sole source of truth, but for now we
+   * keep the legacy fallback to avoid breaking existing AIS deployments.
+   */
+  favicon: string;
+
+  /**
+   * Brand-level logo mark image (square transparent PNG, no wordmark).
+   *
+   * Used in contexts where the text-based `BrandLogo` component can't
+   * render (e.g. legacy email clients, OG image generators, PDF
+   * exports) and as a fallback when `heroBanner` is too wide for the
+   * container.
+   *
+   * Resolution chain: `brand.logo` (this field) → chapter override
+   * (ChapterSetting.loginHero) → SiteSetting.loginLogo → hardcoded
+   * /images/falafel-meerkat.jpg.
+   *
+   * Empty string means "no brand-level logo — fall back to next tier".
+   * AIS today has no brand-level logo (uses the chapter loginHero).
+   * Coma points to /brand/coma/logo.png.
+   */
+  logo: string;
+
+  /**
    * Login page eyebrow template.
    * `{chapterName}` is replaced at render time.
    */
@@ -151,6 +193,13 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     // legacy /images/falafel-meerkat.jpg (the original AI Salon mark).
     // Replace with a proper AIS brand hero when one is produced.
     heroBanner: "",
+    // AIS favicon: intentionally empty — uses the global SiteSetting
+    // favicon (admin-editable, currently the AIS Blob URL) or the
+    // static /favicon.ico file. Brand-level favicon is for new brands
+    // (like Coma) that need their own icon; AIS still works without it.
+    favicon: "",
+    // AIS logo: intentionally empty — uses chapter loginHero.
+    logo: "",
     loginEyebrowTemplate: "{chapterName} Chapter",
     loginHeadlineTemplate:
       "The community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}.",
@@ -183,6 +232,16 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     // (3) hero image on the login page left panel.
     heroBanner:
       "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1786481988015-r315qt.png",
+    // Coma favicon — generated 2026-09-17 from the Coma mark PNG
+    // (downloaded from joincoma.com/assets/coma_trans.png). Used on
+    // every page of joincoma.com + platform.joincoma.com so Coma
+    // browser tabs show the Coma mark, not the AIS meerkat. See
+    // scripts/generate-coma-favicon.py for the source.
+    favicon: "/brand/coma/favicon-32.png",
+    // Coma logo — square PNG with alpha, used as a fallback in
+    // contexts where the text wordmark can't render (legacy email
+    // clients, etc.).
+    logo: "/brand/coma/logo.png",
     loginEyebrowTemplate: "{chapterName} Chapter",
     loginHeadlineTemplate:
       "The home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",
@@ -204,14 +263,31 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
  *
  * Per the Brand-Field Platform Plan §2.5.2 (Host-Based Brand Defaults):
  *
- *   - coma.massapro.com    → coma
- *   - aisalon.massapro.com → aisalon
+ *   - coma.massapro.com        → coma (legacy alias, still works)
+ *   - joincoma.com             → coma (new apex — login surface)
+ *   - platform.joincoma.com    → coma (new subdomain — app surface)
+ *   - www.joincoma.com         → coma (redirects to apex)
+ *   - aisalon.massapro.com     → aisalon
+ *
+ * The joincoma.com split (apex=login, platform=app) is enforced by
+ * middleware.ts. This map just resolves "what brand does this host
+ * belong to?" — the routing decision (which path belongs on which
+ * subdomain) is made separately in middleware.
  *
  * Any other host falls back to BRAND_DEFAULT_SLUG from env, or "aisalon"
  * as the hard-coded last-resort default.
  */
 export const BRAND_HOST_MAP: Record<string, BrandSlug> = {
+  // Coma brand — legacy + new domains. All four map to "coma" so brand
+  // resolution (logo, copy, colors) is consistent regardless of which
+  // Coma domain the visitor landed on. The subdomain routing is handled
+  // separately in middleware.ts (apex → /login only, platform → everything
+  // else).
   "coma.massapro.com": "coma",
+  "joincoma.com": "coma",
+  "platform.joincoma.com": "coma",
+  "www.joincoma.com": "coma",
+  // AI Salon brand — single domain.
   "aisalon.massapro.com": "aisalon",
   // Local dev aliases (so brand resolution works against localhost:3000
   // with explicit Host headers, or when testing via /etc/hosts).

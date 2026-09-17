@@ -49,10 +49,26 @@ export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicSettings();
   const { brand, siteUrl, displayTitle } = await resolveBrandMetadata();
 
-  // Normalize the favicon URL — if it's a relative path ("/images/..."),
-  // it works as-is. If it's an absolute URL (Vercel Blob), also works.
-  // If the admin somehow cleared the row, fall back to the default.
-  const faviconUrl = settings.favicon || "/images/favicon.webp";
+  // Favicon resolution chain (highest precedence first):
+  //   1. Brand-level favicon (brand-config.ts: `brand.favicon`).
+  //      For Coma this is /brand/coma/favicon-32.png — every Coma
+  //      browser tab shows the Coma mark, not the AIS meerkat.
+  //   2. Global SiteSetting.favicon (admin-editable at /admin/images).
+  //      Single global row, currently the AIS Blob URL — this is the
+  //      legacy tier that AIS still uses today.
+  //   3. Hard-coded fallback /images/favicon.webp (the AIS webp file).
+  //
+  // The brand tier is checked first so a brand can override the global
+  // favicon without an admin having to set it. AIS has `favicon: ""`
+  // today, so it falls through to the global SiteSetting tier — i.e.
+  // AIS behavior is unchanged.
+  const faviconUrl = brand.favicon || settings.favicon || "/images/favicon.webp";
+
+  // OG / Twitter banner resolution chain (unchanged from Phase 2 of
+  // Coma brand isolation):
+  //   1. Brand-level hero (brand.heroBanner) — only for Coma today.
+  //   2. Global SiteSetting.loginBanner — admin-editable, AIS uses this.
+  //   3. Hard-coded fallback /images/falafel-meerkat.jpg.
   const bannerUrl =
     (brand.slug === "coma" && brand.heroBanner) ||
     settings.loginBanner ||

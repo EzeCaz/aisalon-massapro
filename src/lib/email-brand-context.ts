@@ -91,29 +91,48 @@ export function resolveEmailBrandContext(
   // Per-brand site + email config. These are hardcoded because they're
   // brand identity decisions, not runtime values — same as the brand
   // colors and wordmark.
+  //
+  // COMA: after the joincoma.com migration, Coma's primary domain is
+  // joincoma.com (apex, login surface) + platform.joincoma.com (app
+  // surface). The siteUrl below is the APP surface (used for most email
+  // links — events, admin, community, etc.). Login-specific links use
+  // the loginUrl field which points to the apex (joincoma.com/login).
+  // The legacy coma.massapro.com still works (BRAND_HOST_MAP maps it to
+  // coma), but new emails default to the new domains.
+  //
+  // From: per user decision (2026-09-17), Coma uses coma@massapro.com
+  // (shared massapro.com mail server, no per-brand SPF/DKIM needed).
+  // Upgradeable to noreply@joincoma.com later by changing this one line
+  // after DNS verification.
+  //
+  // AIS: unchanged — single domain aisalon.massapro.com.
   const brandSiteConfig: Record<BrandSlug, {
     siteUrl: string;
+    loginHost: string;
     fromName: string;
     contactEmail: string;
   }> = {
     coma: {
-      siteUrl: "https://coma.massapro.com",
-      fromName: "Coma <noreply@coma.massapro.com>",
-      contactEmail: "team@coma.massapro.com",
+      siteUrl: "https://platform.joincoma.com",
+      loginHost: "https://joincoma.com",
+      fromName: "Coma <coma@massapro.com>",
+      contactEmail: "coma@massapro.com",
     },
     aisalon: {
       siteUrl: "https://aisalon.massapro.com",
+      loginHost: "https://aisalon.massapro.com",
       fromName: "AI Salon <noreply@aisalon.massapro.com>",
       contactEmail: "aisalon@massapro.com",
     },
   };
 
   const site = brandSiteConfig[slug];
-  // Login URL preserves the brand via ?brand= so the brand sticks even
-  // when the user clicks through from an email on a different domain.
-  // (e.g. a Coma email opened in Gmail links to aisalon.massapro.com/login?brand=coma
-  // — without ?brand=coma, the host header would resolve to AIS.)
-  const loginUrl = `${site.siteUrl}/login?brand=${slug}`;
+  // Login URL points to the LOGIN HOST (the apex for Coma, the single
+  // domain for AIS). The ?brand= param is kept so the brand sticks even
+  // if the user opens the link from a different domain (e.g. an AIS
+  // user gets a link to aisalon.massapro.com/login?brand=aisalon —
+  // redundant but harmless; a Coma user gets joincoma.com/login?brand=coma).
+  const loginUrl = `${site.loginHost}/login?brand=${slug}`;
 
   return {
     slug,
