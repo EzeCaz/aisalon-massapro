@@ -53,6 +53,8 @@ old-deployment/
 scripts/*
 !scripts/baseline-migrations.cjs
 !scripts/set-cazhype-coma-brand.cjs
+!scripts/seed-brands.ts
+!scripts/generate-coma-favicon.py
 download/
 tool-results/
 agents/
