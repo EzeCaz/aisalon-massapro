@@ -105,7 +105,7 @@ export default async function AgendaProfileMockupPage() {
           </p>
         </div>
 
-        <AgendaProfileEditor events={events} scopeKey={scopeKey} />
+        <AgendaProfileEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

@@ -9,6 +9,7 @@ import {
   classifySessionType,
   isAutoHiddenSessionType,
 } from "./types";
+import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 /**
  * Map a DB Event (with speakers + agenda) to an EventProfileData object.
@@ -181,6 +182,8 @@ function findFirstSessionTitle(
 
 export function mapEventToEventProfileData(
   event: DbEventForMapping,
+  /** Brand slug for the QR code URL (default "aisalon" for backward compat). */
+  brandSlug: string = "aisalon",
 ): EventProfileData {
   // Build sessions from agenda.
   const sessions: Session[] = event.agenda
@@ -274,7 +277,10 @@ export function mapEventToEventProfileData(
     collaborators: [],
     qrCodeUrl:
       event.rsvpUrl ||
-      `https://aisalon.massapro.com/events/${event.slug}`,
+      appendBrandParam(
+        resolveBrandSiteUrl(brandSlug, `/events/${event.slug}`),
+        brandSlug,
+      ),
     footerCredit: "Platform by MassaPro",
   };
 }

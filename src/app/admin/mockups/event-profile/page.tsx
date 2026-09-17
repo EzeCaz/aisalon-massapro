@@ -107,7 +107,7 @@ export default async function EventProfileMockupPage() {
           </p>
         </div>
 
-        <EventProfileEditor events={events} scopeKey={scopeKey} />
+        <EventProfileEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

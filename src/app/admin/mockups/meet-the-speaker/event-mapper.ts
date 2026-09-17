@@ -1,4 +1,5 @@
 import type { MeetTheSpeakerData, SpeakerRole } from "./types";
+import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 /**
  * Style 1 default customizations (per user spec 2026-07-13).
@@ -189,6 +190,8 @@ function formatVenue(e: DbEventForMapping): string {
 export function mapEventToMeetTheSpeakerData(
   event: DbEventForMapping,
   preferredSpeakerId?: string,
+  /** Brand slug for the QR code URL (default "aisalon" for backward compat). */
+  brandSlug: string = "aisalon",
 ): MeetTheSpeakerData {
   // Pick the featured speaker: preferred ID → first by order → none.
   const sortedSpeakers = [...event.speakers].sort((a, b) => a.order - b.order);
@@ -285,7 +288,10 @@ export function mapEventToMeetTheSpeakerData(
     sponsors: [],
     qrCodeUrl:
       event.rsvpUrl ||
-      `https://aisalon.massapro.com/events/${event.slug}`,
+      appendBrandParam(
+        resolveBrandSiteUrl(brandSlug, `/events/${event.slug}`),
+        brandSlug,
+      ),
     // 2026-07-13 update (item 8): footer credit → "MassaPro".
     footerCredit: STYLE1_FOOTER_CREDIT,
     // ─── Section layout overrides (user spec 2026-07-13) ────────────────

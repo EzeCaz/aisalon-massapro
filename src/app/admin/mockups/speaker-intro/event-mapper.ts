@@ -4,6 +4,7 @@ import type {
   SpeakerRole,
   ImagePlacement,
 } from "./types";
+import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 /**
  * Map a DB Event (with speakers + agenda included) to a
@@ -300,6 +301,8 @@ function formatVenue(e: DbEventForMapping): string {
  */
 export function mapEventToSpeakerIntroData(
   event: DbEventForMapping,
+  /** Brand slug for the QR code URL (default "aisalon" for backward compat). */
+  brandSlug: string = "aisalon",
 ): SpeakerIntroData {
   // Pre-compute each speaker's first session time so we can sort.
   const speakersWithSort: Array<{
@@ -388,7 +391,10 @@ export function mapEventToSpeakerIntroData(
     locationPins: DEFAULT_PINS.map((p) => ({ ...p })),
     qrCodeUrl:
       event.rsvpUrl ||
-      `https://aisalon.massapro.com/events/${event.slug}`,
+      appendBrandParam(
+        resolveBrandSiteUrl(brandSlug, `/events/${event.slug}`),
+        brandSlug,
+      ),
     // Per user spec 2026-07-09 (item I): footer credit is "MassaPro".
     footerCredit: DEFAULT_FOOTER_CREDIT,
     // Per user spec 2026-07-09 (item H): branding asset at the bottom-left

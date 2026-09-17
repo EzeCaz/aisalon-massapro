@@ -48,9 +48,15 @@ const STORAGE_KEY = "event-profile-data-v1";
 
 type Props = {
   events: EventPickListItem[];
+  /** Brand slug for the QR code URL. Defaults to "aisalon". Phase 2. */
+  brandSlug?: string;
+  /** Pre-existing unused prop — kept to avoid breaking the caller in
+   *  event-profile/page.tsx which still passes it. Can be removed when
+   *  the caller is updated. Not actually used by EventProfileEditor. */
+  scopeKey?: string;
 };
 
-export function EventProfileEditor({ events }: Props) {
+export function EventProfileEditor({ events, brandSlug = "aisalon" }: Props) {
   const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -195,7 +201,7 @@ export function EventProfileEditor({ events }: Props) {
       const res = await fetch(`/api/events/${slug}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to load event (HTTP ${res.status})`);
       const json = (await res.json()) as { event: DbEventForMapping };
-      const mapped = mapEventToEventProfileData(json.event);
+      const mapped = mapEventToEventProfileData(json.event, brandSlug);
       applyData(mapped);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Failed to load event");

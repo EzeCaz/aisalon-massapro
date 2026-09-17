@@ -74,9 +74,11 @@ type Props = {
    * Passed from the server page via buildScopeKey(getUserScope(me.id)).
    */
   scopeKey: string;
+  /** Brand slug for the QR code URL. Defaults to "aisalon". Phase 2. */
+  brandSlug?: string;
 };
 
-export function SpeakerIntroEditor({ events, scopeKey }: Props) {
+export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
   const [data, setData] = useState<SpeakerIntroData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -283,7 +285,7 @@ export function SpeakerIntroEditor({ events, scopeKey }: Props) {
         throw new Error(`Failed to load event (HTTP ${res.status})`);
       }
       const json = (await res.json()) as { event: DbEventForMapping };
-      const mapped = mapEventToSpeakerIntroData(json.event);
+      const mapped = mapEventToSpeakerIntroData(json.event, brandSlug);
       applyData(mapped);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Failed to load event");

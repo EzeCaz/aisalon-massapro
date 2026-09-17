@@ -51,9 +51,11 @@ type Props = {
    * Chapter-scope key for localStorage namespacing (TSK-0076).
    */
   scopeKey: string;
+  /** Brand slug for the QR code URL. Defaults to "aisalon". Phase 2. */
+  brandSlug?: string;
 };
 
-export function AgendaProfileEditor({ events, scopeKey }: Props) {
+export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
   const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -204,7 +206,7 @@ export function AgendaProfileEditor({ events, scopeKey }: Props) {
       const res = await fetch(`/api/events/${slug}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to load event (HTTP ${res.status})`);
       const json = (await res.json()) as { event: DbEventForMapping };
-      const mapped = mapEventToEventProfileData(json.event);
+      const mapped = mapEventToEventProfileData(json.event, brandSlug);
       applyData(mapped);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Failed to load event");

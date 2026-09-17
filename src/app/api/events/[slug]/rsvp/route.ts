@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { sendRsvpConfirmationEmail, emailConfigured } from "@/lib/email";
 import { generateIcs } from "@/lib/calendar";
 import { getReferrerUserId, UTM_COOKIE_NAME } from "@/lib/utm";
-import { resolveComaSiteUrl } from "@/lib/brand/coma-site-url";
+import { resolveComaSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
 
 /**
  * RSVP API for the public event page (/e/[slug]).
@@ -149,7 +149,13 @@ export async function POST(_req: NextRequest, { params }: Params) {
         ? (process.env.NEXT_PUBLIC_SITE_URL ||
           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"))
         : resolveComaSiteUrl(recipientBrandSlug, "/");
-      const eventUrl = `${siteUrl.replace(/\/$/, "")}/events/${slug}`;
+      // Phase 2 share-link fix: append ?brand=<slug> to eventUrl so the
+      // recipient sees the right brand when they click. Idempotent via
+      // appendBrandParam (won't double-add if ?brand= is already present).
+      const eventUrl = appendBrandParam(
+        `${siteUrl.replace(/\/$/, "")}/events/${slug}`,
+        recipientBrandSlug,
+      );
       const icsContent = generateIcs({
         title: event.title,
         description: event.description,

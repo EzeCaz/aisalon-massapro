@@ -120,7 +120,7 @@ export default async function MeetTheSpeakerMockupPage() {
           </p>
         </div>
 
-        <MeetTheSpeakerEditor events={events} scopeKey={scopeKey} />
+        <MeetTheSpeakerEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">

@@ -75,9 +75,12 @@ type Props = {
    * e.g. "chapter_abc123" for a Montreal admin, "global" for SUPER_ADMIN.
    */
   scopeKey: string;
+  /** Brand slug for the QR code URL — drives host + ?brand= param.
+   *  Defaults to "aisalon" for backward compat. Phase 2 (2026-09-17). */
+  brandSlug?: string;
 };
 
-export function MeetTheSpeakerEditor({ events, scopeKey }: Props) {
+export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
   const [data, setData] = useState<MeetTheSpeakerData>(SAMPLE_DATA);
   const [jsonText, setJsonText] = useState<string>(() =>
     JSON.stringify(SAMPLE_DATA, null, 2),
@@ -273,7 +276,7 @@ export function MeetTheSpeakerEditor({ events, scopeKey }: Props) {
       }
       const json = (await res.json()) as { event: DbEventForMapping };
       setLastFetchedEvent(json.event);
-      const mapped = mapEventToMeetTheSpeakerData(json.event);
+      const mapped = mapEventToMeetTheSpeakerData(json.event, undefined, brandSlug);
       applyData(mapped);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Failed to load event");
@@ -289,7 +292,7 @@ export function MeetTheSpeakerEditor({ events, scopeKey }: Props) {
   function handleSpeakerPick(speakerId: string) {
     setSelectedSpeakerId(speakerId);
     if (!lastFetchedEvent || !speakerId) return;
-    const mapped = mapEventToMeetTheSpeakerData(lastFetchedEvent, speakerId);
+    const mapped = mapEventToMeetTheSpeakerData(lastFetchedEvent, speakerId, brandSlug);
     applyData(mapped);
   }
 
