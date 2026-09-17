@@ -14489,3 +14489,28 @@ Stage Summary:
 - ⛔ Still requires USER EXTERNAL setup (Phase 0): DNS records, add 3 domains in Vercel, add 2 redirect URIs to Google OAuth client (the Web-application one used by NextAuth, NOT the Desktop one used for Drive backups), verify NEXTAUTH_URL not pinned on Vercel.
 - 🔄 Pending user clarification: Option A (independent sessions per domain, simple) vs Option B (session bridge across coma.massapro.com ↔ joincoma.com) — I defaulted to A (the safer recommendation) in code, but it affects whether the coma.massapro.com → joincoma.com transition keeps the user logged in.
 - Next: Phase 2+ (use the new resolveComaSiteUrl helper in the 21 email URL builders, finish Phase B member-page fixes, Phase C email system, Phase D admin surfaces from the original audit).
+
+---
+Task ID: joincoma-phase2-email-url-builders
+Agent: Super Z (main)
+Task: Phase 2 of joincoma.com split-domain architecture — wire resolveComaSiteUrl + resolveEmailBrandContext into the 26 email URL builders identified in the audit, so Coma recipients get Coma-branded emails with platform.joincoma.com / joincoma.com links instead of the hardcoded aisalon.massapro.com / AI Salon branding.
+
+Work Log:
+- Step 1 (commit fd07e6e): Made the orchestrator SHELL + render-unified brand-aware. TemplateContext/UnifiedRenderContext gained brandSlug + brandDisplayName + brandWordmark + brandTagline + brandSiteUrl + brandSiteLabel fields. New {{brand_*}} tokens (both camelCase + snake_case). SHELL title/wordmark/tagline/footer URL all now use tokens instead of hardcoded AIS. All 6 '— The AI Salon {{chapter_name}} team' sign-offs across stage 1-5 + NO_CODE_SHELL → '— The {{brand_name}} {{chapter_name}} team'. Stage-5 'https://aisalon.massapro.com/events' link → '{{brand_site_url}}/events'. buildLogoBlock gains optional brandDisplayName? param for <img alt> text.
+- Step 2 (commit 35abffa): worker.ts + flow-worker.ts thread recipient brandSlug through buildContext. Both due-queries now include rsvp.user.brandSlug. baseUrl resolves via resolveComaSiteUrl(brandSlug, '/') in production (Coma → platform.joincoma.com, AIS → aisalon.massapro.com), keeps NEXTAUTH_URL in local dev. buildContext calls pass brandSlug → drives the brand-aware SHELL rendering.
+- Step 3 (commit 3c2f76f): Three high-volume transactional email paths made brand-aware:
+  * sendPasswordEmail (lib/email.ts): now uses brand.loginUrl (apex-correct: joincoma.com for Coma, aisalon.massapro.com for AIS) instead of opts.siteUrl. Coma users get the apex login link directly (no middleware redirect).
+  * sendRsvpConfirmationEmail (lib/email.ts): new brandSlug? param. Coma branch: no chapter name, navy→amber gradient banner, brand-aware subject/sign-off/footer URL. AIS branch unchanged.
+  * /api/events/[slug]/rsvp/route.ts: getUser() selects brandSlug, baseUrl resolves via resolveComaSiteUrl, passes brandSlug to sendRsvpConfirmationEmail.
+  * /api/admin/members/[id]/credentials/route.ts: target query now selects brandSlug + passes to sendPasswordEmail (was the only password-email caller that didn't pass brandSlug — Coma users reset via this endpoint previously got AIS branding).
+  * /api/messages/[userId]/route.ts (DM notification): me + partner queries select brandSlug. Email branded per RECIPIENT (partner.brandSlug). Subject/body/accent color/From/footer link all use brand context.
+- Step 4 (commit b067096): Two more brand-aware URL builders:
+  * /api/speakers/[id]/messages/route.ts (admin-relay email): branded per SENDER (me.brandSlug) — admin needs to know which brand the message came from. Subject/body/sign-off/accent/From all use brand context.
+  * /api/track/email-click/route.ts: FALLBACK_URL (used when target is malformed/missing) now resolved from request host — Coma users land on platform.joincoma.com, AIS on aisalon.massapro.com (was hardcoded aisalon).
+
+Stage Summary:
+- 4 commits pushed to origin/main (fd07e6e, 35abffa, 3c2f76f, b067096). Vercel auto-deploying.
+- ~10 of 26 URL-builder sites fixed. Highest-leverage ones done: SHELL (touches every stage email), RSVP confirmation, password emails, DM/speaker notifications, click-tracking fallback.
+- signup, reset-password, bulk-reset-password are ALREADY effectively fixed by virtue of the sendPasswordEmail change (they pass brandSlug already; sendPasswordEmail now uses brand.loginUrl instead of opts.siteUrl).
+- REMAINING (lower priority): campaigns/[id]/send + test-send, cron/email, force-send-stage, send-chapter-onboarding, provision, chapter-onboarding preview, track/open, track/event, referral-share-card client component, chapter-editor client, public-event-page share, login-form OAuth error message.
+- Next session: continue with remaining URL builders, then move to Phase B (17 member-page branding leaks: set-password logo, my-code, public-event-page header, chapter-landing logo, etc.), Phase C (remaining email system — orchestrator SHELL is done but DM/RSVP copy + sender identity defaults + admin composer defaults still need work), Phase D (admin surfaces — 71 mechanical fixes).
