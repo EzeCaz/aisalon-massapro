@@ -59,6 +59,14 @@ from urllib.parse import urlparse, parse_qs
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 TOKEN_FILE = PROJECT_ROOT / ".gdrive-token.json"
+# PKCE verifier persisted between --auth-url and --code phases so the
+# verifier used to build the code_challenge in phase 1 is the same one
+# presented to Google's token endpoint in phase 2. Without this,
+# `flow.fetch_token()` raises `(invalid_grant) Missing code verifier.`
+# because google_auth_oauthlib auto-generates a new code_verifier for
+# every Flow instance, and the two phases create separate Flow
+# instances. File is gitignored (see .gitignore line for .gdrive-*).
+PKCE_VERIFIER_FILE = PROJECT_ROOT / ".gdrive-pkce-verifier.txt"
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
@@ -143,6 +151,14 @@ def cmd_auth_url():
         prompt="consent",
         access_type="offline",
     )
+    # Persist the PKCE code_verifier so cmd_exchange_and_upload (which
+    # creates a fresh Flow) can present the same verifier to Google's
+    # token endpoint. google_auth_oauthlib stores the verifier on the
+    # flow instance as `flow.code_verifier` after authorization_url().
+    if flow.code_verifier:
+        PKCE_VERIFIER_FILE.write_text(flow.code_verifier)
+        os.chmod(PKCE_VERIFIER_FILE, 0o600)
+        print(f"[upload-to-drive] PKCE verifier saved to {PKCE_VERIFIER_FILE} (for --code phase)")
     print("=" * 80)
     print("OPEN THIS URL IN YOUR BROWSER AND AUTHORIZE:")
     print()
@@ -184,6 +200,16 @@ def cmd_exchange_and_upload(code_or_url: str, files: list[Path]) -> int:
 
     flow = get_oauth_flow(client_id, client_secret)
     flow.redirect_uri = "http://localhost"
+    # Restore the PKCE code_verifier persisted by --auth-url so Google's
+    # token endpoint can validate it against the code_challenge in the
+    # auth URL. Without this, fetch_token raises
+    # `(invalid_grant) Missing code verifier.`
+    if PKCE_VERIFIER_FILE.exists():
+        flow.code_verifier = PKCE_VERIFIER_FILE.read_text().strip()
+        print(f"[upload-to-drive] loaded PKCE verifier from {PKCE_VERIFIER_FILE}")
+    else:
+        print("[upload-to-drive] WARNING: no PKCE verifier file found — token exchange will fail", file=sys.stderr)
+        print(f"[upload-to-drive]          expected at {PKCE_VERIFIER_FILE}", file=sys.stderr)
     try:
         # exchange_code_for_token is sync; it hits Google's token endpoint.
         flow.fetch_token(code=code)
@@ -191,6 +217,11 @@ def cmd_exchange_and_upload(code_or_url: str, files: list[Path]) -> int:
     except Exception as e:
         print(f"[upload-to-drive] ERROR exchanging code for token: {e}", file=sys.stderr)
         return 2
+    # Token exchange succeeded — clean up the one-time PKCE verifier.
+    try:
+        PKCE_VERIFIER_FILE.unlink()
+    except FileNotFoundError:
+        pass
 
     if not creds.refresh_token:
         print("[upload-to-drive] WARNING: no refresh_token in response. You may need to", file=sys.stderr)
