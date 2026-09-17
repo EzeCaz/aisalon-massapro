@@ -124,6 +124,23 @@ export type UnifiedRenderContext = {
   // Tracking — orchestrator path provides these directly
   openPixelUrl?: string;
   wrapLink?: (url: string) => string;
+  // Brand — drives brand-aware SHELL rendering. All optional (default to
+  // AIS values) so existing callers don't break. When `brandSlug` is
+  // "coma", the SHELL renders the Coma wordmark + joincoma.com footer
+  // URL + Coma tagline, and {{brand_name}} resolves to "Coma" instead
+  // of "AI Salon". Added 2026-09-17 as part of the joincoma.com
+  // split-domain architecture.
+  brandSlug?: "aisalon" | "coma";
+  /** Brand display name (e.g. "Coma", "AI Salon") — for {{brand_name}} token. */
+  brandDisplayName?: string;
+  /** Brand wordmark (lowercase, e.g. "coma", "aisalon") — for {{brand_wordmark}}. */
+  brandWordmark?: string;
+  /** Brand tagline (e.g. "Building the Operating System for Communities") — for {{brand_tagline}}. */
+  brandTagline?: string;
+  /** Brand site URL (e.g. https://platform.joincoma.com) — for {{brand_site_url}}. */
+  brandSiteUrl?: string;
+  /** Brand site URL label (e.g. "platform.joincoma.com") — for {{brand_site_label}}. */
+  brandSiteLabel?: string;
 };
 
 /**
@@ -208,10 +225,40 @@ export function replaceTokens(text: string, ctx: UnifiedRenderContext): string {
   const agenda = ctx.agenda ?? "";
   const finishOnboardingUrl = ctx.finishOnboardingUrl ?? "";
 
+  // Brand tokens — default to AIS values so existing callers (which don't
+  // pass brand fields) get the same AIS branding they always did. When a
+  // caller passes brandSlug="coma" + the resolved brand fields, the SHELL
+  // renders Coma wordmark + joincoma.com footer URL + Coma tagline.
+  const brandDisplayName = ctx.brandDisplayName ?? "AI Salon";
+  const brandWordmark = ctx.brandWordmark ?? "aisalon";
+  const brandTagline = ctx.brandTagline ?? "Empowering AI Connections";
+  // For brand_site_url: the public-facing URL the footer link points at.
+  // For AIS → https://aisalon.massapro.com (label = "aisalon.massapro.com").
+  // For Coma → https://platform.joincoma.com (label = "platform.joincoma.com").
+  // Use the ctx-provided values if present; otherwise default to AIS.
+  const brandSiteUrl = ctx.brandSiteUrl ?? "https://aisalon.massapro.com";
+  const brandSiteLabel =
+    ctx.brandSiteLabel ??
+    (ctx.brandSiteUrl ? new URL(ctx.brandSiteUrl).host : "aisalon.massapro.com");
+
   // HTML-escape agenda newlines first → <br/>, then escape the rest.
   const agendaHtml = escapeHtml(agenda).replace(/\n/g, "<br/>");
 
   return text
+    // Brand tokens — added 2026-09-17 for joincoma.com split-domain architecture.
+    // These let the SHELL + stage templates render the correct brand name,
+    // wordmark, tagline, and footer URL per recipient.
+    .replace(/{{brand_name}}/g, escapeHtml(brandDisplayName))
+    .replace(/\{\{\s*brand_name\s*\}\}/g, escapeHtml(brandDisplayName))
+    .replace(/{{brand_wordmark}}/g, escapeHtml(brandWordmark))
+    .replace(/\{\{\s*brand_wordmark\s*\}\}/g, escapeHtml(brandWordmark))
+    .replace(/{{brand_tagline}}/g, escapeHtml(brandTagline))
+    .replace(/\{\{\s*brand_tagline\s*\}\}/g, escapeHtml(brandTagline))
+    // brand_site_url is a URL — do NOT HTML-escape (would break the URL).
+    .replace(/{{brand_site_url}}/g, brandSiteUrl)
+    .replace(/\{\{\s*brand_site_url\s*\}\}/g, brandSiteUrl)
+    .replace(/{{brand_site_label}}/g, escapeHtml(brandSiteLabel))
+    .replace(/\{\{\s*brand_site_label\s*\}\}/g, escapeHtml(brandSiteLabel))
     // camelCase tokens
     .replace(/{{firstName}}/g, escapeHtml(firstName))
     .replace(/{{name}}/g, escapeHtml(firstName))
@@ -271,7 +318,28 @@ export function renderUnifiedSubject(
   const agenda = ctx.agenda ?? "";
   const finishOnboardingUrl = ctx.finishOnboardingUrl ?? "";
 
+  // Brand tokens (subject-line version — no HTML escaping).
+  const brandDisplayName = ctx.brandDisplayName ?? "AI Salon";
+  const brandWordmark = ctx.brandWordmark ?? "aisalon";
+  const brandTagline = ctx.brandTagline ?? "Empowering AI Connections";
+  const brandSiteUrl = ctx.brandSiteUrl ?? "https://aisalon.massapro.com";
+  const brandSiteLabel =
+    ctx.brandSiteLabel ??
+    (ctx.brandSiteUrl ? new URL(ctx.brandSiteUrl).host : "aisalon.massapro.com");
+
   return subject
+    // Brand tokens
+    .replace(/{{brand_name}}/g, brandDisplayName)
+    .replace(/\{\{\s*brand_name\s*\}\}/g, brandDisplayName)
+    .replace(/{{brand_wordmark}}/g, brandWordmark)
+    .replace(/\{\{\s*brand_wordmark\s*\}\}/g, brandWordmark)
+    .replace(/{{brand_tagline}}/g, brandTagline)
+    .replace(/\{\{\s*brand_tagline\s*\}\}/g, brandTagline)
+    .replace(/{{brand_site_url}}/g, brandSiteUrl)
+    .replace(/\{\{\s*brand_site_url\s*\}\}/g, brandSiteUrl)
+    .replace(/{{brand_site_label}}/g, brandSiteLabel)
+    .replace(/\{\{\s*brand_site_label\s*\}\}/g, brandSiteLabel)
+    // camelCase tokens
     .replace(/{{firstName}}/g, firstName)
     .replace(/{{name}}/g, firstName)
     .replace(/{{email}}/g, email)

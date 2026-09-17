@@ -30,6 +30,8 @@ import { renderUnifiedEmail, renderUnifiedSubject } from "@/lib/email/render-uni
 import { db } from "@/lib/db";
 import { K_EMAIL_LOGO, DEFAULTS } from "@/lib/site-settings";
 import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
+import { getBrandConfig, BRANDS } from "@/lib/brand/brand-config";
+import { getBrandAppHost } from "@/lib/brand/coma-site-url";
 
 // ----------------------------------------------------------------------------
 // Brand logo (top-right of every email)
@@ -155,13 +157,18 @@ export function buildLogoBlock(
   templateLogoUrl: string | null | undefined,
   logoHidden?: boolean,
   resolvedDefaultUrl?: string,
+  /** Brand display name for the logo's alt text. Defaults to "AI Salon"
+   *  for backward compat — callers that pass `brandDisplayName` from the
+   *  resolved TemplateContext will get the right alt per recipient. */
+  brandDisplayName?: string,
 ): string {
   // Admin explicitly disabled the logo for this template — skip injection
   // entirely (don't even resolve the URL).
   if (logoHidden) return "";
   const url = resolveLogoUrl(templateLogoUrl, resolvedDefaultUrl);
   if (!url) return "";
-  return `<img src="${url}" alt="AI Salon" width="150" style="width:150px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
+  const alt = brandDisplayName ?? "AI Salon";
+  return `<img src="${url}" alt="${alt}" width="150" style="width:150px;height:auto;display:block;border:0;outline:none;text-decoration:none;"/>`;
 }
 
 // ----------------------------------------------------------------------------
@@ -185,6 +192,23 @@ export type TemplateContext = {
    *  Defaults to "Tel Aviv" when not provided, preserving backward compat
    *  with the original hardcoded templates. */
   chapterName: string;
+  /** Brand slug — drives the brand-aware SHELL (wordmark, footer URL,
+   *  sign-off). Defaults to "aisalon" when not provided (preserves
+   *  backward compat). When set to "coma", the SHELL renders the Coma
+   *  wordmark + joincoma.com footer URL + Coma sign-off, and all
+   *  tracking/event links use the joincoma.com / platform.joincoma.com
+   *  split-domain architecture. */
+  brandSlug: "aisalon" | "coma";
+  /** Brand display name — derived from brandSlug via brand-config.ts.
+   *  Used for the {{brand_name}} merge token (e.g. "Coma" / "AI Salon").
+   *  Defaulted to "AI Salon" when brandSlug is "aisalon" (preserves
+   *  backward compat with the original hardcoded templates). */
+  brandDisplayName: string;
+  /** Brand site URL — the public-facing URL for the footer link.
+   *  For AIS → https://aisalon.massapro.com
+   *  For Coma → https://platform.joincoma.com (the app surface; links
+   *  to /login go through the apex via resolveComaSiteUrl). */
+  brandSiteUrl: string;
   /** Link to /onboarding so the recipient can finish filling out their
    *  profile. Used by the {{finishOnboardingUrl}} merge tag. */
   finishOnboardingUrl: string;
@@ -210,8 +234,17 @@ export function buildContext(args: {
   /** Optional chapter display name — used for the {{chapter_name}} merge
    *  token. Defaults to "Tel Aviv" when not provided. */
   chapterName?: string;
+  /** Brand slug — drives brand-aware rendering (wordmark, footer URL,
+   *  sign-off, color tokens). Defaults to "aisalon" (preserves backward
+   *  compat with the original hardcoded AIS templates). */
+  brandSlug?: "aisalon" | "coma";
 }): TemplateContext {
   const { event, rsvp, speakers, agenda, baseUrl, queueId } = args;
+  const brandSlug: "aisalon" | "coma" = args.brandSlug ?? "aisalon";
+  // Resolve brand display name + site URL via the same brand-config that
+  // the rest of the app uses, so emails stay in sync with the web app.
+  const brand = getBrandConfig(brandSlug);
+  const brandSiteUrl = getBrandAppHost(brandSlug);
   const firstName = (rsvp.name || rsvp.email.split("@")[0]).split(" ")[0];
   const eventDate = formatDate(event.startsAt);
   const eventUrl = `${baseUrl}/e/${event.slug}`;
@@ -240,6 +273,9 @@ export function buildContext(args: {
     // name via the V7 Chapter relation (chapterRef.name) before invoking
     // the renderer. Empty string keeps the bug visible instead of silent.
     chapterName: args.chapterName ?? "",
+    brandSlug,
+    brandDisplayName: brand.displayName,
+    brandSiteUrl,
     finishOnboardingUrl,
     openPixelUrl,
     wrapLink: (url: string) =>
@@ -298,9 +334,20 @@ export function renderTemplate(
   // Delegate to the unified renderer. The orchestrator's TemplateContext
   // is a superset of UnifiedRenderContext (it has `wrapLink` and
   // `openPixelUrl` which the unified renderer uses for click-wrap + pixel).
+  // Brand fields (brandSlug, brandDisplayName, brandWordmark, brandTagline,
+  // brandSiteUrl, brandSiteLabel) flow through here — added 2026-09-17 so
+  // the SHELL's {{brand_*}} tokens resolve per-recipient.
   return renderUnifiedEmail({
     html,
-    ctx,
+    ctx: {
+      ...ctx,
+      brandSlug: ctx.brandSlug,
+      brandDisplayName: ctx.brandDisplayName,
+      brandWordmark: BRANDS[ctx.brandSlug].wordmark,
+      brandTagline: BRANDS[ctx.brandSlug].tagline,
+      brandSiteUrl: ctx.brandSiteUrl,
+      brandSiteLabel: new URL(ctx.brandSiteUrl).host,
+    },
     logoHtml: opts?.logoHtml,
     clickWrapFn: ctx.wrapLink,
     openPixelUrl: ctx.openPixelUrl,
@@ -315,7 +362,17 @@ export function renderTemplate(
  *  supported camelCase). For templates that don't use snake_case tokens,
  *  the behavior is identical. */
 export function renderSubject(subject: string, ctx: TemplateContext): string {
-  return renderUnifiedSubject(subject, ctx);
+  // Pass brand fields so subject-line tokens like {{brand_name}} resolve
+  // per-recipient. Mirrors the brand-field forwarding in renderTemplate().
+  return renderUnifiedSubject(subject, {
+    ...ctx,
+    brandSlug: ctx.brandSlug,
+    brandDisplayName: ctx.brandDisplayName,
+    brandWordmark: BRANDS[ctx.brandSlug].wordmark,
+    brandTagline: BRANDS[ctx.brandSlug].tagline,
+    brandSiteUrl: ctx.brandSiteUrl,
+    brandSiteLabel: new URL(ctx.brandSiteUrl).host,
+  });
 }
 
 // ----------------------------------------------------------------------------
@@ -366,20 +423,20 @@ const SHELL = (inner: string): string => `<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>AI Salon {{chapter_name}}</title>
+  <title>{{brand_name}} {{chapter_name}}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="font-family:'Plus Jakarta Sans',-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0a0a0a;">
-    <div data-brand-header style="font-weight:700;font-size:24px;margin-bottom:10px;">aisalon</div>
+    <div data-brand-header style="font-weight:700;font-size:24px;margin-bottom:10px;">{{brand_wordmark}}</div>
     <br><br>
     ${inner}
     <hr data-brand-content-end style="margin:32px 0;border:none;border-top:1px solid #000;"/>
     <p style="font-size:12px;color:#999;margin:0;line-height:1.5;">
-      AI Salon {{chapter_name}} · Empowering AI Connections<br/>
-      <a href="https://aisalon.massapro.com" style="color:#999;text-decoration:underline;">aisalon.massapro.com</a>
+      {{brand_name}} {{chapter_name}} · {{brand_tagline}}<br/>
+      <a href="{{brand_site_url}}" style="color:#999;text-decoration:underline;">{{brand_site_label}}</a>
     </p>
   </div>
 </body>
@@ -407,7 +464,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
     `),
   },
@@ -422,7 +479,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
     `),
   },
@@ -445,7 +502,7 @@ export const DEFAULT_TEMPLATES: Record<
           </p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
     `),
   },
@@ -463,7 +520,7 @@ export const DEFAULT_TEMPLATES: Record<
           <p style="font-size:14px;line-height:1.7;color:#444;margin:0 0 24px;white-space:pre-wrap;">{{agenda}}</p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">Open event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
     `),
   },
@@ -480,10 +537,10 @@ export const DEFAULT_TEMPLATES: Record<
           </p>
           <a href="{{eventUrl}}" style="display:inline-block;padding:12px 24px;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">View event page</a>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:24px 0 0;">
-            See you at the next one — <a href="https://aisalon.massapro.com/events" style="color:#FF005A;text-decoration:underline;">browse upcoming events</a>.
+            See you at the next one — <a href="{{brand_site_url}}/events" style="color:#FF005A;text-decoration:underline;">browse upcoming events</a>.
           </p>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:16px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
     `),
   },
@@ -524,7 +581,7 @@ const NO_CODE_BODY = (eventTitle: string, eventDate: string, venue: string) => `
             will appear on screen — show it to door staff when you arrive.
           </p>
           <p style="font-size:15px;line-height:1.6;color:#444;margin:20px 0 0;">
-            — The AI Salon {{chapter_name}} team
+            — The {{brand_name}} {{chapter_name}} team
           </p>
 `;
 
