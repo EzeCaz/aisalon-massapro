@@ -14467,3 +14467,25 @@ Stage Summary:
 - Drive backup: ✅ COMPLETE. Both zips live in Drive folder alongside existing V7.1, V5.x, and 2026-07-18 backups.
 - OAuth refresh token persisted (.gdrive-token.json) — future backup runs need no browser interaction.
 - Script bug (PKCE verifier not persisted across phases) FIXED and pushed so the next user who runs --auth-url won't hit the same failure.
+
+---
+Task ID: joincoma-phase1
+Agent: Super Z (main)
+Task: Implement Phase 1 of the joincoma.com split-domain architecture — apex=login, subdomain=app, with cross-subdomain session cookies. User decisions: (1) joincoma.com/login is the login, (2) keep both coma.massapro.com and joincoma.com working, (3) From=coma@massapro.com, (4) AIS untouched, (5) www.joincoma.com should also work, (6) Coma favicon from joincoma.com/assets/coma_trans.png.
+
+Work Log:
+- Downloaded Coma favicon source from joincoma.com/assets/coma_trans.png (405 KB PNG, 605×415 RGBA). Generated 5 favicon variants via scripts/generate-coma-favicon.py (PIL): favicon.ico (multi-size 16/32/48/64), favicon-32.png, favicon-192.png, apple-touch-icon.png (180×180 white-bg), logo.png (256×256 alpha-preserved). All saved to public/brand/coma/.
+- brand-config.ts: added joincoma.com, platform.joincoma.com, www.joincoma.com to BRAND_HOST_MAP (all → coma). Added two new BrandConfig fields: favicon + logo. Coma gets the new brand assets; AIS has empty strings (falls back to existing SiteSetting tier — zero behavior change for AIS).
+- email-brand-context.ts: Coma siteUrl → https://platform.joincoma.com (app surface for most email links), loginHost → https://joincoma.com (apex for /login links), From: Coma <coma@massapro.com>, contactEmail: coma@massapro.com. AIS unchanged.
+- coma-site-url.ts (new helper): resolveComaSiteUrl(brandSlug, path) routes /login and /api/auth/* to apex, everything else to platform subdomain. For AIS (or any non-split brand), returns siteUrl+path unchanged. Will be used by Phase C (email URL builders).
+- middleware.ts: new Coma subdomain routing. www.joincoma.com → apex or platform (based on path). joincoma.com/<non-apex> → platform.joincoma.com (302). platform.joincoma.com/login or /api/auth/* → apex (302). coma.massapro.com → no redirect (legacy alias kept working per user decision). AIS untouched. Runs FIRST in middleware (before UTM/brand logic) so wrong-host requests redirect without DB work.
+- auth.ts: cookies config sets domain=.joincoma.com on sessionToken + callbackUrl (cross-subdomain for joincoma.com). csrfToken stays __Host- (no domain per RFC 6265bis). Per RFC 6265 §5.1.3, browsers reject cookies whose domain doesn't match the request host — so on AIS/coma.massapro.com requests, the .joincoma.com domain is silently dropped and NextAuth falls back to its default host-only cookie behavior. Both brands work, no security risk. trustHost note added (NextAuth v4 auto-detects when NEXTAUTH_URL is unset — v4.24.13 doesn't have trustHost field).
+- layout.tsx: favicon resolution chain now brand-tier first (brand.favicon → SiteSetting.favicon → /images/favicon.webp). AIS unchanged (brand.favicon=\"\" falls through).
+- TypeScript: clean on all changed files (only pre-existing errors remain in unrelated chart/mockup files).
+- Committed as 92fc521, pushed to origin/main (Vercel auto-deploy triggered).
+
+Stage Summary:
+- ✅ Code-side Phase 1 complete. Vercel auto-deploying.
+- ⛔ Still requires USER EXTERNAL setup (Phase 0): DNS records, add 3 domains in Vercel, add 2 redirect URIs to Google OAuth client (the Web-application one used by NextAuth, NOT the Desktop one used for Drive backups), verify NEXTAUTH_URL not pinned on Vercel.
+- 🔄 Pending user clarification: Option A (independent sessions per domain, simple) vs Option B (session bridge across coma.massapro.com ↔ joincoma.com) — I defaulted to A (the safer recommendation) in code, but it affects whether the coma.massapro.com → joincoma.com transition keeps the user logged in.
+- Next: Phase 2+ (use the new resolveComaSiteUrl helper in the 21 email URL builders, finish Phase B member-page fixes, Phase C email system, Phase D admin surfaces from the original audit).
