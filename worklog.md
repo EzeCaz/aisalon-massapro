@@ -14638,3 +14638,19 @@ Work Log:
 Stage Summary:
 - Home pages now render "AI Salon Tel Aviv Chapter" / "Coma Tel Aviv Chapter" + brand-integrated headlines, dynamic per ?chapterSlug= and brand
 - Out of scope (intentionally untouched): admin footers (Phase B/C), legal pages, mockups, comments/placeholders
+
+---
+Task ID: city-param-hero-v2
+Agent: main
+Task: City from invite URL (?city=) + brand-only eyebrow on login pages (Coma + AIS)
+
+Work Log:
+- brand-config.ts: eyebrow templates → "{brandName} community"; headline templates end with {cityClause} token (" in <city>." or "."); subheading templates converted to {cityClause}
+- login/page.tsx: reads ?city= param as the ONLY copy driver; removed DB chapter-name lookups + db import + all "Tel Aviv" strings (incl. comment examples); metadata title brand(+city)
+- chapter-landing-client.tsx: all 3 /login links append &city=<chapter.name>
+- email.ts welcome/password invite: appends &city=<chapterName> when known (AIS; Coma chapter-less → no city)
+- tsc clean; commit c7ec903 pushed; production verified all 4 cases (Coma/AIS × with/without city)
+
+Stage Summary:
+- /login renders "Coma community" + "The Coma home for community builders." (no city) or "...in Berlin." (with ?city=Berlin); AIS mirrors with "AI Salon community" / "...AI builders."
+- No hard-coded city remains anywhere in the login rendering path
