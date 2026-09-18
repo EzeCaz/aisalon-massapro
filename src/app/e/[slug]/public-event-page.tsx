@@ -163,7 +163,13 @@ export function PublicEventPage({ event, me, brand }: Props) {
   // doesn't pass a brand (all callers now pass it).
   const brandName = brand?.displayName ?? "AI Salon";
   const brandTagline = brand?.tagline ?? "Empowering AI Connections";
-  const brandDisplayLong = `${brandName} Tel Aviv`;
+  // CHAPTER + CITY-AWARE (2026-09-18): the chapter display name comes from
+  // the event's denormalized `chapter` field ("Tel Aviv", "Montreal", ...)
+  // — never hard-coded, so every chapter's event page reads
+  // "AI Salon Montreal" / "Coma Tel Aviv" etc. The fallback only fires
+  // for legacy rows saved before the field was enforced.
+  const chapterName = event.chapter?.trim() || "Tel Aviv";
+  const brandDisplayLong = `${brandName} ${chapterName}`;
   const router = useRouter();
   const start = new Date(event.startsAt);
   const end = new Date(event.endsAt);
@@ -321,7 +327,7 @@ export function PublicEventPage({ event, me, brand }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <PublicHeader me={me} />
+      <PublicHeader me={me} chapterName={chapterName} />
 
       <section className="border-b border-black/10 bg-white">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -688,7 +694,11 @@ export function PublicEventPage({ event, me, brand }: Props) {
         </div>
       </main>
 
-      <PublicFooter brandName={brandName} brandTagline={brandTagline} />
+      <PublicFooter
+        brandName={brandName}
+        brandTagline={brandTagline}
+        chapterName={chapterName}
+      />
     </div>
   );
 }
@@ -697,7 +707,7 @@ export function PublicEventPage({ event, me, brand }: Props) {
 // Sub-components
 // ------------------------------------------------------------------
 
-function PublicHeader({ me }: { me: Me }) {
+function PublicHeader({ me, chapterName }: { me: Me; chapterName: string }) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
@@ -705,7 +715,7 @@ function PublicHeader({ me }: { me: Me }) {
           <Link href="/events" className="flex items-center gap-2">
             <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
             <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
-              Tel Aviv Chapter
+              {chapterName} Chapter
             </span>
           </Link>
           <div className="flex items-center gap-2">
@@ -742,11 +752,13 @@ function PublicHeader({ me }: { me: Me }) {
 function PublicFooter({
   brandName,
   brandTagline,
+  chapterName,
 }: {
   brandName: string;
   brandTagline: string;
+  chapterName: string;
 }) {
-  const brandDisplayLong = `${brandName} Tel Aviv`;
+  const brandDisplayLong = `${brandName} ${chapterName}`;
   return (
     <footer className="mt-auto border-t border-black/10 bg-white">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">

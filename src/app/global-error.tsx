@@ -82,7 +82,7 @@ export default function GlobalError({
           </div>
 
           <p className="mt-6 text-xs text-black/80">
-            © {new Date().getFullYear()} {brandDisplay} Tel Aviv
+            © {new Date().getFullYear()} {brandDisplay}
           </p>
         </main>
       </body>

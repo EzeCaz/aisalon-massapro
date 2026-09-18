@@ -52,6 +52,12 @@ export interface BrandMetadata {
    * "Coma Tel Aviv" — the metadata title suffix used across the site.
    */
   displayTitle: string;
+  /**
+   * The brand's home city, humanized from defaultChapterSlug (e.g.
+   * "Tel Aviv"). Lets callers embed the CITY in keywords/descriptions
+   * without hard-coding it.
+   */
+  city: string;
 }
 
 /** Humanize a chapter slug: "tel-aviv" → "Tel Aviv", "mtl" → "Mtl". */
@@ -93,11 +99,10 @@ export async function resolveBrandMetadata(
       ? "https://coma.massapro.com"
       : "https://aisalon.massapro.com";
 
-  const displayTitle = `${brand.displayName} ${humanizeChapterSlug(
-    brand.defaultChapterSlug
-  )}`;
+  const city = humanizeChapterSlug(brand.defaultChapterSlug);
+  const displayTitle = `${brand.displayName} ${city}`;
 
-  return { brand, siteUrl, displayTitle };
+  return { brand, siteUrl, displayTitle, city };
 }
 
 /**
@@ -105,8 +110,13 @@ export async function resolveBrandMetadata(
  * community copy; Coma gets platform copy. Both stay accurate per brand.
  */
 export function brandDescription(brand: BrandConfig): string {
+  // CITY-AWARE (2026-09-18): the city derives from the brand's home
+  // chapter (defaultChapterSlug) — no hard-coded "Tel Aviv", so a brand
+  // whose home chapter changes (or any future brand with a different
+  // home city) renders correct copy automatically.
+  const city = humanizeChapterSlug(brand.defaultChapterSlug);
   if (brand.slug === "coma") {
-    return `Coma Tel Aviv — the community operating system powering Coma's Tel Aviv chapter. ${brand.tagline}.`;
+    return `${brand.displayName} ${city} — the community operating system powering ${brand.displayName}'s ${city} chapter. ${brand.tagline}.`;
   }
-  return "AI Salon Tel Aviv — the community platform for AI Salon's Tel Aviv chapter. Empowering AI connections.";
+  return `${brand.displayName} ${city} — the community platform for ${brand.displayName}'s ${city} chapter. ${brand.tagline}.`;
 }

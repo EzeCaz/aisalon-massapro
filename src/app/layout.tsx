@@ -47,7 +47,7 @@ const inter = Inter({
  */
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getPublicSettings();
-  const { brand, siteUrl, displayTitle } = await resolveBrandMetadata();
+  const { brand, siteUrl, displayTitle, city } = await resolveBrandMetadata();
 
   // Favicon resolution chain (highest precedence first):
   //   1. Brand-level favicon (brand-config.ts: `brand.favicon`).
@@ -83,7 +83,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description: brandDescription(brand),
     keywords: [
       brand.displayName,
-      "Tel Aviv",
+      city,
       "MassaPro",
       "AI community",
       "Israel AI",

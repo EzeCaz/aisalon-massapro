@@ -41,11 +41,13 @@ import { BrandLogo, BrandGradientText } from "@/components/brand/brand-logo";
  *     overrides (stored in ChapterSetting) and renders the chapter's
  *     name in the H1 + eyebrow text.
  *
- * LOGIN PAGE SECTIONS (per user spec 2026-08-02):
+ * LOGIN PAGE SECTIONS (per user spec 2026-08-02, revised 2026-09-18 —
+ * hero copy carries BOTH the brand name and the chapter's city, never a
+ * bare "Tel Aviv"):
  *   A. Eyebrow: <p class="text-[0.7rem] font-semibold uppercase
- *      tracking-[0.3em] text-[<accentColor>] mb-4">{Chapter_name} Chapter</p>
+ *      tracking-[0.3em] text-[<accentColor>] mb-4">{Brand} {Chapter_name} Chapter</p>
  *   B. Headline: <h1 class="text-4xl lg:text-5xl font-extrabold
- *      leading-[1.05] mb-5">The community for <span class="ais-gradient-text">
+ *      leading-[1.05] mb-5">The {Brand} community for <span class="ais-gradient-text">
  *      AI builders</span> in {Chapter_name}.</h1>
  *
  * Both URLs are passed through `next/image` with `unoptimized` when
@@ -88,7 +90,11 @@ export async function generateMetadata({
   // Look up the chapter name for the metadata title.
   let chapterName = "Tel Aviv";
   try {
-    const chapter = await db.chapter.findUnique({
+    // findFirst (not findUnique) — Chapter.slug is no longer globally
+    // unique after Phase 3A (now @@unique([brandId, countryId, slug])).
+    // findUnique({ where: { slug } }) is rejected by Prisma at runtime,
+    // which threw into the catch and silently broke the city lookup.
+    const chapter = await db.chapter.findFirst({
       where: { slug: chapterSlug },
       select: { name: true },
     });
@@ -187,7 +193,11 @@ export default async function LoginPage({
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
   try {
-    const chapter = await db.chapter.findUnique({
+    // findFirst (not findUnique) — Chapter.slug is no longer globally
+    // unique after Phase 3A (now @@unique([brandId, countryId, slug])).
+    // findUnique({ where: { slug } }) is rejected by Prisma at runtime,
+    // which threw into the catch and silently broke the city lookup.
+    const chapter = await db.chapter.findFirst({
       where: { slug: chapterSlug },
       select: { name: true },
     });
@@ -196,15 +206,18 @@ export default async function LoginPage({
     // DB unreachable — keep the humanized slug.
   }
 
-  // Resolve login copy templates → final strings with chapter name interpolated.
-  const eyebrow = brand.loginEyebrowTemplate.replace(
-    "{chapterName}",
-    chapterName
-  );
+  // Resolve login copy templates → final strings with brand + chapter
+  // name interpolated ({brandName} + {chapterName} tokens, so the hero
+  // reads "AI Salon Tel Aviv Chapter" / "The AI Salon community for AI
+  // builders in Tel Aviv." and adapts per chapter + brand).
+  const eyebrow = brand.loginEyebrowTemplate
+    .replace(/\{brandName\}/g, brand.displayName)
+    .replace(/\{chapterName\}/g, chapterName);
   // Headline has {accentSpanOpen}{accentSpanClose} wrapping the highlighted phrase.
   // We split on those tokens and render the middle as a gradient span.
   const headlineParts = splitHeadlineTemplate(
     brand.loginHeadlineTemplate,
+    brand.displayName,
     chapterName
   );
 
@@ -342,17 +355,21 @@ export default async function LoginPage({
  * Split a headline template into three parts: before, accent (gradient),
  * and after.
  *
- * Template format: "The community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}."
+ * Template format: "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}."
  * Tokens:
+ *   - {brandName}       — replaced with the brand display name
  *   - {accentSpanOpen}  — start of gradient-highlighted phrase
  *   - {accentSpanClose} — end of gradient-highlighted phrase
  *   - {chapterName}     — replaced with the chapter display name
  */
 function splitHeadlineTemplate(
   template: string,
+  brandName: string,
   chapterName: string
 ): { before: string; accent: string; after: string } {
-  const withChapter = template.replace("{chapterName}", chapterName);
+  const withChapter = template
+    .replace(/\{brandName\}/g, brandName)
+    .replace(/\{chapterName\}/g, chapterName);
   const openIdx = withChapter.indexOf("{accentSpanOpen}");
   const closeIdx = withChapter.indexOf("{accentSpanClose}");
 

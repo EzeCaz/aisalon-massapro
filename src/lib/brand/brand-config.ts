@@ -146,12 +146,13 @@ export interface BrandConfig {
 
   /**
    * Login page eyebrow template.
-   * `{chapterName}` is replaced at render time.
+   * Tokens: `{brandName}` + `{chapterName}` are replaced at render time
+   * (e.g. "AI Salon Tel Aviv Chapter" — brand + city, never a bare city).
    */
   loginEyebrowTemplate: string;
   /**
    * Login page H1 template.
-   * `{chapterName}` is replaced at render time.
+   * `{brandName}` + `{chapterName}` are replaced at render time.
    * `{accentSpanOpen}` / `{accentSpanClose}` wrap the gradient-highlighted phrase.
    */
   loginHeadlineTemplate: string;
@@ -200,9 +201,9 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     favicon: "",
     // AIS logo: intentionally empty — uses chapter loginHero.
     logo: "",
-    loginEyebrowTemplate: "{chapterName} Chapter",
+    loginEyebrowTemplate: "{brandName} {chapterName} Chapter",
     loginHeadlineTemplate:
-      "The community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}.",
+      "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}.",
     loginSubtitle:
       "Log in to access events, upload photos from our gatherings, browse the shared slideshow, and connect with fellow founders, CMOs, investors and AI builders.",
     loginFormHeading: "Welcome",
@@ -242,9 +243,9 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     // contexts where the text wordmark can't render (legacy email
     // clients, etc.).
     logo: "/brand/coma/logo.png",
-    loginEyebrowTemplate: "{chapterName} Chapter",
+    loginEyebrowTemplate: "{brandName} {chapterName} Chapter",
     loginHeadlineTemplate:
-      "The home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",
+      "The {brandName} home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",
     loginSubtitle:
       "Log in to access the Coma platform — manage your chapter, host events, onboard new members, and orchestrate your community's growth with the Coma operating system.",
     loginFormHeading: "Welcome to Coma",
