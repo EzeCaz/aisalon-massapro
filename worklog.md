@@ -14579,3 +14579,31 @@ Stage Summary:
 - ✅ Phase 3A complete. Brand table exists with 2 rows (Coma + AIS). Chapter + User have new nullable brandId column. All existing data preserves its current experience (chapters → AIS, users → AIS or Coma based on brandSlug).
 - AIS users see ZERO change. Coma users see ZERO change.
 - Next: Phase 3B — switch code reads from the hardcoded BRANDS registry in brand-config.ts to the DB. This is the step that makes the Brand table actually USED at runtime. Then Phase 3C — admin UI for /admin/brands list + edit + new + onboarding wizard (so SUPER_ADMINs can provision new brands like Danone/HiTech AI through the UI).
+
+---
+Task ID: v7-1-release-prod-incident
+Agent: Super Z (main)
+Task: (1) Backup + deploy as new version number (v7.1). (2) Fix production incident — aisalon.massapro.com broke after v7.1 deploy.
+
+Work Log:
+- BACKUP: FULL (418MB, 8548 files) + slim (105MB) zips created + verified (unzip -t clean; contains Brand schema + seed-brands.ts). Drive upload pending — .gdrive-token.json wiped in sandbox reset, needs OAuth re-run OR manual drag-drop by user to https://drive.google.com/drive/folders/19fJYP9rwNTwWTJNi-tXCUoyg8oeylHMj.
+- VERSION: tag v7.1 created (61 commits since v5.16) + pushed. Moved from bffaf4f → 95fd226 (to include the prod fix) with force-push.
+- PRODUCTION INCIDENT: aisalon.massapro.com returned Server Component render errors after the v7.1 deploy.
+  * ROOT CAUSE: Phase 3A (2bdc6ae) changed prisma/schema.prisma WITHOUT a migration — only pushed to local SQLite sandbox. Vercel build generated the new Prisma client (expects brandId on Chapter/User + Brand table) but prod Neon DB had the old schema → every Chapter/User query failed with 'column brandId does not exist'.
+  * LESSON (re-learned from the 2026-08-11 brandSlug incident): schema changes and migrations must ship in the SAME commit, with the migration registered in NEW_MIGRATIONS in scripts/baseline-migrations.cjs.
+  * FIX SEQUENCE:
+    1. Created migration 20260918000000_add_brand_model_and_brand_ids (schema + seed + backfill, fully idempotent) + registered in NEW_MIGRATIONS.
+    2. migrate deploy timed out: advisory lock (72707369) held by an IDLE pgbouncer session (pid=20210) — leaked session-level lock through pgbouncer transaction-mode pooling. Terminated via scripts/fix-prod-lock.ts (safe — session was idle).
+    3. First apply failed: seed INSERT missing createdAt/updatedAt (Prisma sets them client-side; raw SQL must provide explicitly). Fixed SQL with CURRENT_TIMESTAMP for both columns.
+    4. migrate resolve --rolled-back + P2002 unique-constraint quirk → resolved by deleting the row from _prisma_migrations and re-running migrate deploy cleanly.
+  * VERIFIED on production: 2 Brand rows (brand-coma root + brand-aisalon child), 2/2 chapters → brandId=aisalon (Tel Aviv + Montreal), 289/289 users have brandId (1 Coma: eze@cazhype.com + 288 AIS), brandSlug cache synced for all users.
+  * DIAGNOSTIC SCRIPTS KEPT: scripts/check-prod-locks.ts (inspect pg_stat_activity + pg_locks), scripts/fix-prod-lock.ts (terminate idle advisory-lock holders), scripts/verify-prod-brands.ts (verify brand data coverage).
+- USER EXTERNAL SETUP PROGRESS: Task 2 (Vercel domain added, awaiting DNS) ✅; Task 3 (Google OAuth redirect URIs added — project is 'massapro-calendar', client ID 271496681716-0esrh...) ✅; Task 4 (NEXTAUTH_URL deleted) ✅; Task 1 (DNS) pending.
+- CRON_SECRET on Vercel: already exists with production+preview+development targets (user's duplicate-add error confirms) — no action needed.
+- GOOGLE_CLIENT_ID on Vercel: confirmed present (All Environments).
+- Neon 'Needs Attention' env var warnings: cosmetic (integration metadata lost track); env var values still valid; advised user to ignore.
+
+Stage Summary:
+- Production RESTORED (aisalon.massapro.com serving again — pending user confirmation on refresh).
+- v7.1 tag marks the first WORKING state of the multi-brand release.
+- Pending: user DNS propagation (Task 1) → then smoke-test platform.joincoma.com; Drive re-upload of backups (OAuth re-run or manual); Phase 3B (code reads Brand from DB).
