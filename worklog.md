@@ -14607,3 +14607,17 @@ Stage Summary:
 - Production RESTORED (aisalon.massapro.com serving again — pending user confirmation on refresh).
 - v7.1 tag marks the first WORKING state of the multi-brand release.
 - Pending: user DNS propagation (Task 1) → then smoke-test platform.joincoma.com; Drive re-upload of backups (OAuth re-run or manual); Phase 3B (code reads Brand from DB).
+
+---
+Task ID: dns-verify-postdeploy
+Agent: main
+Task: Verify user's DNS manager configuration for joincoma.com migration to platform.joincoma.com
+
+Work Log:
+- Read user's DNS manager screenshot (8 records: 3x A @, 2x www, 3x platform)
+- Live-verified via dig @1.1.1.1 / @8.8.8.8: apex = 216.150.1.1 + 216.150.16.1 + legacy 76.76.21.21; platform currently resolving via generic 76.76.21.21/cname.vercel-dns.com instead of project-specific b5e082ecfa694b0e.vercel-dns-017.com (→ 216.150.1.65/216.150.16.65)
+- HTTP checks: platform.joincoma.com 307→/login→200 (TLS valid, server: Vercel); aisalon.massapro.com 307→/login→200 (production Server Components incident RESOLVED — Neon migration evidently completed); coma.massapro.com 200
+
+Stage Summary:
+- DNS verdict delivered: keep 4 (apex pair 216.150.1.1/216.150.16.1, www CNAME, platform→b5e082...vercel-dns-017.com), delete 4 conflicting duplicates (A @ 76.76.21.21, A www 76.76.21.21, CNAME platform cname.vercel-dns.com, A platform 76.76.21.21)
+- Production confirmed healthy; next: user deletes 4 records → Vercel domains flip Valid → 5-item smoke test → Phase 3B (DB-driven brand config)
