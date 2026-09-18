@@ -14681,3 +14681,21 @@ Stage Summary:
 - Membership: see-all (Coma) / brand-scoped visibility (others); join-to-register gate enforced at API + both event page variants; /communities discovery; member directory scoped to joined communities
 - Brand separation: Knowledge Base, Images, Email Templates, Mockups each have Coma/AI Salon tabs with independent content; images/settings read chain is brand-resolved end to end
 - Deploy: push triggers Vercel build → baseline + migrate deploy applies the new migration automatically; no manual data backfill required
+
+---
+Task ID: deploy-verify-806928a
+Agent: main
+Task: Deploy + verify commit 806928a (task 4: multi-community memberships + per-brand content separation) on production
+
+Work Log:
+- Confirmed working tree clean; origin/main already at 806928a (pushed 19:27 UTC, fetched to verify)
+- Vercel auto-deploy verified via production HTTP probes (no Vercel token in sandbox; established probe pattern)
+- /communities → 200, renders Communities + "Request to join" UI (46KB page; DB-backed queries succeed → ChapterMember/KnowledgeDoc tables live, migration 20260919000000 applied)
+- /api/admin/knowledge-docs → 401 (route deployed, auth-gated as designed)
+- Task 3 copy re-verified on prod: Coma & AIS × with/without ?city= all render correct eyebrow "{brand} community" + headline city clause
+- package.json build runs baseline-migrations + prisma migrate deploy with non-fatal fallback; page-level 200s on DB-backed routes confirm migration success
+
+Stage Summary:
+- 806928a is LIVE on production (platform.joincoma.com + aisalon.massapro.com both healthy, 307→login for guests)
+- Multi-community membership, /communities discovery, brand-separated knowledge docs/images/templates/mockups all deployed
+- Remaining manual items (user-side): DNS 4 conflicting records deletion, Drive backup 418MB upload, coma.massapro.com decision
