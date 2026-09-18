@@ -14732,3 +14732,21 @@ Work Log:
 Stage Summary:
 - User-reported crash (digest 2480828166) RESOLVED on production; all 14 Phase 3B slug-keyed Chapter call sites fixed in a5dcc9f
 - Deploy pipeline note: if a pushed build doesn't promote within ~10min, retrigger via empty commit worked instantly
+
+---
+Task ID: join-dialog-profile-readonly
+Agent: main
+Task: Join-community dialog — prefill from profile, read-only, password-style partial display, single Join button
+
+Work Log:
+- Rewrote JoinCommunityDialog: self-fetches GET /api/profile on open; renders masked read-only rows (Name "Eze •••", Email "ez•••@domain", Role/Company first 3 chars + •••, LinkedIn "hostname/•••") instead of the editable form; whyJoin free-text removed; single "Join {chapter}" button; falls back to me prop (name+email) if profile fetch fails; success screen unchanged
+- POST /api/chapters/[slug]/membership: formJson now built SERVER-SIDE from the user's profile record (name, email, title, company, linkedinUrl, submittedAt, source: PROFILE); client payload ignored (cannot be edited/forged); whyJoin 400 gate removed; getSessionUser selects the extra profile fields
+- Callers untouched (props interface unchanged): public-event-page, communities-client, JoinCommunityCtaCard
+- tsc + eslint clean on touched files; commit 5866baf pushed
+- Deploy promotion stalled ~10min again; empty-commit retrigger (a035d13) + extended polling → dpl_7xMnJxYz... live at 21:39 UTC
+- Post-deploy probes: /communities 200, /c/mtl 200, POST membership unauth 401 (route live), /login copy intact, /events 200
+
+Stage Summary:
+- Join flow is now a one-click confirm: profile details shown partially masked (password-style), read-only, server-side form capture
+- formJson rows created after this deploy contain profile-sourced data only (source: PROFILE); pre-existing rows keep old whyJoin shape
+- Note for user verification: the masked dialog requires a signed-in session — check on /communities → Request to join, or any event register CTA as a non-member
