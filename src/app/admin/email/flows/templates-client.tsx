@@ -44,6 +44,7 @@ import {
   buildLogoBlock,
 } from "@/lib/email-orchestrator/templates";
 import { renderUnifiedEmail, type UnifiedRenderContext } from "@/lib/email/render-unified";
+import { BrandSwitchTabs, type AdminBrandSlug } from "@/components/admin/brand-switch-tabs";
 
 // Full template type — fetched from /api/email-templates (not the
 // minimal FlowTemplate shape used by the flow builder).
@@ -66,6 +67,10 @@ type Template = {
   // TSK-0074 Phase 4: mobile-only CSS/HTML overrides (wrapped in
   // @media (max-width:600px) by the unified renderer).
   mobileOverridesHtml?: string | null;
+  // BRAND SEPARATION (user spec 2026-09-19): which brand the template
+  // belongs to. null = legacy template created before the split — shown
+  // under both brand tabs and tagged "legacy".
+  brandSlug?: string | null;
   isActive: boolean;
   isDefault?: boolean;
   flowStepsCount: number;
@@ -97,6 +102,10 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
   // editor for the freshly-created copy.
   const [choiceOpen, setChoiceOpen] = React.useState(false);
   const [duplicating, setDuplicating] = React.useState(false);
+  // BRAND TABS (user spec 2026-09-19): templates are separated per brand.
+  // The active tab filters the list (brand-owned + legacy) and stamps
+  // newly created templates with this brand.
+  const [brand, setBrand] = React.useState<AdminBrandSlug>("aisalon");
 
   // Keep the latest onTemplatesChange callback in a ref so we don't have to
   // depend on its identity in the sync effect below. The parent passes an
@@ -114,7 +123,7 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
   const refresh = React.useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/email-templates");
+      const r = await fetch(`/api/email-templates?brand=${brand}`);
       if (!r.ok) throw new Error("Failed to load templates");
       const data = await r.json();
       const next = (data.templates || []) as Template[];
@@ -124,7 +133,7 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
 
   // Fetch the full template list (with htmlBody) on mount.
   React.useEffect(() => {
@@ -147,7 +156,12 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
   const handleDuplicate = async (t: Template) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/email-templates/${t.id}/duplicate`, { method: "POST" });
+      const r = await fetch(`/api/email-templates/${t.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // File the copy under the ACTIVE brand tab (legacy sources too).
+        body: JSON.stringify({ brandSlug: brand }),
+      });
       if (!r.ok) {
         const err = await r.json();
         throw new Error(err.error || "Failed to duplicate");
@@ -169,7 +183,11 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
   const handleDuplicateToNew = async (sourceId: string) => {
     setDuplicating(true);
     try {
-      const r = await fetch(`/api/email-templates/${sourceId}/duplicate`, { method: "POST" });
+      const r = await fetch(`/api/email-templates/${sourceId}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandSlug: brand }),
+      });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.error || "Failed to duplicate");
@@ -251,6 +269,14 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
         </button>
       </div>
 
+      {/* BRAND TABS — per-brand template sets. Legacy templates (created
+          before the split) show under both tabs and carry a "legacy" tag. */}
+      <BrandSwitchTabs
+        active={brand}
+        onChange={setBrand}
+        hint={"Templates tagged legacy are shared by both brands."}
+      />
+
       <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-neutral-700">
@@ -290,6 +316,11 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
                     {t.name}
                     {t.isDefault && (
                       <span className="ml-1.5 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-700">DEFAULT</span>
+                    )}
+                    {!t.brandSlug && (
+                      <span className="ml-1.5 rounded bg-neutral-200 px-1 text-[9px] font-bold text-neutral-600" title="Created before the brand split — shared by both brands">
+                        legacy
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-neutral-700 max-w-md truncate">{t.subject}</td>
@@ -362,6 +393,7 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
         <TemplateEditorDialog
           template={editing}
           previewChapterName={previewChapterName}
+          activeBrand={editing.brandSlug === "coma" || editing.brandSlug === "aisalon" ? editing.brandSlug : brand}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); refresh(); }}
         />
@@ -386,6 +418,7 @@ export function TemplatesClient({ templates, onTemplatesChange, previewChapterNa
         <TemplateEditorDialog
           template={null}
           previewChapterName={previewChapterName}
+          activeBrand={brand}
           onClose={() => setCreating(false)}
           onSaved={() => { setCreating(false); refresh(); }}
         />
@@ -614,12 +647,15 @@ function TemplateEditorDialog({
   onClose,
   onSaved,
   previewChapterName,
+  activeBrand = "aisalon",
 }: {
   template: Template | null;
   onClose: () => void;
   onSaved: () => void;
   /** TSK-0075: admin's chapter name — for substituting {{chapter_name}} in the preview. */
   previewChapterName?: string;
+  /** BRAND SEPARATION: brand the template belongs to (used when creating). */
+  activeBrand?: AdminBrandSlug;
 }) {
   const [name, setName] = React.useState(template?.name ?? "");
   const [subject, setSubject] = React.useState(template?.subject ?? "");
@@ -685,6 +721,9 @@ function TemplateEditorDialog({
         // so the API can clear the field on PATCH).
         mobileOverridesHtml: mobileOverridesHtml.trim() || null,
       };
+      // BRAND SEPARATION: stamp newly created templates with the brand
+      // tab they were created in (existing templates keep theirs).
+      if (isCreate) body.brandSlug = activeBrand;
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },

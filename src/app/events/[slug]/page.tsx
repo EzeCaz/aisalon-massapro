@@ -8,6 +8,8 @@ import { AppHeader } from "@/components/ais/app-header";
 import { EventTabs } from "./event-tabs";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { RsvpCheckInCard } from "@/components/events/rsvp-check-in-card";
+import { JoinCommunityCtaCard } from "@/components/events/join-community-cta-card";
+import { checkChapterMembership } from "@/lib/membership";
 import { format } from "date-fns";
 import { Users } from "lucide-react";
 import { getBrandConfig } from "@/lib/brand/brand-config";
@@ -49,6 +51,19 @@ export default async function EventDetailPage({ params }: Params) {
       // The admin-picked main image — used as the event's hero picture
       // at the top-left of the event page. null when none has been set.
       mainImage: { select: { id: true, fileUrl: true, caption: true } },
+      // COMMUNITY GATE (user spec 2026-09-19): the event's community —
+      // used below to compute membership and render the join CTA for
+      // non-members instead of the register button.
+      chapterRef: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          city: true,
+          brand: { select: { slug: true, displayName: true } },
+          country: { select: { name: true, code: true, flagEmoji: true } },
+        },
+      },
       // Quiz sessions linked to this event — shown in the Quiz tab.
       // Sorted by createdAt DESC so the most recent (typically the next
       // upcoming one) shows first.
@@ -208,6 +223,28 @@ export default async function EventDetailPage({ params }: Params) {
     },
   });
   if (!event) notFound();
+
+  // COMMUNITY GATE (user spec 2026-09-19): all signed-in users can VIEW
+  // any event, but joining requires membership of the event's community.
+  // Non-members see the join-CTA instead of the register button (both in
+  // the header widget and the mobile strip below). Legacy events without
+  // a linked community (chapterId = null) stay open to everyone.
+  const eventChapter = event.chapterRef
+    ? {
+        id: event.chapterRef.id,
+        name: event.chapterRef.name,
+        slug: event.chapterRef.slug,
+        city: event.chapterRef.city,
+        brand: event.chapterRef.brand,
+        country: event.chapterRef.country,
+      }
+    : null;
+  let isEventCommunityMember = true;
+  if (event.chapterId) {
+    const membership = await checkChapterMembership(me.id, event.chapterId, me.chapterId);
+    isEventCommunityMember = membership.isMember;
+  }
+  const showJoinGate = !!eventChapter && !isEventCommunityMember;
 
   // Compute the management tier for the current user on this event:
   //   - Super Admins + Admins can manage ANY event.
@@ -530,19 +567,23 @@ export default async function EventDetailPage({ params }: Params) {
                   register / registered / check-in available / checked-in
                   with code. Synced with the Overview tab via the RSVP API. */}
               <div className="mt-4 w-44">
-                <RsvpCheckInCard
-                  eventSlug={event.slug}
-                  eventTitle={event.title}
-                  eventStartsAt={event.startsAt.toISOString()}
-                  eventEndsAt={event.endsAt.toISOString()}
-                  initialRsvp={serializedRsvp}
-                  eventDescription={event.description}
-                  eventVenue={event.venue}
-                  eventAddress={event.address}
-                  eventCity={event.city}
-                  eventCountry={event.country}
-                  variant="header"
-                />
+                {showJoinGate && eventChapter ? (
+                  <JoinCommunityCtaCard chapter={eventChapter} variant="header" />
+                ) : (
+                  <RsvpCheckInCard
+                    eventSlug={event.slug}
+                    eventTitle={event.title}
+                    eventStartsAt={event.startsAt.toISOString()}
+                    eventEndsAt={event.endsAt.toISOString()}
+                    initialRsvp={serializedRsvp}
+                    eventDescription={event.description}
+                    eventVenue={event.venue}
+                    eventAddress={event.address}
+                    eventCity={event.city}
+                    eventCountry={event.country}
+                    variant="header"
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -563,19 +604,23 @@ export default async function EventDetailPage({ params }: Params) {
           hero. The desktop version (above) remains unchanged. */}
       <section className="lg:hidden border-b border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
-          <RsvpCheckInCard
-            eventSlug={event.slug}
-            eventTitle={event.title}
-            eventStartsAt={event.startsAt.toISOString()}
-            eventEndsAt={event.endsAt.toISOString()}
-            initialRsvp={serializedRsvp}
-            eventDescription={event.description}
-            eventVenue={event.venue}
-            eventAddress={event.address}
-            eventCity={event.city}
-            eventCountry={event.country}
-            variant="card"
-          />
+          {showJoinGate && eventChapter ? (
+            <JoinCommunityCtaCard chapter={eventChapter} variant="card" />
+          ) : (
+            <RsvpCheckInCard
+              eventSlug={event.slug}
+              eventTitle={event.title}
+              eventStartsAt={event.startsAt.toISOString()}
+              eventEndsAt={event.endsAt.toISOString()}
+              initialRsvp={serializedRsvp}
+              eventDescription={event.description}
+              eventVenue={event.venue}
+              eventAddress={event.address}
+              eventCity={event.city}
+              eventCountry={event.country}
+              variant="card"
+            />
+          )}
         </div>
       </section>
 

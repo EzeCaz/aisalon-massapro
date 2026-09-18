@@ -187,6 +187,11 @@ model Chapter {
   referralAttributions ReferralAttribution[]
   settings             ChapterSetting[]
   templateOverrides    ChapterEmailTemplateOverride[]
+  // Multi-community memberships (see ChapterMember). One row per user who
+  // has explicitly joined THIS chapter — either their primary chapter
+  // (User.chapterId) or an additional community discovered via /communities
+  // or the event-page join gate.
+  members              ChapterMember[]
   createdAt            DateTime                       @default(now())
   updatedAt            DateTime                       @updatedAt
 
@@ -213,6 +218,93 @@ model ChapterSetting {
 
   @@unique([chapterId, key])
   @@index([chapterId])
+}
+
+// ---------------------------- Knowledge Base ----------------------------
+/// Admin-curated resource library (Google Drive links etc.) shown at
+/// /admin/knowledge-base. Previously a hard-coded RESOURCES array in the
+/// page file — now DB-backed so Super Admins can edit titles/URLs and so
+/// each brand gets its OWN resource set (per user spec 2026-09-19:
+/// "all templates mockups and emails, have a separation for coma platform
+/// users and aisalon user, as everything should be different").
+model KnowledgeDoc {
+  id            String   @id @default(cuid())
+  /// Brand this doc belongs to — "coma" | "aisalon" (Brand.slug).
+  /// Drives the brand tabs on /admin/knowledge-base.
+  brandSlug     String
+  /// Section title, e.g. "Branding and Templates". Docs are grouped by
+  /// this value and sections render in sectionOrder order.
+  section       String
+  /// Optional intro paragraph rendered under the section title.
+  sectionIntro  String?
+  /// Section display order (lower = higher). Denormalized from the doc so
+  /// sections can be reordered without touching every row.
+  sectionOrder  Int      @default(0)
+  title         String
+  description   String?
+  url           String
+  /// "folder" | "doc" | "slides" — drives the icon on the card.
+  kind          String   @default("doc")
+  /// Sort order WITHIN the section (lower = higher).
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([brandSlug, isActive, sectionOrder, sortOrder])
+}
+
+// ------------------------ Community Membership --------------------------
+/// A user's membership in ONE chapter (community). Phase 3 multi-community
+/// model — a user has exactly ONE primary chapter (User.chapterId) but can
+/// join any number of additional communities.
+///
+/// WHY THIS EXISTS (user spec 2026-09-19):
+///   - All Coma users can SEE any event regardless of community.
+///   - To JOIN an event they must first join that event's community:
+///     every join/register button for a non-member opens a
+///     "join the community + fill the community form" flow, and only
+///     after joining can they see all community members + join events.
+///   - Users of OTHER brands (e.g. AI Salon) cannot see other
+///     communities' events at all — they discover communities in their
+///     city/country via /communities and request to join.
+///
+/// PRIMARY MEMBERSHIP IS IMPLICIT: User.chapterId === chapterId counts as
+/// an ACTIVE membership even with no row here (protects every existing
+/// user from being locked out of their own community's events on deploy).
+/// Rows here are required only for ADDITIONAL communities.
+model ChapterMember {
+  id          String    @id @default(cuid())
+  chapterId   String
+  chapter     Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "PENDING" (requested, awaiting approval) | "ACTIVE" | "DECLINED" | "LEFT".
+  /// Current policy: joins are AUTO-APPROVED (status=ACTIVE immediately)
+  /// — the status column exists so a future approval flow can be layered
+  /// in without another migration.
+  status      String    @default("ACTIVE")
+  /// How the membership was created:
+  ///   "EVENT_GATE" — clicked join/register on an event of a community
+  ///                  they weren't a member of (the join dialog flow)
+  ///   "DIRECTORY"  — requested from /communities (discover page)
+  ///   "ADMIN"      — granted by an admin
+  source      String    @default("DIRECTORY")
+  /// The community join form submission (user spec: "join the community
+  /// and fill the community form"). Shape: { title?, company?,
+  /// linkedinUrl?, whyJoin?, agreedAt }. Free-form JSON so per-chapter
+  /// form questions can be added later without a migration.
+  formJson    Json?
+  joinedAt    DateTime  @default(now())
+  approvedAt  DateTime?
+  approvedBy  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([chapterId, userId])
+  @@index([userId])
+  @@index([chapterId, status])
 }
 
 /// Per-chapter override of a global EmailStageTemplate (logo, subject,
@@ -299,6 +391,11 @@ model User {
   chapterOnboardingInvites   ChapterOnboardingInvite[]
   // Chapter lead onboarding invites this user (as admin) has sent
   chapterOnboardingInvitedBy ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
+  // Multi-community memberships — every chapter this user has explicitly
+  // joined (see ChapterMember). The PRIMARY chapter stays on chapterId
+  // above; rows here are additional communities (or an explicit record of
+  // the primary one created when the user joins via a form).
+  chapterMemberships         ChapterMember[]
   // ----------------------------------------------------------------
   // V7 hierarchy scoping fields. Nullable for backwards compatibility
   // with V6 rows (backfilled to Israel/Tel-Aviv on migration).
@@ -857,6 +954,12 @@ model EmailTemplate2 {
   updatedBy String?
   chapterId String?
   chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  /// BRAND SEPARATION (user spec 2026-09-19): which brand this template
+  /// belongs to — "coma" | "aisalon". NULL = legacy template created before
+  /// the brand split; legacy templates remain visible under BOTH brand tabs
+  /// (marked "legacy") so nothing disappears after deploy. New templates
+  /// are stamped with the brand of the tab they were created in.
+  brandSlug String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

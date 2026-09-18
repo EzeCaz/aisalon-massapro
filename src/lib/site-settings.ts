@@ -208,22 +208,98 @@ export async function getPublicSettings(): Promise<PublicSettings> {
  * Write a single setting. SUPER_ADMIN-only — the caller MUST verify the
  * user's role before calling this.
  *
+ * `brandSlug` (optional) writes a BRAND-SCOPED key instead of the global
+ * one — e.g. setSetting("loginHero", url, by, "coma") writes
+ * "loginHero@coma". Reads via getPublicSettingsForBrand(brand) resolve
+ * the brand-scoped row first, then the global row, then DEFAULTS.
+ *
  * Returns the new value (echoes back what was written).
  */
 export async function setSetting(
   key: string,
   value: string,
-  updatedBy?: string
+  updatedBy?: string,
+  brandSlug?: string | null
 ): Promise<string> {
   if (!ALL_KEYS.has(key)) {
     throw new Error(`setSetting: unknown key "${key}"`);
   }
+  const finalKey = brandSlug ? brandScopedKey(key, brandSlug) : key;
   await db.siteSetting.upsert({
-    where: { key },
-    create: { key, value, updatedBy },
+    where: { key: finalKey },
+    create: { key: finalKey, value, updatedBy },
     update: { value, updatedBy },
   });
   return value;
+}
+
+/**
+ * BRAND-SCOPED SETTING KEYS (user spec 2026-09-19 — "everything should be
+ * different" between Coma and AI Salon):
+ *
+ *   SiteSetting is a flat key/value store. Instead of adding a brand
+ *   column, brand-scoped settings use a composite key:
+ *       "loginHero@coma"   — the Coma login hero
+ *       "loginHero@aisalon" — the AI Salon login hero
+ *   (the key column is the PK, so no schema change is needed).
+ *
+ * RESOLUTION CHAIN for getPublicSettingsForBrand(brand):
+ *   1. "<key>@<brand>" row   ← brand-specific value (set via the brand
+ *                               tabs in /admin/images)
+ *   2. "<key>" row           ← legacy global value (pre-split rows —
+ *                               keeps every existing selection working)
+ *   3. DEFAULTS[key]         ← hard-coded fallback
+ */
+export function brandScopedKey(key: string, brandSlug: string): string {
+  return `${key}@${brandSlug}`;
+}
+
+/** Parse a brand-scoped key ("loginHero@coma") → { base, brand } | null. */
+export function parseBrandScopedKey(key: string): { base: string; brand: string } | null {
+  const idx = key.lastIndexOf("@");
+  if (idx <= 0) return null;
+  return { base: key.slice(0, idx), brand: key.slice(idx + 1) };
+}
+
+/**
+ * Brand-aware settings read. Same shape as getPublicSettings() but each
+ * value resolves through the chain: "<key>@<brand>" → "<key>" → DEFAULTS.
+ * Call with a null/unknown brand to get plain legacy behavior.
+ */
+export async function getPublicSettingsForBrand(
+  brandSlug?: string | null
+): Promise<PublicSettings> {
+  const base = await getPublicSettings();
+  if (!brandSlug) return base;
+  try {
+    const rows = await db.siteSetting.findMany({
+      where: { key: { endsWith: `@${brandSlug}` } },
+      select: { key: true, value: true },
+    });
+    if (rows.length === 0) return base;
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      const parsed = parseBrandScopedKey(r.key);
+      if (parsed && ALL_KEYS.has(parsed.base)) map.set(parsed.base, r.value);
+    }
+    const pick = (key: string, fallback: string): string => map.get(key) ?? fallback;
+    return {
+      favicon: pick(K_FAVICON, base.favicon),
+      loginHero: pick(K_LOGIN_HERO, base.loginHero),
+      loginBanner: pick(K_LOGIN_BANNER, base.loginBanner),
+      emailLogo: pick(K_EMAIL_LOGO, base.emailLogo),
+      whatsappGroupUrl: pick(K_WHATSAPP_GROUP_URL, base.whatsappGroupUrl),
+      whatsappGroupText: pick(K_WHATSAPP_GROUP_TEXT, base.whatsappGroupText),
+      linkedinUrl: pick(K_LINKEDIN_URL, base.linkedinUrl),
+      ga4MeasurementId: pick(K_GA4_MEASUREMENT_ID, base.ga4MeasurementId),
+      metaPixelId: pick(K_META_PIXEL_ID, base.metaPixelId),
+      emailSendPaused:
+        pick(K_EMAIL_SEND_PAUSED, base.emailSendPaused ? "true" : "false") === "true",
+    };
+  } catch (err) {
+    console.warn("[site-settings] brand-aware read failed:", err);
+    return base;
+  }
 }
 
 /**

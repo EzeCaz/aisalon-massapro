@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { PublicEventPage } from "./public-event-page";
 import type { Metadata } from "next";
 import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
+import { checkChapterMembership } from "@/lib/membership";
 
 /**
  * /e/[slug] — PUBLIC event landing page.
@@ -104,6 +105,20 @@ export default async function PublicEventPageRoute({ params }: Params) {
           },
         },
       },
+      // Community gating (user spec 2026-09-19): the join/register flow
+      // needs the event's community so non-members can be routed through
+      // the "join the community + fill the form" dialog.
+      chapterRef: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          city: true,
+          isActive: true,
+          brand: { select: { slug: true, displayName: true } },
+          country: { select: { name: true, code: true, flagEmoji: true } },
+        },
+      },
       _count: { select: { speakers: true, agenda: true, rsvps: true } },
     },
   });
@@ -122,7 +137,7 @@ export default async function PublicEventPageRoute({ params }: Params) {
   // but if the user is signed in we preload their RSVP + check-in status
   // so the client component can render the right CTA without a flash.
   const session = await getServerSession(authOptions);
-  let me: { id: string; email: string; name: string | null; utmUid: string | null; role: string } | null = null;
+  let me: { id: string; email: string; name: string | null; utmUid: string | null; role: string; chapterId: string | null } | null = null;
   let rsvp: {
     id: string;
     status: string;
@@ -135,7 +150,7 @@ export default async function PublicEventPageRoute({ params }: Params) {
   if (session?.user?.email) {
     const meRow = await db.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true, email: true, name: true, utmUid: true, role: true },
+      select: { id: true, email: true, name: true, utmUid: true, role: true, chapterId: true },
     });
     if (meRow) {
       me = meRow;
@@ -152,6 +167,29 @@ export default async function PublicEventPageRoute({ params }: Params) {
       });
     }
   }
+
+  // COMMUNITY MEMBERSHIP (user spec 2026-09-19): compute the signed-in
+  // user's membership in the event's community server-side so the CTA
+  // renders the correct state without a flash ("Register" vs "Join the
+  // community to register"). The client re-verifies via the membership
+  // API in case membership changed (e.g. joined in another tab).
+  const chapterRef = event.chapterRef;
+  let isMember = true;
+  if (me && chapterRef) {
+    const membership = await checkChapterMembership(me.id, chapterRef.id, me.chapterId ?? null);
+    isMember = membership.isMember;
+  }
+  const chapter = chapterRef
+    ? {
+        id: chapterRef.id,
+        name: chapterRef.name,
+        slug: chapterRef.slug,
+        city: chapterRef.city,
+        isActive: chapterRef.isActive,
+        brand: chapterRef.brand,
+        country: chapterRef.country,
+      }
+    : null;
 
   // Serialize all Date fields to ISO strings for the client component.
   const serialized = {
@@ -180,5 +218,13 @@ export default async function PublicEventPageRoute({ params }: Params) {
   // cookies are host-scoped so host and brand always agree) and pass it
   // down so the public event page never renders hard-coded AIS copy.
   const { brand } = await resolveBrandMetadata();
-  return <PublicEventPage event={serialized} me={me} brand={brand} />;
+  return (
+    <PublicEventPage
+      event={serialized}
+      me={me}
+      brand={brand}
+      chapter={chapter}
+      initialIsMember={isMember}
+    />
+  );
 }

@@ -15,6 +15,10 @@ import {
   Clock,
 } from "lucide-react";
 import { SaveToCalendar } from "@/components/events/save-to-calendar";
+import {
+  JoinCommunityDialog,
+  type JoinChapterInfo,
+} from "@/components/community/join-community-dialog";
 
 // ------------------------------------------------------------------
 // Types — mirror the EventRsvp shape returned by /api/events/[slug]/rsvp
@@ -136,6 +140,11 @@ export function RsvpCheckInCard({
   const [checkingIn, setCheckingIn] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [now, setNow] = React.useState(() => new Date());
+  // COMMUNITY GATE (user spec 2026-09-19): when the RSVP API answers 403
+  // JOIN_COMMUNITY_REQUIRED we store the chapter from the response and
+  // open the join dialog. On success the registration continues.
+  const [gateChapter, setGateChapter] = React.useState<JoinChapterInfo | null>(null);
+  const [joinDialogOpen, setJoinDialogOpen] = React.useState(false);
 
   // Tick every minute so the "Check in" button appears/disappears at the
   // exact moment the window opens (within 60s granularity).
@@ -176,6 +185,17 @@ export function RsvpCheckInCard({
     try {
       const res = await fetch(`/api/events/${eventSlug}/rsvp`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 403 && data?.code === "JOIN_COMMUNITY_REQUIRED") {
+        // Not a member of this event's community → open the join flow;
+        // after joining, registration continues automatically.
+        if (data.chapter) {
+          setGateChapter(data.chapter as JoinChapterInfo);
+          setJoinDialogOpen(true);
+        } else {
+          toast.error(data?.error || "Join the community first to register.");
+        }
+        return;
+      }
       if (!res.ok) {
         toast.error(data?.error || `Could not register (HTTP ${res.status}).`);
         return;
@@ -187,6 +207,14 @@ export function RsvpCheckInCard({
     } finally {
       setRegistering(false);
     }
+  }
+
+  function handleJoined() {
+    setJoinDialogOpen(false);
+    // Continue the interrupted registration right after joining.
+    setTimeout(() => {
+      void handleRegister();
+    }, 400);
   }
 
   async function handleCheckIn() {

@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { Copy, Check, ExternalLink, Wand2, Upload, Loader2, X, ImageIcon, Trash2 } from "lucide-react";
+import { BrandSwitchTabs, type AdminBrandSlug } from "@/components/admin/brand-switch-tabs";
+import { getBrandConfig } from "@/lib/brand/brand-config";
 
 /**
  * SYSTEM_PROMPT — the full AI Event Mockup Template Generator prompt.
@@ -151,6 +153,56 @@ const BRAND_ASSETS: AssetCard[] = [
     kind: "brand",
   },
 ];
+
+/**
+ * PER-BRAND ASSET LIBRARIES (user spec 2026-09-19 — "everything should be
+ * different"): the Brand Assets section switches with the brand tabs.
+ *   - AI Salon → the original TLV/m Gecko asset library (hard-coded URLs).
+ *   - Coma → derived from Coma's BrandConfig (hero banner, favicon, logo)
+ *     plus a pointer to /admin/images (Coma tab) where the Super Admin
+ *     can upload more Coma assets into the brand-images gallery.
+ */
+function brandAssetsFor(brand: AdminBrandSlug): AssetCard[] {
+  if (brand === "coma") {
+    const coma = getBrandConfig("coma");
+    const cards: AssetCard[] = [];
+    if (coma.heroBanner) {
+      cards.push({
+        title: "Coma hero banner",
+        description: "Wide brand banner (login background / OG image).",
+        url: coma.heroBanner,
+        kind: "brand",
+      });
+    }
+    if (coma.favicon) {
+      cards.push({
+        title: "Coma favicon",
+        description: "Browser tab + home-screen icon.",
+        url: coma.favicon,
+        kind: "brand",
+      });
+    }
+    if (coma.logo) {
+      cards.push({
+        title: "Coma logo mark",
+        description: "Square logo mark (email headers, mockups).",
+        url: coma.logo,
+        kind: "brand",
+      });
+    }
+    cards.push({
+      title: "Upload more Coma assets",
+      description:
+        "Use the Images admin page (Coma brand tab) to upload additional Coma brand images to the gallery.",
+      url: "/brand/coma/wordmark.svg",
+      kind: "brand",
+      editorHref: "/admin/images",
+      editorLabel: "Open Images",
+    });
+    return cards;
+  }
+  return BRAND_ASSETS;
+}
 
 const MOCKUP_TEMPLATES: AssetCard[] = [
   {
@@ -523,6 +575,11 @@ function formatBytes(bytes: number): string {
 export function MockupsClient() {
   const [copied, setCopied] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  // BRAND TABS (user spec 2026-09-19): the Brand Assets library switches
+  // per brand; template editors open with ?brand= so the selected brand's
+  // context carries through.
+  const [brand, setBrand] = useState<AdminBrandSlug>("aisalon");
+  const assets = brandAssetsFor(brand);
 
   async function copyPrompt() {
     try {
@@ -551,6 +608,13 @@ export function MockupsClient() {
 
   return (
     <div className="space-y-12">
+      {/* BRAND TABS — switch the asset library + editor brand context. */}
+      <BrandSwitchTabs
+        active={brand}
+        onChange={setBrand}
+        hint={`Showing the ${brand === "coma" ? "Coma" : "AI Salon"} asset library.`}
+      />
+
       {/* SECTION 1 — Mockup Templates (FIRST, per user request) */}
       <section aria-labelledby="templates-title">
         <div className="flex items-start gap-4 mb-5">
@@ -611,8 +675,17 @@ export function MockupsClient() {
           </div>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {BRAND_ASSETS.map((asset) => (
-            <AssetCardItem key={asset.url} asset={asset} />
+          {assets.map((asset) => (
+            <AssetCardItem
+              key={asset.url}
+              asset={{
+                ...asset,
+                // Editors open with the selected brand as context.
+                editorHref: asset.editorHref
+                  ? `${asset.editorHref}?brand=${brand}`
+                  : undefined,
+              }}
+            />
           ))}
         </div>
       </section>

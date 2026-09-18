@@ -36,6 +36,19 @@ export async function POST(
   const existing = await db.emailTemplate2.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // BRAND SEPARATION (user spec 2026-09-19): an optional { brandSlug }
+  // body overrides the copy's brand — duplicating a legacy template from
+  // inside a brand tab files the copy under THAT brand. Without a body
+  // the copy inherits the source's brand.
+  let bodyBrand: string | null = null;
+  try {
+    const body = (await req.json()) as { brandSlug?: string | null };
+    const b = body?.brandSlug?.toLowerCase();
+    if (b === "coma" || b === "aisalon") bodyBrand = b;
+  } catch {
+    // no / invalid body — inherit source brand
+  }
+
   // Generate a unique name: try "Name (copy)", then "Name (copy 2)", etc.
   // TSK-0074: EmailTemplate2.name is NOT @unique (unlike the legacy
   // EmailStageTemplate.name which was). We use findFirst instead of
@@ -83,6 +96,7 @@ export async function POST(
         stage: null, // custom template — no stage
         isActive: true,
         isDefault: false,
+        brandSlug: bodyBrand ?? existing.brandSlug,
         updatedBy: auth.userId,
       },
     });

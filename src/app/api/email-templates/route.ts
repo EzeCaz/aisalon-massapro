@@ -31,9 +31,20 @@ export async function GET(req: NextRequest) {
   const auth = await checkAuth(req);
   if (!auth.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  // BRAND SEPARATION (user spec 2026-09-19): ?brand=coma|aisalon filters
+  // the list to that brand's templates. Templates created before the
+  // brand split (brandSlug = null) remain visible under BOTH tabs so
+  // nothing disappears after deploy; they're marked "legacy" in the UI.
+  const brandParam = (req.nextUrl.searchParams.get("brand") ?? "").toLowerCase();
+  const brandFilter: { OR?: object[] } = {};
+  if (brandParam === "coma" || brandParam === "aisalon") {
+    brandFilter.OR = [{ brandSlug: brandParam }, { brandSlug: null }];
+  }
+
   // TSK-0074: was db.emailStageTemplate (legacy, now EmailStageTemplateLegacy).
   // Now reads from the unified EmailTemplate2 table.
   const templates = await db.emailTemplate2.findMany({
+    where: brandFilter,
     orderBy: [{ stage: "asc" }, { name: "asc" }],
     include: {
       _count: { select: { flowSteps: true } },
@@ -46,6 +57,8 @@ export async function GET(req: NextRequest) {
       stage: t.stage,
       name: t.name,
       subject: t.subject,
+      // BRAND SEPARATION: per-brand template tag.
+      brandSlug: t.brandSlug,
       // TSK-0074: API contract keeps `htmlBody` for backward compat with
       // the existing UI; maps from the renamed EmailTemplate2.bodyHtml field.
       htmlBody: t.bodyHtml,
@@ -93,6 +106,9 @@ export async function POST(req: NextRequest) {
     // TSK-0074 Phase 4: mobile-only CSS/HTML overrides (wrapped inside
     // @media (max-width: 600px) by the unified renderer at send/preview time).
     mobileOverridesHtml?: string | null;
+    // BRAND SEPARATION (user spec 2026-09-19): brand tab the template was
+    // created in — "coma" | "aisalon".
+    brandSlug?: string | null;
   };
   try {
     body = await req.json();
@@ -107,6 +123,8 @@ export async function POST(req: NextRequest) {
 
   // Only seeded defaults can have a stage value; custom templates must have stage = null.
   const stage = body.stage === null || body.stage === undefined ? null : null;
+  const bodyBrand = body.brandSlug?.toLowerCase();
+  const brandSlug = bodyBrand === "coma" || bodyBrand === "aisalon" ? bodyBrand : null;
 
   try {
     // TSK-0074: was db.emailStageTemplate (legacy). Now writes to EmailTemplate2.
@@ -127,6 +145,7 @@ export async function POST(req: NextRequest) {
         stage,
         isActive: true,
         isDefault: false,
+        brandSlug,
         updatedBy: auth.userId,
       },
     });

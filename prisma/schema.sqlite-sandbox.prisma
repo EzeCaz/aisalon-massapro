@@ -138,6 +138,7 @@ model Chapter {
   referralAttributions ReferralAttribution[]
   settings             ChapterSetting[]
   templateOverrides    ChapterEmailTemplateOverride[]
+  members              ChapterMember[]
   createdAt            DateTime                       @default(now())
   updatedAt            DateTime                       @updatedAt
 
@@ -162,6 +163,47 @@ model ChapterSetting {
 
   @@unique([chapterId, key])
   @@index([chapterId])
+}
+
+// ---------------------------- Knowledge Base ----------------------------
+model KnowledgeDoc {
+  id            String   @id @default(cuid())
+  brandSlug     String
+  section       String
+  sectionIntro  String?
+  sectionOrder  Int      @default(0)
+  title         String
+  description   String?
+  url           String
+  kind          String   @default("doc")
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([brandSlug, isActive, sectionOrder, sortOrder])
+}
+
+// ------------------------ Community Membership --------------------------
+model ChapterMember {
+  id          String    @id @default(cuid())
+  chapterId   String
+  chapter     Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String    @default("ACTIVE")
+  source      String    @default("DIRECTORY")
+  formJson    Json?
+  joinedAt    DateTime  @default(now())
+  approvedAt  DateTime?
+  approvedBy  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([chapterId, userId])
+  @@index([userId])
+  @@index([chapterId, status])
 }
 
 /// Per-chapter override of a global EmailStageTemplate (logo, subject,
@@ -304,6 +346,7 @@ model User {
   // Chapter lead onboarding invites this user has received / sent
   chapterOnboardingInvites     ChapterOnboardingInvite[]
   chapterOnboardingInvitedBy   ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
+  chapterMemberships           ChapterMember[]
   // ----------------------------------------------------------------
   // Flourishing Quiz — sessions this user is hosting + participation records
   hostedQuizSessions QuizSession[]         @relation("QuizHost")
@@ -681,6 +724,7 @@ model EmailTemplate {
   // ---- V7: chapter scoping (nullable = global template available to all chapters) ----
   chapterId     String?
   chapter       Chapter?        @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  brandSlug     String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 

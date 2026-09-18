@@ -6,6 +6,7 @@ import { sendRsvpConfirmationEmail, emailConfigured } from "@/lib/email";
 import { generateIcs } from "@/lib/calendar";
 import { getReferrerUserId, UTM_COOKIE_NAME } from "@/lib/utm";
 import { resolveComaSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
+import { checkChapterMembership } from "@/lib/membership";
 
 /**
  * RSVP API for the public event page (/e/[slug]).
@@ -38,7 +39,9 @@ async function getUser(req: NextRequest, slug: string) {
     // Phase 2 (joincoma.com): include brandSlug so the RSVP confirmation
     // email can be brand-aware (Coma vs AIS) — passes through to
     // sendRsvpConfirmationEmail via opts.brandSlug.
-    select: { id: true, email: true, name: true, brandSlug: true },
+    // chapterId is used by the community gate below (primary chapter =
+    // implicit membership).
+    select: { id: true, email: true, name: true, brandSlug: true, chapterId: true },
   });
   if (!user) return { user: null, event: null, status: 401 as const };
   const event = await db.event.findUnique({
@@ -54,6 +57,20 @@ async function getUser(req: NextRequest, slug: string) {
       city: true,
       country: true,
       chapter: true,
+      // Community gating (user spec 2026-09-19): RSVPing requires
+      // membership of the event's community. Null chapterId = legacy
+      // event with no linked community — always open.
+      chapterId: true,
+      chapterRef: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          city: true,
+          brand: { select: { slug: true, displayName: true } },
+          country: { select: { name: true, code: true, flagEmoji: true } },
+        },
+      },
     },
   });
   if (!event) return { user: null, event: null, status: 404 as const };
@@ -85,6 +102,42 @@ export async function POST(_req: NextRequest, { params }: Params) {
   const { user, event, status } = await getUser(_req, slug);
   if (status === 401) return NextResponse.json({ error: "Sign-in required" }, { status: 401 });
   if (status === 404 || !event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+  // ── COMMUNITY GATE (user spec 2026-09-19) ────────────────────────────
+  // All users can SEE any event, but to JOIN an event they must first be
+  // a member of the event's community. Non-members get a structured 403
+  // so the UI can open the "join the community + fill the form" flow;
+  // after joining they can register.
+  //   - Events without a linked chapter (chapterId = null, legacy rows)
+  //     stay open to everyone.
+  //   - The user's PRIMARY chapter (User.chapterId) counts as a member —
+  //     no extra row needed, so existing members are never locked out.
+  if (event.chapterId) {
+    const membership = await checkChapterMembership(
+      user!.id,
+      event.chapterId,
+      user!.chapterId
+    );
+    if (!membership.isMember) {
+      return NextResponse.json(
+        {
+          code: "JOIN_COMMUNITY_REQUIRED",
+          error: `Join the ${event.chapterRef?.name ?? (event.chapter || "community")} community first to register for this event.`,
+          chapter: event.chapterRef
+            ? {
+                id: event.chapterRef.id,
+                name: event.chapterRef.name,
+                slug: event.chapterRef.slug,
+                city: event.chapterRef.city,
+                brand: event.chapterRef.brand,
+                country: event.chapterRef.country,
+              }
+            : null,
+        },
+        { status: 403 }
+      );
+    }
+  }
 
   // Upsert the RSVP. We key on the (eventId, email) unique constraint so
   // clicking "Register" multiple times is safe — the existing row is just

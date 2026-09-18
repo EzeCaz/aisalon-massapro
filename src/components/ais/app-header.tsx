@@ -10,7 +10,7 @@ import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
 import { InboxButtonServer } from "./inbox-button-server";
 import { ViewAsSwitcher } from "./view-as-switcher";
-import { getPublicSettings } from "@/lib/site-settings";
+import { getPublicSettingsForBrand } from "@/lib/site-settings";
 import { getEffectiveBrandImages } from "@/lib/chapter-brand-images";
 
 /**
@@ -93,8 +93,10 @@ export async function AppHeader() {
 
   // Public site settings — includes the WhatsApp + LinkedIn URLs. Safe
   // to read for anonymous visitors (the URLs are shown publicly in the
-  // header).
-  const settings = await getPublicSettings();
+  // header). BRAND-AWARE (user spec 2026-09-19): resolves through the
+  // per-brand chain so Coma and AI Salon can have different header
+  // links/images ("<key>@<brand>" → "<key>" → defaults).
+  const settings = await getPublicSettingsForBrand(brand.slug);
   // TSK-0056: For signed-in users, prefer the chapter-scoped WhatsApp +
   // LinkedIn URLs (falls back to global defaults when the chapter has
   // no override). Anonymous visitors still see the global defaults.
@@ -125,10 +127,10 @@ export async function AppHeader() {
       // back to no label for users with no chapter.
       chapterLabel = `${chapter.name} Chapter`;
     }
-    // TSK-0057: resolve the chapter-scoped loginHero (with global
-    // fallback built in). This is the image shown as the meerkat mark
-    // in the header.
-    const effective = await getEffectiveBrandImages(effectiveChapterId);
+    // TSK-0057: resolve the chapter-scoped loginHero (with brand-aware
+    // global fallback built in). This is the image shown as the meerkat
+    // mark in the header.
+    const effective = await getEffectiveBrandImages(effectiveChapterId, brand.slug);
     if (effective.loginHero) meerkatSrc = effective.loginHero;
   } else {
     // No chapter — still resolve global loginHero so anonymous visitors
@@ -138,6 +140,9 @@ export async function AppHeader() {
 
   const navLinks = [
     { href: "/events", label: "Events" },
+    // Discover-page: browse communities in your city/country and request
+    // to join (user spec 2026-09-19).
+    { href: "/communities", label: "Communities" },
     { href: "/community", label: "Community" },
     { href: "/testimonials", label: "Testimonials" },
     // AI & Human Flourishing microsite is an AI-Salon-only program.

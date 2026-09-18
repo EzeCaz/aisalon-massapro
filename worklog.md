@@ -14654,3 +14654,30 @@ Work Log:
 Stage Summary:
 - /login renders "Coma community" + "The Coma home for community builders." (no city) or "...in Berlin." (with ?city=Berlin); AIS mirrors with "AI Salon community" / "...AI builders."
 - No hard-coded city remains anywhere in the login rendering path
+
+---
+Task ID: multi-community-brand-separation
+Agent: main
+Task: (1) Super Admin brand separation for templates/mockups/emails/images/knowledge base with brand tabs; (2) community membership gating for event joins + communities discover page + event visibility rules
+
+Work Log:
+- Schema (both prisma/schema.prisma + sqlite-sandbox): added ChapterMember (chapterId+userId unique, status PENDING/ACTIVE, source EVENT_GATE/DIRECTORY/ADMIN, formJson) + KnowledgeDoc (brandSlug, section, sectionIntro, sectionOrder, title, url, kind, sortOrder, isActive) + EmailTemplate2.brandSlug (null = legacy visible in both tabs)
+- Migration 20260919000000_chapter_members_knowledge_docs_brand_templates (idempotent SQL, no backfill needed) + registered in baseline-migrations NEW_MIGRATIONS
+- src/lib/membership.ts: primary chapter (User.chapterId) = IMPLICIT membership → zero-risk deploy; explicit rows only for additional communities; joins auto-approved
+- POST/GET /api/chapters/[slug]/membership: join w/ community form (whyJoin required; title/company/linkedin stored in formJson)
+- RSVP gate POST /api/events/[slug]/rsvp: 403 JOIN_COMMUNITY_REQUIRED + chapter payload when event.chapterId set and user not a member (primary or ACTIVE row); legacy chapterId=null events stay open
+- JoinCommunityDialog (shared): join + form flow; on success public event page AUTO-CONTINUES the RSVP; /events/[slug] renders JoinCommunityCtaCard instead of RsvpCheckInCard for non-members (router.refresh after join); RsvpCheckInCard handles 403 fallback
+- /communities discover page (new, in nav): Nearby (user country) + Everywhere else sections, search + country filter, member/upcoming-event counts only (no event details leak), Request-to-join buttons
+- /events visibility: Coma users see ALL events; other-brand users see only own-brand events + legacy (chapterId null, brandId null) + cross-chapter; chapter dropdown filtered identically
+- /community directory: chapter switcher limited to joined communities (?chapter=slug); members = primary chapterId OR ACTIVE ChapterMember rows; empty state w/ /communities CTA
+- BrandSwitchTabs shared component; Knowledge Base now DB-backed per brand w/ full Super-Admin CRUD (/api/admin/knowledge-docs[/id], SUPER_ADMIN writes) + lazy legacy-AIS seed (src/lib/knowledge-docs.ts); Coma tab starts empty
+- Images: ?brand= on gallery GET (brand-assets/<brand>/ prefix filter, legacy root visible everywhere), upload lands in brand folder, select writes brand-scoped SiteSetting keys "<key>@<brand>"; read chain brand→legacy→DEFAULTS via getPublicSettingsForBrand; wired into layout favicon/OG, login heroes, app-header, GA/pixel
+- Email templates: ?brand= filter (+legacy rows), create/duplicate stamp brandSlug, TemplatesClient brand tabs w/ legacy tag
+- Mockups hub: brand tabs switching asset library (Coma from BrandConfig) + editors open with ?brand=
+- Fixed pre-existing Phase 3B error in chapter-brand-images.ts (findUnique→findFirst by slug)
+- Verified: both schemas validate; client generated; tsc clean on all touched files (only pre-existing Phase 3B/recharts errors remain elsewhere); eslint no new issues; dev server boots, /login 200, /community 307 redirect; sandbox has no Postgres so DB-backed flows verified by types + code review only
+
+Stage Summary:
+- Membership: see-all (Coma) / brand-scoped visibility (others); join-to-register gate enforced at API + both event page variants; /communities discovery; member directory scoped to joined communities
+- Brand separation: Knowledge Base, Images, Email Templates, Mockups each have Coma/AI Salon tabs with independent content; images/settings read chain is brand-resolved end to end
+- Deploy: push triggers Vercel build → baseline + migrate deploy applies the new migration automatically; no manual data backfill required

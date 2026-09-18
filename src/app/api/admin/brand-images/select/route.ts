@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { key?: string; source?: string };
+  let body: { key?: string; source?: string; brand?: string };
   try {
     body = await req.json();
   } catch {
@@ -55,6 +55,12 @@ export async function POST(req: NextRequest) {
 
   const key = body.key;
   const source = body.source;
+  // BRAND SCOPING (user spec 2026-09-19): when a brand is given, the
+  // selection is written to the brand-scoped key ("<key>@<brand>") so
+  // each brand renders its own images. Reads resolve brand → global →
+  // defaults (see getPublicSettingsForBrand in site-settings.ts).
+  const brandRaw = typeof body.brand === "string" ? body.brand.toLowerCase() : null;
+  const brand = brandRaw === "coma" || brandRaw === "aisalon" ? brandRaw : null;
 
   if (!key || !ALL_KEYS.has(key)) {
     return NextResponse.json(
@@ -148,10 +154,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Persist the selection.
-  await setSetting(key, finalUrl, user!.id);
+  // Persist the selection (brand-scoped when a brand tab is active).
+  await setSetting(key, finalUrl, user!.id, brand);
 
-  return NextResponse.json({ ok: true, key, value: finalUrl });
+  return NextResponse.json({ ok: true, key, value: finalUrl, brand });
 }
 
 /** Map a file extension to a MIME type. */

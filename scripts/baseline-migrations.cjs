@@ -82,6 +82,13 @@ const NEW_MIGRATIONS = new Set([
   // decisions. Fully idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING /
   // guarded UPDATEs) so a partial application is safely re-runnable.
   '20260918000000_add_brand_model_and_brand_ids',
+  // 2026-09-19: multi-community memberships + per-brand content separation.
+  // Creates ChapterMember (join flow for non-members registering to an
+  // event) + KnowledgeDoc (DB-backed per-brand knowledge base) and adds
+  // EmailTemplate2.brandSlug. Committed together with the schema change →
+  // MUST be in NEW_MIGRATIONS from the start (brandSlug lesson). Fully
+  // idempotent — no data backfill needed (see migration SQL header).
+  '20260919000000_chapter_members_knowledge_docs_brand_templates',
 ]);
 
 async function main() {

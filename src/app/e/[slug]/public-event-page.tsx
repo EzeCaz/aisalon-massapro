@@ -23,6 +23,10 @@ import {
   Mic2,
 } from "lucide-react";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+import {
+  JoinCommunityDialog,
+  type JoinChapterInfo,
+} from "@/components/community/join-community-dialog";
 
 // ------------------------------------------------------------------
 // Types — mirror the include shape of the server component.
@@ -89,6 +93,10 @@ type Event = {
 
 type Me = { id: string; email: string; name: string | null; utmUid: string | null; role?: string } | null;
 
+// The event's community (chapter) — used by the join-to-register gate.
+// Null for legacy events without a linked community (always open).
+type EventChapter = JoinChapterInfo & { isActive?: boolean };
+
 type Props = {
   event: Event;
   me: Me;
@@ -101,6 +109,13 @@ type Props = {
    *  URL builder can append `?brand=<slug>` (recipient sees the right
    *  brand when they click the shared link). */
   brand?: { displayName: string; tagline: string; slug: string };
+  /** COMMUNITY GATE (user spec 2026-09-19): the event's community. When
+   *  set and the signed-in user is NOT a member, the register CTA opens
+   *  the "join the community + fill the form" flow instead of RSVPing
+   *  directly. */
+  chapter?: EventChapter | null;
+  /** Server-computed membership in `chapter` (avoids a render flash). */
+  initialIsMember?: boolean;
 };
 
 // ------------------------------------------------------------------
@@ -158,7 +173,7 @@ function isPastEvent(endsAt: string, now: Date = new Date()): boolean {
 // Main component
 // ------------------------------------------------------------------
 
-export function PublicEventPage({ event, me, brand }: Props) {
+export function PublicEventPage({ event, me, brand, chapter = null, initialIsMember = true }: Props) {
   // Brand defaults preserve the legacy AIS look for any caller that
   // doesn't pass a brand (all callers now pass it).
   const brandName = brand?.displayName ?? "AI Salon";
@@ -178,6 +193,13 @@ export function PublicEventPage({ event, me, brand }: Props) {
   const [registering, setRegistering] = React.useState(false);
   const [checkingIn, setCheckingIn] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  // COMMUNITY GATE state — isMember mirrors the server-computed value and
+  // is re-verified client-side; joinDialogOpen drives the join flow.
+  const [isMember, setIsMember] = React.useState(initialIsMember);
+  const [joinDialogOpen, setJoinDialogOpen] = React.useState(false);
+  // When the join dialog was opened by clicking "Register", remember to
+  // continue the registration right after a successful join.
+  const [autoRsvpAfterJoin, setAutoRsvpAfterJoin] = React.useState(false);
   const [now, setNow] = React.useState(() => new Date());
 
   React.useEffect(() => {
@@ -207,25 +229,86 @@ export function PublicEventPage({ event, me, brand }: Props) {
   const hasCheckedIn = !!rsvp?.checkInCode;
   const hasRsvped = !!rsvp && rsvp.status === "GOING";
 
+  // Re-verify membership client-side (the server value can go stale — e.g.
+  // the user joined from /communities in another tab). Silent on failure.
+  React.useEffect(() => {
+    if (!me || !chapter) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/chapters/${encodeURIComponent(chapter.slug)}/membership`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.membership) {
+          setIsMember(!!data.membership.isMember);
+        }
+      } catch {
+        /* swallow — server-rendered value stands */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapter?.slug, me?.id]);
+
+  /** Core RSVP call. Returns true when registered. A structured 403
+   *  (JOIN_COMMUNITY_REQUIRED) opens the join dialog instead of a toast. */
+  async function doRsvp(): Promise<boolean> {
+    setRegistering(true);
+    try {
+      const res = await fetch(`/api/events/${event.slug}/rsvp`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403 && data?.code === "JOIN_COMMUNITY_REQUIRED") {
+        // Not a member of this event's community — open the join flow.
+        // If the API reports a chapter we don't know about (shouldn't
+        // happen since the server passes it), fall back to a plain toast.
+        if (chapter || data.chapter) {
+          setAutoRsvpAfterJoin(true);
+          setJoinDialogOpen(true);
+        } else {
+          toast.error(data?.error || "Join the community first to register.");
+        }
+        return false;
+      }
+      if (!res.ok) {
+        toast.error(data?.error || `Could not register (HTTP ${res.status}).`);
+        return false;
+      }
+      setRsvp(data.rsvp);
+      toast.success("You're registered! See you at the event.");
+      return true;
+    } catch {
+      toast.error("Network error — please try again.");
+      return false;
+    } finally {
+      setRegistering(false);
+    }
+  }
+
   async function handleRegisterClick() {
     if (!me) {
       router.push(`/login?callbackUrl=${encodeURIComponent(`/e/${event.slug}`)}`);
       return;
     }
-    setRegistering(true);
-    try {
-      const res = await fetch(`/api/events/${event.slug}/rsvp`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data?.error || `Could not register (HTTP ${res.status}).`);
-        return;
-      }
-      setRsvp(data.rsvp);
-      toast.success("You're registered! See you at the event.");
-    } catch {
-      toast.error("Network error — please try again.");
-    } finally {
-      setRegistering(false);
+    await doRsvp();
+  }
+
+  /** Called by JoinCommunityDialog after a successful join. Refresh the
+   *  gate and — when the dialog was triggered by the register button —
+   *  continue straight into the RSVP. */
+  function handleJoined() {
+    setIsMember(true);
+    setJoinDialogOpen(false);
+    if (autoRsvpAfterJoin) {
+      setAutoRsvpAfterJoin(false);
+      // Small delay so the success state paints before the RSVP fires.
+      setTimeout(() => {
+        void doRsvp();
+      }, 400);
     }
   }
 
@@ -472,6 +555,7 @@ export function PublicEventPage({ event, me, brand }: Props) {
             onCheckIn={handleCheckInClick}
             onCopyCode={handleCopyCode}
             brandName={brandName}
+            joinGate={me && chapter && !isMember ? { chapterName: chapter.name } : null}
           />
         </div>
       </section>
@@ -628,6 +712,7 @@ export function PublicEventPage({ event, me, brand }: Props) {
               onCheckIn={handleCheckInClick}
               onCopyCode={handleCopyCode}
               brandName={brandName}
+              joinGate={me && chapter && !isMember ? { chapterName: chapter.name } : null}
             />
 
             <div className="rounded-xl border border-black/10 bg-white p-5">
@@ -698,6 +783,18 @@ export function PublicEventPage({ event, me, brand }: Props) {
         brandName={brandName}
         brandTagline={brandTagline}
         chapterName={chapterName}
+      />
+
+      {/* COMMUNITY GATE — "join the community + fill the form" dialog.
+          Opened from the register CTA when the signed-in user isn't a
+          member of the event's community; on success the register
+          continues automatically (see handleJoined). */}
+      <JoinCommunityDialog
+        open={joinDialogOpen}
+        onOpenChange={setJoinDialogOpen}
+        chapter={chapter}
+        me={me ? { name: me.name, email: me.email } : null}
+        onJoined={handleJoined}
       />
     </div>
   );
@@ -854,6 +951,7 @@ function CtaCard({
   onCheckIn,
   onCopyCode,
   brandName = "AI Salon",
+  joinGate = null,
 }: {
   event: Event;
   me: Me;
@@ -870,6 +968,11 @@ function CtaCard({
   onCopyCode: () => void;
   /** BRAND-AWARE (Phase 3): brand display name for the register CTA. */
   brandName?: string;
+  /** COMMUNITY GATE (user spec 2026-09-19): set when the signed-in user
+   *  is NOT a member of the event's community. The card then promotes
+   *  joining the community first (the register click opens the join
+   *  dialog and continues to the RSVP after joining). */
+  joinGate?: { chapterName: string } | null;
 }) {
   // ---------- State 4: Already checked in → show entry code ----------
   if (hasCheckedIn && rsvp?.checkInCode) {
@@ -954,6 +1057,45 @@ function CtaCard({
 
   // ---------- State 1/2: Not yet registered ----------
   if (!hasRsvped) {
+    // Signed-in NON-MEMBER of the event's community → join-first CTA.
+    // Clicking opens the join dialog (handled by the parent's register
+    // handler); after a successful join the RSVP fires automatically.
+    if (me && joinGate) {
+      return (
+        <div className="rounded-xl border-2 border-[#7C3AED]/25 bg-gradient-to-br from-[#7C3AED]/5 to-white p-5 space-y-3">
+          <div className="flex items-center gap-2 text-[#7C3AED]">
+            <Users className="h-5 w-5" />
+            <span className="font-bold text-sm uppercase tracking-wider">
+              Join {joinGate.chapterName} to register
+            </span>
+          </div>
+          <p className="text-xs text-black/70 leading-relaxed">
+            This event is hosted by the <strong>{joinGate.chapterName}</strong>{" "}
+            community. Join the community (and fill in the short form) to
+            unlock registration, the member directory, and all their events.
+          </p>
+          <button
+            type="button"
+            onClick={onRegister}
+            disabled={registering}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#7C3AED] text-white font-semibold px-4 py-3 text-sm hover:bg-[#7C3AED]/90 disabled:opacity-50 ais-lift"
+          >
+            {registering ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Checking…
+              </>
+            ) : (
+              <>
+                Join {joinGate.chapterName} <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </button>
+          <p className="text-[0.65rem] text-black/50 text-center">
+            After joining you&apos;ll be registered for this event right away.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border-2 border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-white p-5 space-y-3">
         <div className="flex items-center gap-2 text-[#FF005A]">

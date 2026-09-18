@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
-import { getPublicSettings } from "@/lib/site-settings";
+import { getPublicSettings, getPublicSettingsForBrand } from "@/lib/site-settings";
 import { getChapterBrandImageOverrides } from "@/lib/chapter-brand-images";
 import { GLOBAL_BRAND_LIBRARY_URLS } from "@/lib/global-brand-library";
 
@@ -43,7 +43,7 @@ const LOCAL_BRAND_DIR = path.join(process.cwd(), "public", "uploads", "brand-ass
 /** Public URL prefix for local brand assets. */
 const LOCAL_BRAND_URL = "/uploads/brand-assets";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { user, error, scope } = await getCurrentUser();
   if (error) return error;
   // TSK-0056: Allow ANY signed-in admin (SUPER_ADMIN, ADMIN,
@@ -78,6 +78,17 @@ export async function GET() {
   // library is curated by the Super Admin; chapter admins pick from the
   // curated defaults for their chapter overrides.
   const isGlobalScope = scope?.kind === "global";
+
+  // ── BRAND FILTER (user spec 2026-09-19) ─────────────────────────────
+  // The gallery can be viewed per brand (?brand=coma | aisalon):
+  //   - images uploaded under "brand-assets/<brand>/…" belong to that
+  //     brand only;
+  //   - legacy root-level uploads ("brand-assets/<file>") predate the
+  //     brand split and remain visible under BOTH tabs.
+  // Selections returned are brand-resolved ("<key>@<brand>" → "<key>"
+  // → defaults) so the UI can highlight the right current images.
+  const brandParam = req.nextUrl.searchParams.get("brand")?.toLowerCase() ?? null;
+  const activeBrand = brandParam === "coma" || brandParam === "aisalon" ? brandParam : null;
 
   // 1. List stock images from the hidden .images/ folder.
   const stock: Array<{
@@ -121,6 +132,8 @@ export async function GET() {
     mimeType: string;
     url: string;
     kind: "uploaded";
+    /** Brand subfolder the image lives under (null = legacy global). */
+    brand?: string | null;
   }> = [];
 
   if (hasBlob()) {
@@ -133,12 +146,22 @@ export async function GET() {
           cursor,
         });
         for (const blob of result.blobs) {
+          // Classify the blob: "brand-assets/<file>" → legacy global;
+          // "brand-assets/<brand>/<file>" → that brand only.
+          const rest = blob.pathname.slice("brand-assets/".length);
+          const slashIdx = rest.indexOf("/");
+          const blobBrand = slashIdx > 0 ? rest.slice(0, slashIdx) : null;
+          const fileName = slashIdx > 0 ? rest.slice(slashIdx + 1) : rest;
+          // Brand tab filter — legacy (brandless) uploads stay visible
+          // under every tab so nothing disappears after the split.
+          if (activeBrand && blobBrand && blobBrand !== activeBrand) continue;
           uploaded.push({
-            name: blob.pathname.split("/").pop() ?? blob.pathname,
+            name: fileName || blob.pathname,
             size: blob.size,
-            mimeType: blob.contentType || "application/octet-stream",
+            mimeType: (blob as { contentType?: string }).contentType || "application/octet-stream",
             url: blob.url,
             kind: "uploaded",
+            brand: blobBrand,
           });
         }
         if (!result.hasMore || !result.cursor) break;
@@ -201,9 +224,10 @@ export async function GET() {
             uploaded.push({
               name: parts[2] ?? blob.pathname,
               size: blob.size,
-              mimeType: blob.contentType || "application/octet-stream",
+              mimeType: (blob as { contentType?: string }).contentType || "application/octet-stream",
               url: blob.url,
               kind: "uploaded",
+              brand: null,
             });
           }
           if (!result.hasMore || !result.cursor) break;
@@ -235,6 +259,7 @@ export async function GET() {
           mimeType: extToMime(ext),
           url: `${LOCAL_BRAND_URL}/${encodeURIComponent(name)}`,
           kind: "uploaded",
+          brand: null,
         });
       }
     } catch (e) {
@@ -295,6 +320,7 @@ export async function GET() {
             mimeType: extToMime(ext),
             url: `/uploads/chapter-brand/${dir}/${encodeURIComponent(name)}`,
             kind: "uploaded",
+            brand: null,
           });
         }
       }
@@ -303,8 +329,11 @@ export async function GET() {
     }
   }
 
-  // 3. Current selections for each role.
-  const settings = await getPublicSettings();
+  // 3. Current selections for each role — brand-resolved when the request
+  // is scoped to a brand tab ("<key>@<brand>" → "<key>" → DEFAULTS).
+  const settings = activeBrand
+    ? await getPublicSettingsForBrand(activeBrand)
+    : await getPublicSettings();
 
   // TSK-0059 + TSK-0060: Filter the image list for non-global callers.
   //
@@ -428,6 +457,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
+  // Brand tab the upload belongs to — uploads land under
+  // "brand-assets/<brand>/" so each brand's gallery stays separate
+  // (legacy uploads without a brand remain visible everywhere).
+  const brandRaw = formData.get("brand");
+  const brand = typeof brandRaw === "string" ? brandRaw.toLowerCase() : null;
+  const brandSegment = brand === "coma" || brand === "aisalon" ? brand : null;
+
   const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif"];
   if (!allowed.includes(file.type)) {
     return NextResponse.json(
@@ -447,7 +483,9 @@ export async function POST(req: NextRequest) {
 
   // ---- Production path: Vercel Blob ----
   if (hasBlob()) {
-    const pathname = safeBlobPathname("brand-assets", filename);
+    const pathname = brandSegment
+      ? safeBlobPathname("brand-assets", brandSegment, filename)
+      : safeBlobPathname("brand-assets", filename);
     try {
       const blob = await put(pathname, buf, {
         access: "public",
@@ -462,6 +500,7 @@ export async function POST(req: NextRequest) {
           size: file.size,
           mimeType: file.type,
           kind: "uploaded" as const,
+          brand: brandSegment,
         },
       });
     } catch (err) {

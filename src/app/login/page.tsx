@@ -76,7 +76,7 @@ export async function generateMetadata({
   });
 
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
-  const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
+  const settings = await getEffectiveBrandImagesBySlug(chapterSlug, brand.slug);
   // Hero image resolution chain (per BrandConfig.heroBanner doc):
   // BRAND IDENTITY TAKES PRECEDENCE — the brand-level hero banner is the
   // canonical visual for the brand, applied uniformly across all chapters
@@ -155,8 +155,9 @@ export default async function LoginPage({
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
 
   // Load effective brand images — chapter-scoped overrides take
-  // precedence when chapterSlug is present.
-  const settings = await getEffectiveBrandImagesBySlug(chapterSlug);
+  // precedence when chapterSlug is present. Brand-resolved globals:
+  // "<key>@<brand>" → "<key>" → defaults (per-brand tabs at /admin/images).
+  const settings = await getEffectiveBrandImagesBySlug(chapterSlug, brand.slug);
   // Hero image resolution chain — BRAND IDENTITY TAKES PRECEDENCE:
   //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
   //      banner (hosted on Vercel Blob). Applied uniformly across

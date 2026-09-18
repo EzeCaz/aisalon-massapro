@@ -4,7 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
-import { getPublicSettings } from "@/lib/site-settings";
+import { getPublicSettingsForBrand } from "@/lib/site-settings";
 import { CookieConsentBanner } from "@/components/ais/cookie-consent-banner";
 import { AnalyticsScripts } from "@/components/ais/analytics-scripts";
 import {
@@ -46,8 +46,11 @@ const inter = Inter({
  * never fails on a fresh DB.
  */
 export async function generateMetadata(): Promise<Metadata> {
-  const settings = await getPublicSettings();
   const { brand, siteUrl, displayTitle, city } = await resolveBrandMetadata();
+  // BRAND-AWARE (user spec 2026-09-19): resolve favicon/banner through the
+  // per-brand chain ("<key>@<brand>" → "<key>" → defaults) so each brand
+  // gets its own admin-selected images (brand tabs at /admin/images).
+  const settings = await getPublicSettingsForBrand(brand.slug);
 
   // Favicon resolution chain (highest precedence first):
   //   1. Brand-level favicon (brand-config.ts: `brand.favicon`).
@@ -130,8 +133,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Pull GA4 + Meta Pixel IDs from SiteSetting so the admin can enable
-  // them at /admin/images without a redeploy.
-  const settings = await getPublicSettings();
+  // them at /admin/images without a redeploy. Brand-resolved (per-brand
+  // tabs) — falls back to the legacy global rows when no brand-specific
+  // value exists.
+  const { brand } = await resolveBrandMetadata();
+  const settings = await getPublicSettingsForBrand(brand.slug);
 
   return (
     <html lang="en" suppressHydrationWarning>

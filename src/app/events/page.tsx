@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
@@ -78,7 +79,36 @@ export default async function EventsPage() {
   const brand = getBrandConfig(me?.brandSlug ?? hostBrand.slug);
   const chapterName = me?.chapterName ?? "Tel Aviv";
 
+  // ── EVENT VISIBILITY (user spec 2026-09-19) ─────────────────────────
+  //   - Coma platform users (brandSlug "coma") can see ANY event
+  //     regardless of the community it belongs to.
+  //   - Members of other communities (e.g. AI Salon) canNOT see other
+  //     communities' events (example from spec: an AIS member must not
+  //     see a Danone community event). They only see events of their OWN
+  //     brand — plus legacy rows with no linked chapter/brand (which
+  //     predate the brand system and cannot be classified).
+  //   - Cross-chapter events (explicitly marked by a Super Admin to show
+  //     in all chapters of a country) remain visible to everyone.
+  //   - Anonymous visitors keep the current public behavior (see
+  //     everything; sign-in is only needed to RSVP).
+  const myBrandSlug = (me?.brandSlug as string | null | undefined) ?? null;
+  const isComaUser = myBrandSlug === "coma";
+  const visibilityFilter: Prisma.EventWhereInput = {};
+  if (me && !isComaUser) {
+    visibilityFilter.OR = [
+      // Legacy events without a linked chapter — cannot be classified.
+      { chapterId: null },
+      { chapterRef: null },
+      { chapterRef: { brandId: null } },
+      // Super-Admin-marked cross-community events are open to everyone.
+      { isCrossChapter: true },
+      // Own brand's community events.
+      { chapterRef: { brand: { slug: myBrandSlug ?? "aisalon" } } },
+    ];
+  }
+
   const events = await db.event.findMany({
+    where: visibilityFilter,
     orderBy: { startsAt: "desc" },
     include: {
       _count: { select: { images: true, speakers: true } },
@@ -94,6 +124,7 @@ export default async function EventsPage() {
           name: true,
           slug: true,
           city: true,
+          brand: { select: { slug: true } },
           country: { select: { name: true, code: true, flagEmoji: true } },
         },
       },
@@ -103,8 +134,20 @@ export default async function EventsPage() {
   // V7: load all active chapters for the public filter dropdown. Includes
   // city + country so the dropdown can show "Tel Aviv — Tel Aviv-Yafo" style
   // labels. Sorted by country name then chapter name for stable ordering.
+  // VISIBILITY: non-Coma users only get their own brand's chapters (they
+  // must not discover other communities through the filter dropdown —
+  // community discovery happens on /communities instead).
+  const chapterVisibility: Prisma.ChapterWhereInput =
+    me && !isComaUser
+      ? {
+          OR: [
+            { brandId: null },
+            { brand: { slug: myBrandSlug ?? "aisalon" } },
+          ],
+        }
+      : {};
   const chapters = await db.chapter.findMany({
-    where: { isActive: true },
+    where: { isActive: true, ...chapterVisibility },
     select: {
       id: true,
       name: true,

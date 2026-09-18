@@ -15,6 +15,7 @@ import {
   X,
   Globe2,
 } from "lucide-react";
+import { BrandSwitchTabs, type AdminBrandSlug } from "@/components/admin/brand-switch-tabs";
 
 type BrandImage = {
   name: string;
@@ -22,6 +23,8 @@ type BrandImage = {
   mimeType: string;
   url: string;
   kind: "stock" | "uploaded";
+  /** Brand subfolder the image was uploaded to (null = legacy global). */
+  brand?: string | null;
 };
 
 type Selections = {
@@ -92,6 +95,12 @@ export function ImagesGallery({
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // BRAND TAB (user spec 2026-09-19): the gallery is per brand — each
+  // brand tab lists that brand's uploads (plus legacy global ones) and
+  // shows that brand's selections. Uploads/selects are written scoped to
+  // the active brand.
+  const [brand, setBrand] = useState<AdminBrandSlug>("aisalon");
+
   // Chapter filter — when a chapter is selected, the gallery shows
   // per-chapter select buttons + the chapter's current overrides.
   // `chapterId === ""` means "global only" (no chapter filter).
@@ -140,7 +149,7 @@ export function ImagesGallery({
 
   const load = async () => {
     try {
-      const res = await fetch("/api/admin/brand-images", { cache: "no-store" });
+      const res = await fetch(`/api/admin/brand-images?brand=${brand}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`Request failed with ${res.status}`);
       const json = (await res.json()) as ApiResponse;
       setData(json);
@@ -152,7 +161,8 @@ export function ImagesGallery({
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand]);
 
   const images = data?.images ?? [];
   const selections = data?.selections ?? { favicon: "", loginHero: "", loginBanner: "", emailLogo: "" };
@@ -176,6 +186,8 @@ export function ImagesGallery({
     try {
       const fd = new FormData();
       fd.append("file", file);
+      // Upload into the active brand's folder ("brand-assets/<brand>/").
+      fd.append("brand", brand);
       const res = await fetch("/api/admin/brand-images", { method: "POST", body: fd });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -200,7 +212,7 @@ export function ImagesGallery({
       const res = await fetch("/api/admin/brand-images/select", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: role, source }),
+        body: JSON.stringify({ key: role, source, brand }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -344,6 +356,14 @@ export function ImagesGallery({
 
   return (
     <div className="space-y-6">
+      {/* BRAND TABS — switch which brand's gallery + selections are shown.
+          Uploads and global selects are scoped to the active brand. */}
+      <BrandSwitchTabs
+        active={brand}
+        onChange={setBrand}
+        hint={`Showing ${brand === "coma" ? "Coma" : "AI Salon"} brand images and selections.`}
+      />
+
       {/* Upload zone — SUPER_ADMIN-only. Non-super-admins can only pick
           from the global defaults curated by the Super Admin, so they
           don't need (and can't use) the upload zone. */}

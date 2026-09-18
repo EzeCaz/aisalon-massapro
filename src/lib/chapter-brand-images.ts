@@ -30,6 +30,7 @@ import {
   K_LOGIN_BANNER,
   K_EMAIL_LOGO,
   getPublicSettings,
+  getPublicSettingsForBrand,
   type PublicSettings,
 } from "@/lib/site-settings";
 
@@ -97,7 +98,11 @@ export async function getChapterBrandImageOverridesBySlug(
   chapterSlug: string
 ): Promise<{ chapterId: string; overrides: Partial<Record<ChapterBrandImageKey, string>> } | null> {
   try {
-    const chapter = await db.chapter.findUnique({
+    // Phase 3A: slug is no longer globally unique (composite
+    // [brandId, countryId, slug]) — findUnique({ where: { slug } }) is
+    // REJECTED by Prisma at runtime and TS rejects it too. Use findFirst
+    // (same fix as /login/page.tsx).
+    const chapter = await db.chapter.findFirst({
       where: { slug: chapterSlug },
       select: { id: true },
     });
@@ -122,9 +127,13 @@ export async function getChapterBrandImageOverridesBySlug(
  * anywhere they currently use getPublicSettings().
  */
 export async function getEffectiveBrandImages(
-  chapterId: string | null | undefined
+  chapterId: string | null | undefined,
+  brandSlug?: string | null
 ): Promise<PublicSettings> {
-  const globalSettings = await getPublicSettings();
+  // Brand-aware global chain: "<key>@<brand>" → "<key>" → DEFAULTS.
+  const globalSettings = brandSlug
+    ? await getPublicSettingsForBrand(brandSlug)
+    : await getPublicSettings();
   if (!chapterId) return globalSettings;
   const overrides = await getChapterBrandImageOverrides(chapterId);
   return {
@@ -138,9 +147,12 @@ export async function getEffectiveBrandImages(
 
 /** Same as getEffectiveBrandImages but resolves the chapter by slug. */
 export async function getEffectiveBrandImagesBySlug(
-  chapterSlug: string | null | undefined
+  chapterSlug: string | null | undefined,
+  brandSlug?: string | null
 ): Promise<PublicSettings> {
-  const globalSettings = await getPublicSettings();
+  const globalSettings = brandSlug
+    ? await getPublicSettingsForBrand(brandSlug)
+    : await getPublicSettings();
   if (!chapterSlug) return globalSettings;
   const result = await getChapterBrandImageOverridesBySlug(chapterSlug);
   if (!result) return globalSettings;
