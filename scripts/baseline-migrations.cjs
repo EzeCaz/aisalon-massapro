@@ -73,6 +73,15 @@ const NEW_MIGRATIONS = new Set([
   // (uses ADD COLUMN IF NOT EXISTS) so the next migrate deploy applies
   // it safely whether or not the column already exists.
   '20260811120000_add_user_brand_slug',
+  // 2026-09-18: Phase 3A — Brand model + brandId on Chapter/User.
+  // Committed at the same time as the schema change, so it MUST be in
+  // NEW_MIGRATIONS from the start (lesson learned from the brandSlug
+  // incident above). Creates the Brand table, seeds Coma + AIS rows,
+  // adds brandId to Chapter/User, drops the old Chapter.slug unique
+  // constraints, and backfills existing rows to AIS/Coma per user
+  // decisions. Fully idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING /
+  // guarded UPDATEs) so a partial application is safely re-runnable.
+  '20260918000000_add_brand_model_and_brand_ids',
 ]);
 
 async function main() {

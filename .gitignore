@@ -55,6 +55,9 @@ scripts/*
 !scripts/set-cazhype-coma-brand.cjs
 !scripts/seed-brands.ts
 !scripts/generate-coma-favicon.py
+!scripts/check-prod-locks.ts
+!scripts/fix-prod-lock.ts
+!scripts/verify-prod-brands.ts
 download/
 tool-results/
 agents/
