@@ -74,7 +74,9 @@ export async function POST(req: NextRequest) {
     // that URL is automatically scoped to that chapter.
     let chapterScope: { countryId: string; chapterId: string; chapterName: string } | null = null;
     if (chapterSlug) {
-      const chapter = await db.chapter.findUnique({
+      // findFirst: slug alone is not unique since Phase 3A
+      // (@@unique([brandId, countryId, slug])) — findUnique would throw.
+      const chapter = await db.chapter.findFirst({
         where: { slug: chapterSlug },
         select: {
           id: true,

@@ -32,7 +32,10 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   // the chapter title reads "Coma Tel Aviv" on coma.massapro.com and
   // "AI Salon Montreal" on AIS hosts — no more hard-coded "AI Salon".
   const { brand } = await resolveBrandMetadata();
-  const chapter = await db.chapter.findUnique({
+  // findFirst (not findUnique): Phase 3A dropped the global @unique on
+  // Chapter.slug in favor of @@unique([brandId, countryId, slug]), so a
+  // slug-only where clause is rejected by Prisma at runtime.
+  const chapter = await db.chapter.findFirst({
     where: { slug: chapterSlug },
     select: {
       id: true,
@@ -81,7 +84,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function ChapterLandingPage({ params }: Params) {
   const { chapterSlug } = await params;
-  const chapter = await db.chapter.findUnique({
+  // findFirst: slug alone is not a unique selector since Phase 3A —
+  // findUnique throws a runtime validation error (Server Components crash).
+  const chapter = await db.chapter.findFirst({
     where: { slug: chapterSlug },
     include: {
       country: {

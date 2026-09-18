@@ -29,16 +29,18 @@ async function main() {
   });
   console.log(`Country: ${israel.name} (${israel.id})`);
 
-  // 2. Ensure Chapter Tel Aviv exists
-  const telAviv = await db.chapter.upsert({
-    where: { slug: "tel-aviv" },
-    update: {},
-    create: {
-      name: "Tel Aviv",
-      slug: "tel-aviv",
-      countryId: israel.id,
-    },
-  });
+  // 2. Ensure Chapter Tel Aviv (find-then-create: Phase 3A removed the
+  // global @unique on slug, so upsert({ where: { slug } }) is invalid)
+  const existingChapter = await db.chapter.findFirst({ where: { slug: "tel-aviv" } });
+  const telAviv = existingChapter
+    ? existingChapter
+    : await db.chapter.create({
+        data: {
+          name: "Tel Aviv",
+          slug: "tel-aviv",
+          countryId: israel.id,
+        },
+      });
   console.log(`Chapter: ${telAviv.name} (${telAviv.id})`);
 
   // 3. Hash the password

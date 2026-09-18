@@ -46,8 +46,8 @@ export async function POST(req: Request) {
   const country = await db.country.findUnique({ where: { id: countryId } });
   if (!country) return NextResponse.json({ error: "Country not found" }, { status: 404 });
 
-  // Check slug uniqueness
-  const existing = await db.chapter.findUnique({ where: { slug } });
+  // Check slug uniqueness (findFirst: slug is not a unique selector since Phase 3A)
+  const existing = await db.chapter.findFirst({ where: { slug } });
   if (existing) return NextResponse.json({ error: "Slug already in use" }, { status: 409 });
 
   const chapter = await db.chapter.create({

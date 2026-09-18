@@ -74,7 +74,7 @@ export async function ChapterEditContent({
   // 404.
   const chapter =
     "bySlug" in lookup
-      ? await db.chapter.findUnique({
+      ? await db.chapter.findFirst({
           where: { slug: lookup.bySlug },
           select: {
             id: true,

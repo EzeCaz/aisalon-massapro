@@ -37,7 +37,8 @@ async function resolveChapter(
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
   try {
-    const ch = await db.chapter.findUnique({
+    // findFirst: slug is not a unique selector since Phase 3A — findUnique throws.
+    const ch = await db.chapter.findFirst({
       where: { slug },
       select: { name: true },
     });

@@ -165,7 +165,8 @@ export async function POST(req: NextRequest) {
   const chapterSlugRaw = (body.chapterSlug || "").trim();
   if (chapterSlugRaw) {
     try {
-      const chapter = await db.chapter.findUnique({
+      // findFirst: slug alone is not unique since Phase 3A — findUnique throws.
+      const chapter = await db.chapter.findFirst({
         where: { slug: chapterSlugRaw },
         select: { id: true },
       });

@@ -27,7 +27,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   let title = "Edit chapter — AI Salon";
   let description = "Admin chapter editor — AI Salon";
   try {
-    const chapter = await db.chapter.findUnique({
+    // findFirst: slug alone is not unique since Phase 3A — findUnique throws.
+    const chapter = await db.chapter.findFirst({
       where: { slug: chapterSlug },
       select: { name: true, city: true },
     });

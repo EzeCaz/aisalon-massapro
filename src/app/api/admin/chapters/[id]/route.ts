@@ -64,7 +64,8 @@ export async function PATCH(
 
   // Check slug uniqueness if changing
   if (typeof data.slug === "string" && data.slug !== chapter.slug) {
-    const existing = await db.chapter.findUnique({ where: { slug: data.slug } });
+    // findFirst: slug is not a unique selector since Phase 3A — findUnique throws
+    const existing = await db.chapter.findFirst({ where: { slug: data.slug } });
     if (existing) return NextResponse.json({ error: "Slug already in use" }, { status: 409 });
   }
 

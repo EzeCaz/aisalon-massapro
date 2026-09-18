@@ -69,23 +69,28 @@ export async function POST() {
     },
   });
 
-  // 2. Upsert Chapter
-  const chapter = await db.chapter.upsert({
-    where: { slug: "tel-aviv" },
-    update: {
-      countryId: country.id,
-      city: "Tel Aviv-Yafo",
-      timezone: "Asia/Jerusalem",
-    },
-    create: {
-      name: "Tel Aviv",
-      slug: "tel-aviv",
-      countryId: country.id,
-      city: "Tel Aviv-Yafo",
-      timezone: "Asia/Jerusalem",
-      isActive: true,
-    },
-  });
+  // 2. Ensure Chapter (find-then-update/create: Phase 3A removed the global
+  // @unique on slug, so upsert({ where: { slug } }) is invalid)
+  const existingChapter = await db.chapter.findFirst({ where: { slug: "tel-aviv" } });
+  const chapter = existingChapter
+    ? await db.chapter.update({
+        where: { id: existingChapter.id },
+        data: {
+          countryId: country.id,
+          city: "Tel Aviv-Yafo",
+          timezone: "Asia/Jerusalem",
+        },
+      })
+    : await db.chapter.create({
+        data: {
+          name: "Tel Aviv",
+          slug: "tel-aviv",
+          countryId: country.id,
+          city: "Tel Aviv-Yafo",
+          timezone: "Asia/Jerusalem",
+          isActive: true,
+        },
+      });
 
   // 2b. PER USER SPEC 2026-08-02: Seed Tel Aviv's chapter-scoped brand
   // image overrides. The Tel Aviv chapter has its own login hero and

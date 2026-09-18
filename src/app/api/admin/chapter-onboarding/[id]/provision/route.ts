@@ -226,13 +226,14 @@ export async function POST(
   // ── 2. Chapter ────────────────────────────────────────────────────
   // Slug uniqueness check — if taken, suffix with country code.
   let chapterSlug = sub.chapterSlug.trim() || slugify(sub.chapterName);
-  const existingSlug = await db.chapter.findUnique({
+  // findFirst: slug is not a unique selector since Phase 3A — findUnique throws
+  const existingSlug = await db.chapter.findFirst({
     where: { slug: chapterSlug },
     select: { id: true },
   });
   if (existingSlug) {
     chapterSlug = `${chapterSlug}-${country.code.toLowerCase()}`;
-    const again = await db.chapter.findUnique({
+    const again = await db.chapter.findFirst({
       where: { slug: chapterSlug },
       select: { id: true },
     });
