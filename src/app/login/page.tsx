@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import { LoginForm } from "./login-form";
 import { getPublicSettings } from "@/lib/site-settings";
 import { getEffectiveBrandImagesBySlug } from "@/lib/chapter-brand-images";
-import { db } from "@/lib/db";
 import Image from "next/image";
 import {
   resolveBrand,
@@ -34,21 +33,24 @@ import { BrandLogo, BrandGradientText } from "@/components/brand/brand-logo";
  *   - https://coma.massapro.com/login?brand=google&chapterSlug=tlv
  *                                                        → Google branding (demo)
  *
- * CHAPTER-SCOPED BEHAVIOR:
- *   - /login with no `?chapterSlug=` defaults to the brand's home chapter
- *     (Tel Aviv for both AIS and Coma).
- *   - /login?chapterSlug=<slug> loads that chapter's brand image
- *     overrides (stored in ChapterSetting) and renders the chapter's
- *     name in the H1 + eyebrow text.
+ * CITY-AWARE HERO COPY (2026-09-19 user spec):
+ *   - The city comes from the `?city=` URL param carried by invite links
+ *     (e.g. /login?city=Berlin) — NO hard-coded city anywhere.
+ *   - With a city, the H1 reads "The Coma home for community builders in
+ *     Berlin." Without one it ends at the accent phrase ("...community
+ *     builders.") — never a dangling "in".
+ *   - The eyebrow is brand-only: "Coma community" / "AI Salon community".
  *
- * LOGIN PAGE SECTIONS (per user spec 2026-08-02, revised 2026-09-18 —
- * hero copy carries BOTH the brand name and the chapter's city, never a
- * bare "Tel Aviv"):
+ * CHAPTER-SCOPED BEHAVIOR (images only):
+ *   - /login?chapterSlug=<slug> loads that chapter's brand image
+ *     overrides (stored in ChapterSetting). Copy is NOT chapter-driven.
+ *
+ * LOGIN PAGE SECTIONS (per user spec 2026-08-02, revised 2026-09-19):
  *   A. Eyebrow: <p class="text-[0.7rem] font-semibold uppercase
- *      tracking-[0.3em] text-[<accentColor>] mb-4">{Brand} {Chapter_name} Chapter</p>
+ *      tracking-[0.3em] text-[<accentColor>] mb-4">{Brand} community</p>
  *   B. Headline: <h1 class="text-4xl lg:text-5xl font-extrabold
  *      leading-[1.05] mb-5">The {Brand} community for <span class="ais-gradient-text">
- *      AI builders</span> in {Chapter_name}.</h1>
+ *      AI builders</span>{cityClause — " in Berlin." or "."}</h1>
  *
  * Both URLs are passed through `next/image` with `unoptimized` when
  * they're external Blob URLs, so they work without configuring
@@ -58,9 +60,10 @@ import { BrandLogo, BrandGradientText } from "@/components/brand/brand-logo";
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ chapterSlug?: string; brand?: string }>;
+  searchParams: Promise<{ chapterSlug?: string; brand?: string; city?: string }>;
 }) {
-  const { chapterSlug: rawSlug, brand: urlBrand } = await searchParams;
+  const { chapterSlug: rawSlug, brand: urlBrand, city: cityParam } =
+    await searchParams;
 
   // Resolve brand from URL + host + env (mirrors the page logic, but
   // metadata runs in a separate RSC pass so we re-resolve here).
@@ -78,32 +81,22 @@ export async function generateMetadata({
   // BRAND IDENTITY TAKES PRECEDENCE — the brand-level hero banner is the
   // canonical visual for the brand, applied uniformly across all chapters
   // of that brand (a Coma user in Montreal sees the same Coma banner as a
-  // Coma user in Tel Aviv). Chapter DB overrides only kick in when the
-  // brand has no heroBanner (e.g. AIS today, which still uses per-chapter
-  // photos until a proper AIS brand hero is produced).
+  // Coma user anywhere else in that brand). Chapter DB overrides only kick
+  // in when the brand has no heroBanner (e.g. AIS today, which still uses
+  // per-chapter photos until a proper AIS brand hero is produced).
   //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
   //   2. Chapter DB override (`ChapterSetting.loginBanner`) — AIS only
   //   3. Hard-coded fallback `/images/falafel-meerkat.jpg`
   const bannerUrl =
     brand.heroBanner || settings.loginBanner || "/images/falafel-meerkat.jpg";
 
-  // Look up the chapter name for the metadata title.
-  let chapterName = "Tel Aviv";
-  try {
-    // findFirst (not findUnique) — Chapter.slug is no longer globally
-    // unique after Phase 3A (now @@unique([brandId, countryId, slug])).
-    // findUnique({ where: { slug } }) is rejected by Prisma at runtime,
-    // which threw into the catch and silently broke the city lookup.
-    const chapter = await db.chapter.findFirst({
-      where: { slug: chapterSlug },
-      select: { name: true },
-    });
-    if (chapter) chapterName = chapter.name;
-  } catch {
-    // DB unreachable — keep default "Tel Aviv".
-  }
-
-  const title = `Login — ${brand.displayName} ${chapterName}`;
+  // Metadata title is brand-only, plus the invite city when present.
+  // No DB lookup, no hard-coded city (2026-09-19 spec).
+  const city = (cityParam ?? "").trim();
+  const brandDisplay = city
+    ? `${brand.displayName} ${city}`
+    : brand.displayName;
+  const title = `Login — ${brandDisplay}`;
   return {
     title,
     description: `${brand.loginSubtitle}`,
@@ -115,7 +108,7 @@ export async function generateMetadata({
           url: bannerUrl,
           width: 1200,
           height: 630,
-          alt: `${brand.displayName} ${chapterName}`,
+        alt: brandDisplay,
         },
       ],
     },
@@ -135,13 +128,18 @@ export default async function LoginPage({
     chapterSlug?: string;
     brand?: string;
     callbackUrl?: string;
+    city?: string;
   }>;
 }) {
   const session = await getServerSession(authOptions);
   if (session) redirect("/events");
 
-  const { chapterSlug: rawSlug, brand: urlBrand, callbackUrl: callbackParam } =
-    await searchParams;
+  const {
+    chapterSlug: rawSlug,
+    brand: urlBrand,
+    callbackUrl: callbackParam,
+    city: cityParam,
+  } = await searchParams;
 
   // === 4-LAYER BRAND RESOLUTION ===
   // Per Brand-Field Platform Plan §2.5.1: URL → host → user → env
@@ -163,9 +161,9 @@ export default async function LoginPage({
   //   1. Brand-level hero (`brand.heroBanner`) — Coma's transparent PNG
   //      banner (hosted on Vercel Blob). Applied uniformly across
   //      all chapters of that brand (a Coma user in Montreal sees the
-  //      same Coma banner as a Coma user in Tel Aviv).
+  //      same Coma banner in every chapter of the brand).
   //   2. Chapter DB override (`ChapterSetting.loginHero`) — admin can
-  //      upload a chapter-specific hero photo (e.g. a Tel Aviv skyline).
+  //      upload a chapter-specific hero photo (e.g. a city skyline).
   //      Only kicks in when the brand has no heroBanner (e.g. AIS today).
   //   3. Hard-coded fallback `/images/falafel-meerkat.jpg` — legacy AIS
   //      mark, only fires when both tiers above are empty.
@@ -185,40 +183,25 @@ export default async function LoginPage({
 
   const callbackUrl = callbackParam;
 
-  // Look up the chapter name from the DB. Fall back to a humanized
-  // version of the slug (e.g. "mtl" → "Mtl") if the chapter doesn't
-  // exist or the DB is unreachable.
-  let chapterName = chapterSlug
-    .split(/[-_]/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-  try {
-    // findFirst (not findUnique) — Chapter.slug is no longer globally
-    // unique after Phase 3A (now @@unique([brandId, countryId, slug])).
-    // findUnique({ where: { slug } }) is rejected by Prisma at runtime,
-    // which threw into the catch and silently broke the city lookup.
-    const chapter = await db.chapter.findFirst({
-      where: { slug: chapterSlug },
-      select: { name: true },
-    });
-    if (chapter) chapterName = chapter.name;
-  } catch {
-    // DB unreachable — keep the humanized slug.
-  }
+  // CITY from the invite URL (2026-09-19 spec) — the ONLY copy driver.
+  // Invite links carry ?city=Berlin; with no city the hero copy ends at
+  // the accent phrase (never a dangling "in" or a hard-coded city).
+  const city = (cityParam ?? "").trim();
+  const cityClause = city ? ` in ${city}.` : ".";
 
-  // Resolve login copy templates → final strings with brand + chapter
-  // name interpolated ({brandName} + {chapterName} tokens, so the hero
-  // reads "AI Salon Tel Aviv Chapter" / "The AI Salon community for AI
-  // builders in Tel Aviv." and adapts per chapter + brand).
-  const eyebrow = brand.loginEyebrowTemplate
-    .replace(/\{brandName\}/g, brand.displayName)
-    .replace(/\{chapterName\}/g, chapterName);
+  // Resolve login copy templates → final strings. Eyebrow is brand-only
+  // ("Coma community" / "AI Salon community"); the headline interpolates
+  // {brandName} + {cityClause} (" in Berlin." / ".").
+  const eyebrow = brand.loginEyebrowTemplate.replace(
+    /\{brandName\}/g,
+    brand.displayName
+  );
   // Headline has {accentSpanOpen}{accentSpanClose} wrapping the highlighted phrase.
   // We split on those tokens and render the middle as a gradient span.
   const headlineParts = splitHeadlineTemplate(
     brand.loginHeadlineTemplate,
     brand.displayName,
-    chapterName
+    cityClause
   );
 
   return (
@@ -266,7 +249,11 @@ export default async function LoginPage({
             <div className="mb-6 relative w-full max-w-[320px] aspect-square rounded-2xl overflow-hidden border border-white/10">
               <Image
                 src={heroUrl}
-                alt={`${brand.displayName} ${chapterName} — brand image`}
+                alt={
+                  city
+                    ? `${brand.displayName} ${city} — brand image`
+                    : `${brand.displayName} — brand image`
+                }
                 fill
                 sizes="(max-width: 768px) 240px, 320px"
                 className="object-contain"
@@ -327,8 +314,8 @@ export default async function LoginPage({
           </h2>
           <p className="text-sm text-black/80 mb-8">
             {brand.loginFormSubheadingTemplate.replace(
-              "{chapterName}",
-              chapterName
+              /\{cityClause\}/g,
+              cityClause
             )}
           </p>
 
@@ -355,21 +342,21 @@ export default async function LoginPage({
  * Split a headline template into three parts: before, accent (gradient),
  * and after.
  *
- * Template format: "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}."
+ * Template format: "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose}{cityClause}"
  * Tokens:
  *   - {brandName}       — replaced with the brand display name
  *   - {accentSpanOpen}  — start of gradient-highlighted phrase
  *   - {accentSpanClose} — end of gradient-highlighted phrase
- *   - {chapterName}     — replaced with the chapter display name
+ *   - {cityClause}      — " in <city>." when ?city= is present, "." otherwise
  */
 function splitHeadlineTemplate(
   template: string,
   brandName: string,
-  chapterName: string
+  cityClause: string
 ): { before: string; accent: string; after: string } {
   const withChapter = template
     .replace(/\{brandName\}/g, brandName)
-    .replace(/\{chapterName\}/g, chapterName);
+    .replace(/\{cityClause\}/g, cityClause);
   const openIdx = withChapter.indexOf("{accentSpanOpen}");
   const closeIdx = withChapter.indexOf("{accentSpanClose}");
 

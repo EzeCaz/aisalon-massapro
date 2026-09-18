@@ -168,7 +168,11 @@ export async function sendPasswordEmail(opts: {
   // joincoma.com split-domain architecture (middleware redirects
   // platform.joincoma.com/login → joincoma.com/login). Sending users
   // straight to the apex avoids the redirect round-trip.
-  const loginUrl = `${brand.loginUrl}&callbackUrl=${encodeURIComponent("/events")}`;
+  // City-aware invites (2026-09-19): when the recipient's chapter is
+  // known (AIS), the invite URL carries ?city=<name> so the login hero
+  // reads "...in <city>." Coma is chapter-less at signup, so its invites
+  // carry no city and the hero ends at "community builders.".
+  const loginUrl = `${brand.loginUrl}&callbackUrl=${encodeURIComponent("/events")}${chapterName ? `&city=${encodeURIComponent(chapterName)}` : ""}`;
 
   // Old approach (kept for reference / fallback if some caller relies on it):
   // const base = opts.siteUrl.replace(/\/$/, "");

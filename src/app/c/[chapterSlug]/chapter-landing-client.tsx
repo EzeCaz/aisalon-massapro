@@ -184,7 +184,7 @@ export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props)
             <AiSalonLogo />
           </Link>
           <Link
-            href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
+            href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}`}
             className="text-sm font-semibold text-black/70 hover:text-black"
           >
             Sign in
@@ -373,7 +373,7 @@ export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props)
                   </h3>
                   <p className="text-sm text-black/70">{success}</p>
                   <Link
-                    href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
+                    href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}`}
                     className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2 text-sm hover:bg-black/90"
                   >
                     Sign in <ArrowRight className="h-4 w-4" />
@@ -461,7 +461,7 @@ export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props)
                   <p className="text-xs text-black/50 mt-4 text-center">
                     Already have an account?{" "}
                     <Link
-                      href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}`}
+                      href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}`}
                       className="font-semibold text-[#820A7D] hover:underline"
                     >
                       Sign in

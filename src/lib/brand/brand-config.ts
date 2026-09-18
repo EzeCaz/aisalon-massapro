@@ -146,14 +146,16 @@ export interface BrandConfig {
 
   /**
    * Login page eyebrow template.
-   * Tokens: `{brandName}` + `{chapterName}` are replaced at render time
-   * (e.g. "AI Salon Tel Aviv Chapter" — brand + city, never a bare city).
+   * `{brandName}` is replaced at render time — renders brand-only,
+   * e.g. "AI Salon community" / "Coma community" (2026-09-19 spec).
    */
   loginEyebrowTemplate: string;
   /**
    * Login page H1 template.
-   * `{brandName}` + `{chapterName}` are replaced at render time.
-   * `{accentSpanOpen}` / `{accentSpanClose}` wrap the gradient-highlighted phrase.
+   * `{brandName}` is replaced with the brand display name; `{cityClause}`
+   * becomes " in <city>." when the URL carries ?city=<name>, or "." when
+   * absent (H1 ends at the accent phrase). `{accentSpanOpen}` /
+   * `{accentSpanClose}` wrap the gradient-highlighted phrase.
    */
   loginHeadlineTemplate: string;
   /** Login page subtitle (below H1). Plain text, no templates. */
@@ -161,7 +163,7 @@ export interface BrandConfig {
 
   /** Sign-in form heading (e.g. "Welcome"). */
   loginFormHeading: string;
-  /** Sign-in form subheading (under "Welcome"). */
+  /** Sign-in form subheading (under "Welcome"). Supports {cityClause}. */
   loginFormSubheadingTemplate: string;
 
   /** Footer credit text on the login left panel. */
@@ -201,14 +203,18 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     favicon: "",
     // AIS logo: intentionally empty — uses chapter loginHero.
     logo: "",
-    loginEyebrowTemplate: "{brandName} {chapterName} Chapter",
+    // Eyebrow is brand-only (2026-09-19 user spec): "AI Salon community".
+    loginEyebrowTemplate: "{brandName} community",
+    // {cityClause} = " in <city>." when the invite URL carries
+    // ?city=Berlin, or "." when absent — the H1 ends at "AI builders."
+    // (never a dangling "in" or a hard-coded city).
     loginHeadlineTemplate:
-      "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose} in {chapterName}.",
+      "The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose}{cityClause}",
     loginSubtitle:
       "Log in to access events, upload photos from our gatherings, browse the shared slideshow, and connect with fellow founders, CMOs, investors and AI builders.",
     loginFormHeading: "Welcome",
     loginFormSubheadingTemplate:
-      "Sign in with Google, or use your email and password to access the AI Salon {chapterName} community.",
+      "Sign in with Google, or use your email and password to access the AI Salon community{cityClause}",
     footerCredit: "Platform by MassaPro · Powered by AI Salon",
   },
 
@@ -243,14 +249,14 @@ export const BRANDS: Record<BrandSlug, BrandConfig> = {
     // contexts where the text wordmark can't render (legacy email
     // clients, etc.).
     logo: "/brand/coma/logo.png",
-    loginEyebrowTemplate: "{brandName} {chapterName} Chapter",
+    loginEyebrowTemplate: "{brandName} community",
     loginHeadlineTemplate:
-      "The {brandName} home for {accentSpanOpen}community builders{accentSpanClose} in {chapterName}.",
+      "The {brandName} home for {accentSpanOpen}community builders{accentSpanClose}{cityClause}",
     loginSubtitle:
       "Log in to access the Coma platform — manage your chapter, host events, onboard new members, and orchestrate your community's growth with the Coma operating system.",
     loginFormHeading: "Welcome to Coma",
     loginFormSubheadingTemplate:
-      "Sign in with Google, or use your email and password to access the Coma {chapterName} platform.",
+      "Sign in with Google, or use your email and password to access the Coma platform{cityClause}",
     footerCredit: "Platform by MassaPro · Powered by Coma",
   },
 };
