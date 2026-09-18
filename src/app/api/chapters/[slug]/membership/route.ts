@@ -16,9 +16,13 @@ import {
  *                                            the community form and creates
  *                                            an ACTIVE membership).
  *
- * PER USER SPEC 2026-09-19: any signed-in user may request to join any
- * community. Joins are auto-approved (status ACTIVE immediately) — the
+ * PER USER SPEC 2026-09-19 (v2): any signed-in user may request to join
+ * any community. Joins are auto-approved (status ACTIVE immediately) — the
  * user then becomes able to see all community members and join events.
+ * The dialog shows the user's profile details READ-ONLY (partially
+ * masked client-side) and just confirms — so the server copies the
+ * form data from the user's profile record directly and IGNORES any
+ * client-supplied payload (nothing editable, nothing forgeable).
  *
  * The PRIMARY chapter (User.chapterId) is an implicit membership — POST
  * still records an explicit row (with the form submission) so the
@@ -52,7 +56,15 @@ async function getSessionUser() {
   if (!session?.user?.email) return null;
   const user = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, name: true, chapterId: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      chapterId: true,
+      title: true,
+      company: true,
+      linkedinUrl: true,
+    },
   });
   return user;
 }
@@ -88,7 +100,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   });
 }
 
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(_req: NextRequest, { params }: Params) {
   const { slug } = await params;
   const user = await getSessionUser();
   if (!user) {
@@ -106,44 +118,23 @@ export async function POST(req: NextRequest, { params }: Params) {
     );
   }
 
-  // Community join form — optional fields, stored as JSON on the row.
-  // Required by spec: the user must FILL THE COMMUNITY FORM when joining.
-  // We require at least one intended-answer field (whyJoin) so the form
-  // isn't a no-op, and free-text is length-capped.
-  let body: Record<string, unknown> = {};
-  try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    body = {};
-  }
-  const asString = (v: unknown, max: number): string | undefined => {
-    if (typeof v !== "string") return undefined;
-    const s = v.trim();
-    return s ? s.slice(0, max) : undefined;
-  };
-  const title = asString(body.title, 120);
-  const company = asString(body.company, 120);
-  const linkedinUrl = asString(body.linkedinUrl, 300);
-  const whyJoin = asString(body.whyJoin, 1000);
-
-  if (!whyJoin) {
-    return NextResponse.json(
-      { error: "Please tell the community why you'd like to join." },
-      { status: 400 }
-    );
-  }
-
+  // PER USER SPEC 2026-09-19 (v2): the join dialog is a read-only
+  // confirmation of the user's PROFILE details — the client sends no
+  // form values. Build the submission from the profile record so it
+  // can neither be edited nor forged. (Older clients may still POST a
+  // body with title/company/linkedinUrl/whyJoin — it is ignored.)
   const result = await joinChapter({
     chapterId: chapter.id,
     userId: user.id,
     source: "DIRECTORY",
     formJson: {
-      title,
-      company,
-      linkedinUrl,
-      whyJoin,
       name: user.name,
+      email: user.email,
+      title: user.title ?? undefined,
+      company: user.company ?? undefined,
+      linkedinUrl: user.linkedinUrl ?? undefined,
       submittedAt: new Date().toISOString(),
+      source: "PROFILE",
     },
   });
 

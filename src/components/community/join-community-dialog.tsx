@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Loader2, Users, CheckCircle2, ExternalLink } from "lucide-react";
+import { Loader2, Users, CheckCircle2, Lock, ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,8 +12,15 @@ import {
 } from "@/components/ui/dialog";
 
 /**
- * JoinCommunityDialog — the "join the community + fill the community form"
- * flow (user spec 2026-09-19).
+ * JoinCommunityDialog — the "join the community" flow.
+ *
+ * PER USER SPEC 2026-09-19 (v2): the form is NO LONGER editable. All
+ * details are PRE-FILLED from the user's profile (GET /api/profile),
+ * displayed READ-ONLY with only PART of each personal value visible
+ * (masked with ••• bullets, the same way password inputs hide text),
+ * and the user simply confirms with a single "Join" button. The real
+ * values are never sent from the client — the server copies them from
+ * the signed-in user's profile record, so nothing can be tampered with.
  *
  * Shown whenever a signed-in user who is NOT a member of a community
  * clicks a join/register button that requires membership of that
@@ -36,6 +43,56 @@ export type JoinChapterInfo = {
   country?: { name: string; code: string; flagEmoji: string | null } | null;
 };
 
+type ProfilePrefill = {
+  name: string | null;
+  email: string | null;
+  title: string | null;
+  company: string | null;
+  linkedinUrl: string | null;
+  portfolioUrl: string | null;
+};
+
+// ── PARTIAL-DISPLAY MASKING (password-style) ────────────────────────
+// Show just enough of each personal value to confirm WHICH detail is
+// being shared, never the full value. UI-only cosmetics — the server
+// always stores the real profile data.
+
+function maskText(v: string): string {
+  const s = v.trim();
+  if (!s) return "—";
+  if (s.length <= 3) return `${s[0]}•••`;
+  return `${s.slice(0, 3)}•••`;
+}
+
+function maskName(v: string): string {
+  const s = v.trim();
+  if (!s) return "—";
+  const words = s.split(/\s+/);
+  // Multi-word names keep the first word readable ("Eze •••").
+  if (words.length > 1 && words[0].length >= 2) return `${words[0]} •••`;
+  return maskText(s);
+}
+
+function maskEmail(v: string): string {
+  const s = v.trim();
+  const at = s.indexOf("@");
+  if (at <= 0) return maskText(s);
+  const local = s.slice(0, at);
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}•••${s.slice(at)}`; // "ez•••@cazhype.com"
+}
+
+function maskUrl(v: string): string {
+  const s = v.trim();
+  if (!s) return "—";
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    return `${u.hostname}/•••`; // "linkedin.com/•••"
+  } catch {
+    return maskText(s);
+  }
+}
+
 export function JoinCommunityDialog({
   open,
   onOpenChange,
@@ -46,52 +103,69 @@ export function JoinCommunityDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   chapter: JoinChapterInfo | null;
-  /** Signed-in user for prefill (name + email are not editable here). */
+  /** Fallback identity if the profile fetch fails (name + email only). */
   me: { name: string | null; email: string } | null;
-  /** Called after a successful join (chapter slug + form payload). */
+  /** Called after a successful join. */
   onJoined?: (chapter: JoinChapterInfo) => void;
 }) {
-  const [title, setTitle] = React.useState("");
-  const [company, setCompany] = React.useState("");
-  const [linkedinUrl, setLinkedinUrl] = React.useState("");
-  const [whyJoin, setWhyJoin] = React.useState("");
+  const [profile, setProfile] = React.useState<ProfilePrefill | null>(null);
+  const [profileLoading, setProfileLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [done, setDone] = React.useState(false);
 
-  // Reset the form each time the dialog opens for a (possibly different)
-  // community, and prefill from the user's profile where we can.
+  // Each time the dialog opens, refresh the profile prefill from the
+  // server (the user may have updated it since).
   React.useEffect(() => {
-    if (open) {
-      setDone(false);
-      setWhyJoin("");
-      setTitle("");
-      setCompany("");
-      setLinkedinUrl("");
-    }
+    if (!open) return;
+    setDone(false);
+    setProfile(null);
+    setProfileLoading(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as { user?: ProfilePrefill };
+          if (!cancelled && data?.user) setProfile(data.user);
+        }
+      } catch {
+        // Fall back to the `me` prop below — dialog still works.
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open, chapter?.slug]);
 
   if (!chapter) return null;
 
   const cityLabel = chapter.city ? ` · ${chapter.city}` : "";
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Display identity: prefer the fetched profile, fall back to `me`.
+  const name = profile?.name ?? me?.name ?? null;
+  const email = profile?.email ?? me?.email ?? null;
+  const title = profile?.title ?? null;
+  const company = profile?.company ?? null;
+  const linkUrl = profile?.linkedinUrl ?? profile?.portfolioUrl ?? null;
+
+  const detailRows: { label: string; value: string }[] = [
+    ...(name ? [{ label: "Name", value: maskName(name) }] : []),
+    ...(email ? [{ label: "Email", value: maskEmail(email) }] : []),
+    ...(title ? [{ label: "Role / title", value: maskText(title) }] : []),
+    ...(company ? [{ label: "Company", value: maskText(company) }] : []),
+    ...(linkUrl ? [{ label: "LinkedIn", value: maskUrl(linkUrl) }] : []),
+  ];
+
+  async function handleJoin() {
     if (!chapter) return;
-    if (!whyJoin.trim()) {
-      toast.error("Please tell the community why you'd like to join.");
-      return;
-    }
     setSubmitting(true);
     try {
+      // No payload: the server copies the details from the profile —
+      // nothing here can be edited or forged.
       const res = await fetch(`/api/chapters/${encodeURIComponent(chapter.slug)}/membership`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim() || undefined,
-          company: company.trim() || undefined,
-          linkedinUrl: linkedinUrl.trim() || undefined,
-          whyJoin: whyJoin.trim(),
-        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -152,82 +226,53 @@ export function JoinCommunityDialog({
                   <span className="text-black/50 font-bold">{cityLabel}</span>
                 </DialogTitle>
                 <DialogDescription className="text-sm text-black/70 leading-relaxed">
-                  Fill in the community form to join. After joining you&apos;ll
-                  be able to see all community members and register for
-                  events.
+                  Your details come straight from your profile — nothing to
+                  fill in. After joining you&apos;ll be able to see all
+                  community members and register for events.
                 </DialogDescription>
               </DialogHeader>
 
-              <form onSubmit={handleSubmit} className="mt-5 space-y-3.5">
-                {me && (
-                  <div className="rounded-md bg-black/[0.03] border border-black/10 px-3 py-2.5 text-xs text-black/80 space-y-0.5">
-                    <div>
-                      <span className="font-semibold">{me.name || "You"}</span>{" "}
-                      <span className="text-black/50">({me.email})</span>
-                    </div>
-                    <div className="text-black/50">
-                      Joining as this account.
-                    </div>
+              <div className="mt-5 space-y-3">
+                {profileLoading ? (
+                  <div className="flex items-center justify-center gap-2 rounded-md bg-black/[0.03] border border-black/10 px-3 py-6 text-sm text-black/50">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading your
+                    details…
+                  </div>
+                ) : detailRows.length > 0 ? (
+                  <div className="rounded-md border border-black/10 divide-y divide-black/[0.06] overflow-hidden">
+                    {detailRows.map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5 bg-black/[0.02]"
+                      >
+                        <span className="text-xs font-semibold text-black/60">
+                          {row.label}
+                        </span>
+                        <span
+                          className="text-xs font-mono text-black/80 tracking-wide select-none"
+                          aria-label={`${row.label} (hidden for privacy)`}
+                        >
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md bg-black/[0.03] border border-black/10 px-3 py-4 text-xs text-black/60 text-center">
+                    We&apos;ll share your account details with the community
+                    organizers.
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="text-xs font-semibold text-black/80">
-                      Role / title
-                    </span>
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Founder, engineer, investor…"
-                      className="mt-1 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-black/20"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold text-black/80">
-                      Company
-                    </span>
-                    <input
-                      type="text"
-                      value={company}
-                      onChange={(e) => setCompany(e.target.value)}
-                      placeholder="Company or org"
-                      className="mt-1 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-black/20"
-                    />
-                  </label>
+                <div className="flex items-center justify-center gap-1.5 text-[0.65rem] text-black/50">
+                  <Lock className="h-3 w-3" />
+                  Details are from your profile and can&apos;t be changed
+                  here. Update them anytime in your profile.
                 </div>
 
-                <label className="block">
-                  <span className="text-xs font-semibold text-black/80">
-                    LinkedIn or portfolio{" "}
-                    <span className="font-normal text-black/40">(optional)</span>
-                  </span>
-                  <input
-                    type="url"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
-                    placeholder="https://linkedin.com/in/…"
-                    className="mt-1 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-black/20"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-semibold text-black/80">
-                    Why do you want to join {chapter.name}?
-                  </span>
-                  <textarea
-                    value={whyJoin}
-                    onChange={(e) => setWhyJoin(e.target.value)}
-                    rows={3}
-                    required
-                    placeholder="Tell the organizers a bit about yourself and what you're looking for…"
-                    className="mt-1 w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm text-black placeholder:text-black/30 focus:outline-none focus:ring-2 focus:ring-black/20 resize-none"
-                  />
-                </label>
-
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleJoin}
                   disabled={submitting}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#FF005A] text-white font-semibold px-4 py-3 text-sm hover:bg-[#FF005A]/90 disabled:opacity-50 ais-lift"
                 >
@@ -242,10 +287,9 @@ export function JoinCommunityDialog({
                   )}
                 </button>
                 <p className="text-[0.65rem] text-black/50 text-center leading-relaxed">
-                  Your submission is shared with the community organizers.
                   Membership is free.
                 </p>
-              </form>
+              </div>
             </>
           )}
         </div>
