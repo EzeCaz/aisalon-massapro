@@ -14621,3 +14621,20 @@ Work Log:
 Stage Summary:
 - DNS verdict delivered: keep 4 (apex pair 216.150.1.1/216.150.16.1, www CNAME, platform→b5e082...vercel-dns-017.com), delete 4 conflicting duplicates (A @ 76.76.21.21, A www 76.76.21.21, CNAME platform cname.vercel-dns.com, A platform 76.76.21.21)
 - Production confirmed healthy; next: user deletes 4 records → Vercel domains flip Valid → 5-item smoke test → Phase 3B (DB-driven brand config)
+
+---
+Task ID: brand-city-hero-copy
+Agent: main
+Task: Replace hard-coded "Tel Aviv" with dynamic brand + city name on all home pages (Coma + AI Salon)
+
+Work Log:
+- Located quoted text: login page hero (eyebrow + headline) + hard-coded strings in public event page
+- brand-config.ts: added {brandName} token to login templates for both brands
+- login/page.tsx: interpolate {brandName}; FIXED chapter lookup (findUnique→findFirst) broken by Phase 3A compound-unique (was throwing into catch, disabling DB-backed city names)
+- public-event-page.tsx: header + footer derive from event.chapter (legacy "Tel Aviv" only as fallback)
+- brand-metadata.ts + layout.tsx: SEO description/keywords derive city from brand home chapter; global-error.tsx dropped hard-coded city
+- tsc clean on all edited files; commit 84d8da9 pushed; production verified (eyebrow + headline parts render on both brands)
+
+Stage Summary:
+- Home pages now render "AI Salon Tel Aviv Chapter" / "Coma Tel Aviv Chapter" + brand-integrated headlines, dynamic per ?chapterSlug= and brand
+- Out of scope (intentionally untouched): admin footers (Phase B/C), legal pages, mockups, comments/placeholders
