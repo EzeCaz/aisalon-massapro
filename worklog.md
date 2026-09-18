@@ -14699,3 +14699,36 @@ Stage Summary:
 - 806928a is LIVE on production (platform.joincoma.com + aisalon.massapro.com both healthy, 307→login for guests)
 - Multi-community membership, /communities discovery, brand-separated knowledge docs/images/templates/mockups all deployed
 - Remaining manual items (user-side): DNS 4 conflicting records deletion, Drive backup 418MB upload, coma.massapro.com decision
+
+---
+Task ID: fix-c-slug-crash
+Agent: main
+Task: Fix "Something went wrong" Server Components crash on /c/montreal (reported by user eze@cazhype.com clicking Montreal from /communities, digest 2480828166)
+
+Work Log:
+- Root cause: Phase 3A dropped Chapter.slug global @unique (→ @@unique([brandId, countryId, slug])); Prisma rejects slug-only where clauses at runtime. /c/[chapterSlug]/page.tsx (generateMetadata + page body) called db.chapter.findUnique({ where: { slug } }) → threw in RSC render. Page became widely reachable when Task 4 linked /communities cards to /c/<slug>
+- Enumerated ALL 14 slug-keyed Chapter call sites via tsc (13 initially flagged + set-password found in final sweep)
+- Mechanical fix findUnique→findFirst (same select/include) on: /c/[chapterSlug] ×2, signup API, user/onboarding API, onboarding page, set-password page, admin/c/[chapterSlug], admin chapters create/update slug-uniqueness checks, provision route ×2, chapter-edit-content (bySlug branch)
+- Restructured 2 invalid upsert({ where: { slug } }) → findFirst + update-by-id / create (v7-seed route, scripts/seed-admin.ts); caught + removed a stray bogus update_data arg introduced during edit
+- tsc: 0 ChapterWhereUniqueInput errors (was 13-14); sweep for other hidden chapter-by-slug mutations clean; 120 remaining errors are pre-existing unrelated (recharts, skills/)
+- Commit a5dcc9f pushed → Vercel auto-deploy
+
+Stage Summary:
+- /c/<slug> chapter landing renders again; signup/onboarding/set-password join flow unblocked; admin chapter CRUD safe
+- Slug-uniqueness checks now findFirst-based (conservative: prevents any duplicate slug globally, avoiding /c/slug ambiguity across brands)
+- Note: pre-existing "AI Salon" strings on admin/c page title kept (Phase B/C cleanup scope)
+
+---
+Task ID: fix-c-slug-crash-deploy-verify
+Agent: main
+Task: Deploy a5dcc9f and verify the /c/<slug> fix on production
+
+Work Log:
+- Push a5dcc9f did not go live after 30min (old dpl_ECMfL8... still serving; discriminated via /c/does-not-exist: 500=old build, 404=new build). Build config check: typescript.ignoreBuildErrors=true + eslint clean of new issues → build breakage ruled out
+- Re-triggered with empty commit f31c4b4 → new deployment dpl_FsPyrbZ... promoted within 60s (the a5dcc9f build had completed but never got promoted; retrigger resolved it)
+- Production verification: /c/mtl (the real Montreal slug, from /communities card links) → 200, renders Montreal + Upcoming events + Join, no error boundary; /c/tel-aviv → 200; /c/does-not-exist → 404 (correct notFound); /communities → 200; /login city copy intact
+- Note: /communities cards link /c/mtl for Montreal — earlier /c/montreal probe 404 was a wrong guessed slug, not a bug
+
+Stage Summary:
+- User-reported crash (digest 2480828166) RESOLVED on production; all 14 Phase 3B slug-keyed Chapter call sites fixed in a5dcc9f
+- Deploy pipeline note: if a pushed build doesn't promote within ~10min, retrigger via empty commit worked instantly
