@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
+import { getServerSession } from "next-auth";
 import { db } from "@/lib/db";
+import { authOptions } from "@/lib/auth";
 import { ChapterLandingClient } from "./chapter-landing-client";
 import { getEffectiveBrandImages } from "@/lib/chapter-brand-images";
+import { checkChapterMembership } from "@/lib/membership";
 import type { Metadata } from "next";
 import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
 
@@ -167,5 +170,42 @@ export default async function ChapterLandingPage({ params }: Params) {
   // (hero eyebrow, sign-up card, footer). Host-based — cookies are
   // host-scoped so host and brand always agree.
   const { brand } = await resolveBrandMetadata();
-  return <ChapterLandingClient chapter={serialized} brandName={brand.displayName} />;
+
+  // SIGNED-IN USER (2026-09-19): when a logged-in user lands on /c/<slug>,
+  // the right-hand "Sign up" card must NOT show the editable name/email
+  // form — it shows masked read-only identity from the profile and a
+  // single "Join {chapter}" button instead. Anonymous visitors still see
+  // the normal sign-up form.
+  const session = await getServerSession(authOptions);
+  let me: {
+    name: string | null;
+    email: string;
+    isMember: boolean;
+  } | null = null;
+  if (session?.user?.email) {
+    const signedIn = await db.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, name: true, email: true, chapterId: true },
+    });
+    if (signedIn) {
+      const check = await checkChapterMembership(
+        signedIn.id,
+        chapter.id,
+        signedIn.chapterId
+      );
+      me = {
+        name: signedIn.name,
+        email: signedIn.email,
+        isMember: check.isMember,
+      };
+    }
+  }
+
+  return (
+    <ChapterLandingClient
+      chapter={serialized}
+      brandName={brand.displayName}
+      me={me}
+    />
+  );
 }

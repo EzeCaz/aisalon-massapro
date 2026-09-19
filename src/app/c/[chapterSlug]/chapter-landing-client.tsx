@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Linkedin,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import { AiSalonLogo } from "@/components/brand/aisalon-logo";
 
@@ -65,6 +66,17 @@ type Props = {
    *  eyebrow, sign-up card, and footer so Coma visitors on
    *  coma.massapro.com never see hard-coded "AI Salon" strings. */
   brandName?: string;
+  /**
+   * SIGNED-IN USER (2026-09-19): when present, the right-hand card swaps
+   * the editable sign-up form for a masked read-only identity summary +
+   * a single "Join {chapter}" button. Anonymous visitors see the form.
+   * `isMember: true` shows a "You're a member" state instead.
+   */
+  me?: {
+    name: string | null;
+    email: string;
+    isMember: boolean;
+  } | null;
 };
 
 // ------------------------------------------------------------------
@@ -122,13 +134,66 @@ function fmtTime(d: Date, tz: string): string {
 // Component
 // ------------------------------------------------------------------
 
-export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props) {
+export function ChapterLandingClient({
+  chapter,
+  brandName = "AI Salon",
+  me,
+}: Props) {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+
+  // ── SIGNED-IN JOIN CARD (2026-09-19) ──────────────────────────────
+  // Rendered only when `me` is passed from the server. The user's
+  // identity is shown read-only, partially masked (like a password
+  // input) — nothing editable, nothing forgeable. A single button
+  // POSTs to /api/chapters/[slug]/membership; the server copies the
+  // details from the profile record itself.
+  const [joining, setJoining] = React.useState(false);
+  const [joinError, setJoinError] = React.useState<string | null>(null);
+  const [joined, setJoined] = React.useState(false);
+  // If the server already considered the user a member on first render,
+  // skip straight to the "you're a member" state.
+  const isMember = !!me?.isMember || joined;
+
+  function maskName(v: string): string {
+    const s = v.trim();
+    if (!s) return "—";
+    const words = s.split(/\s+/);
+    if (words.length > 1 && words[0].length >= 2) return `${words[0]} •••`;
+    if (s.length <= 3) return `${s[0]}•••`;
+    return `${s.slice(0, 3)}•••`;
+  }
+  function maskEmail(v: string): string {
+    const s = v.trim();
+    const at = s.indexOf("@");
+    if (at <= 0) return `${s.slice(0, 2)}•••`;
+    return `${s.slice(0, Math.min(2, at))}•••${s.slice(at)}`;
+  }
+
+  async function handleJoin() {
+    setJoinError(null);
+    setJoining(true);
+    try {
+      const res = await fetch(
+        `/api/chapters/${encodeURIComponent(chapter.slug)}/membership`,
+        { method: "POST" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setJoinError(data?.error || `Could not join (HTTP ${res.status}).`);
+        return;
+      }
+      setJoined(true);
+    } catch {
+      setJoinError("Network error — please try again.");
+    } finally {
+      setJoining(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -360,10 +425,109 @@ export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props)
             )}
           </div>
 
-          {/* Right: Sign-up form */}
+          {/* Right: Sign-up form (anon) OR Join card (signed-in) */}
           <aside className="lg:col-span-2">
             <div className="lg:sticky lg:top-8 rounded-xl border border-[#820A7D]/20 bg-gradient-to-b from-[#820A7D]/[0.04] to-white p-6 shadow-sm">
-              {success ? (
+              {me ? (
+                // ── SIGNED-IN JOIN CARD ─────────────────────────────
+                // Read-only masked identity + single Join button. No
+                // editable fields. The server reads the real values
+                // from the profile on POST.
+                <>
+                  <div className="mb-5">
+                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+                      <Sparkles className="h-3 w-3" /> Join the chapter
+                    </p>
+                    <h3 className="text-xl font-bold text-black">
+                      Join {brandName} {chapter.name}
+                    </h3>
+                    <p className="text-xs text-black/60 mt-1">
+                      Your account details come straight from your profile.
+                      After joining you&apos;ll see all community members
+                      and be able to register for events.
+                    </p>
+                  </div>
+
+                  {isMember ? (
+                    <div className="text-center space-y-4 py-6">
+                      <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#007E72]/10">
+                        <CheckCircle2 className="h-7 w-7 text-[#007E72]" />
+                      </div>
+                      <h3 className="text-lg font-bold text-black">
+                        You&apos;re a member
+                      </h3>
+                      <p className="text-sm text-black/70">
+                        You can now see all members of {chapter.name} and
+                        register for their events.
+                      </p>
+                      <Link
+                        href="/events"
+                        className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-4 py-2 text-sm hover:bg-black/90"
+                      >
+                        Browse events <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="rounded-md border border-black/10 divide-y divide-black/[0.06] overflow-hidden">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-black/[0.02]">
+                          <span className="text-xs font-semibold text-black/60">
+                            Name
+                          </span>
+                          <span
+                            className="text-xs font-mono text-black/80 tracking-wide select-none"
+                            aria-label="Name (hidden for privacy)"
+                          >
+                            {maskName(me.name || me.email.split("@")[0])}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-black/[0.02]">
+                          <span className="text-xs font-semibold text-black/60">
+                            Email
+                          </span>
+                          <span
+                            className="text-xs font-mono text-black/80 tracking-wide select-none"
+                            aria-label="Email (hidden for privacy)"
+                          >
+                            {maskEmail(me.email)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="flex items-center justify-center gap-1.5 text-[0.65rem] text-black/50 text-center">
+                        <Lock className="h-3 w-3" />
+                        Details are from your profile and can&apos;t be
+                        edited here.
+                      </p>
+
+                      {joinError && (
+                        <div className="rounded-md bg-[#FF005A]/10 border border-[#FF005A]/30 px-3 py-2 text-xs text-[#FF005A]">
+                          {joinError}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleJoin}
+                        disabled={joining}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-3 text-sm hover:bg-[#820A7D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {joining ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Joining…
+                          </>
+                        ) : (
+                          <>
+                            Join {chapter.name}{" "}
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : success ? (
+                // ── ANON SUCCESS (post-signup confirmation) ─────────
                 <div className="text-center space-y-4 py-6">
                   <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#007E72]/10">
                     <CheckCircle2 className="h-7 w-7 text-[#007E72]" />
@@ -380,6 +544,7 @@ export function ChapterLandingClient({ chapter, brandName = "AI Salon" }: Props)
                   </Link>
                 </div>
               ) : (
+                // ── ANON SIGN-UP FORM ────────────────────────────────
                 <>
                   <div className="mb-5">
                     <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
