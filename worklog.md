@@ -14750,3 +14750,23 @@ Stage Summary:
 - Join flow is now a one-click confirm: profile details shown partially masked (password-style), read-only, server-side form capture
 - formJson rows created after this deploy contain profile-sourced data only (source: PROFILE); pre-existing rows keep old whyJoin shape
 - Note for user verification: the masked dialog requires a signed-in session — check on /communities → Request to join, or any event register CTA as a non-member
+
+---
+Task ID: c-slug-signed-in-join-card
+Agent: main
+Task: /c/[chapterSlug] landing must NOT show editable signup form when the visitor is already signed in — show masked read-only identity + Join button instead
+
+Work Log:
+- Root cause: ChapterLandingClient never received a session context, so /c/mtl rendered the anon Name + Email sign-up form even for logged-in users (eze@cazhype.com reported)
+- Server /c/[chapterSlug]/page.tsx: added getServerSession + authOptions + checkChapterMembership; resolved signed-in user's id/name/email/chapterId; passes me {name, email, isMember} to the client. Anonymous path unchanged (me=null)
+- ChapterLandingClient: added me prop; right-hand card now branches:
+    - me.isMember OR post-join → 'You're a member' state + Browse events CTA
+    - me && not member → masked read-only identity (Name 'Eze •••', Email 'ez•••@cazhype.com', password-style partial display) + lock note + single Join button (POST /api/chapters/[slug]/membership; server-side formJson as before)
+    - no me → original anon sign-up form (unchanged)
+- Added Lock to lucide-react imports; tsc clean on both files; eslint only pre-existing unused-router warning
+- Commit d02f694 pushed; deploy dpl_8pb3itfV... live at 05:06 UTC; /c/mtl 200, /communities 200
+
+Stage Summary:
+- Logged-in users landing on /c/mtl (or any /c/<slug>) now see their masked identity + a single Join button — no editable fields, no signup-by-mistake
+- The membership POST builds formJson from the profile server-side (existing flow); the masked UI is purely cosmetic — real values are never sent by the client
+- Same 3-state pattern now matches the JoinCommunityDialog flow (redesigned earlier this session)
