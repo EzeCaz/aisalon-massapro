@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Image as ImageIcon, Users, ArrowRight, Filter, X } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 
 type EventCard = {
   id: string;
@@ -209,7 +210,7 @@ export function EventsList({
                   <option value="">📍 All chapters</option>
                   {chapters.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.country.flagEmoji ?? ""} {c.name}
+                      {displayFlag(c.country.code, c.country.flagEmoji)} {c.name}
                       {c.city ? ` — ${c.city}` : ""}
                     </option>
                   ))}

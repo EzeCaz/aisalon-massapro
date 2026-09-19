@@ -19,6 +19,7 @@ import {
   Lock,
 } from "lucide-react";
 import { AiSalonLogo } from "@/components/brand/aisalon-logo";
+import { displayFlag } from "@/lib/country-flag";
 
 // ------------------------------------------------------------------
 // Types
@@ -230,7 +231,10 @@ export function ChapterLandingClient({
     }
   }
 
-  const flag = chapter.country.flagEmoji || "🌍";
+  // Some Country rows were seeded with the ISO code in flagEmoji (e.g.
+  // "CA" instead of "🇨🇦") — displayFlag derives the real emoji from
+  // country.code when flagEmoji is malformed or missing.
+  const flag = displayFlag(chapter.country.code, chapter.country.flagEmoji);
 
   // Normalize social URLs at render time so links like "linkedin.com/foo"
   // (entered without https://) still resolve to the external site instead

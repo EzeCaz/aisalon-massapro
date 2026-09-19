@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Globe2, Plus, Loader2, MapPin, Users, ArrowRight, Pencil } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 import Link from "next/link";
 
 type Country = {
@@ -187,7 +188,7 @@ export function CountriesManager({ countries: initial }: { countries: Country[] 
           {countries.map((c) => (
             <Card key={c.id} className="p-4 border border-black/10 bg-white">
               <div className="flex items-start gap-3">
-                <span className="text-3xl leading-none">{c.flagEmoji ?? "🏳️"}</span>
+                <span className="text-3xl leading-none">{displayFlag(c.code, c.flagEmoji)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-black">{c.name}</div>
                   <div className="text-xs text-black/60 font-mono">

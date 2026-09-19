@@ -16,6 +16,7 @@ import {
   Globe2,
 } from "lucide-react";
 import { BrandSwitchTabs, type AdminBrandSlug } from "@/components/admin/brand-switch-tabs";
+import { displayFlag } from "@/lib/country-flag";
 
 type BrandImage = {
   name: string;
@@ -453,7 +454,7 @@ export function ImagesGallery({
                 <option value="">All countries</option>
                 {countries.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.flagEmoji} {c.name}
+                    {displayFlag(c.code, c.flagEmoji)} {c.name}
                   </option>
                 ))}
               </select>

@@ -89,6 +89,12 @@ const NEW_MIGRATIONS = new Set([
   // MUST be in NEW_MIGRATIONS from the start (brandSlug lesson). Fully
   // idempotent — no data backfill needed (see migration SQL header).
   '20260919000000_chapter_members_knowledge_docs_brand_templates',
+  // 2026-09-19 (later): fix Country.flagEmoji seed bug. Some rows (e.g.
+  // Canada) stored the ISO-2 code ('CA') instead of the actual emoji
+  // ('🇨🇦') — chapter landing pages rendered "CA" where the flag
+  // should be. Idempotent UPDATE — only touches rows whose flagEmoji
+  // is a 2-char ASCII string with no regional-indicator chars.
+  '20260919120000_fix_country_flagemoji_seed',
 ]);
 
 async function main() {

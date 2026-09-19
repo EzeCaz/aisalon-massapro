@@ -97,7 +97,7 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
       slug: true,
       name: true,
       city: true,
-      country: { select: { flagEmoji: true } },
+      country: { select: { code: true, flagEmoji: true } },
     },
     orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
   });
@@ -107,6 +107,7 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
     name: c.name,
     city: c.city,
     flagEmoji: c.country?.flagEmoji ?? null,
+    code: c.country?.code ?? null,
   }));
 
   if (me) {

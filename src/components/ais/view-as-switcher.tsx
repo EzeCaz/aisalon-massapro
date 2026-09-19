@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Eye, RotateCcw } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 
 /**
  * TSK-0057 — "View as" switcher for SUPER_ADMIN.
@@ -38,7 +39,7 @@ type Chapter = {
   name: string;
   city: string | null;
   slug: string;
-  country: { name: string; flagEmoji: string | null } | null;
+  country: { name: string; code: string | null; flagEmoji: string | null } | null;
 };
 
 type Props = {
@@ -77,13 +78,13 @@ export function ViewAsSwitcher({ currentViewAsRole, currentViewAsChapterId }: Pr
       const res = await fetch("/api/admin/chapters", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const list: Chapter[] = (data.chapters ?? []).map((c: { id: string; name: string; city: string | null; slug: string; country?: { name: string; flagEmoji: string | null } | null }) => ({
+      const list: Chapter[] = (data.chapters ?? []).map((c: { id: string; name: string; city: string | null; slug: string; country?: { name: string; code?: string | null; flagEmoji: string | null } | null }) => ({
         id: c.id,
         name: c.name,
         city: c.city,
         slug: c.slug,
         country: c.country
-          ? { name: c.country.name, flagEmoji: c.country.flagEmoji }
+          ? { name: c.country.name, code: c.country.code ?? null, flagEmoji: c.country.flagEmoji }
           : null,
       }));
       setChapters(list);
@@ -190,7 +191,7 @@ export function ViewAsSwitcher({ currentViewAsRole, currentViewAsChapterId }: Pr
             onClick={() => applyViewAs(currentViewAsRole, c.id)}
             className={`cursor-pointer ${currentViewAsChapterId === c.id ? "bg-amber-50 font-semibold" : ""}`}
           >
-            <span className="mr-1">{c.country?.flagEmoji ?? "🏳️"}</span>
+            <span className="mr-1">{displayFlag(c.country?.code, c.country?.flagEmoji)}</span>
             {c.name}
             {c.city && <span className="ml-1 text-black/50">· {c.city}</span>}
             {currentViewAsChapterId === c.id && <span className="ml-auto text-amber-600">●</span>}

@@ -70,6 +70,7 @@ import {
   Send,
 } from "lucide-react";
 import { formatDateTimeTlv, formatDateTlv } from "@/lib/datetime-tlv";
+import { displayFlag } from "@/lib/country-flag";
 import { CountryChapterScopeFilter } from "@/components/ais/country-chapter-scope-filter";
 import { BulkAssignScopeDialog } from "@/components/ais/bulk-assign-scope-dialog";
 
@@ -1081,7 +1082,7 @@ function CardsView({
                       {m.country || m.chapter ? (
                         <div className="flex flex-col gap-0.5 text-[0.7rem]">
                           <span className="inline-flex items-center gap-1 text-black/80">
-                            {m.country?.flagEmoji && <span className="text-sm">{m.country.flagEmoji}</span>}
+                            {m.country?.flagEmoji && <span className="text-sm">{displayFlag(m.country?.code, m.country.flagEmoji)}</span>}
                             <span className="font-semibold">{m.country?.name ?? "—"}</span>
                           </span>
                           <span className="inline-flex items-center gap-1 text-black/60 pl-1">
@@ -2679,7 +2680,7 @@ function EditMemberDialog({
                     <option value="">— No country (global / unscoped) —</option>
                     {assignCountries.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.flagEmoji ?? ""} {c.name} ({c.code})
+                        {displayFlag(c.code, c.flagEmoji)} {c.name} ({c.code})
                       </option>
                     ))}
                   </select>

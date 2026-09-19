@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Globe2, MapPin, Loader2, Plus, X } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 
 export type BulkAssignEntityType = "members" | "registrants" | "events" | "speakers";
 
@@ -356,7 +357,7 @@ export function BulkAssignScopeDialog({
             <option value="">— Select a country —</option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.flagEmoji ?? ""} {c.name} ({c.code})
+                {displayFlag(c.code, c.flagEmoji)} {c.name} ({c.code})
               </option>
             ))}
           </select>

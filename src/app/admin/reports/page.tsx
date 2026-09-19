@@ -8,6 +8,7 @@ import {
   getUserScope,
   isSuperAdminEmail,
   ROLES, getEffectiveRole} from "@/lib/permissions";
+import { displayFlag } from "@/lib/country-flag";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import Link from "next/link";
@@ -165,7 +166,7 @@ export default async function ReportsPage() {
                   return (
                     <tr key={c.id} className="hover:bg-black/[0.015]">
                       <td className="px-4 py-3 font-semibold text-black">
-                        <span className="mr-2">{c.flagEmoji ?? "🏳️"}</span>
+                        <span className="mr-2">{displayFlag(c.code, c.flagEmoji)}</span>
                         {c.name}
                         <span className="ml-2 text-xs font-mono text-black/40">({c.code})</span>
                       </td>
@@ -215,7 +216,7 @@ export default async function ReportsPage() {
                       {ch.city && <span className="ml-2 text-xs text-black/40">{ch.city}</span>}
                     </td>
                     <td className="px-4 py-3 text-black/70">
-                      <span className="mr-1.5">{ch.country.flagEmoji}</span>
+                      <span className="mr-1.5">{displayFlag(ch.country.code, ch.country.flagEmoji)}</span>
                       {ch.country.name}
                     </td>
                     <td className="px-4 py-3 text-right font-mono">{ch._count.users}</td>

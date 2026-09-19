@@ -38,6 +38,7 @@
 
 import { useMemo } from "react";
 import { Globe2, MapPin, X, Filter } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 
 export type ScopeFilterCountry = {
   id: string;
@@ -188,7 +189,7 @@ export function CountryChapterScopeFilter({
           <option value="">🌍 All countries</option>
           {countries.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.flagEmoji ?? ""} {c.name}
+              {displayFlag(c.code, c.flagEmoji)} {c.name}
             </option>
           ))}
         </select>
@@ -267,7 +268,7 @@ export function CountryChapterScopeFilter({
             <option value="">🌍 All countries</option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.flagEmoji ?? ""} {c.name} ({c.code})
+                {displayFlag(c.code, c.flagEmoji)} {c.name} ({c.code})
               </option>
             ))}
           </select>
@@ -373,7 +374,7 @@ export function CountryChapterScopeFilter({
           <strong>Active filter:</strong>{" "}
           {selectedCountry ? (
             <>
-              {selectedCountry.flagEmoji} {selectedCountry.name}
+              {displayFlag(selectedCountry.code, selectedCountry.flagEmoji)} {selectedCountry.name}
               {selectedChapter && (
                 <>
                   {" → "}

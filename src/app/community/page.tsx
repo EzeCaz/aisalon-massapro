@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/ais/site-footer";
 import { CommunityGrid } from "./community-grid";
 import { getBrandConfig } from "@/lib/brand/brand-config";
 import { listJoinedChapterIds } from "@/lib/membership";
+import { Flag } from "@/components/flag";
 import Link from "next/link";
 
 /**
@@ -195,7 +196,9 @@ export default async function CommunityPage({
                       : "bg-white text-black/80 border-black/15 hover:border-black/40"
                   }`}
                 >
-                  {c.country.flagEmoji ? <span>{c.country.flagEmoji}</span> : null}
+                  {c.country.flagEmoji ? (
+                    <Flag code={c.country.code} flagEmoji={c.country.flagEmoji} />
+                  ) : null}
                   {c.name}
                   {c.id === meRow.chapterId && (
                     <span className={active ? "text-white/60" : "text-black/40"}>· home</span>

@@ -3,6 +3,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { displayFlag } from "@/lib/country-flag";
 import { Textarea } from "@/components/ui/textarea";
 import { Star, ImagePlus, X, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ export type ChapterOption = {
   slug: string;
   name: string;
   city?: string | null;
+  code?: string | null;
   flagEmoji?: string | null;
 };
 
@@ -345,7 +347,7 @@ export function TestimonialForm({
               <option value="">📍 All chapters</option>
               {chapters.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.flagEmoji ? `${c.flagEmoji} ` : ""}
+                  {c.flagEmoji ? `${displayFlag(c.code, c.flagEmoji)} ` : ""}
                   {c.name}
                   {c.city ? ` — ${c.city}` : ""}
                 </option>

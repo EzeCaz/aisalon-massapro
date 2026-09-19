@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X } from "lucide-react";
+import { displayFlag } from "@/lib/country-flag";
 import { toast } from "sonner";
 import { ChapterBrandImagesEditor } from "./chapter-brand-images-editor";
 
@@ -300,7 +301,7 @@ export function ChapterEditor({
             <option value="">Select country…</option>
             {countries.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.flagEmoji} {c.name} ({c.code})
+                {displayFlag(c.code, c.flagEmoji)} {c.name} ({c.code})
               </option>
             ))}
           </select>
