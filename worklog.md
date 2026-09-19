@@ -14770,3 +14770,23 @@ Stage Summary:
 - Logged-in users landing on /c/mtl (or any /c/<slug>) now see their masked identity + a single Join button — no editable fields, no signup-by-mistake
 - The membership POST builds formJson from the profile server-side (existing flow); the masked UI is purely cosmetic — real values are never sent by the client
 - Same 3-state pattern now matches the JoinCommunityDialog flow (redesigned earlier this session)
+
+---
+Task ID: fix-country-flag-seed
+Agent: main
+Task: /c/mtl shows "CA" where 🇨🇦 should be (Israel shows 🇮🇱 correctly)
+
+Work Log:
+- Root cause from production HTML payload: Country row for Canada had flagEmoji = "CA" (literal ISO code) instead of the emoji "🇨🇦"; Israel row had the correct emoji. Bad seed data
+- Added runtime safety net: src/lib/country-flag.ts displayFlag(code, flagEmoji) — uses the stored emoji when it contains regional-indicator chars; otherwise derives the real emoji from the ISO code via U+1F1E6 + (letter - 'A'); falls back to 🏳️
+- Added <Flag code flagEmoji /> component for span-render sites; used displayFlag() directly in <option> tags (text-only context)
+- Applied across 12 render sites — member-facing: /c/[chapterSlug] hero flag, /community directory pills, /events chapter filter, testimonials form; admin: chapter-editor, members-table, reports, images-gallery, countries-manager, country-chapter-scope-filter (×3), view-as-switcher, bulk-assign-scope-dialog. view-as-switcher needed its Chapter type + fetch mapping extended to include country.code
+- testimonials/page.tsx updated its chapter query to select country.code so ChapterOption has the code available client-side
+- Added prisma/migrations/20260919120000_fix_country_flagemoji_seed — idempotent UPDATE that converts any 2-char ASCII flagEmoji to the real emoji derived from code; registered in baseline-migrations.cjs NEW_MIGRATIONS so Vercel build runs it on next deploy
+- tsc clean on all touched files (119 pre-existing unrelated errors unchanged); commit 0c751a3 pushed
+- Deploy dpl_6ZLtfc5c... live at 05:25 UTC; verified /c/mtl renders 🇨🇦, /c/tel-aviv still 🇮🇱
+
+Stage Summary:
+- Flag rendering is now resilient to bad seeds (runtime derives from code); the migration cleans up the existing rows for non-display consumers (emails, exports) that read flagEmoji directly
+- Same fix benefits any chapter page, community directory, events filter, admin page
+- Other countries that may have been mis-seeded will be auto-fixed by the migration on next deploy
