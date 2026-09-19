@@ -14790,3 +14790,1277 @@ Stage Summary:
 - Flag rendering is now resilient to bad seeds (runtime derives from code); the migration cleans up the existing rows for non-display consumers (emails, exports) that read flagEmoji directly
 - Same fix benefits any chapter page, community directory, events filter, admin page
 - Other countries that may have been mis-seeded will be auto-fixed by the migration on next deploy
+
+---
+Task ID: brand-audit-1
+Agent: sub-agent (general-purpose)
+Task: READ-ONLY audit of the aisalon-massapro codebase to build a comprehensive inventory of brand-specific components for Coma vs AI Salon (Coma is the parent platform brand; AIS is a child brand). Cover brand-config, brand-metadata, brand-switch-tabs, mockups, email templates, knowledge base, hero/brand images, prisma Chapter model, brand colors, slogans, and cities.
+
+Work Log:
+- Read in full: src/lib/brand/brand-config.ts, src/lib/brand/brand-metadata.ts, src/lib/brand/resolve-brand.ts, src/lib/brand/coma-site-url.ts, src/components/admin/brand-switch-tabs.tsx, src/lib/knowledge-docs.ts, src/lib/chapter-brand-images.ts, src/lib/site-settings.ts, src/lib/email-brand-context.ts, src/lib/tags.ts, prisma/migrations/20260918000000_add_brand_model_and_brand_ids/migration.sql, prisma/migrations/20260919000000_chapter_members_knowledge_docs_brand_templates/migration.sql, scripts/seed-brands.ts, src/app/admin/knowledge-base/page.tsx, src/app/admin/knowledge-base/knowledge-base-client.tsx, src/app/api/admin/knowledge-docs/route.ts, src/app/api/admin/brand-images/select/route.ts
+- Read /admin/mockups subtree (page.tsx, mockups-client.tsx, all 5 mockup editors + their page.tsx files + shared/brand-assets.ts + shared/share-buttons.tsx)
+- Read /admin/email subtree (page.tsx, flows/templates-client.tsx) and /api/email-templates/{route.ts,[id]/route.ts,[id]/duplicate/route.ts}
+- Read /lib/email.ts (buildComaPasswordHtml / buildAisPasswordHtml / sendPasswordEmail / sendRsvpConfirmationEmail) and /lib/email-orchestrator/{templates.ts,seed.ts,worker.ts,flow-worker.ts}
+- Read /app/login/page.tsx for the brand-aware login page wiring
+- Read prisma/schema.prisma Brand, Chapter, ChapterSetting, KnowledgeDoc, EmailTemplate2, User models
+- Grep'd for all six brand hex colors (#FF005A, #820A7D, #004F98, #00E6FF, #0A1F44, #F5A623, #E84855) and brand CSS variables (--brand-primary, --brand-accent, --brand-accent-rgb)
+
+Findings (enumerated per the user's 11 numbered items):
+
+═══════════════════════════════════════════════════════════════════════
+1. BRAND REGISTRY / CONFIG  (src/lib/brand/brand-config.ts)
+═══════════════════════════════════════════════════════════════════════
+
+`BrandSlug` union: `"aisalon" | "coma"` (only 2 brands; "aisalon" is the child of "coma").
+
+`BrandConfig` interface fields per brand (defined lines 46–171):
+
+  | Field                          | Type     | AIS value                                            | Coma value                                                                                                  |
+  | ------------------------------ | -------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+  | slug                           | string   | `"aisalon"`                                          | `"coma"`                                                                                                    |
+  | displayName                    | string   | `"AI Salon"`                                         | `"Coma"`                                                                                                    |
+  | defaultChapterSlug             | string   | `"tel-aviv"`                                         | `"tel-aviv"`  (both default to the same physical city; brand-agnostic URL contract allows `?brand=coma&chapterSlug=mtl` etc.) |
+  | wordmark                       | string   | `"aisalon"`  (lowercase)                              | `"coma"`  (lowercase)                                                                                       |
+  | tagline                        | string   | `"Empowering AI Connections"`                         | `"Building the Operating System for Communities"`                                                            |
+  | primaryColor                   | string   | `"#004F98"`  (dark blue)                              | `"#0A1F44"`  (institutional navy)                                                                            |
+  | accentColor                    | string   | `"#00E6FF"`  (cyan)                                   | `"#F5A623"`  (warm amber)                                                                                    |
+  | secondaryColor                 | string   | `"#FF005A"`  (magenta/pink)                          | `"#E84855"`  (warm red)                                                                                      |
+  | gradient                       | string   | `"conic-gradient(from 180deg at 50% 50%, #FF005A, #820A7D, #004F98, #00E6FF, #FF005A)"` | `"conic-gradient(from 180deg at 50% 50%, #E84855, #0A1F44, #F5A623, #E84855)"`                                |
+  | heroBanner                     | string   | `""`  (no brand-level hero → falls back to ChapterSetting.loginHero / `/images/falafel-meerkat.jpg`) | `"https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1786481988015-r315qt.png"`           |
+  | favicon                        | string   | `""`  (uses global SiteSetting.favicon or `/favicon.ico`) | `"/brand/coma/favicon-32.png"`                                                                               |
+  | logo                           | string   | `""`  (uses chapter loginHero)                       | `"/brand/coma/logo.png"`                                                                                     |
+  | loginEyebrowTemplate           | string   | `"{brandName} community"`  → renders "AI Salon community" | `"{brandName} community"`  → renders "Coma community"                                                       |
+  | loginHeadlineTemplate          | string   | `"The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose}{cityClause}"` | `"The {brandName} home for {accentSpanOpen}community builders{accentSpanClose}{cityClause}"`                  |
+  | loginSubtitle                  | string   | `"Log in to access events, upload photos from our gatherings, browse the shared slideshow, and connect with fellow founders, CMOs, investors and AI builders."` | `"Log in to access the Coma platform — manage your chapter, host events, onboard new members, and orchestrate your community's growth with the Coma operating system."` |
+  | loginFormHeading               | string   | `"Welcome"`                                          | `"Welcome to Coma"`                                                                                          |
+  | loginFormSubheadingTemplate    | string   | `"Sign in with Google, or use your email and password to access the AI Salon community{cityClause}"` | `"Sign in with Google, or use your email and password to access the Coma platform{cityClause}"`              |
+  | footerCredit                   | string   | `"Platform by MassaPro · Powered by AI Salon"`       | `"Platform by MassaPro · Powered by Coma"`                                                                   |
+
+The `{cityClause}` placeholder is rendered as `" in <city>."` when `?city=` is on the URL, or `"."` when absent — so the H1 ends at the accent phrase ("…community builders.") instead of a dangling "in".
+
+`BRAND_HOST_MAP` (lines 294–311):
+  - `"platform.joincoma.com"` → coma
+  - `"coma.massapro.com"` → coma (legacy alias; middleware 302-redirects to platform.joincoma.com)
+  - `"aisalon.massapro.com"` → aisalon (grandfathered standalone single domain, permanently)
+  - `"coma.local"` → coma, `"aisalon.local"` → aisalon (localdev /etc/hosts aliases)
+
+`BRAND_DEFAULT_SLUG_ENV` = `"BRAND_DEFAULT_SLUG"` (env var name).
+
+`FALLBACK_DEFAULT_BRAND` = `"coma"` (revised 2026-09-17 — Coma is now the parent platform default for unknown hosts).
+
+`getBrandConfig(slug)` returns `BRANDS[slug]` or falls back to `BRANDS[FALLBACK_DEFAULT_BRAND]` (Coma).
+
+`isBrandSlug(s)` — type guard for `"aisalon" | "coma"`.
+
+Note: the legacy "eyebrowTemplate" used to be `{chapterName} Chapter` in the DB seed (see Phase 3A migration SQL below); the code-level brand-config.ts uses `{brandName} community` (post-2026-09-19 spec).
+
+═══════════════════════════════════════════════════════════════════════
+2. BRAND METADATA  (src/lib/brand/brand-metadata.ts)
+═══════════════════════════════════════════════════════════════════════
+
+`BrandMetadata` interface (lines 41–61):
+  - `brand: BrandConfig`  — the resolved BrandConfig for this request.
+  - `siteUrl: string`  — per-host URL (e.g. "https://coma.massapro.com"), used as metadataBase so OG/Twitter URLs resolve against the visitor's actual host (not a hard-coded AIS domain).
+  - `displayTitle: string`  — human brand + chapter display string, e.g. "AI Salon Tel Aviv" or "Coma Tel Aviv" — appended to every page's `<title>` via the layout template.
+  - `city: string`  — the brand's home city, humanized from `brand.defaultChapterSlug` ("Tel Aviv" today for both brands; derived, not hard-coded).
+
+Per-brand defaults (computed at runtime, not stored):
+  - `humanizeChapterSlug("tel-aviv")` → `"Tel Aviv"` (used for both AIS and Coma since both `defaultChapterSlug` = "tel-aviv").
+  - `displayTitle` = `"<brand.displayName> <city>"` → "AI Salon Tel Aviv" / "Coma Tel Aviv".
+  - `siteUrl` — host header is used when available; otherwise:
+      - Coma → `https://coma.massapro.com`
+      - AIS → `https://aisalon.massapro.com`
+  - `brandDescription(brand)`:
+      - Coma → `"Coma Tel Aviv — the community operating system powering Coma's Tel Aviv chapter. Building the Operating System for Communities."`
+      - AIS → `"AI Salon Tel Aviv — the community platform for AI Salon's Tel Aviv chapter. Empowering AI Connections."`
+
+`resolveBrandMetadata(urlBrandSlug?)` — server-only; reads `next/headers`, resolves brand via the 4-layer chain (`?brand=` URL param → middleware-forwarded `x-brand-override` header → host → env), and returns `{ brand, siteUrl, displayTitle, city }`.
+
+═══════════════════════════════════════════════════════════════════════
+3. BRAND SWITCH TABS COMPONENT  (src/components/admin/brand-switch-tabs.tsx)
+═══════════════════════════════════════════════════════════════════════
+
+- Exported type `AdminBrandSlug = "coma" | "aisalon"`.
+- Exported constant `ADMIN_BRANDS` (array of `{ slug, label, dot }`):
+  - `{ slug: "coma",    label: "Coma",     dot: "#F5A623" }`  (amber)
+  - `{ slug: "aisalon", label: "AI Salon", dot: "#FF005A" }`  (magenta)
+- Component `<BrandSwitchTabs active onChange hint? />` — a controlled two-button tab strip with role="tablist" / aria-selected, dot+label inside each button, optional `hint` text rendered next to the tabs. Black pill on active, hover-black/5 on inactive.
+- Consumed by (confirmed via grep):
+  - src/app/admin/mockups/mockups-client.tsx (controls Brand Assets library + `?brand=` editor links)
+  - src/app/admin/email/flows/templates-client.tsx (filters templates by `?brand=` API param; stamps new templates with active brand)
+  - src/app/admin/knowledge-base/knowledge-base-client.tsx (filters docs by brand; stamps new docs with brandSlug)
+  - src/app/admin/images/images-gallery.tsx (scopes brand-image uploads + global selects to active brand)
+
+═══════════════════════════════════════════════════════════════════════
+4. MOCKUPS — file inventory + brand-awareness
+═══════════════════════════════════════════════════════════════════════
+
+There is NO `src/components/mockups/` directory. All mockup code lives under `src/app/admin/mockups/` (+ `src/app/api/admin/events/[id]/mockup-defaults/` API). Full file list:
+
+`src/app/admin/mockups/`
+  - page.tsx  (the index page; metadata = `"Mockups — AI Salon Tel Aviv"` — hard-coded AIS string)
+  - mockups-client.tsx  (main client — has `BrandSwitchTabs`, swaps the Brand Assets section per brand; passes `?brand=<active>` to all editor links)
+  - qr-salon/  (page.tsx, qr-salon-canvas.tsx, qr-salon-editor.tsx, sample-data.ts, types.ts)
+  - meet-the-speaker/  (page.tsx, meet-the-speaker-canvas.tsx, meet-the-speaker-editor.tsx, event-mapper.ts, sample-data.ts, types.ts)
+  - event-profile/  (page.tsx, event-profile-canvas.tsx, event-profile-editor.tsx, event-mapper.ts, sample-data.ts, types.ts)
+  - speaker-intro/  (page.tsx, speaker-intro-canvas.tsx, speaker-intro-editor.tsx, speaker-intro-style2-canvas.tsx, image-picker-modal.tsx, event-mapper.ts, sample-data.ts, types.ts)
+  - agenda-profile/  (page.tsx, agenda-profile-canvas.tsx, agenda-profile-editor.tsx, event-profile-canvas.tsx, event-profile-editor.tsx, event-mapper.ts, sample-data.ts, types.ts)
+  - shared/  (selected-element-shell.tsx, speaker-intro-form-view.tsx, selected-element-panel.tsx, gradient-color-picker.tsx, speaker-picker-modal.tsx, editable-image-helpers.tsx, tagged-image.ts, share-buttons.tsx, brand-assets.ts, qr-salon-selected-panel.tsx, event-profile-form-view.tsx, meet-the-speaker-selected-panel.tsx, text-style-row.tsx, agenda-profile-form-view.tsx, agenda-profile-selected-panel.tsx, section-edit.tsx, image-picker-modal.tsx, meet-the-speaker-form-view.tsx, qr-section-edit-helpers.tsx, time-format.ts, event-profile-selected-panel.tsx, hero-shape.tsx)
+
+5 mockup templates surfaced on the index page (MOCKUP_TEMPLATES constant, lines 207–253 of mockups-client.tsx):
+
+  | # | Title                | Editor URL (`editorHref`)                          | Reference image URL (Vercel Blob)                                              |
+  | - | -------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
+  | 1 | Speaker Intro        | `/admin/mockups/speaker-intro`                     | `…/brand-assets/1782397996559-ouqlmk.jpg`                                       |
+  | 2 | Meet the Speaker     | `/admin/mockups/meet-the-speaker`                  | `…/brand-assets/1782398067379-mtp26z.jpg`                                       |
+  | 3 | Agenda               | `/admin/mockups/agenda-profile`                     | `…/brand-assets/1782398174646-99bf83.png`                                       |
+  | 4 | Event Profile        | `/admin/mockups/event-profile`                     | `…/brand-assets/1782398263781-ias5la.png`                                       |
+  | 5 | QR Salon             | `/admin/mockups/qr-salon`                          | `…/brand-assets/1782505047256-bpy1ln.png`                                       |
+
+Brand-awareness per mockup surface:
+
+- **mockups-client.tsx (index):** HAS `BrandSwitchTabs`. Each editor's `editorHref` is rewritten to append `?brand=<active>` (line 684–686: `editorHref: \`${asset.editorHref}?brand=${brand}\``). The Brand Assets section content swaps per brand via `brandAssetsFor(brand)`:
+    - `brand === "aisalon"` → returns the hard-coded `BRAND_ASSETS` array (TLV Meerkat, TLV Chapter Profile, TLV Empty Profile, Speaker overlay No logo, Speaker overlay with logo — all on `https://aisalon.massapro.com/...`).
+    - `brand === "coma"` → returns cards derived from `getBrandConfig("coma")` (heroBanner, favicon, logo) PLUS a card pointing to `/admin/images` for "Upload more Coma assets".
+  - The Mockup Templates section (the 5 templates above) is NOT brand-filtered — all 5 templates are shown for both brands (their reference URLs and editor deep-links are identical, just with `?brand=` appended to the editor link).
+  - The Brand Library uploader + the System Prompt sections are brand-agnostic (same for both tabs).
+
+- **Each mockup editor page (page.tsx):** Each passes `brandSlug={me.brandSlug ?? "aisalon"}` to its editor component — i.e. the editor's brand is sourced from the signed-in user's `User.brandSlug` column (NOT from `?brand=` query param). The 5 editors each accept `brandSlug: string = "aisalon"` in their props and forward it to:
+    - `mapEventToSpeakerIntroData(event, brandSlug)` in event-mapper.ts → builds the QR code URL via `appendBrandParam(resolveBrandSiteUrl(brandSlug, "/events/<slug>"), brandSlug)`.
+    - `<ShareButtons brandSlug={brandSlug} />` in shared/share-buttons.tsx — appends `?brand=<slug>` to the shareable PNG-page URL (lines 144, 181).
+
+  - **Note:** the editor pages themselves don't READ the `?brand=` URL param — they take the brand from `me.brandSlug` on the server side. So clicking a `?brand=coma` deep-link from the mockups index doesn't currently switch the brand inside the editor (it always uses the signed-in user's brand). The `?brand=` is consumed only at the mockups index → editor hand-off level (via the editorHref rewrite).
+
+- **shared/brand-assets.ts** — defines AI-Salon-only brand assets: `BRAND_LOGO_LIGHT_URL`, `BRAND_LOGO_DARK_URL`, `BRAND_FAVICON_URL`, `BRAND_LOGIN_HERO_URL`, `TEL_AVIV_LOGIN_HERO_URL`, `TEL_AVIV_LOGIN_BANNER_URL`. Plus `resolveBrandingImageUrl(brandingAsset, fallbackUrl)` (light/dark theme picker). NO Coma variant — these are AI-Salon-specific constants used inside the mockup canvases.
+
+═══════════════════════════════════════════════════════════════════════
+5. EMAIL TEMPLATES — brandSlug separation
+═══════════════════════════════════════════════════════════════════════
+
+Files audited:
+- src/app/admin/email/page.tsx  (orchestrator page; **does NOT use BrandSwitchTabs** — no brand separation in the top-level email tab)
+- src/app/admin/email/flows/templates-client.tsx  (HAS `BrandSwitchTabs`; filters + stamps brand)
+- src/app/api/email-templates/route.ts  (GET filters by `?brand=`; POST stamps `brandSlug`)
+- src/app/api/email-templates/[id]/route.ts  (PATCH — no brandSlug mutation; DELETE)
+- src/app/api/email-templates/[id]/duplicate/route.ts  (POST — accepts `{brandSlug}` body to file the copy under the active brand)
+- src/app/api/email-templates/upload-image/route.ts  (image-upload helper; brand-agnostic)
+
+DB schema (prisma/schema.prisma, EmailTemplate2 model lines 913–975):
+  - `brandSlug String?` (line 962) — nullable. NULL = legacy template created before the brand split; legacy templates are visible under BOTH brand tabs (UI shows a grey "legacy" pill). New templates get stamped with the active brand tab's slug.
+
+Brand-separation flow:
+  - **GET /api/email-templates?brand=<slug>** (route.ts lines 36–52): if `?brand=coma|aisalon` is present, the where clause is `{ OR: [{ brandSlug: <brand> }, { brandSlug: null }] }` — i.e. returns the brand-owned templates PLUS all legacy null templates. No `?brand=` → returns all templates (no filter).
+  - **POST /api/email-templates** (lines 126–148): accepts a `brandSlug` body field; normalizes to `"coma"`/`"aisalon"` or `null`; persists on the new row.
+  - **POST /api/email-templates/[id]/duplicate** (lines 41–50): accepts optional `{ brandSlug }` body; if present the COPY inherits that brand (so duplicating a legacy template from inside the Coma tab files the copy under Coma). Without a body the copy inherits the source's brand.
+  - **PATCH /api/email-templates/[id]** — does NOT change brandSlug (preserves the original; no field in the body schema).
+
+UI wiring (templates-client.tsx):
+  - Local state `brand: AdminBrandSlug = "aisalon"` (default tab).
+  - `refresh()` fetches `GET /api/email-templates?brand=${brand}` on mount and on tab switch.
+  - `handleDuplicate` POSTs `/duplicate` with `{ brandSlug: brand }`.
+  - `handleDuplicateToNew` POSTs `/duplicate` with `{ brandSlug: brand }`.
+  - The create-new flow (`TemplateEditorDialog` with `activeBrand` prop) stamps `body.brandSlug = activeBrand` on POST (line 726).
+  - Existing templates show a grey "legacy" pill when `t.brandSlug` is null (line 320–324).
+  - `BrandSwitchTabs` rendered with hint `"Templates tagged legacy are shared by both brands."` (line 277).
+
+Seed (src/lib/email-orchestrator/seed.ts): the 5 seeded stage templates (Awareness/Reminder/Final Prep/Day-Of/Recap) are created with NO `brandSlug` (line 140–158 — no brandSlug field set) — so they fall into the "legacy" bucket and are visible under both brand tabs. The default template HTML still uses AIS-pink (#FF005A) hardcoded inline (templates.ts lines 498, 518, 540 — `color:#FF005A` for the check-in code + recap link), but the brand-name + chapter-name tokens (`{{brand_name}}`, `{{chapter_name}}`) are resolved per-recipient at send time via `resolveEmailBrandContext` (in src/lib/email-brand-context.ts).
+
+═══════════════════════════════════════════════════════════════════════
+6. KNOWLEDGE BASE — DB-backed, per-brand (src/lib/knowledge-docs.ts)
+═══════════════════════════════════════════════════════════════════════
+
+DB model (prisma/schema.prisma lines 230–256, KnowledgeDoc):
+  - `brandSlug String`  (NON-NULL — every doc belongs to exactly one brand; no legacy bucket here)
+  - `section String`  (section title, e.g. "Branding and Templates")
+  - `sectionIntro String?`  (optional intro paragraph under the section)
+  - `sectionOrder Int`  (lower = higher)
+  - `title String`
+  - `description String?`
+  - `url String`
+  - `kind String`  (default "doc"; "folder" | "doc" | "slides" drives the icon)
+  - `sortOrder Int`
+  - `isActive Boolean`
+  - `@@index([brandSlug, isActive, sectionOrder, sortOrder])`
+
+`KnowledgeDocRecord` shape (lines 19–32): id, brandSlug, section, sectionIntro, sectionOrder, title, description, url, kind, sortOrder, isActive, updatedAt.
+
+`LEGACY_AIS_SEED` (lines 35–163) — auto-seeded into `brandSlug="aisalon"` the first time the table has zero AIS docs (`ensureKnowledgeSeed()` is idempotent — guarded by `count > 0`). 5 sections, 9 docs total:
+
+  | Section (sectionOrder)            | Doc title                              | kind    | URL (Google Drive)                                                                                              |
+  | --------------------------------- | -------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+  | Branding and Templates (1)        | Branding Assets                        | folder  | drive.google.com/drive/folders/1iUQ_HR38VABOQ6CqW8UU5NsMmilIOylQ                                                |
+  | Marketing and Communication (2)   | Social Media Handbook                  | doc     | drive.google.com/file/d/1r2Iv5B1TXNoHvRRT7CBpSUPFOlO8UxM5/view                                                  |
+  | Marketing and Communication (2)   | WhatsApp Guidelines                    | doc     | drive.google.com/file/d/10Og0AgTQCsmlvvYX3khrD20Zv_zoz7bE/view                                                  |
+  | Event Management (3)              | Chapter Formation Meeting Template    | doc     | drive.google.com/file/d/1pYrT4hPV3QTLUlwfHM1IlJ5IoFQsPRAuDWHPqkaHkgg/view                                       |
+  | Event Management (3)              | Event Flow Guide                       | doc     | drive.google.com/file/d/1z0FwvEqHje50N-2w4kPW-O4IVYaMotMS/view                                                   |
+  | Event Management (3)              | Venue Guidelines                       | doc     | drive.google.com/file/d/184uXbwWfzQ5VP56B95cxRmk--IOr1auq/view                                                  |
+  | Event Management (3)              | Volunteer Recruitment Guide            | doc     | drive.google.com/file/d/1wl53C8INgDWqriOrtK8GmKeetaAI73PP/view                                                   |
+  | Sponsorship (4)                    | Sponsorship Best Practices             | doc     | drive.google.com/file/d/18RzV17YRGUbO6RoM8u3CfcpkJWgd2dSt/view                                                   |
+  | Sponsorship (4)                    | Sponsor Deck Template                  | slides  | docs.google.com/presentation/d/1WdNOtrtMQmxmQnbpJoV7wRVlAVSHCssVSlhsKXeTYrc/edit                                  |
+  | Chapter Governance (5)            | Chapter Roles and Expectations Guide   | doc     | drive.google.com/file/d/1p539KLeIcg6uCJc1Gw-Cnz3mpFacjTc5/view                                                  |
+
+Section intros are also defined in the seed (see lines 49, 64, 86, 126, 150 of knowledge-docs.ts for the AIS text).
+
+Coma brand knowledge base: starts EMPTY — `ensureKnowledgeSeed()` only seeds AIS. The Super Admin must add Coma docs manually via `/admin/knowledge-base` (BrandSwitchTabs → Coma tab → "Add doc").
+
+API (src/app/api/admin/knowledge-docs/route.ts):
+  - GET `?brand=<slug>` validates the slug is "coma" or "aisalon" (400 otherwise), runs `ensureKnowledgeSeed()` (idempotent), returns docs for that brand.
+  - POST SUPER_ADMIN-only; accepts `brandSlug` in the body, validates `["coma", "aisalon"].includes(brandSlug)`.
+
+Admin page (src/app/admin/knowledge-base/page.tsx):
+  - Runs `ensureKnowledgeSeed()`, then `Promise.all([getKnowledgeDocs("coma"), getKnowledgeDocs("aisalon")])` and passes both sets to the client as `initialDocs={{ coma, aisalon }}`.
+  - Client (knowledge-base-client.tsx) has `BrandSwitchTabs` (line 127), default `"aisalon"`. Edits POST/PATCH with `brandSlug: brand` (line 326). Empty state copy for Coma: `"The Coma knowledge base is empty. Add the first doc to start Coma's own library."` (line 160).
+  - Note: the page metadata title and footer credit are still hard-coded AIS (`"Knowledge Base"` + `© AI Salon Global · Empowering AI Connections`) — not brand-aware.
+
+═══════════════════════════════════════════════════════════════════════
+7. HERO / BRAND IMAGE SETTINGS  (src/lib/chapter-brand-images.ts)
+═══════════════════════════════════════════════════════════════════════
+
+Chapter-overridable image keys (CHAPTER_BRAND_IMAGE_KEYS, lines 44–49):
+  - `K_FAVICON`     = "favicon"
+  - `K_LOGIN_HERO`  = "loginHero"
+  - `K_LOGIN_BANNER` = "loginBanner"
+  - `K_EMAIL_LOGO`  = "emailLogo"
+
+(WhatsApp + LinkedIn URLs live on the Chapter row directly, not in ChapterSetting.)
+
+Resolution chain for `getEffectiveBrandImages(chapterId, brandSlug)` (lines 129–146):
+  1. Brand-scoped global: `getPublicSettingsForBrand(brandSlug)` reads `SiteSetting["<key>@<brand>"]` first (brand-scoped key), then falls back to plain `"<key>"` (legacy global), then `DEFAULTS[<key>]`.
+  2. Chapter-specific: `ChapterSetting[chapterId, <key>]` overrides the global brand-scoped value if present.
+  3. Returns a `PublicSettings` shape.
+
+Brand-scoped SiteSetting keys (src/lib/site-settings.ts lines 237–263):
+  - Keys are stored as `"<key>@<brand>"` (e.g. `"loginHero@coma"`, `"favicon@aisalon"`).
+  - `brandScopedKey(key, brandSlug)` builds `"${key}@${brandSlug}"`.
+  - `parseBrandScopedKey(key)` parses back to `{ base, brand }`.
+  - `getPublicSettingsForBrand(brandSlug)` reads all rows where `key endsWith "@<brandSlug>"`, parses them, and returns merged settings (brand-scoped wins over global fallback wins over DEFAULTS).
+
+DEFAULTS (hard-coded fallbacks, all AIS-flavored):
+  - `favicon`    → `https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393850874-uwkddr.webp`
+  - `loginHero`  → `…/brand-assets/1785654449284-sqq083.png`
+  - `loginBanner`→ `…/brand-assets/1785668808200-0fdrda.png`
+  - `emailLogo`  → `…/brand-assets/1785868301722-nl1qnl.png`
+  - `whatsappGroupUrl` → `https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3` (AIS TLV)
+  - `whatsappGroupText` → "Join our WhatsApp"
+  - `linkedinUrl` → `https://www.linkedin.com/showcase/ai-salon-tel-aviv`
+  - `ga4MeasurementId`, `metaPixelId` → "" (disabled)
+  - `emailSendPaused` → "true" (default paused on first deploy)
+
+Public files: `/public/brand/coma/` contains `apple-touch-icon.png`, `coma-hero.png`, `favicon-192.png`, `favicon-32.png`, `favicon-source.png`, `favicon.ico`, `logo.png`. There is NO `/public/brand/aisalon/` directory — AIS relies on Vercel-Blob-hosted assets + `/images/falafel-meerkat.{jpg,png}`. `/public/brand/aisalon-logo.webp` exists at the root of `/public/brand/`.
+
+Admin /admin/images UI (images-gallery.tsx):
+  - HAS `BrandSwitchTabs` (default `"aisalon"`).
+  - Uploads/selects are written scoped to the active brand (POST `/api/admin/brand-images/select` accepts a `brand` body field; writes to `SiteSetting["<key>@<brand>"]`).
+  - Hint text: `"Showing ${brand === "coma" ? "Coma" : "AI Salon"} brand images and selections."`
+
+═══════════════════════════════════════════════════════════════════════
+8. CHAPTER MODEL + brand→chapter mapping (prisma/schema.prisma)
+═══════════════════════════════════════════════════════════════════════
+
+Chapter model (lines 150–205):
+  - `brandId String?` (FK to Brand; nullable during migration; will be made non-null in Phase 3E).
+  - `slug String` (NO global @unique — Phase 3A dropped it; composite `@@unique([brandId, countryId, slug])` enforces uniqueness per brand+country+slug).
+  - Indexes: `@@index([countryId])`, `@@index([brandId])`.
+  - The same chapter slug can exist under both AIS and Coma in the same country (e.g. "tel-aviv" under AIS Israel + "tel-aviv" under Coma Israel).
+
+Brand model (lines 69–132) — added in Phase 3A migration:
+  - Self-referential hierarchy: `parentBrandId String?`, `parentBrand Brand?`, `childBrands Brand[]` (relation "BrandChildren").
+  - Fields: id, slug (unique), displayName, wordmark, tagline, primaryColor, accentColor, secondaryColor, gradient, heroBannerUrl?, faviconUrl?, logoUrl?, emailLogoUrl?, loginEyebrowTemplate, loginHeadlineTemplate, loginSubtitle, loginFormHeading, loginFormSubheadingTemplate, footerCredit, emailFromName, emailContactEmail, domainArchitecture (default "single"), apexDomain?, appDomain?, legacyDomains String[], status ("DRAFT"|"ACTIVE"), onboardedAt?, parentBrandId?, createdAt, updatedAt.
+  - `Brand.chapters Chapter[]` and `Brand.users User[]` back-relations.
+
+User model brand binding (lines 411–435):
+  - `brandSlug String?` (denormalized cache of `Brand.slug`; will be dropped in Phase 3E).
+  - `brandId String?` (FK to Brand; nullable; SET_NULL on brand delete).
+  - `@@index([brandId])`, `@@index([role, brandId])` for admin filtering.
+
+Data backfill (scripts/seed-brands.ts + Phase 3A migration SQL):
+  - Phase 3A decision: ALL existing chapters → brandId = AIS (preserves AIS user experience; Coma chapters created fresh via Phase 3C onboarding).
+  - All existing users with `brandSlug = null | "aisalon"` → brandId = AIS.
+  - Users with `brandSlug = "coma"` → brandId = Coma.
+  - "Tel Aviv" and "Montreal" are mentioned in scripts/seed-brands.ts comments as the existing chapters — both backfilled to AIS. The Coma brand starts with zero chapters (no seed creating a "tel-aviv" Coma chapter).
+  - Brand seed (id="brand-coma" for Coma, id="brand-aisalon" for AIS) — fixed IDs for determinism. Coma `parentBrandId = null` (parent). AIS `parentBrandId = Coma.id` (child).
+
+Brand→chapter mapping in code: there is NO code-level list of "AIS chapter slugs vs Coma chapter slugs". Chapter→brand binding is purely DB-driven (`Chapter.brandId`). The Coma-side chapter set is empty at deploy time; Coma chapters are created later via the Phase 3C onboarding flow (`/admin/chapter-onboarding/` exists). The only city mentioned in code is `defaultChapterSlug = "tel-aviv"` (both brands).
+
+Brand app hosts (src/lib/brand/coma-site-url.ts BRAND_APP_HOSTS, lines 50–53):
+  - `coma`    → `https://platform.joincoma.com`
+  - `aisalon` → `https://aisalon.massapro.com`
+  - Future brands (Danone, HiTech AI, etc.) would default to `platform.joincoma.com` until a per-brand domain is configured.
+
+═══════════════════════════════════════════════════════════════════════
+9. BRAND COLORS / THEME TOKENS
+═══════════════════════════════════════════════════════════════════════
+
+No central `--brand-primary` CSS-variable definition exists. Brand colors are injected inline at the page level:
+
+- **/login/page.tsx** (line 211): `style={{ ["--brand-primary" as string]: brand.primaryColor }}` — sets the CSS variable on the `<main>` element. Used downstream (e.g. LoginForm reads `primaryColor`, `accentColor`, `secondaryColor` as props from `brand.*`).
+- **/onboarding/page.tsx** (line 190): same pattern — `style={{ ["--brand-primary"]: brand.primaryColor }}`.
+- **/quiz/[sessionId]/quiz-player.tsx** (lines 134–167): sets `--brand-accent` and `--brand-accent-rgb` (the accent color + its RGB triplet for Tailwind `rgba(var(--brand-accent-rgb), 0.05)` etc.).
+
+Hard-coded brand hex codes scattered across the codebase (40+ files use them):
+  - **AIS palette** (src/lib/tags.ts lines 5–12): the canonical AIS palette is documented here as:
+    - AIS RED      `#FF005A`
+    - AIS CYAN     `#00E6FF`
+    - AIS ACCENT 1 `#FFAC30` (orange)
+    - AIS ACCENT 2 `#007E72` (teal)
+    - AIS ACCENT 3 `#004F98` (dark blue)
+    - AIS ACCENT 4 `#820A7D` (purple)
+    - AIS BLACK    `#000000`
+    These appear in admin-pills (permissions.ts scopeBadge lines 407–413: `bg-[#820A7D] text-white` global, `bg-[#FF005A]` country, `bg-[#00E6FF]/20 text-[#007E72]` chapter), member tags, mockup accent bars (`text-[#FF005A]` in mockups-client.tsx + every mockup editor's eyebrow), brand-switch-tabs dot color for AIS, upload-zone border colors, etc.
+  - **Coma palette** is NOT documented in a `tags.ts`-equivalent module — it lives in brand-config.ts (primary `#0A1F44`, accent `#F5A623`, secondary `#E84855`) and the email-context helper (email-brand-context.ts). The amber dot for Coma in brand-switch-tabs.tsx (`#F5A623`) is the only Coma-specific hex literal I found outside brand-config.ts. Most "Coma" UI simply consumes `brand.primaryColor` / `brand.accentColor` via inline `style={{ ... }}` rather than Tailwind classes.
+
+Email-rendering color usage (src/lib/email.ts):
+  - `buildComaPasswordHtml` uses `brand.primaryColor` (`#0A1F44`) for wordmark, headings, buttons, and `brand.accentColor` (`#F5A623`) for the password-box border tint + background tint `#FAF7F0`.
+  - `buildAisPasswordHtml` uses `brand.secondaryColor` (`#FF005A`) for the password text itself, `brand.primaryColor` (`#004F98`) for the link.
+  - `sendRsvpConfirmationEmail` banner gradient:
+      - Coma → `linear-gradient(135deg, ${brand.primaryColor} 0%, ${brand.accentColor} 100%)` (navy → amber)
+      - AIS  → `linear-gradient(135deg, #FF005A 0%, #00E6FF 100%)` (pink → cyan — hard-coded, NOT pulled from brand config)
+
+Orchestrator templates (src/lib/email-orchestrator/templates.ts): default template HTML still has hard-coded `color:#FF005A` for check-in code (lines 498, 518) and recap link (line 540). The brand_name + chapter_name tokens are dynamic, but the inline accent colors are AIS-specific.
+
+═══════════════════════════════════════════════════════════════════════
+10. SLOGANS / TAGLINES / EYEBROWS
+═══════════════════════════════════════════════════════════════════════
+
+From brand-config.ts:
+
+| Field              | AIS value                                  | Coma value                                         |
+| ------------------ | ------------------------------------------ | -------------------------------------------------- |
+| tagline            | `"Empowering AI Connections"`              | `"Building the Operating System for Communities"`  |
+| loginEyebrow       | `"AI Salon community"`  (from `{brandName} community`) | `"Coma community"`  (same template)         |
+| loginHeadline      | `"The AI Salon community for AI builders{cityClause}"` | `"The Coma home for community builders{cityClause}"` |
+| loginFormHeading  | `"Welcome"`                                | `"Welcome to Coma"`                                |
+| footerCredit       | `"Platform by MassaPro · Powered by AI Salon"` | `"Platform by MassaPro · Powered by Coma"`        |
+
+Other AIS-only slogans in code:
+  - `src/app/admin/mockups/page.tsx` footer (line 93): `© <year> AI Salon Global· Empowering AI Connections` — hard-coded AIS, not brand-aware.
+  - All 5 mockup editor footers (e.g. speaker-intro/page.tsx line 132): `© <year> AI Salon Global· Empowering AI Connections` — hard-coded AIS.
+  - `src/app/admin/email/page.tsx` footer (line 221): `© <year> AI Salon · V7 Hierarchy` — hard-coded AIS.
+  - `src/app/admin/knowledge-base/page.tsx` footer (line 80): `© <year> AI Salon Global· Empowering AI Connections` — hard-coded AIS.
+  - Page metadata titles hard-coded as AIS in many admin pages (e.g. `"Mockups — AI Salon Tel Aviv"`, `"Email Campaigns — AI Salon Admin"`, `"Speaker Intro Mockup — AI Salon"`, `"QR Salon Mockup — AI Salon Tel Aviv"`, etc.). The leaf admin pages do NOT use `resolveBrandMetadata()`.
+
+Coma slogans: only the tagline `Building the Operating System for Communities` (used in the Coma password email footer + the RSVP email footer + the Coma brand panel of /login).
+
+═══════════════════════════════════════════════════════════════════════
+11. CITIES / CHAPTERS per brand
+═══════════════════════════════════════════════════════════════════════
+
+| Source                  | Brand  | City / Chapter slug                |
+| ----------------------- | ------ | ---------------------------------- |
+| brand-config.ts         | AIS    | `defaultChapterSlug = "tel-aviv"` (humanized: "Tel Aviv") |
+| brand-config.ts         | Coma   | `defaultChapterSlug = "tel-aviv"` (humanized: "Tel Aviv") |
+| site-settings.ts        | AIS    | `K_WHATSAPP_GROUP_URL = https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3` (AI Salon TLV community group); `K_LINKEDIN_URL = https://www.linkedin.com/showcase/ai-salon-tel-aviv` |
+| scripts/seed-brands.ts  | both   | Comment line 124: "all existing chapters (Tel Aviv, Montreal) become AIS chapters" — Tel Aviv (`tel-aviv`) + Montreal (`mtl`) are the existing AIS chapters (per /communities + /c/mtl landing verified in earlier worklog task `fix-c-slug-crash-deploy-verify`). |
+| scripts/set-montreal-hero.ts | AIS | Confirms Montreal chapter exists with `slug = "montreal"` (slug-based query) — note: the production Montreal chapter's slug is `mtl` per the worklog task `fix-c-slug-crash-deploy-verify` (the script's case-insensitive `slug = "montreal"` query + `name CONTAINS "Montreal"` fallback both match the same row). Hero image URL: `https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1784630528181-xsnpz1.jpeg` |
+| Phase 3A migration      | AIS    | ALL existing chapters backfilled to `brandId = AIS.id`. |
+| Phase 3A migration      | Coma   | ZERO chapters at deploy time — Coma chapters created fresh via Phase 3C onboarding (`/admin/chapter-onboarding/`). |
+| URL contract            | both   | `?brand=coma&chapterSlug=<any-slug>` is valid — the brand-chapter pairing is brand-agnostic at the URL level. The `defaultChapterSlug` is purely informational. |
+
+No code-level mapping of "AIS chapter slugs vs Coma chapter slugs" exists. Chapter→brand binding is purely DB-driven via `Chapter.brandId`. The `@@unique([brandId, countryId, slug])` constraint allows "tel-aviv" to exist under both brands in the same country simultaneously (the platform intent per schema.prisma line 198–201).
+
+═══════════════════════════════════════════════════════════════════════
+Cross-cutting observations (NOT requested but relevant):
+═══════════════════════════════════════════════════════════════════════
+
+- **Brand separation is INCOMPLETE on the admin surface**: only 4 admin pages use `BrandSwitchTabs` (mockups index, email-templates flow tab, knowledge-base, images gallery). The email orchestrator top-level page (src/app/admin/email/page.tsx), the campaign composer, and the orchestrator panel do NOT have brand tabs — they read whatever brand is set on the user (`me.brandSlug`) at most.
+- **Hard-coded AIS strings still leak**: every admin mockup editor's footer + page metadata uses "AI Salon Tel Aviv" copy, regardless of which brand the signed-in admin belongs to. Same for the email-admin + knowledge-base page footers and metadata. This is consistent with the prior worklog observation in `fix-c-slug-crash` (line 14719): "Note: pre-existing 'AI Salon' strings on admin/c page title kept (Phase B/C cleanup scope)".
+- **Email orchestrator seed creates "legacy" templates**: the 5 stage templates (Awareness/Reminder/Final Prep/Day-Of/Recap) have `brandSlug = NULL` so they show under both brand tabs. There is currently no brand-specific seed of stage templates — a Super Admin would need to duplicate them per brand from the UI to get brand-specific color tokens (otherwise the hard-coded `#FF005A` accents remain in the seed HTML).
+- **The mockup editor `?brand=` URL param is currently dropped**: mockups-client.tsx rewrites the editor link to `?brand=<active>`, but the editor pages read `me.brandSlug` (signed-in user's brand) instead. A Coma-signed-in admin clicking a Coma-tab editor deep-link will see Coma branding via `me.brandSlug` — but switching the BrandSwitchTabs to Coma as an AIS-signed-in admin won't change the editor's brand. This is a known gap, not a bug.
+- **Coma brand knowledge base + Coma brand stage templates both start EMPTY**: only the AIS knowledge base is auto-seeded; the 5 stage templates are legacy (NULL brand). The Super Admin must populate Coma's content manually post-deploy.
+
+Stage Summary:
+- Read-only audit complete. NO code changes made. Findings appended to worklog.md under Task ID: brand-audit-1.
+- The platform has a clean 2-brand registry (Coma parent + AIS child) with full color/copy/asset separation at the BrandConfig level, brand-aware email rendering via `resolveEmailBrandContext`, and 4 admin surfaces (mockups index, email-templates flow tab, knowledge-base, images gallery) wired with `BrandSwitchTabs` for per-brand filtering + per-brand new-row stamping.
+- Brand-separation gaps identified (no fixes applied): (1) admin page metadata + footers across mockup editors, email admin, knowledge-base are still hard-coded AIS strings; (2) the email orchestrator top-level + campaign composer lack brand tabs; (3) mockup editors ignore the `?brand=` URL param (use signed-in user's brand); (4) the 5 seeded stage templates are brand-NULL (legacy), so hard-coded `#FF005A` AIS accents in the seed HTML leak into Coma-branded sends unless the Super Admin duplicates them per brand; (5) Coma brand knowledge base + Coma brand stage templates both start empty post-deploy.
+- Next-action recommendations (for the user's decision): decide whether to (a) leave the seeded stage templates as legacy (single set, both brands share them — current state), or (b) seed brand-specific copies (Coma stage templates using navy `#0A1F44` + amber `#F5A623`, AIS stage templates keeping the existing pink `#FF005A`), or (c) rip out the hard-coded `#FF005A` from templates.ts and replace with `brand.secondaryColor` tokens resolved at send time. Option (c) is the cleanest but requires touching the seed + the renderer.
+
+---
+Task ID: brand-audit-2
+Agent: general-purpose (read-only audit)
+Task: Build a comprehensive inventory of brand-specific UI surfaces for Coma vs AI Salon at /home/z/my-project
+
+Method:
+- Read /home/z/my-project/worklog.md (14792 lines, last entry: c-slug-signed-in-join-card → fix-country-flag-seed).
+- Grepped src/ for `resolveBrandMetadata`, `getBrandConfig`, `FALLBACK_DEFAULT_BRAND`, `BrandSwitchTabs`, `?brand=`, `appendBrandParam`, `resolveEmailBrandContext`, `BRANDS`, `sendPasswordEmail`, `sendRsvpConfirmationEmail`, `sendChapterOnboardingEmail`, `sendChapterProvisionedEmail`, `isComa`, `brandSlug` and read each hit.
+- Cross-referenced Prisma schema (Brand, KnowledgeDoc, EmailTemplate2, User.brandSlug/brandId, Chapter.brandId).
+- READ-ONLY: no code changes.
+
+Summary table — 1 line per brand-branched surface (full enumeration in sections 1–11 below):
+
+| # | File | What renders differently per brand |
+|---|------|------------------------------------|
+| 1 | src/middleware.ts | Forwards `?brand=<slug>` as `x-brand-override` request header; 302-redirects coma.massapro.com → platform.joincoma.com; passes through AIS host unchanged |
+| 2 | src/app/layout.tsx | generateMetadata resolves brand → `metadataBase`, title template, keywords, OG image, favicon chain (brand.favicon → global → /images/favicon.webp). RootLayout resolves brand → `getPublicSettingsForBrand(brand.slug)` → injects GA4 + Meta Pixel |
+| 3 | src/app/login/page.tsx + login-form.tsx | Full brand-aware login (hero image, eyebrow, headline, subheading, CTA, form heading, footer credit, button color = brand.primaryColor) |
+| 4 | src/app/onboarding/page.tsx | Coma branch vs AIS branch — different hero copy, header strip, footer; Coma suppresses chapter name |
+| 5 | src/app/c/[chapterSlug]/page.tsx + chapter-landing-client.tsx | Title uses `brand.displayName`, eyebrow "brandName · country", footer "© year brandName · chapter.name Chapter", sign-up card copy "Sign up for {brandName} {chapter.name}" |
+| 6 | src/app/e/[slug]/page.tsx + public-event-page.tsx | Title bare (template appends brand suffix); brand config passed down → brandName/brandTagline → PublicFooter; share URL `?brand=<slug>` appended |
+| 7 | src/app/events/page.tsx | "Join {brand.displayName}" banner + "Upcoming & past gatherings" header eyebrow "{brand.displayName} {chapterName}" + SiteFooter(brand) + ReferralShareCard(brand) |
+| 8 | src/app/community/page.tsx | eyebrow "{brand.displayName} {chapterName}" + SiteFooter(brand) |
+| 9 | src/app/communities/page.tsx | CommunitiesClient receives brandName; cards render per-chapter `c.brandName` from `Chapter.brand.displayName` |
+| 10 | src/app/testimonials/page.tsx | eyebrow "{brand.displayName} {chapterName} · Testimonials" + TestimonialFeed receives brandName + brandSlug (used in share URLs) |
+| 11 | src/app/profile/page.tsx | ProfileEditor eyebrow + ReferralShareCard(brand) + footer "{brand.displayName} {chapterName} · {brand.tagline}" |
+| 12 | src/app/admin/page.tsx + admin/dashboard/page.tsx | Brand palette for scope badges, StatCards, headers; Coma shows "Launch your first chapter" CTA; footer "{brand.displayName} · {brand.tagline}" |
+| 13 | src/app/admin/admin-members-table.tsx | Per-member brandSlug selector (AIS ↔ Coma) in the Edit dialog; BrandBadge pill per row |
+| 14 | src/app/admin/chapters/chapter-edit-content.tsx + chapter-editor.tsx | `brandSlug` from `me.brandSlug` → appends `?brand=<slug>` to registration URL + admin URL |
+| 15 | src/app/admin/chapter-onboarding/page.tsx + chapter-onboarding-admin-list.tsx | brandSlug → invite URLs carry `?brand=<slug>` |
+| 16 | src/app/admin/chapter-onboarding/preview-coma-form-button.tsx | Hardcoded "Preview Coma onboarding form" button (only Coma) |
+| 17 | src/app/chapter-onboarding/[token]/page.tsx + chapter-onboarding-form.tsx | invitee.user.brandSlug → BrandConfig → header brand chip, hero copy "Coma vs AI Salon global community", mailto: team@coma.massapro.com vs aisalon@massapro.com |
+| 18 | src/app/admin/mockups/mockups-client.tsx + admin/mockups/*-editor + event-mapper.ts | BrandSwitchTabs; brandSlug prop drives `resolveBrandSiteUrl` + `appendBrandParam` for QR code URLs in mockups (speaker-intro, meet-the-speaker, event-profile, agenda-profile) |
+| 19 | src/app/admin/knowledge-base/knowledge-base-client.tsx + api/admin/knowledge-docs | BrandSwitchTabs; per-brand KnowledgeDoc rows (brandSlug column); AIS seeded, Coma starts empty |
+| 20 | src/app/admin/images/images-gallery.tsx + api/admin/brand-images/* | BrandSwitchTabs; uploads land under `brand-assets/<brand>/`; selections write brand-scoped `SiteSetting["key@brand"]` |
+| 21 | src/app/admin/email/flows/templates-client.tsx + api/email-templates | BrandSwitchTabs; `?brand=<slug>` filter on list; new template stamped with `brandSlug`; legacy (null) templates visible in both tabs |
+| 22 | src/app/quiz/page.tsx + quiz/[sessionId]/page.tsx | resolveBrand → redirects to /events?brand=<slug>; quiz session page passes brand.palette down to QuizPlayer + login URL keeps `?brand=` |
+| 23 | src/app/admin/quiz/[id]/page.tsx + quiz-control-room.tsx | brandSlug prop → join-URL display + clipboard copy carry `?brand=<slug>` |
+| 24 | src/components/ais/app-header.tsx | `getBrandConfig(user.brandSlug ?? "aisalon")` → renders Coma wordmark / Coma hero banner PNG / Coma tagline / hides "AI & Human Flourishing" nav link; WhatsApp + LinkedIn URLs resolved via `getPublicSettingsForBrand(brand.slug)` + chapter override; chapter label "Montreal Chapter" from chapter row |
+| 25 | src/components/ais/site-footer.tsx | Receives `brandName` + `chapterName` props; renders "© year brand chapter · Empowering Human Connections" |
+| 26 | src/components/brand/brand-logo.tsx (BrandLogo + BrandGradientText) | Text-based wordmark + tagline; `withGradient` paints wordmark in brand.gradient |
+| 27 | src/components/brand/aisalon-logo.tsx + aisalon-logo-server.tsx + components/salon/brand-logo.tsx | AIS-only wordmark + Falafel Meerkat mascot (no Coma equivalent) |
+| 28 | src/components/ais/referral-share-card.tsx | brandName + brandTagline + brandSlug → share URL `?utm_campaign=<slug>&brand=<slug>` |
+| 29 | src/components/testimonials/testimonial-card.tsx + testimonial-feed.tsx | brandName + brandSlug → share URL `?brand=<slug>` + share text "{brandName} — {eventTitle}" |
+| 30 | src/app/events/[slug]/page.tsx + tabs/testimonials-tab.tsx + event-tabs.tsx + my-registered-events.tsx | brandName + brandSlug passed to ReferralShareCard / TestimonialsTab / MyRegisteredEvents (calendar URL carries `?brand=`) |
+| 31 | src/app/admin/mockups/shared/share-buttons.tsx | `brandSlug` → `appendBrandParam(pageUrl, brandSlug)` on every platform share link |
+| 32 | src/lib/auth.ts | Reads `ais_signup_brand` cookie during Google OAuth → stamps `User.brandSlug` at creation; backfills on legacy sign-in; propagates `brandSlug` to `session.user.brandSlug` via JWT |
+| 33 | src/app/api/auth/signup/route.ts | Validates `brandSlug` body param → stamps on new User row + forwards to sendPasswordEmail |
+| 34 | src/app/api/auth/post-login-redirect/route.ts | Reads `?brand=` + `user.brandSlug` → appends to /onboarding redirect URL |
+| 35 | src/app/api/events/[slug]/rsvp/route.ts | RSVP confirmation email: per-recipient `recipientBrandSlug = user.brandSlug === "coma" ? "coma" : "aisalon"` → `resolveComaSiteUrl` + `appendBrandParam` + `sendRsvpConfirmationEmail({brandSlug})` |
+| 36 | src/app/api/messages/[userId]/route.ts | DM notification email: recipient.brandSlug → `resolveEmailBrandContext` → brand.fromName, brand.displayName, brand.accentColor in email |
+| 37 | src/app/api/speakers/[id]/messages/route.ts | Speaker-contact admin-relay email: sender.brandSlug → resolveEmailBrandContext |
+| 38 | src/app/api/admin/members/[id]/reset-password/route.ts + bulk-reset-password/route.ts + [id]/credentials/route.ts | Reads target.brandSlug → forwards to sendPasswordEmail per-recipient |
+| 39 | src/app/api/admin/members/[id]/send-chapter-onboarding/route.ts | Reads target.brandSlug → `resolveBrandSiteUrl` + `appendBrandParam` on formUrl |
+| 40 | src/app/api/admin/chapter-onboarding/preview-invite/route.ts + [id]/provision/route.ts | target.brandSlug → brand-aware form URL + chapter-provisioned email URL (adminUrl + loginUrl carry `?brand=`) |
+| 41 | src/lib/email-orchestrator/flow-worker.ts | `flowBrandSlug = row.rsvp?.user?.brandSlug === "coma" ? "coma" : "aisalon"` → `resolveComaSiteUrl(flowBrandSlug, "/")` → buildContext({brandSlug}) |
+| 42 | src/lib/email-orchestrator/templates.ts | buildContext accepts `brandSlug`; ctx.brandSlug + ctx.brandDisplayName + ctx.brandSiteUrl from getBrandConfig + BRANDS[slug] |
+| 43 | src/lib/email/render-unified.ts | Replaces `{{brand_name}} {{brand_wordmark}} {{brand_tagline}} {{brand_site_url}} {{brand_site_label}}` tokens; defaults to AIS when brand fields absent |
+
+---
+
+## 1. All pages that branch by brand
+
+### Pages / route handlers that explicitly branch on brand:
+
+| File | Brand-branch behavior |
+|---|---|
+| `src/middleware.ts` | Lines 86-96: `comaLegacyDomainRedirect()` 302-redirects `coma.massapro.com → platform.joincoma.com`. Lines 148-157: validates `?brand=<slug>` against `isBrandSlug()`, forwards as `x-brand-override` request header. Skips UTM tracking on `/api/auth/`, `/api/site-settings`, `/favicon.ico`, `/robots.txt`, `/sitemap.xml` (still propagates brand header). |
+| `src/app/layout.tsx` | `generateMetadata` calls `resolveBrandMetadata()` then `getPublicSettingsForBrand(brand.slug)`; metadataBase = `proto://host`; title template = `%s — ${displayTitle}` where displayTitle = `${brand.displayName} ${city}`; favicon chain = `brand.favicon || settings.favicon || /images/favicon.webp`; OG banner = `brand.heroBanner` (Coma) or `settings.loginBanner` (AIS) or `/images/falafel-meerkat.jpg`. RootLayout injects `<AnalyticsScripts ga4MeasurementId={settings.ga4MeasurementId} metaPixelId={settings.metaPixelId} />`. |
+| `src/app/login/page.tsx` | 4-layer `resolveBrand()` (URL → host → env). Full brand-aware hero + form (see §2). |
+| `src/app/onboarding/page.tsx` | Reads `me.brandSlug` + `?brand=` URL param; `isComa` branch (lines 188-274) renders Coma hero "Build your community with Coma" with `BrandGradientText` + "Community Builder" label; AIS branch (lines 277-352) renders "AI Salon {chapterName}" with `AiSalonLogoServer`. generateMetadata branches: `?brand=coma` → `Welcome — Coma`, else `Welcome`. |
+| `src/app/c/[chapterSlug]/page.tsx` | `resolveBrandMetadata()` → passes `brand.displayName` as `brandName` prop to `ChapterLandingClient`. generateMetadata uses `brand.displayName` in title + description. |
+| `src/app/c/[chapterSlug]/chapter-landing-client.tsx` | Defaults `brandName = "AI Salon"`; eyebrow `{flag} {brandName} · {chapter.country.name}`; signup-card heading `Sign up for {brandName} {chapter.name}`; toast `Welcome to {brandName} {chapter.name}!`; footer `© year {brandName} · {chapter.name} Chapter`. |
+| `src/app/e/[slug]/page.tsx` | `resolveBrandMetadata()` → `brand` passed to `PublicEventPage`. Title returned BARE (template appends brand suffix). |
+| `src/app/e/[slug]/public-event-page.tsx` | `brandName = brand.displayName ?? "AI Salon"`; `brandTagline = brand.tagline ?? "Empowering AI Connections"`; `chapterName = event.chapter?.trim() || "Tel Aviv"`; `brandDisplayLong = ${brandName} ${chapterName}`. PublicHeader uses `AiSalonLogoServer` (AIS-only, see §6). PublicFooter: `© year {brandDisplayLong} · {brandTagline}` + `Platform by MassaPro`. Share URL appends `?brand=<slug>`. CtaCard: anonymous CTA = `Join {brandName}`. |
+| `src/app/events/page.tsx` | `resolveBrandMetadata()` + `getBrandConfig(me?.brandSlug ?? hostBrand.slug)`. Banner: `Join {brand.displayName}` + button `Join {brand.displayName} →`. Header eyebrow `{brand.displayName} {chapterName}`. ReferralShareCard uses `brand.displayName`, `brand.tagline`, `brand.slug`. MyRegisteredEvents receives `brand.slug`. EventsList receives `brand.displayName`, `chapterName`. SiteFooter receives `brand.displayName`, `chapterName`. **Event visibility filter**: `isComaUser` (me.brandSlug === "coma") sees ALL events; non-Coma users see only their own brand's events + legacy + isCrossChapter. |
+| `src/app/community/page.tsx` | `getBrandConfig(meRow.brandSlug ?? "aisalon")` → eyebrow `{brand.displayName} {chapterName}` + empty-state copy "No other members in {brand.displayName} {chapterName} yet." + member-count footer "Showing N members · {brand.displayName} {chapterName}" + SiteFooter(brand). |
+| `src/app/communities/page.tsx` | `resolveBrandMetadata()` → CommunitiesClient receives `brandName=brand.displayName`; each card shows `c.brandName` from `Chapter.brand.displayName`. |
+| `src/app/communities/communities-client.tsx` | Each card renders `c.brandName ?? brandName` as a sub-header under the chapter name; brand strip is hardcoded `from-[#FF005A] via-[#7C3AED] to-[#00E6FF]` (NOT brand-aware). |
+| `src/app/testimonials/page.tsx` | `getBrandConfig(me?.brandSlug ?? "aisalon")` → eyebrow `{brand.displayName} {chapterName} · Testimonials` + TestimonialFeed receives `brandName=brand.displayName, brandSlug=brand.slug` + SiteFooter(brand). |
+| `src/app/profile/page.tsx` | `getBrandConfig(me.brandSlug ?? "aisalon")` → ReferralShareCard(brand) + footer `© year {brand.displayName} {chapterName} · {brand.tagline}`. |
+| `src/app/admin/page.tsx` | `getBrandConfig(me.brandSlug ?? "aisalon")` → scope badge colors come from `brand.primaryColor`/`accentColor`; eyebrow `{brand.displayName} Admin Panel · V7 Hierarchy`; StatCard accents = brand.primary/accent/secondary; footer `{brand.displayName} · {brand.tagline}`. **Brand-scoped data**: `isComa` → `events = []`, `allSpeakers = []` (Coma is fresh, has no events yet); non-Coma → `db.event.findMany` with `scopeEventFilter`. |
+| `src/app/admin/dashboard/page.tsx` | Same brand palette pattern. **Coma-only CTA**: `showNewChapterCta = isComa && !me.chapterId` → "Launch your first chapter" hero card with brand gradient + Coma hero banner PNG; links to /admin/chapter-onboarding. |
+| `src/app/admin/admin-members-table.tsx` | BrandBadge component (lines 3098-3116) hardcoded: Coma `{label:"Coma", bg:"#0A1F44", fg:"#F5A623"}`, AIS `{label:"AI Salon", bg:"#004F98", fg:"#00E6FF"}`. Edit dialog has Brand `<select>` (lines 2838-2845) with options `AI Salon (platform default)` + `Coma`; saved to `User.brandSlug`. |
+| `src/app/admin/chapters/chapter-edit-content.tsx` + `chapter-editor.tsx` | `brandSlug={me.brandSlug ?? "aisalon"}` (line 155). ChapterEditor appends `?brand=<slug>` to registration URL `${siteUrl}/c/${slug}?brand=<slug>` and admin URL `${siteUrl}/admin/c/${slug}?brand=<slug>`. |
+| `src/app/admin/chapter-onboarding/chapter-onboarding-admin-list.tsx` | `brandSlug` prop (default "aisalon") → `brandQs = "?brand=<slug>"` → invite URL `${siteUrl}/chapter-onboarding/${token}${brandQs}` (row display + open-in-new-tab + copy). |
+| `src/app/admin/chapter-onboarding/preview-coma-form-button.tsx` | **Hardcoded Coma-only** — POSTs to `/api/admin/chapter-onboarding/preview-invite` with `email: "eze@cazhype.com"` (the Coma-branded member). UI: `border-[#0A1F44]/30 text-[#0A1F44]` (Coma navy). |
+| `src/app/chapter-onboarding/[token]/page.tsx` | invitee.user.brandSlug → `getBrandConfig(brandSlug ?? "aisalon")` → header chip with brand.gradient swatch + brand.displayName + "Chapter Onboarding" subtitle; "For: {inviteeName}" right-side; footer `brand.displayName · brand.tagline · <link to brand.slug === "coma" ? coma.massapro.com : aisalon.massapro.com>`; ExpiredView + RevokedView + AlreadySubmittedView all branched: mailto: `team@coma.massapro.com` vs `aisalon@massapro.com`. |
+| `src/app/chapter-onboarding/[token]/chapter-onboarding-form.tsx` | Brand prop (BrandConfig) → hero headline branches: Coma = "Welcome to the Coma platform! Fill out this form once and we'll provision your chapter — landing page, login page, brand assets, email templates, everything. Coma is the operating system for communities — your chapter will run on the same stack that powers every other Coma chapter worldwide." AIS = "Welcome to the AI Salon global community! Fill out this form once and we'll provision your chapter — landing page, login page, brand assets, email templates, everything." Brand info banner uses brand.primaryColor + brand.gradient swatch; submission payload includes `brand: brand.slug`. |
+| `src/app/admin/mockups/mockups-client.tsx` | BrandSwitchTabs at line 612. `brandAssetsFor(brand)` branches: Coma → returns cards derived from `getBrandConfig("coma")` (heroBanner, favicon, logo) + "Upload more Coma assets" pointer; AIS → returns hardcoded `BRAND_ASSETS` array (TLV Meerkat, TLV Chapter Profile, TLV Empty Profile, Speaker overlay variants). Editors open with `?brand=<brand>` in URL. |
+| `src/app/admin/mockups/speaker-intro/event-mapper.ts` + `meet-the-speaker/event-mapper.ts` + `event-profile/event-mapper.ts` + `agenda-profile/event-mapper.ts` | All accept `brandSlug = "aisalon"` prop; QR code URL = `appendBrandParam(resolveBrandSiteUrl(brandSlug, /events/<slug>), brandSlug)`. Mockup canvas itself still uses AIS brand assets (meerkat, pink #FF0056 / purple #8F0080 brand colors) — NOT branched. |
+| `src/app/admin/knowledge-base/knowledge-base-client.tsx` | BrandSwitchTabs at line 127. Reads `?brand=<slug>` from `/api/admin/knowledge-docs?brand=<b>` (line 62). Super Admin edit dialog stamps `brandSlug` on every doc. |
+| `src/app/admin/images/images-gallery.tsx` | BrandSwitchTabs at line 362. Lists `/api/admin/brand-images?brand=<slug>`. Uploads POST `formData.brand` → blob stored at `brand-assets/<brand>/<filename>`. Global selects POST `body.brand` → writes SiteSetting key `<key>@<brand>`. |
+| `src/app/admin/email/flows/templates-client.tsx` | BrandSwitchTabs at line 274. Lists `/api/email-templates?brand=<slug>`. New template POSTs `{brandSlug: brand}`. Legacy templates (brandSlug=null) shown in both tabs with "legacy" tag. Editor dialog stamps `activeBrand` (line 396). |
+| `src/app/quiz/page.tsx` | `resolveBrand({urlBrandSlug, hostHeader, envDefault})` → `redirect('/events?brand=${brand.slug}')` (preserves brand through redirect). |
+| `src/app/quiz/[sessionId]/page.tsx` | Same resolution; if not signed in → `/login?brand=<slug>&callbackUrl=/quiz/<id>?brand=<slug>`. Passes `brand={slug, displayName, primaryColor, accentColor, secondaryColor}` to QuizPlayer. Title: `Flourishing Quiz — ${brand.displayName}`. |
+| `src/app/admin/quiz/[id]/page.tsx` + `quiz-control-room.tsx` | `brandSlug={me.brandSlug ?? "aisalon"}` → join-URL display + clipboard copy carry `?brand=<slug>`. |
+
+### Components that branch:
+
+| Component | Branch |
+|---|---|
+| `src/components/ais/app-header.tsx` | `getBrandConfig(user?.brandSlug ?? "aisalon")`. `isComa = brand.slug === "coma"`. Coma: logo image = `brand.heroBanner` (transparent PNG on Vercel Blob) at `height: 2.2em`; wordmark = `brand.wordmark` colored `brand.primaryColor`; tagline = `brand.tagline`. AIS: logo = chapter meerkat (loginHero) or `/images/falafel-meerkat.jpg`; wordmark = `brand.wordmark`; tagline = `brand.tagline`. **AI & Human Flourishing nav link hidden for Coma** (`isComa ? [] : [{href:"/resources/ai-human-flourishing", label:"AI & Human Flourishing"}]`). WhatsApp/LinkedIn URLs from `getPublicSettingsForBrand(brand.slug)` then overridden by chapter row. |
+| `src/components/ais/site-footer.tsx` | Receives `brandName + chapterName` props; renders `© year brand chapter · Empowering Human Connections` (hardcoded tagline — does NOT use `brand.tagline`). |
+| `src/components/ais/referral-share-card.tsx` | Props `brandName = "AI Salon Tel Aviv"`, `brandTagline = "empowering AI connections"`, `brandSlug = "aisalon"`. Share URL = `${sharePath}?utm_source=member&utm_medium=referral&utm_campaign=<slug>&utm_uid=<uid>&brand=<slug>`. Native share: `title: brandName, text: "Join me at ${brandName} — ${brandTagline}."`. Card gradient is hardcoded `from-[#FF005A]/5 to-[#00E6FF]/5` (NOT brand-aware). |
+| `src/components/testimonials/testimonial-card.tsx` + `testimonial-feed.tsx` | Props `brandName="AI Salon", brandSlug="aisalon"`. Share URL = `${origin}/testimonials?t=<id>&brand=<slug>`. Curated event share text: `I had an amazing time on this great ${brandName} event about ${eventTitle}${venuePart}, join the community.`. Share title: `${brandName} — ${eventTitle}` or `${brandName} — Testimonial`. |
+| `src/components/brand/brand-logo.tsx` | `BrandLogo` is brand-agnostic — accepts `wordmark`, `tagline`, `gradient`, `color`, `scale`, `withGradient`. `BrandGradientText` wraps children in `backgroundImage: gradient` + `WebkitBackgroundClip: text`. Used by /login, /onboarding, /admin/dashboard, /chapter-onboarding/[token]. |
+| `src/components/brand/aisalon-logo.tsx` (client) + `aisalon-logo-server.tsx` (server) + `components/salon/brand-logo.tsx` | AIS-only components — render the falafel-meerkat mark + lowercase `aisalon` wordmark + tagline `EMPOWERING AI CONNECTIONS`. Used in: /c/[chapterSlug] header (`AiSalonLogo`), /e/[slug] PublicHeader (`AiSalonLogoServer`), /onboarding AIS branch (`AiSalonLogoServer` with `markSrc`). **No Coma equivalent component exists.** |
+| `src/app/events/events-list.tsx` | Receives `brandName = "AI Salon"` (default) + `chapterName`. Empty-state copy: `No events yet. Check back soon — the next ${brandName} ${chapterName} gathering is being planned.` AIS gradient top strip hardcoded `from-[#FF005A] via-[#7C3AED] to-[#00E6FF]` (NOT brand-aware). |
+| `src/app/events/my-registered-events.tsx` | `brandSlug = "aisalon"` → calendar embed URL `${origin}/events/<slug>?brand=<slug>`. |
+| `src/app/admin/mockups/shared/share-buttons.tsx` | `brandSlug = "aisalon"` → `appendBrandParam(pageUrl, brandSlug)` on every platform share link (Twitter, LinkedIn, Facebook, WhatsApp, Copy). |
+
+### API routes that branch:
+
+| API route | Brand-branch behavior |
+|---|---|
+| `src/app/api/auth/signup/route.ts` | Validates `brandSlug` body param against `isBrandSlug`. New User: stamps `brandSlug` at creation. Existing User: backfills `brandSlug` if null. Forwards to `sendPasswordEmail({brandSlug})`. |
+| `src/app/api/auth/post-login-redirect/route.ts` | Reads `?brand=` + `me.brandSlug` → effective brand → appends to `/onboarding?chapterSlug=...&brand=<slug>` redirect (lines 135-141). |
+| `src/app/api/events/[slug]/rsvp/route.ts` | RSVP confirmation email (lines 195-238): `recipientBrandSlug = user.brandSlug === "coma" ? "coma" : "aisalon"` → `siteUrl = resolveComaSiteUrl(recipientBrandSlug, "/")`; `eventUrl = appendBrandParam(${siteUrl}/events/${slug}, recipientBrandSlug)`; `sendRsvpConfirmationEmail({brandSlug: recipientBrandSlug, chapterName: event.chapter})`. |
+| `src/app/api/messages/[userId]/route.ts` | DM notification email: `recipientBrandSlug = partner.brandSlug === "coma" ? "coma" : "aisalon"`; `brand = resolveEmailBrandContext(recipientBrandSlug)`; `chatFrom = process.env.SMTP_FROM || brand.fromName`; `subject = "New message from ${fromName} on ${brand.displayName}"`; HTML uses `brand.accentColor` for the left border. |
+| `src/app/api/speakers/[id]/messages/route.ts` | Speaker-contact admin-relay email: branded per SENDER (`me.brandSlug`); `subject` text + HTML use `brand.displayName` + `brand.accentColor`. |
+| `src/app/api/admin/members/[id]/reset-password/route.ts` | Reads `target.brandSlug` (line 52) → forwards to `sendPasswordEmail({brandSlug: target.brandSlug ?? undefined})` (line 122). |
+| `src/app/api/admin/members/bulk-reset-password/route.ts` | Per-recipient: `brandSlug: target.brandSlug ?? undefined` (line 141) — each email in a bulk batch is branded per-recipient. |
+| `src/app/api/admin/members/[id]/credentials/route.ts` | Reads `target.brandSlug` (line 92) → forwards (line 265). |
+| `src/app/api/admin/members/[id]/send-chapter-onboarding/route.ts` | Reads `target.brandSlug` (line 59); `targetBrandSlug = target.brandSlug === "coma" ? "coma" : "aisalon"`; `siteUrl = resolveBrandSiteUrl(targetBrandSlug, "/")`; `formUrl = appendBrandParam(${siteUrl}/chapter-onboarding/${token}, targetBrandSlug)`. |
+| `src/app/api/admin/chapter-onboarding/preview-invite/route.ts` | Reads `target.brandSlug` (line 63); `previewBrandSlug = target.brandSlug === "coma" ? "coma" : "aisalon"`; `formUrl = appendBrandParam(${siteUrl}/chapter-onboarding/${token}, previewBrandSlug)`. |
+| `src/app/api/admin/chapter-onboarding/[id]/provision/route.ts` | Reads `lead.brandSlug` (line 321); `leadBrandSlug = lead.brandSlug === "coma" ? "coma" : "aisalon"`; `chapterQs = "chapterSlug=<slug>&brand=<leadBrandSlug>"`; `adminUrl` + `loginUrl` built with that QS; sends `sendChapterProvisionedEmail({adminUrl, loginUrl})` (the email body itself is currently hardcoded AIS — see §8). |
+| `src/app/api/admin/brand-images/route.ts` | `?brand=<slug>` filter on GET list; uploads POST with `formData.brand` → blob stored at `brand-assets/<brand>/<filename>` (legacy uploads at `brand-assets/<filename>` shown under both tabs). Selections resolved through `getPublicSettingsForBrand(activeBrand)` when `?brand=` is set. |
+| `src/app/api/admin/brand-images/select/route.ts` | Body `brand` → writes SiteSetting key `<key>@<brand>` via `setSetting(key, value, user.id, brand)` (line 158). |
+| `src/app/api/admin/knowledge-docs/route.ts` | GET `?brand=<slug>` filter (validates "coma"|"aisalon"); POST accepts `brandSlug` body param (required, validated). |
+| `src/app/api/email-templates/route.ts` | GET `?brand=<slug>` filters list: `OR: [{brandSlug: <slug>}, {brandSlug: null}]` (legacy templates visible in both tabs). POST accepts `brandSlug` body param. |
+| `src/app/api/admin/members/[id]/route.ts` | (Referenced — accepts `brandSlug` field on PATCH; Super Admin can reassign member's brand.) |
+| `src/lib/email-orchestrator/flow-worker.ts` | Lines 236-241: `flowBrandSlug = row.rsvp?.user?.brandSlug === "coma" ? "coma" : "aisalon"`; `baseUrl = resolveComaSiteUrl(flowBrandSlug, "/")` (or localhost for dev); `buildContext({brandSlug: flowBrandSlug, chapterName})` (line 279). |
+
+### Other entry points:
+
+| File | Brand-branch behavior |
+|---|---|
+| `src/lib/auth.ts` | `signIn` callback reads `ais_signup_brand` cookie (set by login-form before Google OAuth) → stamps `User.brandSlug` at creation; backfills legacy users on subsequent sign-ins (only if existing.brandSlug is null). JWT callback reads `dbUser.brandSlug` (with try/catch fallback if column missing — `FALLBACK_DEFAULT_BRAND` from brand-config). Session callback propagates `session.user.brandSlug`. |
+| `src/lib/email-brand-context.ts` | `resolveEmailBrandContext(brandSlug)` returns `{slug, wordmark, displayName, tagline, primaryColor, accentColor, secondaryColor, gradient, fromName, loginUrl, siteUrl, footerCredit, contactEmail}`. Hardcoded brandSiteConfig map: Coma = `{siteUrl: "https://platform.joincoma.com", loginHost: "https://platform.joincoma.com", fromName: "Coma <coma@massapro.com>", contactEmail: "coma@massapro.com"}`; AIS = `{siteUrl: "https://aisalon.massapro.com", loginHost: "https://aisalon.massapro.com", fromName: "AI Salon <noreply@aisalon.massapro.com>", contactEmail: "aisalon@massapro.com"}`. loginUrl = `${loginHost}/login?brand=${slug}`. |
+| `src/lib/brand/brand-config.ts` | Static BRANDS registry (see §2). `getBrandConfig(slug)` falls back to `FALLBACK_DEFAULT_BRAND = "coma"` for unknown slugs. `BRAND_HOST_MAP` maps `platform.joincoma.com → coma`, `coma.massapro.com → coma`, `aisalon.massapro.com → aisalon`, plus localhost aliases. |
+
+### Files that USE brand-aware helpers but don't branch themselves:
+
+- `src/components/ais/analytics-scripts.tsx` — receives GA4 + Meta Pixel IDs as props (no internal branching); IDs come from `getPublicSettingsForBrand(brand.slug)` in layout.tsx.
+- `src/components/ais/cookie-consent-banner.tsx` — no brand logic.
+- `src/components/ais/mobile-nav.tsx` — receives `brandTitle` prop ("Coma" or "AI Salon TLV") from app-header.
+- `src/app/api/site-settings/route.ts` (public GET) — returns GLOBAL `getPublicSettings()` only (no `?brand=` param).
+
+---
+
+## 2. Login page (/login)
+
+### `src/app/login/page.tsx`
+
+**Brand resolution**: 4-layer chain (URL `?brand=` → host → env `BRAND_DEFAULT_SLUG`). Default chapter slug per brand (`aisalon → tel-aviv`, `coma → tel-aviv`).
+
+**generateMetadata (lines 60-122)**:
+- Title: `Login — ${brandDisplay}` where brandDisplay = `?city=` URL param present ? `${brand.displayName} ${city}` : `brand.displayName`
+- Description: `brand.loginSubtitle` (verbatim)
+- OG/Twitter image resolution chain: `brand.heroBanner || settings.loginBanner || "/images/falafel-meerkat.jpg"`
+- Hero banner fetched via `getEffectiveBrandImagesBySlug(chapterSlug, brand.slug)` (chapter override + brand-scoped global + DEFAULTS).
+
+**Page render (lines 124-340)**:
+- Left panel `backgroundColor: brand.primaryColor`; CSS var `--brand-primary = brand.primaryColor` set on `<main>` so child CTA button can use it.
+- Brand wordmark via `<BrandLogo wordmark={brand.wordmark} tagline={brand.tagline} variant="horizontal-tagline" color="white" />`.
+- Hero image:
+  - If `brand.heroBanner` is truthy (Coma only today) → unframed banner at `aspect-[3/2]`, `object-contain`, floats on brand-colored panel (no card, no border).
+  - Else (AIS) → square card `aspect-square rounded-2xl border border-white/10` with `object-contain`.
+- Eyebrow `<p class="text-[0.7rem] font-semibold uppercase tracking-[0.3em]" style="color: brand.accentColor">` → `{brand.loginEyebrowTemplate.replace("{brandName}", brand.displayName)}`.
+- Headline `<h1 class="text-4xl lg:text-5xl font-extrabold">` → split via `splitHeadlineTemplate` into `{before}<BrandGradientText gradient={brand.gradient}>{accent}</BrandGradientText>{after}`. `{cityClause}` interpolated as ` in <city>.` (when `?city=` set) or `.`.
+- Subtitle: `brand.loginSubtitle` (plain text).
+- Footer credit (bottom-left): `brand.footerCredit`.
+- Decorative orb: `position: -bottom-32 -right-32; width: 480px; height: 480px; opacity: 30%; blur-3xl; background: brand.gradient`.
+
+**Right panel (login form)**:
+- Mobile brand wordmark: `<BrandLogo color="black">`.
+- `<h2>{brand.loginFormHeading}</h2>`.
+- `<p>{brand.loginFormSubheadingTemplate.replace("{cityClause}", cityClause)}</p>`.
+- `<LoginForm brandSlug primaryColor accentColor secondaryColor chapterSlug />`.
+- Footer text: `By logging in you agree to the {brand.displayName} community guidelines. Only registered members can attend events.`
+
+### `src/app/login/login-form.tsx`
+
+**Brand-aware props**: `brandSlug`, `chapterSlug`, `primaryColor`, `accentColor`, `secondaryColor`.
+
+**Branding use**:
+- `redirectEndpoint` (line 129-136) forwards both `chapterSlug` and `brand` params to `/api/auth/post-login-redirect`.
+- `setSignupBrandCookie()` writes `ais_signup_brand=<slug>` cookie (10-min expiry, SameSite=Lax) before Google OAuth — read by `src/lib/auth.ts` to stamp `User.brandSlug` on the new row.
+- `emailSignUp()` POSTs `{email, name, chapterSlug?, brandSlug?}` to `/api/auth/signup`.
+- Sign-up button background = `primaryColor` (brand primary) inline-style.
+- "Forgot password" link color = `primaryColor`.
+- Error banner: `borderColor: ${secondaryColor}4D, backgroundColor: ${secondaryColor}0D, color: secondaryColor`.
+- Info banner: `borderColor: ${accentColor}66, backgroundColor: ${accentColor}1A, color: primaryColor`.
+- CTA text "Continue with Google" / "Sign in" / "Send me a password" — NOT brand-aware (hardcoded English copy).
+
+**Templates used**:
+- `{brandName}` → `brand.displayName` (eyebrow + headline)
+- `{cityClause}` → ` in <city>.` (when `?city=Berlin`) or `.` (no city)
+- `{accentSpanOpen}{accentSpanClose}` → wraps the gradient-highlighted phrase in the H1
+
+### Exact brand strings:
+
+| Field | AI Salon | Coma |
+|---|---|---|
+| `displayName` | `"AI Salon"` | `"Coma"` |
+| `wordmark` | `"aisalon"` | `"coma"` |
+| `tagline` | `"Empowering AI Connections"` | `"Building the Operating System for Communities"` |
+| `primaryColor` | `#004F98` (AIS navy) | `#0A1F44` (Coma navy) |
+| `accentColor` | `#00E6FF` (cyan) | `#F5A623` (amber) |
+| `secondaryColor` | `#FF005A` (pink) | `#E84855` (warm red) |
+| `gradient` | `conic-gradient(from 180deg at 50% 50%, #FF005A, #820A7D, #004F98, #00E6FF, #FF005A)` | `conic-gradient(from 180deg at 50% 50%, #E84855, #0A1F44, #F5A623, #E84855)` |
+| `heroBanner` | `""` (empty — falls back to chapter loginHero or `/images/falafel-meerkat.jpg`) | `"https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1786481988015-r315qt.png"` (Coma transparent PNG) |
+| `favicon` | `""` (uses global SiteSetting or `/favicon.ico`) | `"/brand/coma/favicon-32.png"` |
+| `logo` | `""` (uses chapter loginHero) | `"/brand/coma/logo.png"` |
+| `loginEyebrowTemplate` | `"{brandName} community"` → `"AI Salon community"` | `"{brandName} community"` → `"Coma community"` |
+| `loginHeadlineTemplate` | `"The {brandName} community for {accentSpanOpen}AI builders{accentSpanClose}{cityClause}"` | `"The {brandName} home for {accentSpanOpen}community builders{accentSpanClose}{cityClause}"` |
+| `loginSubtitle` | `"Log in to access events, upload photos from our gatherings, browse the shared slideshow, and connect with fellow founders, CMOs, investors and AI builders."` | `"Log in to access the Coma platform — manage your chapter, host events, onboard new members, and orchestrate your community's growth with the Coma operating system."` |
+| `loginFormHeading` | `"Welcome"` | `"Welcome to Coma"` |
+| `loginFormSubheadingTemplate` | `"Sign in with Google, or use your email and password to access the AI Salon community{cityClause}"` | `"Sign in with Google, or use your email and password to access the Coma platform{cityClause}"` |
+| `footerCredit` | `"Platform by MassaPro · Powered by AI Salon"` | `"Platform by MassaPro · Powered by Coma"` |
+| `defaultChapterSlug` | `"tel-aviv"` | `"tel-aviv"` |
+
+**Final rendered example with `?city=Berlin`**:
+
+- AIS: eyebrow `AI Salon community`; H1 `The AI Salon community for AI builders in Berlin.` (with `AI builders` in gradient)
+- Coma: eyebrow `Coma community`; H1 `The Coma home for community builders in Berlin.` (with `community builders` in gradient)
+
+---
+
+## 3. Chapter landing page (/c/[chapterSlug])
+
+### `src/app/c/[chapterSlug]/page.tsx`
+
+**generateMetadata (lines 32-86)**:
+- `resolveBrandMetadata()` → `brand`
+- Title returned BARE = `chapter.name` (root layout appends brand suffix → "Montreal — Coma Tel Aviv" / "Montreal — AI Salon Tel Aviv")
+- Description: `Join the ${brand.displayName} ${chapter.name} chapter${city ? ` in ${city}` : ""}. Sign up to register for upcoming events and connect with the local AI community.`
+- Icons: chapter override `settings.favicon` (via `getEffectiveBrandImages(chapter.id)`)
+- OG/Twitter image: `settings.loginBanner` (chapter override)
+
+**Page (lines 88-211)**:
+- Loads chapter with upcoming events.
+- `resolveBrandMetadata()` → passes `brandName={brand.displayName}` to `ChapterLandingClient`.
+- Session-aware: if signed in, computes `me = {name, email, isMember}` via `checkChapterMembership`. Anonymous visitors → `me=null`.
+
+### `src/app/c/[chapterSlug]/chapter-landing-client.tsx`
+
+**Component defaults**: `brandName = "AI Salon"` (preserves legacy if no brand passed).
+
+**Header (lines 250-262)**:
+- `<Link href="/"><AiSalonLogo /></Link>` — **AIS-only logo component**, not brand-aware. Coma visitors on a /c/<slug> URL still see the AIS meerkat mark + "aisalon" wordmark + "Empowering AI Connections" tagline (because the chapter landing page uses AiSalonLogo directly, not the brand-aware BrandLogo).
+- Sign-in link → `/login?chapterSlug=<slug>&city=<chapter.name>` (does NOT pass `?brand=` — login page will resolve brand from host).
+
+**Hero gradient** (lines 266-269):
+```jsx
+<section className="relative overflow-hidden bg-gradient-to-br from-[#820A7D] via-[#5b0758] to-[#FF005A] text-white">
+  <div className="absolute inset-0 opacity-10" style={{
+    backgroundImage: "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,230,255,0.3) 0%, transparent 50%)"
+  }} />
+```
+**Hardcoded AIS colors** — `#820A7D` (deep magenta) → `#5b0758` → `#FF005A` (pink). Not brand-aware.
+
+**Eyebrow** (lines 273-276):
+```jsx
+<p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 mb-4">
+  <span className="text-2xl">{flag}</span>
+  {brandName} · {chapter.country.name}
+</p>
+```
+e.g. `🇨🇦 AI Salon · Canada` or `🇨🇦 Coma · Canada`.
+
+**H1**: `{chapter.name} Chapter` (e.g. "Montreal Chapter") — not brand-aware.
+
+**Subhead** (lines 285-289): `Join the local AI community in {chapter.name}. Sign up to register for upcoming events, connect with other members, and get invited to invite-only salons.` — **hardcoded "AI community" + "salons" copy**, not brand-aware.
+
+**Quick stats** (lines 292-303): `{memberCount} members · {eventCount} events hosted` — brand-neutral.
+
+**Community links**: WhatsApp group + LinkedIn (chapter-level URLs from `Chapter.whatsappGroupUrl` + `Chapter.linkedinUrl`).
+
+**Hero image** (right column on lg+): `chapter.heroImageUrl` inside a white card `aspect-square rounded-2xl border border-white/20 bg-white shadow-2xl` (chapter-scoped, not brand-scoped).
+
+**Sign-up card** (right rail, lines 432-642) — **3 states**:
+
+1. **Signed-in + isMember → "You're a member"**: green CheckCircle2 + "You can now see all members of {chapter.name} and register for their events." + "Browse events →" button.
+2. **Signed-in + not member → "Join {chapter.name}"**: eyebrow "Join the chapter" + heading `Join {brandName} {chapter.name}` + masked Name/Email read-only + "Details are from your profile and can't be edited here." + button `Join {chapter.name}` (POST `/api/chapters/<slug>/membership`).
+3. **Anonymous → editable signup form**: eyebrow "Join the chapter" + heading `Sign up for {brandName} {chapter.name}` + subhead `Your account will be tagged to {chapter.name}, {chapter.country.name}. You'll get a password by email — use it to sign in and register for events.` + Name + Email inputs + button `Sign up for {chapter.name}` (POST `/api/auth/signup` with `chapterSlug`).
+
+4. **Post-signup success**: "You're in!" + `Welcome to {brandName} {chapter.name}! Check your email for your password.` + "Sign in →" button → `/login?chapterSlug=<slug>&city=<chapter.name>`.
+
+**Signup card colors** (hardcoded AIS):
+- Border: `border-[#820A7D]/20`
+- Background: `bg-gradient-to-b from-[#820A7D]/[0.04] to-white`
+- "Join the chapter" eyebrow: `text-[#FF005A]`
+- Form focus ring: `focus:ring-[#FF005A]`
+- Primary button bg: `bg-[#820A7D]`
+- "Sign in" link color: `text-[#820A7D]`
+- Error border: `border-[#FF005A]/30 bg-[#FF005A]/10 text-[#FF005A]`
+
+**Footer** (lines 646-658):
+```jsx
+<footer>
+  © {year} {brandName} · {chapter.name} Chapter
+  <Link href="/">All chapters</Link>
+</footer>
+```
+
+**Branding gaps / observations**:
+- Logo: hardcoded `AiSalonLogo` (AIS meerkat + wordmark) regardless of brand. Coma visitors see AIS branding in the header.
+- Hero gradient: hardcoded AIS magenta→pink.
+- Subhead copy: hardcoded "AI community" + "salons".
+- Card colors: hardcoded `#820A7D` + `#FF005A`.
+- Sign-up POST does NOT forward `brandSlug` — new user is created without a brand stamp from this flow.
+- Sign-in link does NOT append `?brand=<slug>`.
+
+---
+
+## 4. Public event page (/e/[slug])
+
+### `src/app/e/[slug]/page.tsx`
+
+**generateMetadata (lines 45-71)**: Title returned BARE = `event.title` (template appends brand suffix). Description = `event.subtitle || event.description.slice(0, 160) || "Community event"`. OG image = `event.mainImage?.fileUrl`.
+
+**Page (lines 73-230)**:
+- Loads event + mainImage + speakers + agenda + chapterRef (with `brand: {select: {slug, displayName}}`).
+- `resolveBrandMetadata()` → passes `brand` to `<PublicEventPage>`.
+- `chapterRef` passed as `chapter` (includes `brand: {slug, displayName}` + country + isActive).
+- Computes `isMember` server-side via `checkChapterMembership(me.id, chapterRef.id, me.chapterId ?? null)`.
+
+### `src/app/e/[slug]/public-event-page.tsx`
+
+**Brand usage in PublicEventPage (lines 176-200)**:
+- `brandName = brand?.displayName ?? "AI Salon"`
+- `brandTagline = brand?.tagline ?? "Empowering AI Connections"`
+- `chapterName = event.chapter?.trim() || "Tel Aviv"` (denormalized `chapter` string field, NOT chapterRef.name — legacy fallback)
+- `brandDisplayLong = `${brandName} ${chapterName}``
+
+**PublicHeader component (lines 807-847)** — defined inline in this file:
+```jsx
+function PublicHeader({ me, chapterName }) {
+  return (
+    <header className="sticky top-0 z-40 ...">
+      <Link href="/events" className="flex items-center gap-2">
+        <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
+        <span>{chapterName} Chapter</span>
+      </Link>
+      ...
+    </header>
+  );
+}
+```
+**NOT brand-aware** — always uses `AiSalonLogoServer` (AIS meerkat). Coma visitors on a /e/<slug> page see the AIS logo. The chapter tag (e.g. "Tel Aviv Chapter") is appended from the event's chapter name.
+
+**PublicFooter (lines 849-877)**:
+```jsx
+function PublicFooter({ brandName, brandTagline, chapterName }) {
+  const brandDisplayLong = `${brandName} ${chapterName}`;
+  return (
+    <footer>
+      © {year} {brandDisplayLong} · {brandTagline}
+      Platform by <a href="https://massapro.com">MassaPro</a>
+    </footer>
+  );
+}
+```
+Brand-aware (e.g. `© 2026 Coma Tel Aviv · Building the Operating System for Communities`).
+
+**Register CTAs (CtaCard, lines 939-1181)**:
+
+| User state | CTA heading | CTA button |
+|---|---|---|
+| Anonymous, no RSVP | `Join {brandName}` | `Join {brandName}` (with arrow) → routes to `/login?callbackUrl=/e/<slug>` |
+| Signed-in, no RSVP, NOT member of community | `Join {joinGate.chapterName} to register` | `Join {joinGate.chapterName}` → opens `JoinCommunityDialog` |
+| Signed-in, no RSVP, IS member | `Register to attend` | `Register to event` → POST `/api/events/<slug>/rsvp` |
+| Signed-in + RSVP, not checked-in, window open | `You're registered` | `I'm here — Check in` (green) |
+| Signed-in + checked-in | `You're checked in` | Big green panel with check-in code |
+| Past event | `This event has ended` | `View recap & photos` |
+
+Card colors hardcoded AIS: `border-[#FF005A]/20`, `bg-gradient-to-br from-[#FF005A]/5 to-white`, accent `text-[#FF005A]`, primary button `bg-[#FF005A]`. Join-gate variant uses `#7C3AED` (purple). Registered state uses `#00E6FF` + `#007E72`.
+
+**Members-only community note** (lines 770-777): `Members-only community. Photos, presentations, and recordings from this event are shared with registered {brandDisplayLong} members. Sign in to access the full event experience including the photo gallery, speaker chat, and community slideshow.` — brand-aware via `brandDisplayLong`.
+
+**Share URL (lines 355-409)**: Brand-aware via `shareBrandSlug = brand?.slug ?? "aisalon"`. URL params: `utm_source=member, utm_medium=referral, utm_campaign=<brandSlug>, utm_uid=<memberUid>, brand=<brandSlug>`.
+
+**Section accents** (hardcoded):
+- "About this event" → `#FF005A`
+- "What you'll take home" → `#007E72`
+- "Who this is for" → `#004F98`
+- "Speakers" → `#820A7D`
+- "Agenda" → `#004F98`
+
+**Event chapter badge** (line 435): `<span className="bg-[#FF005A]/10 text-[#FF005A]">{event.chapter}</span>` — hardcoded AIS pink, displays the legacy denormalized `event.chapter` string (e.g. "Tel Aviv").
+
+**Date card top strip** (line 511): `<div className="ais-gradient h-2" />` — AIS gradient class.
+
+**Timezone**: All date formatting hardcoded to `Asia/Jerusalem` (lines 127-152) — not brand- or chapter-aware (a Coma Montreal event still shows Israel time).
+
+---
+
+## 5. Community / Communities / Events pages
+
+### `/community` (`src/app/community/page.tsx`)
+
+- **Auth gate**: signed-in + onboarded only; redirects anonymous to `/login?callbackUrl=/community`.
+- **Brand resolution**: `getBrandConfig(meRow.brandSlug ?? "aisalon")` (line 69).
+- **Eyebrow**: `{brand.displayName} {chapterName}` (line 170).
+- **H1**: `Meet the <span class="ais-gradient-text">community</span>` (hardcoded AIS gradient text).
+- **Subhead**: `Founders, builders, investors, and researchers in {chapterName}. Click Contact on any profile to start a private 1-on-1 chat.` (chapter-aware, brand-agnostic).
+- **Chapter switcher**: `joinedChapters` (only communities the user has joined) with flag + name + "· home" suffix for primary.
+- **Empty state**: `You haven't joined a community yet. Find communities in your city and request to join to see their members.` + "Discover communities →" button to /communities.
+- **Empty members**: `No other members in {brand.displayName} {chapterName} yet. Check back soon — new members join every week.`
+- **Member-count footer**: `Showing N members · {brand.displayName} {chapterName}`.
+- **Layout**: `<AppHeader />` + `<CommunityGrid>` + `<SiteFooter brandName={brand.displayName} chapterName={chapterName} />`.
+
+### `/communities` (`src/app/communities/page.tsx`)
+
+- **Auth gate**: optional. Anonymous visitors get one alphabetical list; signed-in users get "Nearby — communities in your country" + "Everywhere else".
+- **Brand resolution**: `resolveBrandMetadata()` (line 162) → `brand` + `city` passed to CommunitiesClient + SiteFooter.
+- **Card data**: each card carries `brandSlug` + `brandName` from `Chapter.brand` (DB relation), so each community card displays its OWN chapter's brand (not the viewer's brand).
+- **Brand strip** (line 114): `bg-gradient-to-r from-[#FF005A] via-[#7C3AED] to-[#00E6FF]` — hardcoded AIS gradient.
+- **Card sub-header** (line 129): `{c.brandName ?? brandName}` — displays the chapter's brand name (e.g. "AI Salon" or "Coma").
+- **"Yours" badge** (line 119): `bg-[#0A1F44] text-white` (Coma navy — only Coma-branded color in the card).
+- **Join flow**: opens `JoinCommunityDialog` (passes chapter info including `brand: {slug, displayName}`).
+
+### `/events` (`src/app/events/page.tsx`)
+
+- **Auth gate**: optional. Anonymous visitors see "Join {brand.displayName}" banner; signed-in non-onboarded redirect to /onboarding.
+- **Brand resolution**: `resolveBrandMetadata()` (host) + `getBrandConfig(me?.brandSlug ?? hostBrand.slug)` (line 79).
+- **Event visibility** (lines 96-108): brand-scoped filter:
+  - `isComaUser` (me.brandSlug === "coma") → NO filter, sees ALL events across all brands.
+  - Non-Coma users → `OR: [chapterId null, chapterRef null, brandId null, isCrossChapter true, chapterRef.brand.slug === me.brandSlug ?? "aisalon"]`.
+- **Anonymous banner** (lines 261-289): `Join {brand.displayName}` eyebrow (hardcoded `text-[#FF005A]`) + "Sign up to RSVP, check in at the door, and upload photos." + button `Join {brand.displayName} →` (`bg-[#FF005A]`).
+- **Page header** (lines 292-303): eyebrow `{brand.displayName} {chapterName}` + H1 `Upcoming & past <span class="ais-gradient-text">gatherings</span>` + subhead `Events at the leading {chapterName} venues. Click any event to view the agenda, speakers, and shared photo gallery.`
+- **ReferralShareCard** (lines 309-319): `brandName={`${brand.displayName} ${chapterName}`}`, `brandTagline=brand.tagline.charAt(0).toLowerCase() + brand.tagline.slice(1)`, `brandSlug=brand.slug`.
+- **MyRegisteredEvents** (lines 324-337): receives `brandSlug={brand.slug}`.
+- **EventsList** (lines 339-348): receives `brandName={brand.displayName}, chapterName`.
+- **Layout**: `<AppHeader />` + main + `<SiteFooter brandName={brand.displayName} chapterName={chapterName} />`.
+
+### Brand-specific bits NOT branched (still hardcoded AIS):
+
+- `/events` list: EventsList empty-state `text-[#FF005A]` accent + `ais-gradient` top strip
+- `/community` page: `ais-gradient-text` on "community" word in H1
+- `/communities` cards: hardcoded pink→purple→cyan brand strip on every card (not per-chapter brand)
+- `/community`, `/events`, `/communities` pages all rely on `<AppHeader>` and `<SiteFooter>` (which ARE brand-aware via `me.brandSlug` and brandName prop).
+
+---
+
+## 6. PublicHeader / PublicFooter / AppHeader / SiteFooter
+
+### PublicHeader — defined inline in `src/app/e/[slug]/public-event-page.tsx` (lines 807-847)
+
+- Logo: `<AiSalonLogoServer variant="horizontal-tagline" />` — **AIS-only**, not brand-aware.
+- Right-side: signed-in → "Open dashboard" link to /events; anonymous → "Sign in" + "Join the community" button (`bg-[#FF005A]`).
+- Left chapter label: `<span>{chapterName} Chapter</span>` — chapter-aware, brand-agnostic.
+- **NOT branched**: Coma visitors to /e/<slug> see the AIS meerkat logo. There is no shared `PublicHeader` component extracted for reuse.
+
+### PublicFooter — defined inline in `src/app/e/[slug]/public-event-page.tsx` (lines 849-877)
+
+- Receives `brandName`, `brandTagline`, `chapterName` props.
+- Renders: `© {year} {brandName} {chapterName} · {brandTagline}` + `Platform by <a href="https://massapro.com">MassaPro</a>`.
+- **Brand-aware** (e.g. `© 2026 Coma Tel Aviv · Building the Operating System for Communities`).
+- Inline component — not exported, only used on the public event page.
+
+### AppHeader — `src/components/ais/app-header.tsx`
+
+The site-wide top nav for member-facing pages. Server component.
+
+**Brand resolution (lines 31-47)**: `getBrandConfig(user?.brandSlug ?? "aisalon")`; `isComa = brand.slug === "coma"`.
+
+**Logo rendering (lines 159-218)**:
+- Coma: header image = `brand.heroBanner` (transparent PNG on Vercel Blob); `height: 2.2em`; wordmark colored `brand.primaryColor` (navy); tagline = `brand.tagline` ("Building the Operating System for Communities").
+- AIS: header image = chapter meerkat (`effective.loginHero`) or `/images/falafel-meerkat.jpg`; `height: 1.5em`; wordmark = lowercase `aisalon` (default black); tagline = `brand.tagline`.
+- Chapter label appended after the logo block: `${chapter.name} Chapter` (from `Chapter.name`).
+
+**Nav links (lines 141-153)**: Events, Communities, Community, Testimonials, **(isComa ? [] : AI & Human Flourishing)** — the AI&HF microsite link is hidden for Coma members. Admin link conditional on role.
+
+**Social pills (lines 222-294)**: WhatsApp + LinkedIn pills in header. URLs resolved via:
+1. `getPublicSettingsForBrand(brand.slug)` (brand-scoped SiteSetting)
+2. Overridden by `Chapter.whatsappGroupUrl` + `Chapter.linkedinUrl` for the signed-in user's effective chapter (including "view-as" chapter for SUPER_ADMIN).
+
+**ViewAsSwitcher**: visible to real SUPER_ADMIN only; mobile nav uses `brandTitle={isComa ? brand.displayName : "AI Salon TLV"}` for the slide-out title.
+
+### SiteFooter — `src/components/ais/site-footer.tsx`
+
+**Props**: `brandName` + `chapterName` (resolved by parent page from `me.brandSlug` + `me.chapterId`).
+
+**Render** (lines 29-50):
+```jsx
+<footer>
+  © {year} {brandName} {chapterName} · Empowering Human Connections
+  Platform by <a href="https://massapro.com">MassaPro</a>
+</footer>
+```
+
+**Brand-aware via props** but tagline is hardcoded `"Empowering Human Connections"` (NOT `brand.tagline` — note: this differs from `brand.tagline` for Coma which is "Building the Operating System for Communities"). Bug-or-feature: every page renders "Empowering Human Connections" regardless of brand, even when brandName=Coma. The profile page and admin pages use their OWN inline footer that DOES use `brand.tagline`.
+
+---
+
+## 7. Logo components
+
+### `src/components/brand/aisalon-logo.tsx` (client)
+
+- Exports `AiSalonLogo({variant, className, color, tagline})` and `MeerkatMark({className, height})`.
+- Variants: `"horizontal" | "stacked" | "horizontal-tagline" | "stacked-tagline" | "monogram"`.
+- Always renders the falafel-meerkat `<Image src="/images/falafel-meerkat.jpg" width={624} height={1686} />` followed by the lowercase `aisalon` wordmark and `EMPOWERING AI CONNECTIONS` tagline.
+- Color: only `"black" | "white"` (per brand book — logo is never pink/cyan/etc).
+
+### `src/components/brand/aisalon-logo-server.tsx` (server)
+
+Same as above but server-safe (no `"use client"`). Adds a `markSrc` prop so the login page can override the mascot with the admin-selected `loginBanner` brand image. Used by /onboarding AIS branch, /e/[slug] PublicHeader, /admin pages.
+
+### `src/components/salon/brand-logo.tsx`
+
+A separate, narrow brand-logo for the AI Salon /resources/ai-human-flourishing microsite. Renders `<Image src="/brand/aisalon-logo.webp" width={dimension} height={dimension} />` at sizes sm/md/lg/xl. AIS-only — not brand-aware.
+
+### `src/components/brand/brand-logo.tsx` (BrandLogo + BrandGradientText)
+
+The **brand-agnostic text-based wordmark** — accepts `wordmark`, `tagline`, `variant`, `color`, `withGradient`, `gradient`, `scale` props. Used by:
+- `/login` (both AIS + Coma branches) — `<BrandLogo wordmark={brand.wordmark} tagline={brand.tagline} variant="horizontal-tagline" />`
+- `/onboarding` Coma branch — `<BrandLogo wordmark="coma" tagline={brand.tagline} />`
+- `/admin/dashboard` Coma new-chapter CTA — uses `<BrandLogo>` indirectly via the inline img fallback `{brand.wordmark}` when `brand.heroBanner` is empty.
+- `/chapter-onboarding/[token]` header (uses `brand.displayName` + `brand.gradient` swatch, not BrandLogo directly).
+
+`BrandGradientText` wraps children in `<span style="backgroundImage: <gradient>; WebkitBackgroundClip: text; color: transparent;">`. Used for the H1 accent phrase in /login and /onboarding.
+
+### Is there a Coma logo component?
+
+**No — Coma has NO dedicated Coma logo component.** Only the text-based `BrandLogo` (in `src/components/brand/brand-logo.tsx`) handles the lowercase `coma` wordmark via its `wordmark` prop, and the Coma hero banner PNG is referenced directly from `BrandConfig.heroBanner` (an external Vercel Blob URL: `https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1786481988015-r315qt.png`). The Coma favicon (`/brand/coma/favicon-32.png`) and square logo mark (`/brand/coma/logo.png`) live in the static `public/brand/coma/` folder but are only referenced from `BrandConfig` fields, never from a dedicated React component.
+
+**Implication**: when a page imports a logo component directly (`<AiSalonLogo>` or `<AiSalonLogoServer>`), Coma visitors see the AIS meerkat + "aisalon" wordmark. This happens on:
+- `/c/[chapterSlug]` header (uses `AiSalonLogo`)
+- `/e/[slug]` PublicHeader (uses `AiSalonLogoServer`)
+- `/onboarding` AIS branch (uses `AiSalonLogoServer` with `markSrc`)
+- `/admin/images` page footer (hardcoded `AI Salon Tel Aviv · Empowering AI Connections` text)
+- `/admin/dashboard` + `/admin` pages — no logo (text-only headers)
+- `/admin/mockups/shared/brand-assets.ts` — references hardcoded AIS Vercel Blob URLs for branding assets
+
+To make the logo brand-aware on those surfaces, callers must use `<BrandLogo>` instead — currently only `/login`, `/onboarding` (Coma branch), and `/chapter-onboarding/[token]` do.
+
+---
+
+## 8. Emails
+
+### Where emails live
+
+- `src/lib/email.ts` (709 lines) — transactional email sending utility + 3 transactional email builders:
+  - `sendPasswordEmail` (signup / forgot-password / admin-reset)
+  - `sendRsvpConfirmationEmail` (RSVP confirmation with .ics attachment)
+  - `sendChapterOnboardingEmail` (admin "send chapter onboarding form" action)
+  - `sendChapterProvisionedEmail` (chapter provisioned notification)
+- `src/lib/email-brand-context.ts` — `resolveEmailBrandContext(brandSlug)` returns `EmailBrandContext` (slug, wordmark, displayName, tagline, colors, fromName, loginUrl, siteUrl, footerCredit, contactEmail).
+- `src/lib/email-orchestrator/templates.ts` (625 lines) — orchestrator stage templates (Awareness, Reminder, Final Prep, Day-Of, Recap) + `SHELL` wrapper + `buildContext()` + `renderTemplate()` + `renderSubject()`.
+- `src/lib/email-orchestrator/flow-worker.ts` — flow worker; per-recipient `flowBrandSlug` resolution.
+- `src/lib/email/render-unified.ts` — unified renderer that substitutes `{{brand_*}}` tokens.
+- `src/lib/email-campaign/sender.ts` — campaign batch sender (no brand logic — uses orchestrator templates).
+
+### Brand-aware transactional emails
+
+| Email | Brand-aware? | From name | Subject | Brand-specific copy |
+|---|---|---|---|---|
+| `sendPasswordEmail` | YES | `process.env.SMTP_FROM || brand.fromName` (Coma: `Coma <coma@massapro.com>`, AIS: `AI Salon <noreply@aisalon.massapro.com>`) | Coma: `Your Coma login` / AIS: `Your AI Salon {chapterName} login` | Two separate HTML builders: `buildComaPasswordHtml` (navy + amber, "coma" wordmark, "Welcome to Coma", "After you sign in, you'll be guided through creating your chapter.") vs `buildAisPasswordHtml` (pink password box, "Welcome to {brandDisplay}", "After you sign in, you can change your password from your profile page."). Login URL = `${brand.loginUrl}&callbackUrl=/events&city=<city>`. Coma omits chapter name entirely. |
+| `sendRsvpConfirmationEmail` | YES | `SMTP_FROM` (no per-brand From passed — falls back to env) | `You're registered: {eventTitle}` (NOT brand-aware subject) | Banner gradient: Coma `linear-gradient(135deg, ${primaryColor} 0%, ${accentColor} 100%)` (navy→amber) / AIS `linear-gradient(135deg, #FF005A 0%, #00E6FF 100%)` (pink→cyan). Footer: `${brand.displayName}${chapterName ? ` ${chapterName}` : ""} · ${brand.tagline}` + `<a href="${brand.siteUrl}">{brand.siteUrl host}</a>`. Coma: chapterName forced to `""` (chapter-less RSVP). AIS: chapterName = `opts.chapterName ?? "Tel Aviv"`. |
+| DM notification (`src/app/api/messages/[userId]/route.ts`) | YES | `process.env.SMTP_FROM || brand.fromName` | `New message from {fromName} on {brand.displayName}` | HTML left-border color = `brand.accentColor`. Footer: `Sent from <strong>${chatFrom}</strong> · ${brand.displayName}`. |
+| Speaker-contact admin relay (`src/app/api/speakers/[id]/messages/route.ts`) | YES | `process.env.SMTP_FROM || brand.fromName` (sender's brand) | Plain text: `${fromName} (${fromEmail}) sent a message to ${speaker.name} via the ${brand.displayName} platform.` | HTML left-border color = `brand.accentColor`. |
+| `sendChapterOnboardingEmail` | **NO** (hardcoded AIS) | (no `from` override) | `Your AI Salon ${chapterName} chapter onboarding form` | HTML: gradient button `linear-gradient(135deg, #FF005A 0%, #00E6FF 100%)`, "Welcome to AI Salon {chapterName}!", "We're excited to launch your chapter on the AI Salon platform.", "Once you submit, we'll provision the chapter within 2 business days and send you admin access.", "AI Salon · Empowering AI Connections", "aisalon.massapro.com". Even Coma onboarding invitees receive AIS-branded onboarding email. |
+| `sendChapterProvisionedEmail` | **NO** (hardcoded AIS — the URL is brand-aware but the email body is not) | (no `from` override) | `🎉 AI Salon ${chapterName} is live! Your admin access is ready` | HTML: gradient button `linear-gradient(135deg, #FF005A 0%, #00E6FF 100%)`, "🎉 AI Salon {chapterName} is live!", "your chapter has been fully provisioned on the AI Salon platform", "Public chapter landing page at /c/<slug>", "Login page with your chapter's brand at /login?chapterSlug=<slug>", "AI Salon · Empowering AI Connections", "aisalon.massapro.com". Even Coma leads receive AIS-branded chapter-provisioned email. The adminUrl + loginUrl DO carry `?brand=<slug>` (per provision route), but the email body still reads "AI Salon". |
+
+### Orchestrator flow emails (`src/lib/email-orchestrator/templates.ts`)
+
+`buildContext()` (lines 227-284) accepts `brandSlug?: "aisalon" | "coma"` and resolves:
+- `brandDisplayName = getBrandConfig(brandSlug).displayName`
+- `brandSiteUrl = getBrandAppHost(brandSlug)` (Coma: `https://platform.joincoma.com`, AIS: `https://aisalon.massapro.com`)
+- `ctx.brandSlug`, `ctx.brandDisplayName`, `ctx.brandWordmark` (from `BRANDS[ctx.brandSlug].wordmark`), `ctx.brandTagline` (from `BRANDS[ctx.brandSlug].tagline`), `ctx.brandSiteUrl`, `ctx.brandSiteLabel` (host extracted from brandSiteUrl)
+
+`SHELL` wrapper (lines 421-443) renders:
+- `<title>{{brand_name}} {{chapter_name}}</title>`
+- `<div data-brand-header>{{brand_wordmark}}</div>` — lowercase wordmark ("coma" or "aisalon")
+- Footer: `{{brand_name}} {{chapter_name}} · {{brand_tagline}} <a href="{{brand_site_url}}">{{brand_site_label}}</a>`
+
+Default templates (5 stages: Awareness, Reminder, Final Prep, Day-Of, Recap) all use `SHELL(inner)`. Sign-off line: `— The {{brand_name}} {{chapter_name}} team`. Subject templates use `{{eventTitle}}` and `{{name}}` — brand-agnostic.
+
+**Per-recipient brand resolution in flow worker** (`flow-worker.ts` line 237):
+```ts
+const flowBrandSlug = row.rsvp?.user?.brandSlug === "coma" ? "coma" : "aisalon";
+const baseUrl = resolveComaSiteUrl(flowBrandSlug, "/");
+// ... buildContext({brandSlug: flowBrandSlug, ...})
+```
+
+### `render-unified.ts` token substitution
+
+`{{brand_name}}`, `{{brand_wordmark}}`, `{{brand_tagline}}`, `{{brand_site_url}}`, `{{brand_site_label}}` — all support both camelCase (`{{brand_name}}`) and snake_case-with-spaces (`{{ brand_name }}`) forms. Defaults when caller passes no brand fields: `AI Salon`, `aisalon`, `Empowering AI Connections`, `https://aisalon.massapro.com`, `aisalon.massapro.com`.
+
+### Brand-aware share links inside emails
+
+- RSVP confirmation: `eventUrl = appendBrandParam(${siteUrl}/events/${slug}, recipientBrandSlug)` (lines 208-211).
+- Chapter-onboarding invite: `formUrl = appendBrandParam(${siteUrl}/chapter-onboarding/${token}, targetBrandSlug)`.
+- Chapter-provisioned email: `adminUrl = ${siteUrl}/admin?chapterSlug=<slug>&brand=<leadBrandSlug>` + `loginUrl = ${siteUrl}/login?chapterSlug=<slug>&brand=<leadBrandSlug>`.
+
+### Email templates admin (`src/app/admin/email/flows/templates-client.tsx`)
+
+- BrandSwitchTabs at line 274.
+- API filter: `?brand=<slug>` returns templates where `brandSlug = <slug>` OR `brandSlug = null` (legacy templates visible in both tabs).
+- New template POST body: `{brandSlug: brand}` (line 163).
+- New template dialog `activeBrand` (line 396): `editing.brandSlug === "coma" || editing.brandSlug === "aisalon" ? editing.brandSlug : brand`.
+- Save body (line 726): `if (isCreate) body.brandSlug = activeBrand`.
+
+### Email templates DB (`EmailTemplate2` table)
+
+Per Prisma schema (line 957-962):
+```
+/// BRAND SEPARATION (user spec 2026-09-19): which brand this template
+/// belongs to. null = legacy template created before the brand split;
+/// legacy templates remain visible under BOTH brand tabs (they're
+/// "shared"). New templates created after the split are stamped with
+/// the brand of the tab they were created in.
+brandSlug String?
+```
+
+---
+
+## 9. SEO / metadata (`src/app/layout.tsx`)
+
+### `generateMetadata` (lines 48-128)
+
+**Brand resolution**: `const { brand, siteUrl, displayTitle, city } = await resolveBrandMetadata();`
+
+`displayTitle = ${brand.displayName} ${city}` where `city = humanizeChapterSlug(brand.defaultChapterSlug)`. For both brands today: city = "Tel Aviv" (since `defaultChapterSlug = "tel-aviv"` for both). displayTitle:
+- AIS: `"AI Salon Tel Aviv"`
+- Coma: `"Coma Tel Aviv"`
+
+`siteUrl = ${proto}://${host}` (per-host) — falls back to `"https://coma.massapro.com"` (Coma) / `"https://aisalon.massapro.com"` (AIS) when host header is missing.
+
+**Title**:
+- Default: `${displayTitle} — MassaPro` (e.g. `"Coma Tel Aviv — MassaPro"`)
+- Template: `%s — ${displayTitle}` (e.g. `"Events — Coma Tel Aviv"`)
+- Bare titles returned by leaf pages get the brand suffix appended automatically.
+
+**Description** (`brandDescription(brand)` in brand-metadata.ts):
+- Coma: `"${brand.displayName} ${city} — the community operating system powering ${brand.displayName}'s ${city} chapter. ${brand.tagline}."` → `"Coma Tel Aviv — the community operating system powering Coma's Tel Aviv chapter. Building the Operating System for Communities."`
+- AIS / default: `"${brand.displayName} ${city} — the community platform for ${brand.displayName}'s ${city} chapter. ${brand.tagline}."` → `"AI Salon Tel Aviv — the community platform for AI Salon's Tel Aviv chapter. Empowering AI Connections."`
+
+**Keywords**:
+```ts
+[
+  brand.displayName,  // "AI Salon" or "Coma"
+  city,              // "Tel Aviv" (from defaultChapterSlug)
+  "MassaPro",
+  "AI community",
+  "Israel AI",
+  brand.tagline,     // "Empowering AI Connections" / "Building the Operating System for Communities"
+]
+```
+Note: "Israel AI" keyword is hardcoded for both brands (not branched).
+
+**Authors**: `[{name: "MassaPro"}]` (brand-agnostic).
+
+**OpenGraph**:
+- title: `${displayTitle} — MassaPro`
+- description: `brandDescription(brand)`
+- siteName: `displayTitle`
+- type: `"website"`
+- url: `siteUrl`
+- images: `[{url: bannerUrl, width: 1200, height: 630, alt: "${displayTitle} — brand image"}]`
+- `bannerUrl = (brand.slug === "coma" && brand.heroBanner) || settings.loginBanner || "/images/falafel-meerkat.jpg"` — Coma uses its own heroBanner; AIS uses the admin-selected global `settings.loginBanner`; both fall back to `/images/falafel-meerkat.jpg`.
+
+**Twitter**:
+- card: `"summary_large_image"`
+- title: `${displayTitle} — MassaPro`
+- description: `brandDescription(brand)`
+- images: `[bannerUrl]`
+
+**Icons (favicon)**:
+- icon: `[{url: "/favicon.ico", sizes: "any"}, {url: faviconUrl}]`
+- apple: `[{url: faviconUrl}]`
+- `faviconUrl = brand.favicon || settings.favicon || "/images/favicon.webp"`
+- Coma: `brand.favicon = "/brand/coma/favicon-32.png"` (browser tab shows Coma mark).
+- AIS: `brand.favicon = ""` (falls through to `settings.favicon` from `getPublicSettingsForBrand("aisalon")` — typically the admin-set global webp, or `/images/favicon.webp`).
+
+**metadataBase**: `new URL(siteUrl)` — per-host (so OG URLs resolve against the domain the visitor is actually on).
+
+### Per-page metadata overrides (bare titles only)
+
+Most pages return a bare title (e.g. `"Events"`, `"Community"`, `"Testimonials"`, `"My Profile"`, `"Admin"`, `"Member Dashboard"`, `"Brand Images — AI Salon Tel Aviv"` (admin/images is the one exception — it has a hardcoded AIS title)) and rely on the root layout template to append the brand suffix.
+
+Special cases:
+- `/login` generateMetadata returns `Login — ${brandDisplay}` (already includes brand+city when `?city=` is set).
+- `/onboarding` generateMetadata branches: `?brand=coma` → `Welcome — Coma`, else `Welcome` (template appends `— AI Salon Tel Aviv` etc.).
+- `/c/[chapterSlug]` generateMetadata returns `chapter.name` (bare) → e.g. "Montreal — Coma Tel Aviv".
+- `/e/[slug]` generateMetadata returns `event.title` (bare).
+- `/admin/images` page.tsx exports `metadata = {title: "Brand Images — AI Salon Tel Aviv"}` — HARDCODED AIS (template would append brand suffix again, causing "Brand Images — AI Salon Tel Aviv — Coma Tel Aviv" for a Coma admin). This is a known brand leak.
+
+---
+
+## 10. Admin pages with BrandSwitchTabs
+
+`BrandSwitchTabs` is imported in **4 admin pages**:
+
+### a) `/admin/images` (`src/app/admin/images/images-gallery.tsx`)
+
+- **Tabs**: Coma / AI Salon (line 362)
+- **What's per-brand**:
+  - Gallery list filtered by `?brand=<slug>` — uploads stored under `brand-assets/<brand>/` blob prefix; legacy root-level uploads visible in both tabs.
+  - Selection writes via POST `/api/admin/brand-images/select` with `body.brand` → SiteSetting key `<key>@<brand>` (e.g. `loginHero@coma`, `favicon@aisalon`, `emailLogo@coma`, `loginBanner@aisalon`).
+  - Selections resolved per-brand for display: `getPublicSettingsForBrand(activeBrand)`.
+- **NOT per-brand** (below the gallery):
+  - `WhatsAppLinkEditor` — POSTs to `/api/admin/site-settings/whatsapp` which writes global SiteSetting rows (no `?brand=` param).
+  - `LinkedInLinkEditor` — same.
+  - `AnalyticsSettingsEditor` (GA4 + Meta Pixel) — POSTs to `/api/admin/site-settings` with `key: "ga4MeasurementId" | "metaPixelId"` — NO brand param passed (writes global rows). Although layout.tsx READS them per-brand via `getPublicSettingsForBrand`, the admin editor never writes a brand-scoped variant. So GA4 + Meta Pixel IDs are effectively GLOBAL today (one ID for both brands).
+
+### b) `/admin/email/flows` → templates tab (`src/app/admin/email/flows/templates-client.tsx`)
+
+- **Tabs**: Coma / AI Salon (line 274, hint: "Templates tagged legacy are shared by both brands.")
+- **What's per-brand**:
+  - Template list filtered by `?brand=<slug>` → returns templates where `brandSlug = <slug>` OR `brandSlug = null` (legacy visible in both tabs).
+  - New template POST body includes `brandSlug: brand` → stamps the new EmailTemplate2 row.
+  - Edit dialog `activeBrand` defaults to current template's brandSlug when explicitly set, else falls back to active tab.
+  - "Legacy" badge shown next to templates with `brandSlug = null`.
+- **NOT per-brand**:
+  - Email flows themselves (`EmailFlow` rows) — no `brandSlug` column. Flows are shared across brands (each flow's steps reference templates by templateId, so a flow could mix AIS + Coma templates).
+  - Email audiences (`EmailAudience` rows) — no `brandSlug` column.
+  - Email campaigns (`EmailCampaign` rows) — no `brandSlug` column.
+  - Email queue (`EmailQueue` rows) — the runtime brand is resolved per-recipient from `rsvp.user.brandSlug` (see flow-worker §8), not from a column on the queue row.
+
+### c) `/admin/knowledge-base` (`src/app/admin/knowledge-base/knowledge-base-client.tsx`)
+
+- **Tabs**: Coma / AI Salon (line 127)
+- **What's per-brand**:
+  - KnowledgeDoc rows have a `brandSlug` column (Prisma schema line 234). Each brand has its OWN doc set.
+  - AIS is auto-seeded with default docs on first read (`ensureKnowledgeSeed()` — `knowledge-docs.ts` line 167). Coma starts EMPTY — the Super Admin adds Coma's own docs.
+  - Read API: `GET /api/admin/knowledge-docs?brand=<slug>`.
+  - Write API: `POST /api/admin/knowledge-docs` with `brandSlug` body param (required, validated to "coma"|"aisalon").
+  - Super Admin can edit: title, URL, description, kind (folder/doc/slides), section, sectionIntro, sectionOrder, sortOrder, isActive.
+- **Display**: section-grouped list with ResourceIcon per kind. Empty state per brand: "No docs yet for {Coma|AI Salon}. Click 'Add doc' to create the first resource."
+
+### d) `/admin/mockups` (`src/app/admin/mockups/mockups-client.tsx`)
+
+- **Tabs**: Coma / AI Salon (line 612)
+- **What's per-brand**:
+  - `brandAssetsFor(brand)` (lines 165-205):
+    - Coma → cards derived from `getBrandConfig("coma")`: "Coma hero banner" (heroBanner URL), "Coma favicon" (favicon URL), "Coma logo mark" (logo URL), "Upload more Coma assets" (pointer to /admin/images).
+    - AI Salon → hardcoded `BRAND_ASSETS` array of 5 cards: TLV Meerkat, TLV Chapter Profile, TLV Empty Profile, Speaker overlay (No logo), Speaker overlay (with logo). All URLs point at `https://aisalon.massapro.com/...` or `.images/` hidden folder.
+  - Mockup editors (speaker-intro, meet-the-speaker, event-profile, agenda-profile) open with `?brand=<brand>` in the URL.
+  - Each mockup editor's `event-mapper.ts` accepts a `brandSlug` prop (default "aisalon") and builds the QR code URL via `appendBrandParam(resolveBrandSiteUrl(brandSlug, /events/<slug>), brandSlug)`.
+- **NOT per-brand** (mockup canvas itself):
+  - Brand colors in the mockup are hardcoded `["#00FFFF", "#8B00FF"]` (cyan + purple) per user spec 2026-07-09 — same for both brand tabs.
+  - Branding asset URL (`brandingAsset.imageUrl`) is the AIS meerkat on Vercel Blob (`https://...brand-assets/1785506059156-4chc96.png`) — same for both tabs.
+  - Mockup SYSTEM_PROMPT references "Low-poly Tel Aviv skyline + beach, prominent low-poly meerkat character, geometric triangle overlays, location pins (Sarona, Dizengoff, Neve Tzedek, Yafo/Jaffa)" — TLV/AIS specific.
+
+### Other admin pages with brand-awareness but NO BrandSwitchTabs
+
+These admin pages resolve the viewer's brand from `me.brandSlug` (not via tabs) — they show ONE brand at a time (the viewer's own):
+
+- `/admin` (`src/app/admin/page.tsx`): brand palette for scope badges + StatCards; brand-scoped events (Coma admin sees `events = []`, `allSpeakers = []`); footer `© year {brand.displayName} · {brand.tagline}`.
+- `/admin/dashboard` (`src/app/admin/dashboard/page.tsx`): brand palette + Coma-only "Launch your first chapter" CTA + footer.
+- `/admin/chapter-onboarding` (`src/app/admin/chapter-onboarding/page.tsx`): brandSlug passed to admin list; "Preview Coma onboarding form" button (hardcoded Coma, not a tab).
+- `/admin/chapters/[id]` + `/admin/chapters/new` + `/admin/c/[chapterSlug]`: `ChapterEditor` receives `brandSlug={me.brandSlug ?? "aisalon"}` and appends `?brand=<slug>` to share URLs only.
+- `/admin/quiz/[id]` (`src/app/admin/quiz/[id]/page.tsx`): `QuizControlRoom` receives `brandSlug={me.brandSlug ?? "aisalon"}` for the join-URL display.
+
+---
+
+## 11. Analytics / Pixels / GA
+
+### How GA4 + Meta Pixel IDs are loaded per brand
+
+**Read path** (`src/app/layout.tsx` lines 139-168):
+
+```ts
+const { brand } = await resolveBrandMetadata();
+const settings = await getPublicSettingsForBrand(brand.slug);
+// ...
+<AnalyticsScripts
+  ga4MeasurementId={settings.ga4MeasurementId}
+  metaPixelId={settings.metaPixelId}
+/>
+```
+
+`getPublicSettingsForBrand(brand.slug)` (in `src/lib/site-settings.ts` lines 269-303) resolves through the chain:
+1. `"<key>@<brand>"` row (e.g. `"ga4MeasurementId@coma"`) — brand-scoped
+2. `"<key>"` row (e.g. `"ga4MeasurementId"`) — legacy global
+3. `DEFAULTS[key]` — hardcoded fallback (`""` for both GA4 and Meta Pixel = disabled by default)
+
+So a brand-scoped `ga4MeasurementId@coma` row WOULD take precedence over the global `ga4MeasurementId` row, IF such a row existed.
+
+**Write path** (`src/app/admin/images/analytics-settings-editor.tsx`):
+
+```ts
+await fetch("/api/admin/site-settings", {
+  method: "POST",
+  body: JSON.stringify({ key: "ga4MeasurementId", value: trimmed }),
+});
+```
+
+`POST /api/admin/site-settings` (`src/app/api/admin/site-settings/route.ts` line 67) calls `setSetting(key, value, user.id)` — NO `brandSlug` parameter. So the write goes to the GLOBAL `ga4MeasurementId` SiteSetting row, not a brand-scoped one.
+
+**Implication**: although the read path is brand-aware, the admin editor never writes a brand-scoped GA4/Meta Pixel ID. Both brands share the same GA4 + Meta Pixel IDs today (whatever global row the Super Admin sets). To get per-brand analytics, the admin would have to manually insert a `ga4MeasurementId@coma` / `metaPixelId@coma` row in the DB — there is no UI for this.
+
+**Validation** (server-side, route.ts lines 50-65):
+- GA4: `^G-[A-Z0-9]{6,}$` (e.g. "G-ABC123DEFG")
+- Meta Pixel: `^\d{10,20}$` (e.g. "123456789012345")
+
+**Client-side validation** (analytics-settings-editor.tsx lines 45, 72): same regexes.
+
+**Script injection** (`src/components/ais/analytics-scripts.tsx`):
+- Reads consent state from `useCookieConsent()` hook.
+- Only injects scripts when consent === "all" (cookie banner "Accept All").
+- GA4: `<script src="https://www.googletagmanager.com/gtag/js?id=${ga4MeasurementId}" async precedence="high" />` + inline gtag init with `anonymize_ip: true, cookie_flags: 'SameSite=None;Secure'`.
+- Meta Pixel: standard `fbq('init', ${metaPixelId}); fbq('track', 'PageView');` snippet.
+- On consent revocation: forces `window.location.reload()` to strip the scripts (no programmatic "stop" API for gtag/fbq).
+
+**Per-brand support that EXISTS in the chain but is UNUSED by the admin UI**:
+- The `<key>@<brand>` SiteSetting key pattern (site-settings.ts `brandScopedKey()`).
+- The `getPublicSettingsForBrand()` read resolution.
+- The `setSetting(key, value, by, brandSlug)` write function (site-settings.ts line 218 — accepts optional `brandSlug`).
+- The BrandSwitchTabs in `/admin/images` — but it only controls the gallery section, NOT the Analytics editor below it.
+
+So **in theory** a Coma-branded GA4 ID could be set by directly inserting a `ga4MeasurementId@coma` SiteSetting row in the DB; in practice the admin UI only writes the global row, so both AIS + Coma visitors currently share the same GA4 + Meta Pixel IDs (or none, if unset).
+
+### WhatsApp + LinkedIn header URLs
+
+Same pattern: `getPublicSettingsForBrand(brand.slug)` resolves brand-scoped → global → defaults. The `/api/admin/site-settings/whatsapp` write route also does NOT pass a brandSlug, so the WhatsApp/LinkedIn URLs are also global today (one set for both brands). Defaults:
+- `whatsappGroupUrl` = `"https://chat.whatsapp.com/DnOIlSxZi8c8DT1wdWELu3"` (AI Salon TLV community group)
+- `whatsappGroupText` = `"Join our WhatsApp"`
+- `linkedinUrl` = `"https://www.linkedin.com/showcase/ai-salon-tel-aviv"` (AI Salon Tel Aviv)
+
+These defaults leak AIS-specific URLs to Coma visitors if the admin hasn't set a global override.
+
+### Email send-pause flag
+
+`isEmailSendPaused()` (`src/lib/site-settings.ts` line 310-320) reads ONLY the global `emailSendPaused` SiteSetting row — NOT brand-scoped. A Coma-branded `emailSendPaused@coma` row would be ignored by the sender hot path.
+
+---
+
+## Notable brand-leak observations (cross-cutting)
+
+1. **`/c/[chapterSlug]` chapter landing page header** uses `<AiSalonLogo>` directly — Coma visitors see the AIS meerkat + "aisalon" wordmark. The hero gradient is also hardcoded `from-[#820A7D] via-[#5b0758] to-[#FF005A]` (AIS magenta→pink) for both brands.
+
+2. **`/e/[slug]` PublicHeader** uses `<AiSalonLogoServer>` directly — same leak.
+
+3. **`SiteFooter` tagline is hardcoded `"Empowering Human Connections"`** — does NOT use `brand.tagline`. Coma pages render `© 2026 Coma Tel Aviv · Empowering Human Connections` (should be `Building the Operating System for Communities`). Pages using SiteFooter: /community, /communities, /events, /profile.
+
+4. **`/admin/images` page.tsx `metadata = {title: "Brand Images — AI Salon Tel Aviv"}`** — hardcoded AIS title; a Coma admin sees `Brand Images — AI Salon Tel Aviv — Coma Tel Aviv` (double-suffix).
+
+5. **`/admin/mockups` mockup canvas** — brand colors hardcoded `["#00FFFF", "#8B00FF"]`; branding asset always the AIS meerkat URL. The BrandSwitchTabs only changes the asset library card list, NOT the canvas rendering. Coma mockups still look like AIS mockups.
+
+6. **`/admin/images` analytics editor + WhatsApp/LinkedIn editors** — write GLOBAL SiteSetting rows only; no brand-scoped editor UI. Per-brand GA4/Meta Pixel IDs can only be set by direct DB write today.
+
+7. **`sendChapterOnboardingEmail` + `sendChapterProvisionedEmail`** — bodies are hardcoded AIS ("Welcome to AI Salon {chapterName}!", "AI Salon · Empowering AI Connections", "aisalon.massapro.com"). Coma onboarding invitees + chapter leads receive AIS-branded email even when the URLs inside carry `?brand=coma`.
+
+8. **Chapter-landing sign-up POST** (`/api/auth/signup`) — `chapter-landing-client.tsx` `handleSubmit()` (lines 199-232) only sends `{email, name, chapterSlug}` — no `brandSlug`. New users from a Coma /c/<slug> page create User rows without a brand stamp, then resolve to AIS (FALLBACK_DEFAULT_BRAND in resolveBrand) for subsequent visits. The sign-in link from the card also doesn't append `?brand=<slug>`.
+
+9. **Timezone formatting on /e/[slug]** is hardcoded to `Asia/Jerusalem` (lines 127-152) — a Coma Montreal event still shows Israel time in the date/time pills.
+
+10. **`/events` list EventsList empty state** and **`/community` H1** use `ais-gradient-text` (hardcoded AIS gradient class). `/events` page H1 uses `<span class="ais-gradient-text">gatherings</span>` — same hardcoded gradient for both brands.
+
+11. **`/events` "Join {brand.displayName}" banner** uses hardcoded `bg-[#FF005A]` (AIS pink) regardless of brand — even when `brand.displayName = "Coma"`.
+
+12. **Testimonials share URL** uses `?brand=<slug>` correctly but the testimonial card itself uses hardcoded `from-[#FF005A]/5 to-[#00E6FF]/5` AIS gradient.
+
+13. **ReferralShareCard** card gradient is hardcoded `from-[#FF005A]/20 to-[#00E6FF]/5` — the brand colors flow only into the share URL `utm_campaign` + `?brand=` param + the native share title/text, not into the visual treatment.
+
+14. **BrandSwitchTabs in `/admin/mockups`** switches the asset library list but the mockup editor's QR code uses the viewer's `brandSlug` only (default "aisalon") — there's no per-brand canvas theming. Coma mockup still renders AIS colors + meerkat.
+
+15. **Email flows / audiences / campaigns / queue rows** have no `brandSlug` column. Per-recipient brand resolution happens at send time via `rsvp.user.brandSlug` — but this only works for events tied to an RSVP. Pure campaign broadcasts (no event) would inherit the orchestrator's default brand (AIS).
+
+Next actions recommended (READ-ONLY — no code changes made in this audit):
+- Extract a shared `PublicHeader` component that uses `<BrandLogo>` instead of `<AiSalonLogoServer>` so /c/[chapterSlug] + /e/[slug] render Coma branding when brandSlug=coma.
+- Replace `SiteFooter` hardcoded "Empowering Human Connections" with `brand.tagline` (or accept it as a platform-wide tagline independent of `BrandConfig.tagline`).
+- Add `brandSlug` to `/admin/images` WhatsApp/LinkedIn/GA4/Meta Pixel editors so they write brand-scoped SiteSetting rows; or document that analytics IDs are intentionally global.
+- Make `sendChapterOnboardingEmail` + `sendChapterProvisionedEmail` brand-aware (same `resolveEmailBrandContext` pattern as `sendPasswordEmail`).
+- Forward `brandSlug` from `chapter-landing-client.tsx` `handleSubmit()` to `/api/auth/signup` (and append `?brand=<slug>` to the sign-in link) so chapter-landing signups stamp the correct brand.
+- Decide whether `/admin/mockups` mockup canvas should switch brand colors + branding asset per tab, or stay AIS-only with brand-aware QR URLs only.
+- Branch the chapter-landing hero gradient + signup card colors via `brand.primaryColor` / `brand.gradient` (or define a per-brand hero gradient in BrandConfig).
+- Make the /events "Join" banner + EventsList empty-state gradient brand-aware.
+- Replace `ais-gradient-text` usages on /community, /events, /testimonials with `BrandGradientText gradient={brand.gradient}`.
+
+---
+Task ID: brand-inventory-compilation
+Agent: main
+Task: Compile a complete list of brand-specific components for Coma vs AI Salon (mockups, hero images, event preps, colors, knowledge base, chapter, cities, slogan, etc.)
+
+Work Log:
+- Launched 2 read-only audit agents in parallel (Task IDs brand-audit-1 + brand-audit-2) covering brand-config/brand-metadata/brand-switch-tabs/mockups/email-templates/knowledge-docs/chapter-brand-images/schema/chapter mapping/colors/slogans/cities AND pages-that-branch-by-brand/login/chapter-landing/public-event-page/community/events/headers/footers/logos/emails/SEO/admin-tabs/analytics
+- Both agents appended detailed findings to worklog.md (brand-audit-1 added ~383 lines, brand-audit-2 added ~258 lines, full enumeration of 43+ brand-branching surfaces and 15 brand leaks)
+- Compiled the combined findings into a single clean reference document at /home/z/my-project/download/brand-separation-inventory.md (16 sections: brand-at-a-glance, resolution chain, BrandConfig fields, knowledge base, mockups, hero images, emails, chapters/cities, slogans, colors, logo components, SEO, analytics, branching pages, admin BrandSwitchTabs, brand-leak priority list, recommended next actions)
+
+Stage Summary:
+- Inventory document saved to /home/z/my-project/download/brand-separation-inventory.md
+- Captures both brands' current state (Coma = parent w/ no chapters/logo component/knowledge docs at deploy; AIS = white-label with 2 chapters + meerkat mascot + 9 seed docs + hardcoded magenta/pink colors)
+- Lists all 4 BrandSwitchTabs admin pages + what's still NOT per-brand in each
+- Lists 15 brand leaks with recommended fixes — user can pick any subset to execute next
