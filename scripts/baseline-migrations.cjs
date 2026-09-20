@@ -95,6 +95,14 @@ const NEW_MIGRATIONS = new Set([
   // should be. Idempotent UPDATE — only touches rows whose flagEmoji
   // is a 2-char ASCII string with no regional-indicator chars.
   '20260919120000_fix_country_flagemoji_seed',
+  // 2026-09-19 (latest): Brand onboarding invites + user interested
+  // locations. Two new tables — BrandOnboardingInvite (Super Admin
+  // invites a brand lead → fills /brand-onboarding/[token] form →
+  // Super Admin provisions the Brand row) + UserInterestedLocation
+  // (signup-form field: up to 5 country+city locations the user wants
+  // community updates from). Idempotent CREATE TABLE IF NOT EXISTS +
+  // guarded ALTER TABLE ADD CONSTRAINT.
+  '20260919140000_brand_onboarding_interested_locations',
 ]);
 
 async function main() {

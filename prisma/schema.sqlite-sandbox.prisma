@@ -101,6 +101,7 @@ model Country {
   isActive           Boolean   @default(true)
   chapters           Chapter[]
   users              User[]
+  interestedUsers    UserInterestedLocation[]
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }
@@ -346,7 +347,9 @@ model User {
   // Chapter lead onboarding invites this user has received / sent
   chapterOnboardingInvites     ChapterOnboardingInvite[]
   chapterOnboardingInvitedBy   ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
+  brandOnboardingInvitedBy      BrandOnboardingInvite[]  @relation("BrandOnboardingInvitedBy")
   chapterMemberships           ChapterMember[]
+  interestedLocations         UserInterestedLocation[]
   // ----------------------------------------------------------------
   // Flourishing Quiz — sessions this user is hosting + participation records
   hostedQuizSessions QuizSession[]         @relation("QuizHost")
@@ -1710,4 +1713,50 @@ model ChapterOnboardingInvite {
   @@index([userId])
   @@index([status])
   @@index([invitedById])
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 2 (2026-09-19): Brand onboarding — mirrors the prod schema.
+// ───────────────────────────────────────────────────────────────────
+model BrandOnboardingInvite {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  inviteeEmail    String
+  prefillBrandName String?
+  prefillBrandSlug String?
+  invitedById     String
+  invitedBy       User     @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  status          String   @default("PENDING")
+  sentAt          DateTime @default(now())
+  openedAt        DateTime?
+  submittedAt     DateTime?
+  expiresAt       DateTime
+  submissionJson  String?
+  adminNotes      String?
+  appliedBrandId  String?
+  appliedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([invitedById])
+  @@index([status])
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 3 (2026-09-19): Interested locations — mirrors the prod schema.
+// ───────────────────────────────────────────────────────────────────
+model UserInterestedLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  city      String
+  region    String?
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([countryId])
 }

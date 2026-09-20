@@ -143,6 +143,9 @@ model Country {
   isActive           Boolean   @default(true)
   chapters           Chapter[]
   users              User[]
+  // Phase 3 (2026-09-19): users who want community updates from this
+  // country. Back-relation for UserInterestedLocation.country.
+  interestedUsers    UserInterestedLocation[]
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }
@@ -391,11 +394,17 @@ model User {
   chapterOnboardingInvites   ChapterOnboardingInvite[]
   // Chapter lead onboarding invites this user (as admin) has sent
   chapterOnboardingInvitedBy ChapterOnboardingInvite[] @relation("ChapterOnboardingInvitedBy")
+  // Brand lead onboarding invites this user (as Super Admin) has sent
+  brandOnboardingInvitedBy   BrandOnboardingInvite[]   @relation("BrandOnboardingInvitedBy")
   // Multi-community memberships — every chapter this user has explicitly
   // joined (see ChapterMember). The PRIMARY chapter stays on chapterId
   // above; rows here are additional communities (or an explicit record of
   // the primary one created when the user joins via a form).
   chapterMemberships         ChapterMember[]
+  // Phase 3 (2026-09-19): locations the user wants community updates
+  // from. Collected at signup (anonymous /c/[slug] form) and editable
+  // from /profile.
+  interestedLocations       UserInterestedLocation[]
   // ----------------------------------------------------------------
   // V7 hierarchy scoping fields. Nullable for backwards compatibility
   // with V6 rows (backfilled to Israel/Tel-Aviv on migration).
@@ -2052,4 +2061,85 @@ model ChapterOnboardingInvite {
   @@index([userId])
   @@index([status])
   @@index([invitedById])
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 2 (2026-09-19): Brand onboarding — Super Admin invites a brand
+// lead by email → the lead fills a public /brand-onboarding/[token]
+// form (mirroring /chapter-onboarding/[token]) → Super Admin reviews +
+// provisions the new Brand row with branding fields, palette, assets,
+// email config, and apex domain. Skipped fields inherit from Coma
+// (the platform parent brand), so a lead who skips the entire form
+// still gets a working brand with Coma's defaults.
+// ───────────────────────────────────────────────────────────────────
+model BrandOnboardingInvite {
+  id           String   @id @default(cuid())
+  /// Unguessable token used in the public URL. CUID-based, 32+ chars.
+  token        String   @unique
+  /// The brand lead's email — captured at invite creation. The lead
+  /// may or may not already have a User account when invited.
+  inviteeEmail String
+  /// Optional pre-filled brand name + slug (Super Admin can pre-fill
+  /// when they already know the brand they're onboarding).
+  prefillBrandName String?
+  prefillBrandSlug String?
+  /// The Super Admin who sent the invite.
+  invitedById  String
+  invitedBy    User     @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  /// Status: PENDING (sent, not yet submitted) | SUBMITTED (form filled)
+  /// | EXPIRED (past expiresAt) | REVOKED (admin manually revoked).
+  status       String   @default("PENDING")
+  sentAt       DateTime @default(now())
+  openedAt     DateTime?
+  submittedAt  DateTime?
+  /// Auto-expire after 30 days.
+  expiresAt    DateTime
+  /// The full form submission as a JSON blob (mirrors
+  /// BrandOnboardingFormData in src/lib/brand-onboarding-types.ts).
+  /// Null until the form is submitted.
+  submissionJson String?
+  /// Optional admin notes (visible only on /admin/brands).
+  adminNotes   String?
+  /// After the admin applies the submission (creates the Brand row),
+  /// we record the resulting brandId here.
+  appliedBrandId String?
+  appliedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([invitedById])
+  @@index([status])
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 3 (2026-09-19): Interested locations — at signup, the user
+// picks up to 5 (country + optional city) locations they want to
+// receive community updates from. Used by the /communities discover
+// page to surface communities near those locations first, and by the
+// email orchestrator to notify the user about events in their
+// interested cities.
+// ───────────────────────────────────────────────────────────────────
+model UserInterestedLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Optional FK to Country. Null = free-text location only (no
+  /// structured country).
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  /// Free-text city name (e.g. "Berlin", "Tel Aviv", "Montreal").
+  /// Required — the country alone is rarely enough to drive useful
+  /// discovery.
+  city      String
+  /// Optional region/state (e.g. "QC", "CA") — free text, used by the
+  /// admin for analytics only.
+  region    String?
+  /// Optional lat/lng — populated later by a geocoding job. Null at
+  /// signup (the form doesn't ask for coordinates).
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([countryId])
 }

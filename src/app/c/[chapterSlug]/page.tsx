@@ -201,6 +201,15 @@ export default async function ChapterLandingPage({ params }: Params) {
     }
   }
 
+  // Phase 3 (2026-09-19): load the country list for the interested-locations
+  // picker on the anonymous signup form. Sorted by name, only active
+  // countries. The list is small (~30 rows at scale) so we pass it inline.
+  const countries = await db.country.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, code: true, flagEmoji: true },
+    orderBy: { name: "asc" },
+  });
+
   return (
     <ChapterLandingClient
       chapter={serialized}
@@ -215,6 +224,12 @@ export default async function ChapterLandingPage({ params }: Params) {
         gradient: brand.gradient,
       }}
       me={me}
+      countries={countries.map((c) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        flagEmoji: c.flagEmoji,
+      }))}
     />
   );
 }

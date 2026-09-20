@@ -19,6 +19,7 @@ import {
   Brain,
   Globe2,
   ClipboardCheck,
+  Sparkles,
 } from "lucide-react";
 
 /**
@@ -80,6 +81,9 @@ type AdminTabDef = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   match: string;
+  /** When true, the tab is only shown to SUPER_ADMIN users. Hidden
+   *  from ADMIN / CHAPTER_ORGANIZER / CO_HOST. */
+  superAdminOnly?: boolean;
 };
 
 const ALL_TABS: AdminTabDef[] = [
@@ -100,6 +104,7 @@ const ALL_TABS: AdminTabDef[] = [
   { href: "/admin/mockups", label: "Mockups", icon: LayoutTemplate, match: "/admin/mockups" },
   { href: "/admin/quiz", label: "Quiz", icon: Brain, match: "/admin/quiz" },
   { href: "/admin/event-prep", label: "Event Prep", icon: ClipboardCheck, match: "/admin/event-prep" },
+  { href: "/admin/brands", label: "Brands", icon: Sparkles, match: "/admin/brands", superAdminOnly: true },
 ];
 
 /**
@@ -138,9 +143,14 @@ function filterTabsByRole(role: string | null | undefined): AdminTabDef[] {
     return ALL_TABS.filter((t) => allowed.has(t.href));
   }
 
-  // SUPER_ADMIN + ADMIN see everything.
-  if (r === "SUPER_ADMIN" || r === "ADMIN") {
+  // SUPER_ADMIN sees everything. ADMIN sees everything EXCEPT
+  // superAdminOnly tabs (e.g. /admin/brands is Super Admin only —
+  // brand onboarding affects the entire platform).
+  if (r === "SUPER_ADMIN") {
     return ALL_TABS;
+  }
+  if (r === "ADMIN") {
+    return ALL_TABS.filter((t) => !t.superAdminOnly);
   }
 
   // SPEAKER + MEMBER + unknown → no tabs.

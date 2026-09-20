@@ -91,6 +91,10 @@ type Props = {
     email: string;
     isMember: boolean;
   } | null;
+  /** Phase 3 (2026-09-19): country list for the interested-locations
+   *  picker on the anonymous signup form. Empty array = no list (the
+   *  picker hides). The server always loads from DB. */
+  countries?: { id: string; name: string; code: string; flagEmoji: string | null }[];
 };
 
 // ------------------------------------------------------------------
@@ -153,11 +157,23 @@ export function ChapterLandingClient({
   brandName = "AI Salon",
   brand = null,
   me,
+  countries = [],
 }: Props) {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  // Phase 3 (2026-09-19): interested locations the user wants community
+  // updates from. Up to 5 { countryId?, city } entries. Submitted with
+  // the signup POST. Initialized with the chapter's country pre-selected.
+  const [locations, setLocations] = React.useState<
+    { countryId: string; city: string }[]
+  >([
+    {
+      countryId: chapter.country.id,
+      city: chapter.city || chapter.name,
+    },
+  ]);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
@@ -228,6 +244,16 @@ export function ChapterLandingClient({
           // right brandId at signup — otherwise they default to AIS via
           // FALLBACK_DEFAULT_BRAND even when signing up via a Coma /c/ page.
           brandSlug: brand?.slug,
+          // Phase 3 (2026-09-19): forward the interested locations so
+          // /api/auth/signup can persist UserInterestedLocation rows for
+          // the new user. Filter out empty-city entries; the server does
+          // its own validation + cap.
+          interestedLocations: locations
+            .filter((l) => l.city.trim() || l.countryId)
+            .map((l) => ({
+              countryId: l.countryId || undefined,
+              city: l.city.trim(),
+            })),
         }),
       });
       const data = await res.json();
@@ -657,6 +683,83 @@ export function ChapterLandingClient({
                     {error && (
                       <div className="rounded-md border px-3 py-2 text-xs" style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}4D`, color: accent }}>
                         {error}
+                      </div>
+                    )}
+
+                    {/* ── Phase 3 (2026-09-19): Interested locations ──
+                        Up to 5 { countryId, city } entries. Pre-filled
+                        with the current chapter's country + city. The
+                        user can edit, add more, or remove entries. */}
+                    {countries.length > 0 && (
+                      <div className="rounded-md border border-black/10 bg-black/[0.02] p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-black/80">
+                            Communities you want updates from
+                          </span>
+                          {locations.length < 5 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLocations((prev) => [...prev, { countryId: "", city: "" }])
+                              }
+                              className="text-[0.65rem] font-semibold hover:underline"
+                              style={{ color: accentDeep }}
+                            >
+                              + Add location
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[0.65rem] text-black/50">
+                          We&apos;ll show you communities + events in these
+                          cities first. Up to 5.
+                        </p>
+                        {locations.map((loc, idx) => (
+                          <div key={idx} className="flex items-start gap-2">
+                            <select
+                              value={loc.countryId}
+                              onChange={(e) =>
+                                setLocations((prev) =>
+                                  prev.map((p, i) => (i === idx ? { ...p, countryId: e.target.value } : p))
+                                )
+                              }
+                              className="w-32 rounded-md border border-black/15 bg-white px-2 py-2 text-xs focus:outline-none focus:ring-2"
+                              style={{ "--tw-ring-color": accent } as React.CSSProperties}
+                              aria-label={`Location ${idx + 1} country`}
+                            >
+                              <option value="">🌍 Any</option>
+                              {countries.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.flagEmoji ?? "🌍"} {c.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={loc.city}
+                              onChange={(e) =>
+                                setLocations((prev) =>
+                                  prev.map((p, i) => (i === idx ? { ...p, city: e.target.value } : p))
+                                )
+                              }
+                              placeholder="City (e.g. Berlin, Tel Aviv)"
+                              className="flex-1 rounded-md border border-black/15 bg-white px-2 py-2 text-xs focus:outline-none focus:ring-2"
+                              style={{ "--tw-ring-color": accent } as React.CSSProperties}
+                              aria-label={`Location ${idx + 1} city`}
+                            />
+                            {locations.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLocations((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                                className="text-xs text-black/40 hover:text-black/70 px-1.5 py-2"
+                                aria-label={`Remove location ${idx + 1}`}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
 

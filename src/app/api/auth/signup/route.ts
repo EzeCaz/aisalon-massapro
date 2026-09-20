@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
       name?: unknown;
       chapterSlug?: unknown;
       brandSlug?: unknown;
+      /** Phase 3 (2026-09-19): interested locations the user wants
+       *  community updates from. Up to 5 entries of
+       *  { countryId?: string, city: string }. The chapter landing
+       *  signup form collects these. */
+      interestedLocations?: unknown;
     };
     try {
       body = await req.json();
@@ -276,6 +281,49 @@ export async function POST(req: NextRequest) {
             console.warn("[signup] UTM attribution failed:", err);
           });
         }
+      }
+
+      // ── Phase 3 (2026-09-19): interested locations ──────────────────
+      // Parse the `interestedLocations` array from the body and persist
+      // up to 5 UserInterestedLocation rows for the new (or existing)
+      // user. Best-effort — failures never block signup. The list is
+      // validated client-side; we do a light server-side trim + cap.
+      try {
+        const rawLocs = body.interestedLocations;
+        if (Array.isArray(rawLocs)) {
+          const userId = existing?.id ?? (await db.user.findUnique({ where: { email }, select: { id: true } }))?.id;
+          if (userId) {
+            // Filter + normalize each entry: { countryId?, city }.
+            const cleaned = rawLocs
+              .map((entry) => {
+                if (!entry || typeof entry !== "object") return null;
+                const e = entry as { countryId?: unknown; city?: unknown };
+                const city = typeof e.city === "string" ? e.city.trim() : "";
+                if (!city) return null;
+                const countryId =
+                  typeof e.countryId === "string" && e.countryId.trim() ? e.countryId.trim() : null;
+                return { city: city.slice(0, 120), countryId };
+              })
+              .filter((x): x is { city: string; countryId: string | null } => x !== null)
+              .slice(0, 5);
+            if (cleaned.length > 0) {
+              // Wipe the user's existing rows first (idempotent for the
+              // "forgot password" re-signup path that hits this code for
+              // an existing user). Then insert the new ones.
+              await db.userInterestedLocation.deleteMany({ where: { userId } });
+              await db.userInterestedLocation.createMany({
+                data: cleaned.map((c) => ({
+                  userId,
+                  city: c.city,
+                  countryId: c.countryId,
+                })),
+                skipDuplicates: true,
+              });
+            }
+          }
+        }
+      } catch (locErr) {
+        console.warn("[signup] interested locations save failed (non-blocking):", locErr);
       }
     } catch (dbErr) {
       console.error("[signup] DB error:", dbErr);

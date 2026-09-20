@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { ProfileEditor } from "./profile-editor";
+import { InterestedLocationsEditor } from "./interested-locations-editor";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { getBrandConfig } from "@/lib/brand/brand-config";
 import { BrandGradientText } from "@/components/brand/brand-logo";
@@ -56,6 +57,22 @@ export default async function ProfilePage() {
     tags: me.tags.map((t) => ({ id: t.id, label: t.label, color: t.color })),
   };
 
+  // Phase 3 (2026-09-19): interested locations + countries for the picker.
+  const [interestedLocations, countries] = await Promise.all([
+    db.userInterestedLocation.findMany({
+      where: { userId: me.id },
+      include: {
+        country: { select: { id: true, name: true, code: true, flagEmoji: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.country.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, code: true, flagEmoji: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
@@ -75,6 +92,33 @@ export default async function ProfilePage() {
         </div>
 
         <ProfileEditor initial={initial} />
+
+        {/* Phase 3 (2026-09-19): interested-locations editor */}
+        <div className="mt-8">
+          <InterestedLocationsEditor
+            countries={countries.map((c) => ({
+              id: c.id,
+              name: c.name,
+              code: c.code,
+              flagEmoji: c.flagEmoji,
+            }))}
+            initial={interestedLocations.map((l) => ({
+              id: l.id,
+              countryId: l.countryId,
+              country: l.country
+                ? {
+                    id: l.country.id,
+                    name: l.country.name,
+                    code: l.country.code,
+                    flagEmoji: l.country.flagEmoji,
+                  }
+                : null,
+              city: l.city,
+              region: l.region,
+            }))}
+            accentColor={brand.secondaryColor}
+          />
+        </div>
 
         {/* Referral program — show the member their unique share link
             + their stats (visits, signups, RSVPs they've driven).
