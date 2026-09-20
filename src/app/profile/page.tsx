@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/ais/app-header";
 import { ProfileEditor } from "./profile-editor";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { getBrandConfig } from "@/lib/brand/brand-config";
+import { BrandGradientText } from "@/components/brand/brand-logo";
 
 export const metadata = { title: "My Profile" };
 
@@ -61,11 +62,11 @@ export default async function ProfilePage() {
       <main className="flex-1 mx-auto max-w-5xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-8">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: brand.secondaryColor }}>
             My Profile
           </p>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
-            Edit your <span className="ais-gradient-text">community profile</span>
+            Edit your <BrandGradientText gradient={brand.gradient}>community profile</BrandGradientText>
           </h1>
           <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Tell fellow {brand.displayName} {chapterName} members who you are. Your photo, bio, company and

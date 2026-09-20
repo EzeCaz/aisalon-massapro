@@ -170,9 +170,11 @@ export default async function CommunitiesPage() {
           myCountryCode={myCountryCode}
           me={me ? { name: me.name, email: me.email } : null}
           brandName={brand.displayName}
+          brandGradient={brand.gradient}
+          brandAccentColor={brand.secondaryColor}
         />
       </main>
-      <SiteFooter brandName={brand.displayName} chapterName={city} />
+      <SiteFooter brandName={brand.displayName} chapterName={city} tagline={brand.tagline} />
     </div>
   );
 }

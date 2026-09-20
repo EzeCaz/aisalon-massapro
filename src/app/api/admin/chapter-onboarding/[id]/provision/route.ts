@@ -388,6 +388,7 @@ export async function POST(
         chapterSlug: chapter.slug,
         adminUrl,
         loginUrl,
+        brandSlug: leadBrandSlug,
       });
     } catch (err) {
       console.error("[chapter-onboarding/provision] sendChapterProvisionedEmail threw:", err);

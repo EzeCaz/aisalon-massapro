@@ -39,6 +39,10 @@ export type JoinChapterInfo = {
   name: string;
   slug: string;
   city?: string | null;
+  /** IANA timezone (e.g. "Asia/Jerusalem", "America/Montreal"). Used
+   *  by the public event page to format event times in the chapter's
+   *  local timezone instead of a hardcoded default. */
+  timezone?: string | null;
   brand?: { slug: string; displayName: string } | null;
   country?: { name: string; code: string; flagEmoji: string | null } | null;
 };

@@ -9,6 +9,7 @@ import { CommunityGrid } from "./community-grid";
 import { getBrandConfig } from "@/lib/brand/brand-config";
 import { listJoinedChapterIds } from "@/lib/membership";
 import { Flag } from "@/components/flag";
+import { BrandGradientText } from "@/components/brand/brand-logo";
 import Link from "next/link";
 
 /**
@@ -166,11 +167,11 @@ export default async function CommunityPage({
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Page header */}
         <div className="mb-6">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: brand.secondaryColor }}>
             {brand.displayName} {chapterName}
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
-            Meet the <span className="ais-gradient-text">community</span>
+            Meet the <BrandGradientText gradient={brand.gradient}>community</BrandGradientText>
           </h1>
           <p className="mt-3 text-base text-black/80 max-w-2xl">
             Founders, builders, investors, and researchers in {chapterName}.
@@ -259,7 +260,7 @@ export default async function CommunityPage({
           </div>
         )}
       </main>
-      <SiteFooter brandName={brand.displayName} chapterName={chapterName} />
+      <SiteFooter brandName={brand.displayName} chapterName={chapterName} tagline={brand.tagline} />
     </div>
   );
 }

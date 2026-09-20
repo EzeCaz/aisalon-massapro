@@ -23,6 +23,7 @@ import {
   Mic2,
 } from "lucide-react";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
+import { BrandHeaderLogo } from "@/components/brand/brand-header-logo";
 import {
   JoinCommunityDialog,
   type JoinChapterInfo,
@@ -108,7 +109,16 @@ type Props = {
    *  Phase 2 addendum (2026-09-17): `slug` is also passed so the share
    *  URL builder can append `?brand=<slug>` (recipient sees the right
    *  brand when they click the shared link). */
-  brand?: { displayName: string; tagline: string; slug: string };
+  brand?: {
+    displayName: string;
+    tagline: string;
+    slug: string;
+    wordmark: string;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    gradient: string;
+  };
   /** COMMUNITY GATE (user spec 2026-09-19): the event's community. When
    *  set and the signed-in user is NOT a member, the register CTA opens
    *  the "join the community + fill the form" flow instead of RSVPing
@@ -122,33 +132,42 @@ type Props = {
 // Helpers
 // ------------------------------------------------------------------
 
-function fmtDate(d: Date): string {
+// ── Date/time formatters ──────────────────────────────────────────
+// Each formatter accepts an optional IANA timezone string. When the
+// event's chapter carries a timezone, the caller passes it in so the
+// times render in the chapter's local time (e.g. a Montreal event
+// shows 18:00 Eastern, not 18:00 Asia/Jerusalem). Falls back to
+// "Asia/Jerusalem" only when no timezone is available (legacy events
+// with chapter=null, or malformed chapter.timezone) — preserves the
+// previous behavior for those edge cases.
+
+function fmtDate(d: Date, tz?: string | null): string {
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jerusalem",
+    timeZone: tz || "Asia/Jerusalem",
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
   }).format(d);
 }
-function fmtTime(d: Date): string {
+function fmtTime(d: Date, tz?: string | null): string {
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Jerusalem",
+    timeZone: tz || "Asia/Jerusalem",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   }).format(d);
 }
-function fmtMonth(d: Date): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", month: "short" })
+function fmtMonth(d: Date, tz?: string | null): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz || "Asia/Jerusalem", month: "short" })
     .format(d)
     .toUpperCase();
 }
-function fmtDay(d: Date): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", day: "2-digit" }).format(d);
+function fmtDay(d: Date, tz?: string | null): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz || "Asia/Jerusalem", day: "2-digit" }).format(d);
 }
-function fmtYear(d: Date): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", year: "numeric" }).format(d);
+function fmtYear(d: Date, tz?: string | null): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz || "Asia/Jerusalem", year: "numeric" }).format(d);
 }
 
 /**
@@ -178,6 +197,12 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
   // doesn't pass a brand (all callers now pass it).
   const brandName = brand?.displayName ?? "AI Salon";
   const brandTagline = brand?.tagline ?? "Empowering AI Connections";
+  // CHAPTER TIMEZONE (2026-09-19): used by the date/time formatters so
+  // event times render in the chapter's local timezone (Montreal events
+  // show Eastern time, not the hardcoded Asia/Jerusalem). Falls back
+  // to "Asia/Jerusalem" inside the formatters when null (legacy compat
+  // for events with no chapter, or chapter.timezone missing).
+  const tz = chapter?.timezone ?? null;
   // CHAPTER + CITY-AWARE (2026-09-18): the chapter display name comes from
   // the event's denormalized `chapter` field ("Tel Aviv", "Montreal", ...)
   // — never hard-coded, so every chapter's event page reads
@@ -410,7 +435,7 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <PublicHeader me={me} chapterName={chapterName} />
+      <PublicHeader me={me} chapterName={chapterName} brand={brand} />
 
       <section className="border-b border-black/10 bg-white">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -437,10 +462,10 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
                 {event.city && (
                   <span className="text-black/80 font-semibold">{event.city}</span>
                 )}
-                <span className="text-black/80">{fmtDate(start)}</span>
+                <span className="text-black/80">{fmtDate(start, tz)}</span>
                 <span className="text-black/20">·</span>
                 <span className="text-black/80 font-mono">
-                  {fmtTime(start)} – {fmtTime(end)}
+                  {fmtTime(start, tz)} – {fmtTime(end, tz)}
                 </span>
                 {event.country && <span className="text-black/80">· {event.country}</span>}
                 {/* Going pill — black bg, white text. Matches the spec:
@@ -511,16 +536,16 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
                 <div className="ais-gradient h-2" />
                 <div className="p-4">
                   <div className="text-[0.7rem] font-bold uppercase tracking-widest text-[#FF005A]">
-                    {fmtMonth(start)}
+                    {fmtMonth(start, tz)}
                   </div>
-                  <div className="text-5xl font-extrabold text-black leading-none my-1">{fmtDay(start)}</div>
+                  <div className="text-5xl font-extrabold text-black leading-none my-1">{fmtDay(start, tz)}</div>
                   <div className="text-[0.9rem] font-semibold uppercase tracking-wider text-black/90">
-                    {fmtYear(start)}
+                    {fmtYear(start, tz)}
                   </div>
                 </div>
               </div>
               <div className="mt-2 text-[0.85rem] font-mono text-black/90">
-                {fmtTime(start)} – {fmtTime(end)}
+                {fmtTime(start, tz)} – {fmtTime(end, tz)}
               </div>
             </div>
           </div>
@@ -556,6 +581,7 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
             onCopyCode={handleCopyCode}
             brandName={brandName}
             joinGate={me && chapter && !isMember ? { chapterName: chapter.name } : null}
+            tz={tz}
           />
         </div>
       </section>
@@ -615,10 +641,10 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
                           )}`}
                         />
                         <div className="flex flex-wrap items-baseline gap-2">
-                          <span className="text-xs font-mono text-black/50">{fmtTime(aStart)}</span>
+                          <span className="text-xs font-mono text-black/50">{fmtTime(aStart, tz)}</span>
                           {a.endsAt && (
                             <span className="text-xs font-mono text-black/80">
-                              – {fmtTime(new Date(a.endsAt))}
+                              – {fmtTime(new Date(a.endsAt), tz)}
                             </span>
                           )}
                           <span
@@ -713,6 +739,7 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
               onCopyCode={handleCopyCode}
               brandName={brandName}
               joinGate={me && chapter && !isMember ? { chapterName: chapter.name } : null}
+              tz={tz}
             />
 
             <div className="rounded-xl border border-black/10 bg-white p-5">
@@ -722,7 +749,7 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
                   <Calendar className="h-4 w-4 mt-0.5 text-black/80 flex-shrink-0" />
                   <div>
                     <dt className="text-black/80 text-xs">Date</dt>
-                    <dd className="font-semibold text-black">{fmtDate(start)}</dd>
+                    <dd className="font-semibold text-black">{fmtDate(start, tz)}</dd>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
@@ -730,7 +757,7 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
                   <div>
                     <dt className="text-black/80 text-xs">Time</dt>
                     <dd className="font-semibold text-black font-mono">
-                      {fmtTime(start)} – {fmtTime(end)}
+                      {fmtTime(start, tz)} – {fmtTime(end, tz)}
                     </dd>
                   </div>
                 </div>
@@ -804,13 +831,33 @@ export function PublicEventPage({ event, me, brand, chapter = null, initialIsMem
 // Sub-components
 // ------------------------------------------------------------------
 
-function PublicHeader({ me, chapterName }: { me: Me; chapterName: string }) {
+function PublicHeader({
+  me,
+  chapterName,
+  brand,
+}: {
+  me: Me;
+  chapterName: string;
+  brand?: {
+    slug: string;
+    wordmark: string;
+    tagline: string;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    gradient: string;
+  } | null;
+}) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-black/10 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link href="/events" className="flex items-center gap-2">
-            <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
+            {brand ? (
+              <BrandHeaderLogo brand={brand} variant="server" />
+            ) : (
+              <AiSalonLogoServer variant="horizontal-tagline" className="text-[1.05rem]" />
+            )}
             <span className="hidden sm:inline-block ml-3 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-black/80 border-l border-black/15 pl-3">
               {chapterName} Chapter
             </span>
@@ -952,6 +999,7 @@ function CtaCard({
   onCopyCode,
   brandName = "AI Salon",
   joinGate = null,
+  tz = null,
 }: {
   event: Event;
   me: Me;
@@ -973,6 +1021,10 @@ function CtaCard({
    *  joining the community first (the register click opens the join
    *  dialog and continues to the RSVP after joining). */
   joinGate?: { chapterName: string } | null;
+  /** CHAPTER TIMEZONE (2026-09-19): passed down so the date/time
+   *  formatters inside this card render times in the chapter's local
+   *  time instead of the hardcoded Asia/Jerusalem. */
+  tz?: string | null;
 }) {
   // ---------- State 4: Already checked in → show entry code ----------
   if (hasCheckedIn && rsvp?.checkInCode) {
@@ -996,7 +1048,7 @@ function CtaCard({
             <div className="mt-2 text-[0.6rem] text-black/80">
               Checked in at{" "}
               {new Intl.DateTimeFormat("en-GB", {
-                timeZone: "Asia/Jerusalem",
+                timeZone: tz || "Asia/Jerusalem",
                 hour: "2-digit",
                 minute: "2-digit",
                 hour12: false,
@@ -1142,8 +1194,8 @@ function CtaCard({
         <span className="font-bold text-sm uppercase tracking-wider">You're registered</span>
       </div>
       <p className="text-xs text-black/70 leading-relaxed">
-        See you on <strong>{fmtDate(new Date(event.startsAt))}</strong> at{" "}
-        <strong className="font-mono">{fmtTime(new Date(event.startsAt))}</strong>.
+        See you on <strong>{fmtDate(new Date(event.startsAt), tz)}</strong> at{" "}
+        <strong className="font-mono">{fmtTime(new Date(event.startsAt), tz)}</strong>.
       </p>
 
       {windowOpen ? (

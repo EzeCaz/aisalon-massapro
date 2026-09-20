@@ -205,6 +205,15 @@ export default async function ChapterLandingPage({ params }: Params) {
     <ChapterLandingClient
       chapter={serialized}
       brandName={brand.displayName}
+      brand={{
+        slug: brand.slug,
+        wordmark: brand.wordmark,
+        tagline: brand.tagline,
+        primaryColor: brand.primaryColor,
+        secondaryColor: brand.secondaryColor,
+        accentColor: brand.accentColor,
+        gradient: brand.gradient,
+      }}
       me={me}
     />
   );

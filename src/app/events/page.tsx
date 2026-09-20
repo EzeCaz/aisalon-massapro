@@ -8,6 +8,7 @@ import { needsOnboarding } from "@/lib/onboarding";
 import { AppHeader } from "@/components/ais/app-header";
 import { SiteFooter } from "@/components/ais/site-footer";
 import { EventsList } from "./events-list";
+import { BrandGradientText } from "@/components/brand/brand-logo";
 import { MyRegisteredEvents } from "./my-registered-events";
 import { ReferralShareCard } from "@/components/ais/referral-share-card";
 import { getBrandConfig } from "@/lib/brand/brand-config";
@@ -257,11 +258,20 @@ export default async function EventsPage() {
     <div className="min-h-screen flex flex-col bg-white">
       <AppHeader />
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        {/* "Join AI Salon" banner — only for anonymous visitors. */}
+        {/* "Join {brand}" banner — only for anonymous visitors. */}
         {!me && (
-          <div className="mb-8 rounded-xl border border-[#FF005A]/20 bg-gradient-to-br from-[#FF005A]/5 to-[#00E6FF]/5 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div
+            className="mb-8 rounded-xl border p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            style={{
+              borderColor: `${brand.secondaryColor}33`,
+              backgroundImage: `linear-gradient(to bottom right, ${brand.secondaryColor}0D, ${brand.accentColor}0D)`,
+            }}
+          >
             <div>
-              <p className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-[#FF005A] mb-1">
+              <p
+                className="text-[0.7rem] font-bold uppercase tracking-[0.2em] mb-1"
+                style={{ color: brand.secondaryColor }}
+              >
                 Join {brand.displayName}
               </p>
               <h2 className="text-lg sm:text-xl font-extrabold text-black">
@@ -273,13 +283,14 @@ export default async function EventsPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                href="/login?callbackUrl=/events"
-                className="inline-flex items-center justify-center rounded-md bg-[#FF005A] text-white font-semibold px-5 py-2.5 text-sm hover:bg-[#D8004D] ais-lift"
+                href={`/login?callbackUrl=/events${brand ? `&brand=${encodeURIComponent(brand.slug)}` : ""}`}
+                className="inline-flex items-center justify-center rounded-md text-white font-semibold px-5 py-2.5 text-sm ais-lift"
+                style={{ backgroundColor: brand.secondaryColor }}
               >
                 Join {brand.displayName} →
               </Link>
               <Link
-                href="/login?callbackUrl=/events"
+                href={`/login?callbackUrl=/events${brand ? `&brand=${encodeURIComponent(brand.slug)}` : ""}`}
                 className="inline-flex items-center justify-center rounded-md border border-black/15 bg-white text-black font-semibold px-5 py-2.5 text-sm hover:bg-black/5"
               >
                 Sign in
@@ -290,11 +301,11 @@ export default async function EventsPage() {
 
         {/* Page header */}
         <div className="mb-10">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: brand.secondaryColor }}>
             {brand.displayName} {chapterName}
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
-            Upcoming & past <span className="ais-gradient-text">gatherings</span>
+            Upcoming & past <BrandGradientText gradient={brand.gradient}>gatherings</BrandGradientText>
           </h1>
           <p className="mt-3 text-base text-black/80 max-w-2xl">
             Events at the leading {chapterName} venues.
@@ -347,7 +358,7 @@ export default async function EventsPage() {
           />
         </Suspense>
       </main>
-      <SiteFooter brandName={brand.displayName} chapterName={chapterName} />
+      <SiteFooter brandName={brand.displayName} chapterName={chapterName} tagline={brand.tagline} />
     </div>
   );
 }

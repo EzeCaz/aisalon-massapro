@@ -23,10 +23,16 @@ export function AnalyticsSettingsEditor({
   currentGa4Id,
   currentMetaPixelId,
   canEdit,
+  brandSlug,
 }: {
   currentGa4Id: string;
   currentMetaPixelId: string;
   canEdit: boolean;
+  /** When provided, the saved IDs are scoped to this brand (writes to
+   *  `ga4MeasurementId@<brand>` / `metaPixelId@<brand>`). When null /
+   *  undefined, writes go to the global rows (legacy behavior — shared
+   *  by all brands). */
+  brandSlug?: string | null;
 }) {
   const [ga4Id, setGa4Id] = React.useState(currentGa4Id);
   const [pixelId, setPixelId] = React.useState(currentMetaPixelId);
@@ -51,7 +57,7 @@ export function AnalyticsSettingsEditor({
       const res = await fetch("/api/admin/site-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "ga4MeasurementId", value: trimmed }),
+        body: JSON.stringify({ key: "ga4MeasurementId", value: trimmed, brandSlug: brandSlug ?? undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -78,7 +84,7 @@ export function AnalyticsSettingsEditor({
       const res = await fetch("/api/admin/site-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "metaPixelId", value: trimmed }),
+        body: JSON.stringify({ key: "metaPixelId", value: trimmed, brandSlug: brandSlug ?? undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AiSalonLogo } from "@/components/brand/aisalon-logo";
 import { displayFlag } from "@/lib/country-flag";
+import { BrandHeaderLogo } from "@/components/brand/brand-header-logo";
 
 // ------------------------------------------------------------------
 // Types
@@ -67,6 +68,18 @@ type Props = {
    *  eyebrow, sign-up card, and footer so Coma visitors on
    *  coma.massapro.com never see hard-coded "AI Salon" strings. */
   brandName?: string;
+  /** Full brand config — drives the header logo (Coma vs AIS meerkat),
+   *  hero gradient color, and signup-card accent. When omitted, the
+   *  client falls back to a neutral black/white treatment. */
+  brand?: {
+    slug: string;
+    wordmark: string;
+    tagline: string;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    gradient: string;
+  } | null;
   /**
    * SIGNED-IN USER (2026-09-19): when present, the right-hand card swaps
    * the editable sign-up form for a masked read-only identity summary +
@@ -138,6 +151,7 @@ function fmtTime(d: Date, tz: string): string {
 export function ChapterLandingClient({
   chapter,
   brandName = "AI Salon",
+  brand = null,
   me,
 }: Props) {
   const router = useRouter();
@@ -210,6 +224,10 @@ export function ChapterLandingClient({
           email,
           name,
           chapterSlug: chapter.slug,
+          // Forward the resolved brand so new users get stamped with the
+          // right brandId at signup — otherwise they default to AIS via
+          // FALLBACK_DEFAULT_BRAND even when signing up via a Coma /c/ page.
+          brandSlug: brand?.slug,
         }),
       });
       const data = await res.json();
@@ -236,6 +254,13 @@ export function ChapterLandingClient({
   // country.code when flagEmoji is malformed or missing.
   const flag = displayFlag(chapter.country.code, chapter.country.flagEmoji);
 
+  // BRAND-AWARE ACCENTS: when a brand is provided, use its secondary
+  // color for the "Join the chapter" eyebrow, hover states, and the
+  // signup-card border. When brand is null (legacy callers), keep the
+  // legacy AIS magenta (#FF005A / #820A7D) so AIS pages look unchanged.
+  const accent = brand?.secondaryColor ?? "#FF005A";
+  const accentDeep = brand?.primaryColor ?? "#820A7D";
+
   // Normalize social URLs at render time so links like "linkedin.com/foo"
   // (entered without https://) still resolve to the external site instead
   // of being treated as a relative path on aisalon.massapro.com.
@@ -250,7 +275,11 @@ export function ChapterLandingClient({
       <header className="border-b border-black/10 bg-white">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <AiSalonLogo />
+            {brand ? (
+              <BrandHeaderLogo brand={brand} />
+            ) : (
+              <AiSalonLogo />
+            )}
           </Link>
           <Link
             href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}`}
@@ -262,8 +291,18 @@ export function ChapterLandingClient({
       </header>
 
       {/* Hero — chapter identity. Two-column on lg+ when a hero image
-          is set; single-column (gradient-only) when no image. */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#820A7D] via-[#5b0758] to-[#FF005A] text-white">
+          is set; single-column (gradient-only) when no image.
+          BRAND-AWARE (2026-09-19): the hero gradient comes from
+          brand.gradient when a brand is provided, so Coma visitors see
+          the Coma gradient instead of the legacy AIS magenta. */}
+      <section
+        className="relative overflow-hidden text-white"
+        style={{
+          background: brand?.gradient
+            ? brand.gradient
+            : "linear-gradient(to bottom right, #820A7D, #5b0758, #FF005A)",
+        }}
+      >
         <div className="absolute inset-0 opacity-10" style={{
           backgroundImage:
             "radial-gradient(circle at 20% 50%, rgba(255,255,255,0.4) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(0,230,255,0.3) 0%, transparent 50%)",
@@ -283,9 +322,19 @@ export function ChapterLandingClient({
               </p>
             )}
             <p className="text-base sm:text-lg text-white/80 max-w-2xl mb-8">
-              Join the local AI community in {chapter.name}. Sign up to register
-              for upcoming events, connect with other members, and get invited
-              to invite-only salons.
+              {brandName === "AI Salon" ? (
+                <>
+                  Join the local AI community in {chapter.name}. Sign up to
+                  register for upcoming events, connect with other members,
+                  and get invited to invite-only salons.
+                </>
+              ) : (
+                <>
+                  Join the {brandName} community in {chapter.name}. Sign up to
+                  register for upcoming events and connect with other
+                  community builders near you.
+                </>
+              )}
             </p>
 
             {/* Quick stats */}
@@ -431,7 +480,7 @@ export function ChapterLandingClient({
 
           {/* Right: Sign-up form (anon) OR Join card (signed-in) */}
           <aside className="lg:col-span-2">
-            <div className="lg:sticky lg:top-8 rounded-xl border border-[#820A7D]/20 bg-gradient-to-b from-[#820A7D]/[0.04] to-white p-6 shadow-sm">
+            <div className="lg:sticky lg:top-8 rounded-xl border bg-gradient-to-b to-white p-6 shadow-sm" style={{ borderColor: `${accentDeep}33`, backgroundImage: `linear-gradient(to bottom, ${accentDeep}0A, white)` }}>
               {me ? (
                 // ── SIGNED-IN JOIN CARD ─────────────────────────────
                 // Read-only masked identity + single Join button. No
@@ -439,7 +488,7 @@ export function ChapterLandingClient({
                 // from the profile on POST.
                 <>
                   <div className="mb-5">
-                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: accent }}>
                       <Sparkles className="h-3 w-3" /> Join the chapter
                     </p>
                     <h3 className="text-xl font-bold text-black">
@@ -505,7 +554,7 @@ export function ChapterLandingClient({
                       </p>
 
                       {joinError && (
-                        <div className="rounded-md bg-[#FF005A]/10 border border-[#FF005A]/30 px-3 py-2 text-xs text-[#FF005A]">
+                        <div className="rounded-md border px-3 py-2 text-xs" style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}4D`, color: accent }}>
                           {joinError}
                         </div>
                       )}
@@ -514,7 +563,8 @@ export function ChapterLandingClient({
                         type="button"
                         onClick={handleJoin}
                         disabled={joining}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-3 text-sm hover:bg-[#820A7D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-md text-white font-semibold px-4 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: accentDeep }}
                       >
                         {joining ? (
                           <>
@@ -551,7 +601,7 @@ export function ChapterLandingClient({
                 // ── ANON SIGN-UP FORM ────────────────────────────────
                 <>
                   <div className="mb-5">
-                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+                    <p className="inline-flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: accent }}>
                       <Sparkles className="h-3 w-3" /> Join the chapter
                     </p>
                     <h3 className="text-xl font-bold text-black">
@@ -579,7 +629,8 @@ export function ChapterLandingClient({
                           placeholder="Jane Cohen"
                           autoComplete="name"
                           required
-                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
+                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                          style={{ "--tw-ring-color": accent } as React.CSSProperties}
                         />
                       </div>
                     </div>
@@ -597,13 +648,14 @@ export function ChapterLandingClient({
                           placeholder="you@example.com"
                           autoComplete="email"
                           required
-                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
+                          className="w-full rounded-md border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                          style={{ "--tw-ring-color": accent } as React.CSSProperties}
                         />
                       </div>
                     </div>
 
                     {error && (
-                      <div className="rounded-md bg-[#FF005A]/10 border border-[#FF005A]/30 px-3 py-2 text-xs text-[#FF005A]">
+                      <div className="rounded-md border px-3 py-2 text-xs" style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}4D`, color: accent }}>
                         {error}
                       </div>
                     )}
@@ -611,7 +663,8 @@ export function ChapterLandingClient({
                     <button
                       type="submit"
                       disabled={loading || !email || !name}
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-[#820A7D] text-white font-semibold px-4 py-3 text-sm hover:bg-[#820A7D]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-md text-white font-semibold px-4 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: accentDeep }}
                     >
                       {loading ? (
                         <>
@@ -630,8 +683,9 @@ export function ChapterLandingClient({
                   <p className="text-xs text-black/50 mt-4 text-center">
                     Already have an account?{" "}
                     <Link
-                      href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}`}
-                      className="font-semibold text-[#820A7D] hover:underline"
+                      href={`/login?chapterSlug=${encodeURIComponent(chapter.slug)}&city=${encodeURIComponent(chapter.name)}${brand ? `&brand=${encodeURIComponent(brand.slug)}` : ""}`}
+                      className="font-semibold hover:underline"
+                      style={{ color: accentDeep }}
                     >
                       Sign in
                     </Link>

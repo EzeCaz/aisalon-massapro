@@ -131,6 +131,7 @@ export async function POST(
     name: target.name,
     chapterName: prefillChapterName,
     formUrl,
+    brandSlug: targetBrandSlug,
   });
 
   if (!emailResult.ok) {

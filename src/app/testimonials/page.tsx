@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/ais/site-footer";
 import { TestimonialFeed } from "@/components/testimonials/testimonial-feed";
 import type { EventOption, ChapterOption } from "@/components/testimonials/testimonial-form";
 import { getBrandConfig } from "@/lib/brand/brand-config";
+import { BrandGradientText } from "@/components/brand/brand-logo";
 import { MessageSquareHeart } from "lucide-react";
 
 /**
@@ -156,12 +157,12 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {/* Header */}
         <div className="mb-8">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2" style={{ color: brand.secondaryColor }}>
             <MessageSquareHeart className="inline h-3 w-3 mr-1" />
             {brand.displayName} {chapterName} · Testimonials
           </p>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-black">
-            What people are <span className="ais-gradient-text">saying</span>
+            What people are <BrandGradientText gradient={brand.gradient}>saying</BrandGradientText>
           </h1>
           <p className="mt-2 text-sm text-black/80 max-w-2xl">
             Real stories from our community about speakers, events, sessions,
@@ -181,7 +182,7 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
         />
       </main>
 
-      <SiteFooter brandName={brand.displayName} chapterName={chapterName} />
+      <SiteFooter brandName={brand.displayName} chapterName={chapterName} tagline={brand.tagline} />
     </div>
   );
 }

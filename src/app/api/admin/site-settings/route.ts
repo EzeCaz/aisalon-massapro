@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden — Super Admin only" }, { status: 403 });
   }
 
-  let body: { key?: string; value?: string };
+  let body: { key?: string; value?: string; brandSlug?: string };
   try {
     body = await req.json();
   } catch {
@@ -38,6 +38,16 @@ export async function POST(req: NextRequest) {
 
   const key = (body.key ?? "").trim();
   const value = (body.value ?? "").trim();
+  // Optional brand scope — when present, writes go to "<key>@<brand>"
+  // instead of the global row. The brand slug is validated by
+  // setSetting() (it accepts any non-empty string for the brand arg,
+  // but the read chain only resolves known brands). We still validate
+  // it here against isBrandSlug so a typo doesn't silently create an
+  // orphan row.
+  const rawBrandSlug = (body.brandSlug ?? "").trim().toLowerCase() || null;
+  // Imported lazily to avoid a cycle with site-settings.
+  const { isBrandSlug } = await import("@/lib/brand/brand-config");
+  const brandSlug = rawBrandSlug && isBrandSlug(rawBrandSlug) ? rawBrandSlug : null;
 
   if (!ALL_KEYS.has(key)) {
     return NextResponse.json(
@@ -64,6 +74,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await setSetting(key, value, user!.id);
-  return NextResponse.json({ ok: true, key, value });
+  await setSetting(key, value, user!.id, brandSlug ?? undefined);
+  return NextResponse.json({ ok: true, key, value, brandSlug: brandSlug ?? null });
 }

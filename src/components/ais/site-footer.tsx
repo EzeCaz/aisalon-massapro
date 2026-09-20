@@ -24,15 +24,21 @@ type Props = {
   /** Chapter display name (e.g. "Tel Aviv", "Montréal"). Already resolved
    *  by the page from the user's chapterId. */
   chapterName: string;
+  /** Brand tagline — shown after the "·" separator. Defaults to
+   *  "Empowering Human Connections" for backward compat with callers
+   *  that haven't been updated yet. Pages that have the brand config
+   *  should pass `brand.tagline` (e.g. AIS → "Empowering AI Connections",
+   *  Coma → "Building the Operating System for Communities"). */
+  tagline?: string;
 };
 
-export function SiteFooter({ brandName, chapterName }: Props) {
+export function SiteFooter({ brandName, chapterName, tagline = "Empowering Human Connections" }: Props) {
   const year = new Date().getFullYear();
   return (
     <footer className="mt-auto border-t border-black/10 bg-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
         <span>
-          © {year} {brandName} {chapterName} · Empowering Human Connections
+          © {year} {brandName} {chapterName} · {tagline}
         </span>
         <span>
           Platform by{" "}

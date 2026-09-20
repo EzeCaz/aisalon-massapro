@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MapPin, Search, Users, CalendarDays, ArrowRight, CheckCircle2, Home } from "lucide-react";
+import { BrandGradientText } from "@/components/brand/brand-logo";
 import {
   JoinCommunityDialog,
   type JoinChapterInfo,
@@ -47,11 +48,15 @@ export function CommunitiesClient({
   myCountryCode,
   me,
   brandName,
+  brandGradient,
+  brandAccentColor,
 }: {
   communities: CommunityCard[];
   myCountryCode: string | null;
   me: { name: string | null; email: string } | null;
   brandName: string;
+  brandGradient?: string;
+  brandAccentColor?: string;
 }) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
@@ -209,11 +214,19 @@ export function CommunitiesClient({
     <>
       {/* Header */}
       <div className="mb-8">
-        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
+        <p
+          className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] mb-2"
+          style={brandAccentColor ? { color: brandAccentColor } : { color: "#FF005A" }}
+        >
           Discover
         </p>
         <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-black leading-tight">
-          Communities <span className="ais-gradient-text">near you</span>
+          Communities{" "}
+          {brandGradient ? (
+            <BrandGradientText gradient={brandGradient}>near you</BrandGradientText>
+          ) : (
+            <span className="ais-gradient-text">near you</span>
+          )}
         </h1>
         <p className="mt-3 text-base text-black/80 max-w-2xl">
           Browse communities in your city and country — and around the world.

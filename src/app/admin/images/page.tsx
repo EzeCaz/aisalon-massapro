@@ -9,9 +9,22 @@ import { ImagesGallery } from "./images-gallery";
 import { WhatsAppLinkEditor } from "./whatsapp-link-editor";
 import { LinkedInLinkEditor } from "./linkedin-link-editor";
 import { AnalyticsSettingsEditor } from "./analytics-settings-editor";
-import { getPublicSettings } from "@/lib/site-settings";
+import { getPublicSettings, getPublicSettingsForBrand } from "@/lib/site-settings";
+import { resolveBrandMetadata } from "@/lib/brand/brand-metadata";
+import { isBrandSlug } from "@/lib/brand/brand-config";
+import type { Metadata } from "next";
 
-export const metadata = { title: "Brand Images — AI Salon Tel Aviv" };
+// BRAND-AWARE (2026-09-19): the leaf title is bare ("Brand Images") and
+// the root layout's template appends "<brand> <city>" automatically, so
+// Coma admins see "Brand Images — Coma Tel Aviv" instead of the old
+// hard-coded "Brand Images — AI Salon Tel Aviv" double-suffix.
+export async function generateMetadata(): Promise<Metadata> {
+  const { brand } = await resolveBrandMetadata();
+  return {
+    title: "Brand Images",
+    description: `Manage ${brand.displayName} brand images, favicon, login hero, login banner, WhatsApp + LinkedIn links, and analytics IDs.`,
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +49,11 @@ export const dynamic = "force-dynamic";
  * /api/admin/hidden-images route, but the upload + select buttons on this
  * page are only functional for SUPER_ADMIN.
  */
-export default async function AdminImagesPage() {
+export default async function AdminImagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/images");
 
@@ -73,8 +90,21 @@ export default async function AdminImagesPage() {
 
   const isSuper = isSuperAdmin({ email: me.email, role: me.role });
 
-  // Load the current WhatsApp link so the editor can pre-fill the input.
-  const settings = await getPublicSettings();
+  // BRAND-AWARE (2026-09-19): the page reads ?brand=<slug> so the Super
+  // Admin can scope the WhatsApp/LinkedIn/Analytics editors to a
+  // specific brand. Defaults to the host-resolved brand (e.g. Coma on
+  // coma.massapro.com, AIS on aisalon.massapro.com). The ImagesGallery
+  // above also reads ?brand= via its own client-side hook — same flow.
+  const sp = await searchParams;
+  const rawBrandSlug = (sp.brand ?? "").trim().toLowerCase() || null;
+  const brandSlug =
+    rawBrandSlug && isBrandSlug(rawBrandSlug)
+      ? rawBrandSlug
+      : (await resolveBrandMetadata()).brand.slug;
+
+  // Load the current settings scoped to the resolved brand. Falls back
+  // to global defaults when the brand-scoped row is missing.
+  const settings = await getPublicSettingsForBrand(brandSlug);
 
   // Load countries + chapters for the new chapter-scoped image filter.
   // Scope: Super Admin sees all; Admin sees own country; Chapter
@@ -163,6 +193,7 @@ export default async function AdminImagesPage() {
           <WhatsAppLinkEditor
             currentUrl={settings.whatsappGroupUrl}
             canEdit={isSuper}
+            brandSlug={brandSlug}
           />
         </div>
 
@@ -173,6 +204,7 @@ export default async function AdminImagesPage() {
           <LinkedInLinkEditor
             currentUrl={settings.linkedinUrl}
             canEdit={isSuper}
+            brandSlug={brandSlug}
           />
         </div>
 
@@ -183,6 +215,7 @@ export default async function AdminImagesPage() {
             currentGa4Id={settings.ga4MeasurementId}
             currentMetaPixelId={settings.metaPixelId}
             canEdit={isSuper}
+            brandSlug={brandSlug}
           />
         </div>
       </main>

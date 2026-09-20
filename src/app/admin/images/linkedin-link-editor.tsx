@@ -19,9 +19,14 @@ import { Loader2, ExternalLink, Save } from "lucide-react";
 export function LinkedInLinkEditor({
   currentUrl,
   canEdit,
+  brandSlug,
 }: {
   currentUrl: string;
   canEdit: boolean;
+  /** When provided, the saved URL is scoped to this brand (writes to
+   *  `K_LINKEDIN_URL@<brand>`). When null/undefined, writes go to the
+   *  global row (legacy behavior — shared by all brands). */
+  brandSlug?: string | null;
 }) {
   const [url, setUrl] = React.useState(currentUrl);
   const [saving, setSaving] = React.useState(false);
@@ -48,7 +53,7 @@ export function LinkedInLinkEditor({
       const res = await fetch("/api/admin/linkedin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmed }),
+        body: JSON.stringify({ url: trimmed, brandSlug: brandSlug ?? undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
