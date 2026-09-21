@@ -94,7 +94,7 @@ export function BrandsAdminClient({
   }
 
   async function handleProvision(invite: Invite) {
-    if (!confirm(`Provision brand "${invite.prefillBrandName || invite.inviteeEmail}"? This creates a new Brand row.`)) return;
+    if (!confirm(`Provision brand "${brandNameFor(invite) || invite.inviteeEmail}"? This creates a new Brand row.`)) return;
     setProvisioningId(invite.id);
     try {
       const res = await fetch(`/api/admin/brands/${invite.id}/provision`, {
@@ -116,6 +116,24 @@ export function BrandsAdminClient({
 
   function viewSubmission(invite: Invite) {
     setViewingSubmission(invite);
+  }
+
+  /** Extract the brand name for display:
+   *  - INVITE flow: prefer the Super Admin's prefill (prefillBrandName).
+   *  - SELF_SERVE flow: the lead had no prefill — pull brandName from
+   *    the submission JSON they submitted via /apply/form.
+   *  Falls back to the invitee email if neither is available. */
+  function brandNameFor(invite: Invite): string | null {
+    if (invite.prefillBrandName) return invite.prefillBrandName;
+    if (invite.submissionJson) {
+      try {
+        const data = JSON.parse(invite.submissionJson) as { brandName?: string };
+        if (data.brandName && typeof data.brandName === "string") return data.brandName;
+      } catch {
+        // Corrupt JSON — fall through to null.
+      }
+    }
+    return null;
   }
 
   function statusBadge(status: string) {
@@ -259,10 +277,20 @@ export function BrandsAdminClient({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="font-bold text-black text-sm">
-                      {i.prefillBrandName || <span className="italic text-black/60">(no brand name)</span>}
-                      {i.prefillBrandSlug && (
-                        <span className="ml-2 text-xs font-mono text-black/50">/{i.prefillBrandSlug}</span>
-                      )}
+                      {brandNameFor(i) || <span className="italic text-black/60">(no brand name)</span>}
+                      {(() => {
+                        // Show the brand slug from the submission for SELF_SERVE rows
+                        // (where prefillBrandSlug is null) — gives the admin at-a-glance
+                        // visibility into the requested URL slug too.
+                        if (i.prefillBrandSlug) return <span className="ml-2 text-xs font-mono text-black/50">/{i.prefillBrandSlug}</span>;
+                        if (i.submissionJson) {
+                          try {
+                            const d = JSON.parse(i.submissionJson) as { brandSlug?: string };
+                            if (d.brandSlug) return <span className="ml-2 text-xs font-mono text-black/50">/{d.brandSlug}</span>;
+                          } catch { /* ignore */ }
+                        }
+                        return null;
+                      })()}
                     </div>
                     <div className="text-xs text-black/70 mt-0.5">
                       Submitted by {i.inviteeEmail} · {new Date(i.submittedAt || i.sentAt).toLocaleDateString()}
@@ -316,7 +344,7 @@ export function BrandsAdminClient({
                   <tr key={i.id} className="hover:bg-black/[0.02]">
                     <td className="px-3 py-2 text-black/80">{i.inviteeEmail}</td>
                     <td className="px-3 py-2 text-black/80">
-                      {i.prefillBrandName || <span className="italic text-black/40">—</span>}
+                      {brandNameFor(i) || <span className="italic text-black/40">—</span>}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
