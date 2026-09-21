@@ -54,6 +54,8 @@ export default async function AdminBrandsPage() {
       prefillBrandName: true,
       prefillBrandSlug: true,
       status: true,
+      source: true,
+      applicantUserId: true,
       sentAt: true,
       submittedAt: true,
       expiresAt: true,

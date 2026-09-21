@@ -67,6 +67,11 @@ model Brand {
   emailFromName     String
   emailContactEmail String
 
+  mascotName        String?
+  mascotImageUrl    String?
+  mascotBackstory   String?
+  brandBookUrl      String?
+
   domainArchitecture String   @default("single")
   apexDomain         String?
   appDomain          String?
@@ -1724,8 +1729,10 @@ model BrandOnboardingInvite {
   inviteeEmail    String
   prefillBrandName String?
   prefillBrandSlug String?
-  invitedById     String
-  invitedBy       User     @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedById     String?
+  invitedBy       User?    @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  applicantUserId String?
+  source          String   @default("INVITE")
   status          String   @default("PENDING")
   sentAt          DateTime @default(now())
   openedAt        DateTime?
@@ -1739,7 +1746,9 @@ model BrandOnboardingInvite {
   updatedAt       DateTime @updatedAt
 
   @@index([invitedById])
+  @@index([applicantUserId])
   @@index([status])
+  @@index([source])
 }
 
 // ───────────────────────────────────────────────────────────────────

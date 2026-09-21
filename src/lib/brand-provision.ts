@@ -80,6 +80,13 @@ export async function provisionBrandFromSubmission(opts: {
   const apexDomain = (submission.apexDomain || "").trim() || "platform.joincoma.com";
   const domainArchitecture = submission.domainArchitecture || "single";
 
+  // Mascot + brand book (2026-09-19) — all optional, default to NULL
+  // (no mascot → text wordmark; no brand book → Super Admin can ask).
+  const mascotName = (submission.mascotName || "").trim() || null;
+  const mascotImageUrl = (submission.mascotImageUrl || "").trim() || null;
+  const mascotBackstory = (submission.mascotBackstory || "").trim() || null;
+  const brandBookUrl = (submission.brandBookUrl || "").trim() || null;
+
   // Slug uniqueness check — prevent accidental dupes.
   const existing = await db.brand.findUnique({ where: { slug }, select: { id: true } });
   if (existing) {
@@ -111,6 +118,10 @@ export async function provisionBrandFromSubmission(opts: {
       footerCredit,
       emailFromName,
       emailContactEmail,
+      mascotName,
+      mascotImageUrl,
+      mascotBackstory,
+      brandBookUrl,
       domainArchitecture,
       apexDomain,
       appDomain: apexDomain, // single-architecture: app = apex

@@ -99,6 +99,19 @@ model Brand {
   emailFromName     String   // "Coma <coma@massapro.com>"
   emailContactEmail String   // "coma@massapro.com"
 
+  // ── Mascot (2026-09-19) — optional character representing the brand ──
+  // e.g. AIS has the "falafel meerkat" mascot shown on login + headers.
+  // New brands can supply their own via the /apply form. All nullable —
+  // skipped → text wordmark only (no mascot), which is the default.
+  mascotName        String?  // "Falafel Meerkat"
+  mascotImageUrl    String?  // URL to mascot PNG/SVG
+  mascotBackstory   String?  // 1-2 sentence backstory shown on the about page
+
+  // ── Brand book (2026-09-19) — link to the brand's full style guide ──
+  // Typically a PDF/DOC/Figma URL with logo usage, typography, color
+  // palettes, do/don'ts. Super Admin can reference it when provisioning.
+  brandBookUrl      String?  // https://...pdf
+
   // ── Domain architecture ──
   // "single" = brand lives on one host (login + app + admin + API).
   // "split"  = apex hosts login + auth; subdomain hosts app. (Currently
@@ -2075,24 +2088,40 @@ model ChapterOnboardingInvite {
 model BrandOnboardingInvite {
   id           String   @id @default(cuid())
   /// Unguessable token used in the public URL. CUID-based, 32+ chars.
+  /// For the self-serve /apply flow, the token is generated server-side
+  /// when the application is submitted (so Super Admin can share a
+  /// direct link to view the submission later).
   token        String   @unique
-  /// The brand lead's email — captured at invite creation. The lead
-  /// may or may not already have a User account when invited.
+  /// The brand lead's email — captured at invite creation (INVITE flow)
+  /// OR at application submission (SELF_SERVE flow — equals the signed-in
+  /// user's email).
   inviteeEmail String
   /// Optional pre-filled brand name + slug (Super Admin can pre-fill
   /// when they already know the brand they're onboarding).
   prefillBrandName String?
   prefillBrandSlug String?
-  /// The Super Admin who sent the invite.
-  invitedById  String
-  invitedBy    User     @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  /// The Super Admin who sent the invite. NULL for SELF_SERVE
+  /// applications (the lead applied without an invite via /apply).
+  invitedById  String?
+  invitedBy    User?    @relation("BrandOnboardingInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  /// When the lead applied via /apply (signed in), their user.id is
+  /// recorded here so the Super Admin can reach them directly.
+  applicantUserId String?
+  /// Source of the invite:
+  ///   "INVITE"     — Super Admin emailed the lead via /admin/brands
+  ///                  (existing flow). status starts PENDING.
+  ///   "SELF_SERVE" — Lead applied directly via /apply/form (new flow).
+  ///                  status starts SUBMITTED (no PENDING step).
+  source       String   @default("INVITE")
   /// Status: PENDING (sent, not yet submitted) | SUBMITTED (form filled)
   /// | EXPIRED (past expiresAt) | REVOKED (admin manually revoked).
   status       String   @default("PENDING")
   sentAt       DateTime @default(now())
   openedAt     DateTime?
   submittedAt  DateTime?
-  /// Auto-expire after 30 days.
+  /// Auto-expire after 30 days. For SELF_SERVE applications, this is
+  /// set to ~10 years out (effectively never) since the lead already
+  /// submitted — the admin can take their time reviewing.
   expiresAt    DateTime
   /// The full form submission as a JSON blob (mirrors
   /// BrandOnboardingFormData in src/lib/brand-onboarding-types.ts).
@@ -2108,7 +2137,9 @@ model BrandOnboardingInvite {
   updatedAt    DateTime @updatedAt
 
   @@index([invitedById])
+  @@index([applicantUserId])
   @@index([status])
+  @@index([source])
 }
 
 // ───────────────────────────────────────────────────────────────────

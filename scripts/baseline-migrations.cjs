@@ -103,6 +103,12 @@ const NEW_MIGRATIONS = new Set([
   // community updates from). Idempotent CREATE TABLE IF NOT EXISTS +
   // guarded ALTER TABLE ADD CONSTRAINT.
   '20260919140000_brand_onboarding_interested_locations',
+  // 2026-09-21: Brand mascot/book fields (mascotName, mascotImageUrl,
+  // mascotBackstory, brandBookUrl on Brand) + self-serve /apply flow
+  // (applicantUserId + source on BrandOnboardingInvite, invitedById
+  // becomes nullable). Idempotent ADD COLUMN IF NOT EXISTS + guarded
+  // FK swap (CASCADE → SET NULL).
+  '20260921000000_brand_mascot_book_apply_self_serve',
 ]);
 
 async function main() {

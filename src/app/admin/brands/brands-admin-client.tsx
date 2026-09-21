@@ -11,6 +11,10 @@ type Invite = {
   prefillBrandName: string | null;
   prefillBrandSlug: string | null;
   status: string;
+  /** "INVITE" (Super Admin invited) or "SELF_SERVE" (lead applied via /apply/form). */
+  source: string;
+  /** Signed-in user.id when the lead applied via /apply/form (SELF_SERVE only). */
+  applicantUserId: string | null;
   sentAt: string;
   submittedAt: string | null;
   expiresAt: string;
@@ -124,6 +128,24 @@ export function BrandsAdminClient({
     return (
       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[0.65rem] font-bold uppercase tracking-wider border ${colors[status] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
         {status}
+      </span>
+    );
+  }
+
+  function sourceBadge(source: string) {
+    // SELF_SERVE = lead applied directly via /apply/form (no invite)
+    // INVITE     = Super Admin emailed the lead via /admin/brands
+    const isSelfServe = source === "SELF_SERVE";
+    return (
+      <span
+        className={`inline-flex items-center px-2 py-0.5 rounded text-[0.6rem] font-bold uppercase tracking-wider border ${
+          isSelfServe
+            ? "bg-purple-100 text-purple-800 border-purple-200"
+            : "bg-gray-50 text-black/60 border-black/10"
+        }`}
+        title={isSelfServe ? "Lead applied directly via /apply/form" : "Super Admin emailed the lead"}
+      >
+        {isSelfServe ? "Apply" : "Invite"}
       </span>
     );
   }
@@ -248,6 +270,7 @@ export function BrandsAdminClient({
                   </div>
                   <div className="flex items-center gap-2">
                     {statusBadge(i.status)}
+                    {sourceBadge(i.source)}
                     <button
                       onClick={() => viewSubmission(i)}
                       className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
@@ -295,7 +318,12 @@ export function BrandsAdminClient({
                     <td className="px-3 py-2 text-black/80">
                       {i.prefillBrandName || <span className="italic text-black/40">—</span>}
                     </td>
-                    <td className="px-3 py-2">{statusBadge(i.status)}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        {statusBadge(i.status)}
+                        {sourceBadge(i.source)}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 text-black/60 text-xs">{new Date(i.sentAt).toLocaleDateString()}</td>
                     <td className="px-3 py-2 text-black/60 text-xs">{new Date(i.expiresAt).toLocaleDateString()}</td>
                     <td className="px-3 py-2 text-right">

@@ -45,6 +45,20 @@ export type BrandOnboardingFormData = {
   /** Email header logo. Skipped → favicon or text wordmark fallback. */
   emailLogoUrl?: string;
 
+  // ─── Section 3b: Mascot (optional character) ───────────────────────
+  /** Mascot character name (e.g. "Falafel Meerkat"). Skipped → no mascot;
+   *  the brand renders with a text wordmark only. */
+  mascotName?: string;
+  /** Mascot image URL (PNG/SVG). Skipped → no mascot image rendered. */
+  mascotImageUrl?: string;
+  /** 1-2 sentence backstory shown on the about/branding page. */
+  mascotBackstory?: string;
+
+  // ─── Section 3c: Brand book / style guide ──────────────────────────
+  /** URL to the brand's full style guide (PDF/DOC/Figma). Super Admin
+   *  references this when reviewing the application + provisioning. */
+  brandBookUrl?: string;
+
   // ─── Section 4: Login copy ─────────────────────────────────────────
   /** Eyebrow template above the H1 on /login. Skipped → "{brandName} community"
    *  (matches Coma + AIS today). */
