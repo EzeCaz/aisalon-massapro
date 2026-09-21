@@ -62,23 +62,38 @@ export default async function ApplyFormPage() {
   });
 
   // Has the user already submitted an application?
-  const existing = await db.brandOnboardingInvite.findFirst({
-    where: {
-      OR: [
-        { applicantUserId: me.id },
-        { inviteeEmail: me.email, source: "SELF_SERVE" },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      token: true,
-      status: true,
-      submittedAt: true,
-      submissionJson: true,
-      appliedBrandId: true,
-    },
-  });
+  // Wrapped in try/catch — if the migration adding source/applicantUserId
+  // hasn't applied yet, the query fails. Treat as "no existing application"
+  // and render the empty form.
+  let existing: {
+    id: string;
+    token: string;
+    status: string;
+    submittedAt: Date | null;
+    submissionJson: string | null;
+    appliedBrandId: string | null;
+  } | null = null;
+  try {
+    existing = await db.brandOnboardingInvite.findFirst({
+      where: {
+        OR: [
+          { applicantUserId: me.id },
+          { inviteeEmail: me.email, source: "SELF_SERVE" },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        token: true,
+        status: true,
+        submittedAt: true,
+        submissionJson: true,
+        appliedBrandId: true,
+      },
+    });
+  } catch (dbErr) {
+    console.warn("[/apply/form] existing-application lookup failed (likely migration not applied):", dbErr);
+  }
 
   let existingSubmission: Record<string, unknown> | null = null;
   if (existing?.submissionJson) {

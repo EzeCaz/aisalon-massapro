@@ -36,26 +36,72 @@ export const dynamic = "force-dynamic";
 export default async function ApplyLandingPage() {
   // Load existing brands (excluding Coma — the platform parent — since
   // it's not a "customer"). AIS counts as social proof.
-  const brands = await db.brand.findMany({
-    where: {
-      status: "ACTIVE",
-      slug: { not: "coma" },
-    },
-    select: {
-      id: true,
-      slug: true,
-      displayName: true,
-      wordmark: true,
-      tagline: true,
-      primaryColor: true,
-      secondaryColor: true,
-      accentColor: true,
-      mascotName: true,
-      mascotImageUrl: true,
-      _count: { select: { chapters: true, users: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  // Wrapped in try/catch so the page renders even if the migration that
+  // adds the mascot columns hasn't applied yet (the rest of the page
+  // works without the social-proof section).
+  let brands: Array<{
+    id: string;
+    slug: string;
+    displayName: string;
+    wordmark: string;
+    tagline: string;
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    mascotName: string | null;
+    mascotImageUrl: string | null;
+    _count: { chapters: number; users: number };
+  }> = [];
+  try {
+    // Try with the new mascot columns (added 2026-09-21).
+    brands = await db.brand.findMany({
+      where: {
+        status: "ACTIVE",
+        slug: { not: "coma" },
+      },
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        wordmark: true,
+        tagline: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        mascotName: true,
+        mascotImageUrl: true,
+        _count: { select: { chapters: true, users: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+  } catch (err) {
+    // Migration 20260921000000 hasn't applied yet — fall back to the
+    // pre-mascot query so the page still renders.
+    console.warn("[/apply] brand query with mascot columns failed — falling back:", err);
+    try {
+      const fallback = await db.brand.findMany({
+        where: {
+          status: "ACTIVE",
+          slug: { not: "coma" },
+        },
+        select: {
+          id: true,
+          slug: true,
+          displayName: true,
+          wordmark: true,
+          tagline: true,
+          primaryColor: true,
+          secondaryColor: true,
+          accentColor: true,
+          _count: { select: { chapters: true, users: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      brands = fallback.map((b) => ({ ...b, mascotName: null, mascotImageUrl: null }));
+    } catch (err2) {
+      console.warn("[/apply] fallback brand query also failed:", err2);
+    }
+  }
 
   const coma = BRANDS.coma;
 

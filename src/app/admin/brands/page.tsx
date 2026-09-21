@@ -45,27 +45,52 @@ export default async function AdminBrandsPage() {
   }
 
   // Load all invites (any status) for the admin list.
-  const invites = await db.brandOnboardingInvite.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      token: true,
-      inviteeEmail: true,
-      prefillBrandName: true,
-      prefillBrandSlug: true,
-      status: true,
-      source: true,
-      applicantUserId: true,
-      sentAt: true,
-      submittedAt: true,
-      expiresAt: true,
-      openedAt: true,
-      appliedBrandId: true,
-      appliedAt: true,
-      submissionJson: true,
-      invitedBy: { select: { name: true, email: true } },
-    },
-  });
+  // Wrapped in try/catch — if the migration adding source/applicantUserId
+  // hasn't applied yet, the query fails. We render an empty list rather
+  // than 500 the page; the Super Admin can still send new invites.
+  let invites: Array<{
+    id: string;
+    token: string;
+    inviteeEmail: string;
+    prefillBrandName: string | null;
+    prefillBrandSlug: string | null;
+    status: string;
+    source: string;
+    applicantUserId: string | null;
+    sentAt: Date;
+    submittedAt: Date | null;
+    expiresAt: Date;
+    openedAt: Date | null;
+    appliedBrandId: string | null;
+    appliedAt: Date | null;
+    submissionJson: string | null;
+    invitedBy: { name: string | null; email: string } | null;
+  }> = [];
+  try {
+    invites = await db.brandOnboardingInvite.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        token: true,
+        inviteeEmail: true,
+        prefillBrandName: true,
+        prefillBrandSlug: true,
+        status: true,
+        source: true,
+        applicantUserId: true,
+        sentAt: true,
+        submittedAt: true,
+        expiresAt: true,
+        openedAt: true,
+        appliedBrandId: true,
+        appliedAt: true,
+        submissionJson: true,
+        invitedBy: { select: { name: true, email: true } },
+      },
+    });
+  } catch (dbErr) {
+    console.warn("[/admin/brands] invites query failed (likely migration not applied):", dbErr);
+  }
 
   // Load all existing Brand rows (Coma, AIS, plus any provisioned via this flow).
   const brands = await db.brand.findMany({

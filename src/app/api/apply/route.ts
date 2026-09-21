@@ -85,16 +85,24 @@ export async function POST(req: NextRequest) {
   // One-application-per-user: check for an existing SELF_SERVE application
   // by this user (or by their email — covers the case where they applied
   // before signing in with this user.id).
-  const existing = await db.brandOnboardingInvite.findFirst({
-    where: {
-      OR: [
-        { applicantUserId: me.id, source: "SELF_SERVE" },
-        { inviteeEmail: me.email, source: "SELF_SERVE" },
-      ],
-    },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, token: true, status: true, appliedBrandId: true },
-  });
+  // Wrapped in try/catch — if the migration adding source/applicantUserId
+  // hasn't applied yet, the query fails. Treat as "no existing application"
+  // and let the create attempt below surface the error.
+  let existing: { id: string; token: string; status: string; appliedBrandId: string | null } | null = null;
+  try {
+    existing = await db.brandOnboardingInvite.findFirst({
+      where: {
+        OR: [
+          { applicantUserId: me.id, source: "SELF_SERVE" },
+          { inviteeEmail: me.email, source: "SELF_SERVE" },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, token: true, status: true, appliedBrandId: true },
+    });
+  } catch (dbErr) {
+    console.warn("[/api/apply] existing-application lookup failed (likely migration not applied):", dbErr);
+  }
   if (existing) {
     return NextResponse.json({
       error: "You've already submitted an application. Re-visit /apply/form to view it.",
@@ -116,20 +124,29 @@ export async function POST(req: NextRequest) {
   // time reviewing without the application auto-expiring.
   const expiresAt = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
 
-  const invite = await db.brandOnboardingInvite.create({
-    data: {
-      token,
-      inviteeEmail: leadEmail,
-      invitedById: null, // SELF_SERVE — no Super Admin invited
-      applicantUserId: me.id,
-      source: "SELF_SERVE",
-      status: "SUBMITTED",
-      submittedAt: new Date(),
-      expiresAt,
-      submissionJson: JSON.stringify(submission),
-    },
-    select: { id: true, token: true },
-  });
+  let invite: { id: string; token: string };
+  try {
+    invite = await db.brandOnboardingInvite.create({
+      data: {
+        token,
+        inviteeEmail: leadEmail,
+        invitedById: null, // SELF_SERVE — no Super Admin invited
+        applicantUserId: me.id,
+        source: "SELF_SERVE",
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        expiresAt,
+        submissionJson: JSON.stringify(submission),
+      },
+      select: { id: true, token: true },
+    });
+  } catch (dbErr) {
+    console.error("[/api/apply] create failed:", dbErr);
+    return NextResponse.json({
+      error:
+        "We couldn't save your application — the database migration that adds the apply flow may still be running. Please try again in a few minutes.",
+    }, { status: 503 });
+  }
 
   return NextResponse.json({
     ok: true,
