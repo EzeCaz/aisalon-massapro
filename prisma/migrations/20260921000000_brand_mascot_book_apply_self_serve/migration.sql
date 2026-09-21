@@ -38,14 +38,16 @@ END $$;
 -- Existing FK on invitedById was ON DELETE CASCADE — change to SET NULL
 -- since the column is now nullable (matches the User? relation in schema).
 -- Drop + re-add only if the existing constraint is CASCADE.
+-- Postgres pg_constraint.confdeltype chars: 'a' = NO ACTION, 'r' = RESTRICT,
+-- 'c' = CASCADE, 'n' = SET NULL, 'd' = SET DEFAULT.
 DO $$
 DECLARE
-    existing_action TEXT;
+    existing_action CHAR;
 BEGIN
-    SELECT confdelsetcols INTO existing_action
+    SELECT confdeltype INTO existing_action
     FROM pg_constraint
     WHERE conname = 'BrandOnboardingInvite_invitedById_fkey';
-    IF existing_action = 'a' THEN  -- 'a' = CASCADE in pg_constraint confdeltype
+    IF existing_action = 'c' THEN  -- 'c' = CASCADE
         ALTER TABLE "BrandOnboardingInvite" DROP CONSTRAINT IF EXISTS "BrandOnboardingInvite_invitedById_fkey";
         ALTER TABLE "BrandOnboardingInvite"
           ADD CONSTRAINT "BrandOnboardingInvite_invitedById_fkey"
