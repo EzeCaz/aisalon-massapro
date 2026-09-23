@@ -16107,3 +16107,16 @@ Stage Summary:
 - Container network IP: 21.0.9.184 → http://21.0.9.184:3000/doc/platform-summary
 - .docx still downloadable at /api/downloads/coma-platform-capabilities-and-goals.docx and via the header button
 - Re-runnable: edit docx → python3 scripts/prepare-doc-viewer.py → refresh page
+
+---
+Task ID: standalone-doc-files
+Agent: main
+Task: User could not reach /doc/platform-summary viewer path — requested md/pdf file deliverables instead
+
+Work Log:
+- Copied rendered PDF (public/doc-viewer/document.pdf, LibreOffice conversion of the docx) → download/coma-platform-capabilities-and-goals.pdf (10 pages, A4)
+- Wrote clean markdown export → download/coma-platform-capabilities-and-goals.md (full content: 7 sections, 5 tables, metadata header, blockquote tagline)
+- download/ now holds the report in 3 formats: .docx (21 KB), .pdf (166 KB), .md (16 KB)
+
+Stage Summary:
+- User-facing deliverables no longer depend on the dev server or preview panel — all three formats open directly from the download folder
