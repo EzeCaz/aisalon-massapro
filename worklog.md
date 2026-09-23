@@ -16085,3 +16085,25 @@ Work Log:
 Stage Summary:
 - Deliverable: /home/z/my-project/download/coma-platform-capabilities-and-goals.docx (10 pages, ~3,000 words)
 - Reusable generator at scripts/generate-platform-summary.js + post-processor at scripts/postprocess-summary-docx.py — edit + re-run to revise
+
+---
+Task ID: doc-viewer-page
+Agent: main
+Task: "Show me the document and the preview and code workspace panel — download/coma-platform-capabilities-and-goals.docx"
+
+Work Log:
+- Built a 3-panel workspace viewer at /doc/platform-summary (public route, no auth):
+  * Document panel — cover hero (Coma navy/amber), TOC note card, 22 headings, 34 paragraphs, 6 styled tables rendered from extracted docx blocks
+  * Preview panel — all 10 pages rendered as PNGs (docx → LibreOffice PDF → pdftoppm @110dpi) with Cover/TOC badges, fit/full-width toggle, Open PDF button
+  * Code panel — VS Code-style file explorer + syntax-highlighted source (react-syntax-highlighter/Prism oneDark) of the 3 pipeline scripts (generator 508 lines, postprocessor, asset stager)
+- Asset pipeline: scripts/prepare-doc-viewer.py (persisted) → public/doc-viewer/{content.json, manifest.json, document.pdf, pages/page-01..10.png, code/*}
+- New route files: src/app/doc/platform-summary/{page,document-panel,preview-panel,code-panel,types}.tsx
+- Dev server started (bun run dev, port 3000); all assets + docx download API verified 200
+- Visual QA via headless browser (agent-browser) + VLM review: all 3 panels PASS (no layout breakage, no overlaps, readable text)
+- Bot-id for space-z preview URL still unknown per core/protocols/preview-url-sharing.md (documented gap — user must provide it from Space-Z dashboard); tested hostname/session/chat/trace/git-UUID candidates, all 404
+
+Stage Summary:
+- Viewer live at http://localhost:3000/doc/platform-summary (dev server running, HTTP 200)
+- Container network IP: 21.0.9.184 → http://21.0.9.184:3000/doc/platform-summary
+- .docx still downloadable at /api/downloads/coma-platform-capabilities-and-goals.docx and via the header button
+- Re-runnable: edit docx → python3 scripts/prepare-doc-viewer.py → refresh page

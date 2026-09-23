@@ -1,0 +1,49 @@
+{
+ "stats": {
+  "title": "Coma Platform — Capabilities & Goals",
+  "file": "download/coma-platform-capabilities-and-goals.docx",
+  "sizeBytes": 21331,
+  "modified": "2026-09-23T11:42:46.101509",
+  "wordCount": 1993,
+  "headings": 22,
+  "tables": 6,
+  "paragraphs": 34
+ },
+ "pdf": "document.pdf",
+ "pages": [
+  "pages/page-01.png",
+  "pages/page-02.png",
+  "pages/page-03.png",
+  "pages/page-04.png",
+  "pages/page-05.png",
+  "pages/page-06.png",
+  "pages/page-07.png",
+  "pages/page-08.png",
+  "pages/page-09.png",
+  "pages/page-10.png"
+ ],
+ "code": [
+  {
+   "name": "generate-platform-summary.js",
+   "path": "scripts/generate-platform-summary.js",
+   "language": "javascript",
+   "lines": 508,
+   "bytes": 35275
+  },
+  {
+   "name": "postprocess-summary-docx.py",
+   "path": "scripts/postprocess-summary-docx.py",
+   "language": "python",
+   "lines": 68,
+   "bytes": 2582
+  },
+  {
+   "name": "prepare-doc-viewer.py",
+   "path": "scripts/prepare-doc-viewer.py",
+   "language": "python",
+   "lines": 192,
+   "bytes": 7252
+  }
+ ],
+ "generatedAt": "2026-09-23T13:05:08.826120"
+}
