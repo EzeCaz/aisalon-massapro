@@ -16064,3 +16064,24 @@ Stage Summary:
 - Captures both brands' current state (Coma = parent w/ no chapters/logo component/knowledge docs at deploy; AIS = white-label with 2 chapters + meerkat mascot + 9 seed docs + hardcoded magenta/pink colors)
 - Lists all 4 BrandSwitchTabs admin pages + what's still NOT per-brand in each
 - Lists 15 brand leaks with recommended fixes — user can pick any subset to execute next
+
+---
+Task ID: platform-summary-doc
+Agent: main
+Task: "Create a summary of the platform capabilities and goals."
+
+Work Log:
+- Compiled capabilities + goals from full session context (brand architecture, hierarchy, membership gating, events, email orchestrator, onboarding/apply flows, roles, analytics, roadmap)
+- Generated formal English business report via docx skill: scripts/generate-platform-summary.js
+  * Cover: R1 recipe (Pure Paragraph Left) with Coma-branded palette (navy #0A1F44 / amber #F5A623)
+  * 3-section architecture: cover (margin 0, no footer) → TOC (Roman numerals) → body (Arabic from 1)
+  * 7 body sections: Executive Summary, Vision & Goals, Platform Architecture, Core Capabilities (6 subsections), Onboarding & Application Flows, Roles/Administration/Analytics, Current State & Roadmap
+  * 5 tables: hierarchy entities, brand configuration surface, onboarding paths, role hierarchy, roadmap items
+  * All headings use HeadingLevel (TOC-detectable); TOC refresh hint included
+- Post-processing: add_toc_placeholders.py --auto (exit 0, 22 headings), custom postprocess-summary-docx.py (removed 1 empty pgNumType, patched footer1 → PAGE \* ROMAN, footer2 → PAGE \* arabic)
+- postcheck.py: 8/9 passed, 0 errors, 1 acceptable warning (the mandatory TOC section-ending PageBreak — the allowed exception per SKILL.md)
+- Render verification: LibreOffice PDF conversion → 10 A4 pages; pixel check confirms cover/TOC/body all render with content
+
+Stage Summary:
+- Deliverable: /home/z/my-project/download/coma-platform-capabilities-and-goals.docx (10 pages, ~3,000 words)
+- Reusable generator at scripts/generate-platform-summary.js + post-processor at scripts/postprocess-summary-docx.py — edit + re-run to revise
