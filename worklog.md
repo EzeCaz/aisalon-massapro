@@ -16142,3 +16142,17 @@ Stage Summary:
 - download/AI-Agent-Team-Playbook.pdf (print-ready render)
 - download/AI-Agent-Team-Playbook.md (portable markdown, drop into any project's docs/)
 - All 3 formats contain: 11 agent profiles (identity/mission/job/artifacts/standards/refusals/coordination), triage tiers, 11-gate workflow, 7-step TSK protocol + 5 anti-patterns, removal governance, staged porting plan (L1/L2/L3), invocation phrasebook, source file map
+
+---
+Task ID: playbook-docx-download-verify
+Agent: main (Super Z)
+Task: "Show me the AI-Agent-Team-Playbook.docx download version"
+
+Work Log:
+- Verified download/AI-Agent-Team-Playbook.docx integrity via python-docx: 271 non-empty paragraphs, 30 tables, 3 sections (cover / TOC Roman / body Arabic)
+- Confirmed /api/downloads/[filename] route serves docx as application/octet-stream
+- Restarted dev server (bun run dev, port 3000); endpoint test: HTTP 200, 49,582 bytes = exact file size on disk
+
+Stage Summary:
+- AI-Agent-Team-Playbook.docx confirmed downloadable at /api/downloads/AI-Agent-Team-Playbook.docx (HTTP 200, full file)
+- Also available: AI-Agent-Team-Playbook.pdf (555 KB print render) and .md (portable) in download/
