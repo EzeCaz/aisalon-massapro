@@ -16120,3 +16120,25 @@ Work Log:
 
 Stage Summary:
 - User-facing deliverables no longer depend on the dev server or preview panel — all three formats open directly from the download folder
+
+---
+Task ID: TSK-0070-agent-team-playbook
+Agent: main (Super Z)
+Task: "Create a comprehensive downloadable report with all the agents' skills, knowledge, strategies, working methodology, and all information relevant to copy into another project — by name, responsibility, job description, etc."
+
+Work Log:
+- Ran Explore agent over core/, docs/, mini-services/ — inventoried the 9-agent core team (Meridian, Atlas, Canvas, Aegis, Forge, Lumen, Sentinel, Beacon, Codex), Super Z, and the CPO with all defining files
+- Read all 9 team files + constitution + workflow + task-management + TASK_CATEGORIES + REVIEW_PROCESS + CPO-PROTOCOL + smoke-tests in full
+- Generated docx via docx skill (R1 cover recipe, Coma navy/amber palette, 3-section architecture: cover / TOC Roman / body Arabic):
+  * scripts/agent-report-helpers.js + agent-report-sec-front.js + agent-report-sec-agents.js + agent-report-sec-port.js + agent-team-report.js
+  * 10 sections: Exec Summary, Team at a Glance, Triage, 11-Gate Workflow, Intake Protocol, 9 Agent Profiles, Extended Agents, Governance, Porting Guide, Appendix File Map — 30 tables total
+- Post-processing: add_toc_placeholders.py --auto (35 headings, exit 0) + scripts/postprocess-agent-report.py (removed 1 empty pgNumType, patched footer1→ROMAN, footer2→arabic)
+- postcheck.py: 7/9 passed, 0 errors, 2 acceptable warnings (TOC section-ending PageBreak; intentional table line spacing)
+- Visual QA: LibreOffice PDF render (36 pages A4) + VLM review — cover PASS, TOC PASS (dot leaders + Roman numerals), table page PASS (navy header rows, alternating shading, no overflow)
+- Companion .md version written for direct copy into another project (~5,500 words)
+
+Stage Summary:
+- download/AI-Agent-Team-Playbook.docx (36 pages, ~5,500 words, 30 tables, TOC with 35 entries)
+- download/AI-Agent-Team-Playbook.pdf (print-ready render)
+- download/AI-Agent-Team-Playbook.md (portable markdown, drop into any project's docs/)
+- All 3 formats contain: 11 agent profiles (identity/mission/job/artifacts/standards/refusals/coordination), triage tiers, 11-gate workflow, 7-step TSK protocol + 5 anti-patterns, removal governance, staged porting plan (L1/L2/L3), invocation phrasebook, source file map
