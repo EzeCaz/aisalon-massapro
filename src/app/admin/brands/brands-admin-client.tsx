@@ -272,6 +272,20 @@ export function BrandsAdminClient({
         </form>
       </section>
 
+      {/* ── Section 1b: Invite a brand admin (Option 4, Path 2) ─────── */}
+      <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-6">
+        <h2 className="text-lg font-bold text-black mb-1">Invite a brand admin</h2>
+        <p className="text-xs text-black/70 mb-4">
+          Promote an existing user (already signed up) to BRAND_ADMIN for a
+          specific brand. They&apos;ll get full admin power within that
+          brand — chapters, members, events, mockups, branding — and see
+          nothing from other brands. For a brand-new lead, use the
+          &quot;Invite a brand lead&quot; form above instead (that path
+          lets them apply, then provisioning auto-promotes them).
+        </p>
+        <InviteBrandAdminForm brands={brandsList.map((b) => ({ slug: b.slug, displayName: b.displayName }))} />
+      </section>
+
       {/* ── Section 2: Existing brands ────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
@@ -611,5 +625,101 @@ function SubmissionModal({ invite, onClose }: { invite: Invite; onClose: () => v
         )}
       </div>
     </div>
+  );
+}
+
+// ── Invite Brand Admin Form (Option 4, Path 2) ───────────────────────────
+
+function InviteBrandAdminForm({
+  brands,
+}: {
+  brands: Array<{ slug: string; displayName: string }>;
+}) {
+  const [email, setEmail] = React.useState("");
+  const [brandSlug, setBrandSlug] = React.useState(brands[0]?.slug ?? "");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.error("A valid email is required.");
+      return;
+    }
+    if (!brandSlug) {
+      toast.error("Pick a brand first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/admin/brands/invite-brand-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail, brandSlug }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || `Failed (HTTP ${res.status}).`);
+        return;
+      }
+      toast.success(
+        `${data.user?.email ?? trimmedEmail} is now BRAND_ADMIN for ${data.brand?.displayName ?? brandSlug}.`,
+      );
+      setEmail("");
+    } catch {
+      toast.error("Network error — try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="grid sm:grid-cols-3 gap-3">
+      <div>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
+          User email <span className="text-[#FF005A]">*</span>
+        </label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="lead@example.com (must already be signed up)"
+          required
+          className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-black/70 mb-1.5">
+          Brand <span className="text-[#FF005A]">*</span>
+        </label>
+        <select
+          value={brandSlug}
+          onChange={(e) => setBrandSlug(e.target.value)}
+          required
+          className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+        >
+          {brands.length === 0 && <option value="">No brands available</option>}
+          {brands.map((b) => (
+            <option key={b.slug} value={b.slug}>
+              {b.displayName} /{b.slug}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="sm:col-span-3 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 rounded-md bg-emerald-600 text-white font-semibold px-4 py-2 text-sm hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+          Promote to BRAND_ADMIN
+        </button>
+        <p className="text-xs text-black/60">
+          The user must have signed up at /login at least once. After promotion,
+          their next login lands on /admin with brand-scoped access only.
+        </p>
+      </div>
+    </form>
   );
 }

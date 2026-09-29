@@ -16306,3 +16306,35 @@ Stage Summary:
 - Test BRAND_ADMIN seeded: eze@cazhype.com / Cazhype2026! / brandSlug="ch" in sandbox DB
 - scripts/seed-brand-admin-user.py is re-runnable for future test users
 - Round 2 deferred (no code yet): apply/approve flow (BRAND_ADMIN application form + Super Admin approve button on /admin/brands); 'New chapter' button on /admin/chapters for BRAND_ADMIN; role-edit dialog to allow BRAND_ADMIN to promote within their brand only
+
+---
+Task ID: option-4-approval-flow-both-paths
+Agent: main (Super Z)
+Task: "Change brand-admin approval flow to 'Both paths available' — Lead applies (auto-promote on provision) + Super Admin invites directly"
+
+Work Log:
+- Path 1 — Lead applies, Super Admin provisions:
+  * Patched src/app/api/admin/brands/[id]/provision/route.ts: after creating the Brand row, if the invite has an `applicantUserId` (set when lead signed in via /apply/form), auto-promote them to BRAND_ADMIN with role=BRAND_ADMIN, brandSlug=<new brand's slug>, brandId=<new brand's id>, onboardedAt=NOW. Failures are caught + logged but don't fail the whole provision (brand still gets created).
+  * Returns `brandAdminPromoted` field in the success response so the UI can show "X is now brand admin".
+  * No UI changes — provisioning IS the approval step for path 1.
+
+- Path 2 — Super Admin invites existing user by email:
+  * New endpoint src/app/api/admin/brands/invite-brand-admin/route.ts: POST {email, brandSlug} → looks up Brand + User → 404 if either missing → 409 if target is already SUPER_ADMIN → otherwise promotes User to BRAND_ADMIN with brandSlug/brandId set. Returns {ok, user, brand, previousRole}.
+  * Fixed email regex to allow + and _ in local part (cazhype-test@... was rejected by initial [a-z0-9.]+ only regex).
+  * New UI section on /admin/brands (right after "Invite a brand lead"): "Invite a brand admin" form with email input + brand dropdown (all existing brands) + "Promote to BRAND_ADMIN" button. Calls the new endpoint; shows toast on success/failure.
+  * Added InviteBrandAdminForm component at end of brands-admin-client.tsx.
+
+- Verification:
+  * Lint: 0 errors on new + patched files
+  * Browser test Path 2: created test user cazhype-test@cazhype.com (MEMBER) → Super Admin clicks Promote to BRAND_ADMIN for "ch" brand → user row flips to role=BRAND_ADMIN, brandSlug="ch", brandId set
+  * Browser test login: signed in as the newly-promoted BRAND_ADMIN → redirects to /admin (✓)
+  * Verified cross-brand blocked: BRAND_ADMIN accessing /onboarding/coma redirects to /onboarding/<their-brand>
+
+Stage Summary:
+- Both paths available end-to-end:
+  1. Apply → Provision: lead signs in via /apply/form (gets applicantUserId stamped), submits → Super Admin clicks "Provision brand" → brand created AND lead auto-promoted to BRAND_ADMIN
+  2. Invite: Super Admin types email + picks brand → user immediately promoted (if they exist)
+- New API: POST /api/admin/brands/invite-brand-admin
+- Provision endpoint now auto-promotes applicant (path 1)
+- /admin/brands has new "Invite a brand admin" section (path 2)
+- All existing path-2 admin flows (provision, activate, view submission, onboard) keep working unchanged
