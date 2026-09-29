@@ -84,3 +84,6 @@ CORE-PRACTICE.md
 # V7: Google OAuth client secret for Drive uploader — DO NOT COMMIT
 upload/client_secret*.json
 client_secret*.json
+
+# Sandbox-only brand asset uploads (created by /api/brand-assets/[brandSlug]/upload when BLOB_READ_WRITE_TOKEN is unset)
+/public/brand-uploads/
