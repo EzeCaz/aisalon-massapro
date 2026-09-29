@@ -82,3 +82,85 @@ export function resolveBrandingImageUrl(
   if (brandingAsset?.theme === "dark") return BRAND_LOGO_DARK_URL;
   return fallbackUrl;
 }
+
+// ── Brand-aware asset resolution (cazhype onboarding funnel, 2026-09-29) ──
+//
+// The constants above are hardcoded AIS URLs. When a new brand (cazhype,
+// danone, hitechai, ...) is provisioned via /onboarding/[brandSlug],
+// mockups should pull the brand's own logo/hero/mascot URLs from the
+// Brand DB row instead of always rendering AIS visuals.
+//
+// This export adds a brand-aware resolver that mockup canvases can opt
+// into. Existing callers keep working — only callers that pass a
+// `brandAssets` context switch behavior. This is a backward-compatible
+// bridge so we can migrate canvases one at a time without a big-bang.
+//
+// Resolution rule (when brandAssets is provided):
+//   1. brandingAsset.imageUrl (admin override on a specific mockup element)
+//   2. brandAssets.assets.<role>Url (the brand's uploaded asset)
+//   3. BRAND_LOGO_LIGHT_URL / BRAND_LOGO_DARK_URL (legacy AIS default)
+//
+// `role` maps the brandingAsset's role to the Brand DB column:
+//   - "logo"  → brandAssets.assets.logoUrl
+//   - "hero"  → brandAssets.assets.heroBannerUrl
+//   - "mascot"→ brandAssets.assets.mascotImageUrl
+//   - default → use the theme-based logo URL (existing behavior)
+//
+// See src/lib/brand/brand-assets-resolver.ts for the BrandAssets shape
+// and src/app/onboarding/[brandSlug]/page.tsx for the admin upload flow.
+
+import type { BrandAssets as ResolvedBrandAssets } from "@/lib/brand/brand-assets-resolver";
+
+export type BrandAssetRole = "logo" | "hero" | "mascot" | "favicon" | "emailLogo";
+
+/**
+ * Resolve a brandingAsset's image URL with optional brand-DB context.
+ *
+ * @param brandingAsset — the per-mockup-element override (unchanged API)
+ * @param opts — optional { brandAssets, role } — pass to make the resolver
+ *              brand-aware; omit to get the legacy AIS-only behavior
+ */
+export function resolveBrandingImageUrlBrand(
+  brandingAsset: { imageUrl?: string; theme?: "light" | "dark" } | undefined,
+  opts: {
+    brandAssets?: ResolvedBrandAssets;
+    role?: BrandAssetRole;
+  } = {},
+): string {
+  // Layer 1: per-element admin override
+  if (brandingAsset?.imageUrl) return brandingAsset.imageUrl;
+
+  // Layer 2: brand-DB asset (only if brandAssets is passed + role maps)
+  if (opts.brandAssets && opts.role) {
+    const brandUrl = (() => {
+      switch (opts.role) {
+        case "logo":
+          return opts.brandAssets.assets.logoUrl;
+        case "hero":
+          return opts.brandAssets.assets.heroBannerUrl;
+        case "mascot":
+          return opts.brandAssets.assets.mascotImageUrl;
+        case "favicon":
+          return opts.brandAssets.assets.faviconUrl;
+        case "emailLogo":
+          return opts.brandAssets.assets.emailLogoUrl;
+      }
+    })();
+    if (brandUrl) return brandUrl;
+  }
+
+  // Layer 3: legacy AIS default (theme-based logo)
+  if (brandingAsset?.theme === "light") return BRAND_LOGO_LIGHT_URL;
+  if (brandingAsset?.theme === "dark") return BRAND_LOGO_DARK_URL;
+  return BRAND_LOGO_DARK_URL;
+}
+
+/**
+ * Whether a brand's mascot should render on a given mockup.
+ * Returns false when the brand has no mascot (so the canvas can skip
+ * the mascot block entirely instead of rendering an empty square).
+ */
+export function hasMascot(brandAssets?: ResolvedBrandAssets): boolean {
+  return !!brandAssets && !!brandAssets.assets.mascotImageUrl;
+}
+

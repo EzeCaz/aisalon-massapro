@@ -16156,3 +16156,30 @@ Work Log:
 Stage Summary:
 - AI-Agent-Team-Playbook.docx confirmed downloadable at /api/downloads/AI-Agent-Team-Playbook.docx (HTTP 200, full file)
 - Also available: AI-Agent-Team-Playbook.pdf (555 KB print render) and .md (portable) in download/
+
+---
+Task ID: cazhype-onboarding-funnel
+Agent: main (Super Z)
+Task: "Build an onboarding funnel for cazhype with email + asset upload that applies uploaded images to mockups/landing; ensure no Coma/AIS imagery leaks when brand uploads its own creatives; if blank, show Coma fallback. Palette: #4FF0F3, #FF3554, #FF4758, #FF01F8, #3677EB"
+
+Work Log:
+- Ran leakage audit (scripts/cazhype-leakage-audit.sh) — found 90+ files referencing AIS/Coma visuals; real leakage concentrated in 8 mockup-related files (sample-data.ts + canvas.tsx + shared/brand-assets.ts)
+- Built src/lib/brand/brand-assets-resolver.ts — 4-layer chain: Brand DB row → brand-config.ts → Coma fallback → hardcoded last-resort. Returns BrandAssets + per-asset provenance.
+- Built src/app/api/brand-assets/[brandSlug]/route.ts (GET/PATCH/DELETE, Super Admin auth) + upload/route.ts (multipart → Vercel Blob, sandbox fallback to /public/brand-uploads/<slug>/<key>/)
+- Built src/app/onboarding/[brandSlug]/page.tsx + onboarding-hub-client.tsx — admin hub with 6 asset tiles (drag/drop upload + Replace/Clear), palette editor (3 color pickers + hex + gradient preview), mascot metadata editor, mockup preview cards (link to /admin/mockups/<type>?brand=cazhype), email test buttons (Welcome/Reminder/Go-live), Activate brand CTA
+- Patched src/app/admin/mockups/shared/brand-assets.ts with backward-compatible resolveBrandingImageUrlBrand() + hasMascot() helpers — legacy callers unchanged, new callers can pass brandAssets context
+- Built src/lib/brand-onboarding-email/templates.ts — 3 email templates (Welcome D0, Reminder D3 conditional, Go-live D7) using resolveEmailBrandContext for brand-aware subject/From/palette
+- Wired Go-live email to fire from PATCH endpoint on DRAFT→ACTIVE transition (best-effort — never fails the PATCH if SMTP send fails)
+- Lint: 0 errors, 1 unused-var warning on new files
+- Browser verification: /onboarding/cazhype correctly 307-redirects to /login?callbackUrl=/onboarding/cazhype (Super Admin only)
+- API verification: GET /api/brand-assets/cazhype returns 200 with {slug:"cazhype", displayName:"Coma" (sandbox DB fallback), status:"DRAFT", owned:0, fallback:4, palette: Coma's} — confirms resolver works (cazhype's prod row will override once in production)
+- Generated download/Cazhype-Onboarding-Audit-Report.md (14 KB, full leakage list + remediation actions + setup checklist)
+
+Stage Summary:
+- Onboarding hub live at /onboarding/cazhype (Super Admin auth)
+- API live at /api/brand-assets/cazhype (GET/PATCH/DELETE/upload)
+- 4-layer brand resolver: Brand DB → brand-config → Coma fallback → hardcoded
+- 3-step email flow wired (Welcome + Reminder + Go-live; Go-live fires on DRAFT→ACTIVE)
+- Backward-compatible mockup brand-assets.ts patch (legacy resolveBrandingImageUrl unchanged; new resolveBrandingImageUrlBrand ready for canvas migration in round 2)
+- Downloadable audit report: download/Cazhype-Onboarding-Audit-Report.md
+- Round 2 deferred: migrate 4 mockup canvases to consume brandAssets prop + de-hardcode sample-data falafel-meerkat URLs + D3 reminder cron + login page DB-backed override
