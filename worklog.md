@@ -16183,3 +16183,25 @@ Stage Summary:
 - Backward-compatible mockup brand-assets.ts patch (legacy resolveBrandingImageUrl unchanged; new resolveBrandingImageUrlBrand ready for canvas migration in round 2)
 - Downloadable audit report: download/Cazhype-Onboarding-Audit-Report.md
 - Round 2 deferred: migrate 4 mockup canvases to consume brandAssets prop + de-hardcode sample-data falafel-meerkat URLs + D3 reminder cron + login page DB-backed override
+
+---
+Task ID: cazhype-admin-brands-entry-point
+Agent: main (Super Z)
+Task: "Logged in as eze@massapro.com (Super Admin) on coma.massapro.com but can't find /onboarding/cazhype. Want: Activate button on each brand row + onboarding preview to approve/change brand info — see what the user submitted and let super admin update it."
+
+Work Log:
+- Patched src/app/admin/brands/brands-admin-client.tsx (443 → 615 lines):
+  * Section 2 "Existing brands" cards now show: brand avatar (primaryColor square), displayName + slug, tagline, chapter count, user count, onboardedAt date, status badge (DRAFT amber / ACTIVE emerald), and 2 action buttons per card:
+    - "Onboard" → links to /onboarding/<slug> (the asset upload hub built in TSK-cazhype-onboarding-funnel)
+    - "Activate" (DRAFT only) → fires PATCH /api/brand-assets/<slug> with {status:"ACTIVE"} → flips DB row + fires Go-live email; optimistic UI update without full reload
+    - "Login" (ACTIVE only) → opens /login?brand=<slug> in new tab so admin can verify branding
+  * Added local state: brandsList (optimistic updates after Activate), activatingBrandSlug (per-row spinner)
+  * SubmissionModal upgraded: now shows provisioned-status banner (green if appliedBrandId set, blue if still pending), submission timestamp, and CTAs at the bottom: "Open onboarding hub" + "View JSON state" (links to /onboarding/<appliedBrandSlug> + /api/brand-assets/<appliedBrandSlug>)
+- Lint: 0 errors on patched file (2 pre-existing warnings)
+
+Stage Summary:
+- Super Admin can now: open /admin/brands → see cazhype card → click Onboard → arrive at /onboarding/cazhype
+- Each DRAFT brand shows an Activate button (fires Go-live email on DRAFT→ACTIVE)
+- Each ACTIVE brand shows a Login button (verify branding on /login?brand=<slug>)
+- SubmissionModal (click "View" on a submitted invite) now shows whether the brand was provisioned, when, and provides a direct link to the onboarding hub to edit/update the brand's assets, palette, mascot, copy
+- Brands page is the single Super Admin entry point: invite → review submission → provision → onboarding hub → activate

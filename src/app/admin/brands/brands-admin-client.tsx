@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Loader2, Send, Eye, CheckCircle2, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  Loader2,
+  Send,
+  Eye,
+  CheckCircle2,
+  ExternalLink,
+  RefreshCw,
+  Rocket,
+  Settings2,
+} from "lucide-react";
 
 type Invite = {
   id: string;
@@ -55,6 +64,38 @@ export function BrandsAdminClient({
   const [invitesList, setInvitesList] = React.useState<Invite[]>(invites);
   const [provisioningId, setProvisioningId] = React.useState<string | null>(null);
   const [viewingSubmission, setViewingSubmission] = React.useState<Invite | null>(null);
+  const [activatingBrandSlug, setActivatingBrandSlug] = React.useState<string | null>(null);
+  const [brandsList, setBrandsList] = React.useState<Brand[]>(brands);
+
+  async function activateBrand(slug: string, displayName: string) {
+    if (!confirm(`Activate "${displayName}"? This flips status to ACTIVE and fires the Go-live email to the brand's contact address.`)) return;
+    setActivatingBrandSlug(slug);
+    try {
+      const res = await fetch(`/api/brand-assets/${slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ACTIVE" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        toast.error(data.error || `Failed (HTTP ${res.status}).`);
+        return;
+      }
+      toast.success(`${displayName} is now ACTIVE! Go-live email sent.`);
+      // Optimistic local update — flip the row's status without a full reload.
+      setBrandsList((prev) =>
+        prev.map((b) =>
+          b.slug === slug
+            ? { ...b, status: "ACTIVE", onboardedAt: new Date().toISOString() }
+            : b,
+        ),
+      );
+    } catch {
+      toast.error("Network error — try again.");
+    } finally {
+      setActivatingBrandSlug(null);
+    }
+  }
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -233,33 +274,89 @@ export function BrandsAdminClient({
 
       {/* ── Section 2: Existing brands ────────────────────────────── */}
       <section>
-        <h2 className="text-lg font-bold text-black mb-3">Existing brands</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-black">Existing brands ({brandsList.length})</h2>
+          <p className="text-xs text-black/60">
+            Click <strong>Onboard</strong> to open the brand&apos;s upload hub (drag/drop assets, palette, mascot, mockup previews). Click <strong>Activate</strong> to flip a DRAFT brand to ACTIVE.
+          </p>
+        </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {brands.map((b) => (
-            <div key={b.id} className="rounded-lg border border-black/10 bg-white p-4">
-              <div className="flex items-center gap-2 mb-2">
+          {brandsList.map((b) => (
+            <div
+              key={b.id}
+              className={`rounded-lg border bg-white p-4 flex flex-col gap-3 ${
+                b.status === "ACTIVE"
+                  ? "border-emerald-200"
+                  : "border-amber-200"
+              }`}
+            >
+              <div className="flex items-start gap-2">
                 <span
-                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-white text-xs font-bold"
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-white text-xs font-bold flex-shrink-0"
                   style={{ backgroundColor: b.primaryColor }}
                 >
                   {b.wordmark.slice(0, 2).toUpperCase()}
                 </span>
-                <div>
-                  <div className="font-bold text-black text-sm">{b.displayName}</div>
-                  <div className="text-[0.7rem] text-black/60 font-mono">/{b.slug}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-black text-sm truncate">{b.displayName}</div>
+                  <div className="text-[0.7rem] text-black/60 font-mono truncate">/{b.slug}</div>
                 </div>
-              </div>
-              <p className="text-[0.7rem] text-black/70 leading-snug">{b.tagline}</p>
-              <div className="mt-2 flex items-center gap-2 text-[0.65rem] text-black/60">
-                <span>{b._count.chapters} chapters</span>
-                <span>·</span>
-                <span>{b._count.users} users</span>
-                <span>·</span>
                 <span
-                  className={`font-bold uppercase ${b.status === "ACTIVE" ? "text-[#007E72]" : "text-amber-700"}`}
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-[0.6rem] font-bold uppercase tracking-wider border flex-shrink-0 ${
+                    b.status === "ACTIVE"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                      : "bg-amber-100 text-amber-800 border-amber-200"
+                  }`}
                 >
                   {b.status}
                 </span>
+              </div>
+              <p className="text-[0.7rem] text-black/70 leading-snug line-clamp-2">{b.tagline}</p>
+              <div className="flex items-center gap-2 text-[0.65rem] text-black/60">
+                <span>{b._count.chapters} chapters</span>
+                <span>·</span>
+                <span>{b._count.users} users</span>
+                {b.onboardedAt && (
+                  <>
+                    <span>·</span>
+                    <span>onboarded {new Date(b.onboardedAt).toLocaleDateString()}</span>
+                  </>
+                )}
+              </div>
+              <div className="mt-auto flex flex-wrap gap-1.5 pt-2 border-t border-black/[0.06]">
+                <a
+                  href={`/onboarding/${b.slug}`}
+                  className="inline-flex items-center gap-1 rounded-md bg-black text-white font-semibold px-2.5 py-1.5 text-xs hover:bg-black/90"
+                  title="Open onboarding hub — upload assets, edit palette, view mockup previews"
+                >
+                  <Settings2 className="h-3.5 w-3.5" /> Onboard
+                </a>
+                {b.status !== "ACTIVE" ? (
+                  <button
+                    type="button"
+                    onClick={() => activateBrand(b.slug, b.displayName)}
+                    disabled={activatingBrandSlug === b.slug}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-600 text-white font-semibold px-2.5 py-1.5 text-xs hover:bg-emerald-700 disabled:opacity-50"
+                    title="Flip status to ACTIVE + fire Go-live email"
+                  >
+                    {activatingBrandSlug === b.slug ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Rocket className="h-3.5 w-3.5" />
+                    )}
+                    Activate
+                  </button>
+                ) : (
+                  <a
+                    href={`/login?brand=${b.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-black/15 bg-white text-black font-semibold px-2.5 py-1.5 text-xs hover:bg-black/5"
+                    title="Open the brand's login page in a new tab"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Login
+                  </a>
+                )}
               </div>
             </div>
           ))}
@@ -401,6 +498,18 @@ function SubmissionModal({ invite, onClose }: { invite: Invite; onClose: () => v
   } catch {
     // ignore
   }
+
+  // If the submission was already provisioned (appliedBrandId is set),
+  // find the resulting brand's slug from the submissionJson so the admin
+  // can jump straight to the onboarding hub for it.
+  let appliedBrandSlug: string | null = null;
+  if (invite.appliedBrandId && data) {
+    appliedBrandSlug =
+      (typeof data.brandSlug === "string" && data.brandSlug) ||
+      invite.prefillBrandSlug ||
+      null;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[85vh] overflow-auto p-6">
@@ -409,7 +518,14 @@ function SubmissionModal({ invite, onClose }: { invite: Invite; onClose: () => v
             <h3 className="text-lg font-bold text-black">
               {data ? String(data.brandName || invite.prefillBrandName || "Submission") : "Submission"}
             </h3>
-            <p className="text-xs text-black/60">{invite.inviteeEmail}</p>
+            <p className="text-xs text-black/60">
+              {invite.inviteeEmail}
+              {invite.submittedAt && (
+                <span className="ml-2 text-black/40">
+                  · submitted {new Date(invite.submittedAt).toLocaleString()}
+                </span>
+              )}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -418,6 +534,38 @@ function SubmissionModal({ invite, onClose }: { invite: Invite; onClose: () => v
             Close ✕
           </button>
         </div>
+
+        {invite.appliedBrandId ? (
+          <div className="mb-4 p-3 rounded-md bg-emerald-50 border border-emerald-200">
+            <p className="text-sm text-emerald-900 font-semibold mb-1">
+              ✓ Provisioned as a Brand row
+            </p>
+            <p className="text-xs text-emerald-800 mb-2">
+              {invite.appliedAt && (
+                <>Provisioned on {new Date(invite.appliedAt).toLocaleString()}.</>
+              )}{" "}
+              Open the onboarding hub to manage this brand&apos;s assets, palette,
+              mascot metadata, and activation status.
+            </p>
+            {appliedBrandSlug && (
+              <a
+                href={`/onboarding/${appliedBrandSlug}`}
+                className="inline-flex items-center gap-1 rounded-md bg-black text-white font-semibold px-3 py-1.5 text-xs hover:bg-black/90"
+              >
+                <Settings2 className="h-3.5 w-3.5" /> Open onboarding hub
+              </a>
+            )}
+          </div>
+        ) : (
+          <div className="mb-4 p-3 rounded-md bg-blue-50 border border-blue-200">
+            <p className="text-xs text-blue-900">
+              Not provisioned yet. Review the lead&apos;s submission below, then
+              click <strong>Provision brand</strong> on the row above to
+              create the Brand row.
+            </p>
+          </div>
+        )}
+
         {data ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {Object.entries(data).map(([k, v]) => (
@@ -435,6 +583,31 @@ function SubmissionModal({ invite, onClose }: { invite: Invite; onClose: () => v
           </dl>
         ) : (
           <p className="text-sm text-black/60">No submission data.</p>
+        )}
+
+        {appliedBrandSlug && (
+          <div className="mt-6 pt-4 border-t border-black/[0.08]">
+            <p className="text-xs text-black/70 mb-2">
+              To <strong>edit or update</strong> this brand&apos;s branding
+              (palette, logo, hero, mascot, copy), use the onboarding hub:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`/onboarding/${appliedBrandSlug}`}
+                className="inline-flex items-center gap-1.5 rounded-md bg-black text-white font-semibold px-3 py-2 text-sm hover:bg-black/90"
+              >
+                <Settings2 className="h-4 w-4" /> Open onboarding hub
+              </a>
+              <a
+                href={`/api/brand-assets/${appliedBrandSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-black/15 bg-white text-black font-semibold px-3 py-2 text-sm hover:bg-black/5"
+              >
+                <ExternalLink className="h-4 w-4" /> View JSON state
+              </a>
+            </div>
+          </div>
         )}
       </div>
     </div>
