@@ -29,7 +29,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isSuperAdmin, isSuperAdminEmail } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, normalizeRole, ROLES } from "@/lib/permissions";
 import { safeFileExtension, uniqueBlobFilename } from "@/lib/blob-paths";
 import {
   ASSET_KEYS,
@@ -80,7 +80,9 @@ function sanitizeSlug(slug: string): string | null {
   return slug;
 }
 
-async function requireSuperAdmin(): Promise<
+async function requireBrandAdmin(
+  brandSlug: string,
+): Promise<
   | { ok: true; email: string }
   | { ok: false; response: NextResponse }
 > {
@@ -93,7 +95,7 @@ async function requireSuperAdmin(): Promise<
   }
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, brandSlug: true },
   });
   if (!me) {
     return {
@@ -101,10 +103,15 @@ async function requireSuperAdmin(): Promise<
       response: NextResponse.json({ error: "User not found" }, { status: 404 }),
     };
   }
-  if (!isSuperAdmin({ email: me.email, role: me.role }) && !isSuperAdminEmail(me.email)) {
+  const sa = isSuperAdmin({ email: me.email, role: me.role }) || isSuperAdminEmail(me.email);
+  const ba = normalizeRole(me.role) === ROLES.BRAND_ADMIN && me.brandSlug === brandSlug;
+  if (!sa && !ba) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Forbidden — Super Admin only" }, { status: 403 }),
+      response: NextResponse.json(
+        { error: "Forbidden — Super Admin or matching BRAND_ADMIN only" },
+        { status: 403 },
+      ),
     };
   }
   return { ok: true, email: me.email };
@@ -114,14 +121,13 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ brandSlug: string }> },
 ) {
-  const auth = await requireSuperAdmin();
-  if (!auth.ok) return auth.response;
-
   const { brandSlug: rawSlug } = await ctx.params;
   const slug = sanitizeSlug(rawSlug);
   if (!slug) {
     return NextResponse.json({ error: "Invalid brand slug" }, { status: 400 });
   }
+  const auth = await requireBrandAdmin(slug);
+  if (!auth.ok) return auth.response;
 
   // Parse multipart form
   let formData: FormData;

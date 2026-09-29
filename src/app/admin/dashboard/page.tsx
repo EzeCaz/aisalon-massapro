@@ -27,6 +27,14 @@ function scopeBadge(scope: UserScope, brand: BrandConfig): { label: string; colo
     case "global":
       // Primary brand color for the highest scope level.
       return { label: "Global", color: `bg-[${brand.primaryColor}] text-white` };
+    case "brand":
+      // Brand-scoped admin (Option 4, 2026-09-29) — same visual weight as
+      // country, but with the brand's name in the label so the admin
+      // immediately sees "which brand am I scoped to".
+      return {
+        label: `${brand.displayName} brand`,
+        color: `bg-[${brand.accentColor}] text-white`,
+      };
     case "country":
       // Accent color for country scope.
       return { label: "Country", color: `bg-[${brand.accentColor}] text-white` };

@@ -55,16 +55,28 @@ export default async function ChaptersPage() {
   }
 
   const isSuperAdmin = isSuperAdminEmail(me.email) || myRole === ROLES.SUPER_ADMIN;
+  const isBrandAdmin = myRole === ROLES.BRAND_ADMIN;
   const isChapterOrganizer = effectiveRole === ROLES.CHAPTER_ORGANIZER;
 
-  // Scope: Super Admin sees all countries; Admin sees only their country;
-  // Chapter Organizer sees only their country AND only their own chapter
-  // inside that country (so they can click through to the editor and
-  // manage brand image overrides without seeing other chapters).
-  const countryWhere = isSuperAdmin ? {} : { id: me.countryId ?? "___NEVER___" };
+  // Scope: Super Admin sees all countries; BRAND_ADMIN sees countries where
+  // their brand has chapters; Admin sees only their country; Chapter
+  // Organizer sees only their country AND only their own chapter inside
+  // that country (so they can click through to the editor and manage
+  // brand image overrides without seeing other chapters).
+  //
+  // BRAND_ADMIN scope (Option 4, 2026-09-29): instead of filtering by
+  // countryId, we filter chapters by brand.slug === me.brandSlug. The
+  // country query stays open (BRAND_ADMIN might have chapters in
+  // multiple countries) but every chapter is restricted to their brand.
+  const countryWhere =
+    isSuperAdmin || isBrandAdmin
+      ? {}
+      : { id: me.countryId ?? "___NEVER___" };
   const chapterWhere = isChapterOrganizer
     ? { id: me.chapterId ?? "___NEVER___" }
-    : {};
+    : isBrandAdmin
+      ? { brand: { slug: me.brandSlug ?? "___NEVER___" } }
+      : {};
   const countries = await db.country.findMany({
     where: countryWhere,
     include: {

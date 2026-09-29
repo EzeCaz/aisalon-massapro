@@ -54,6 +54,7 @@
  */
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
+  BRAND_ADMIN: "BRAND_ADMIN",
   ADMIN: "ADMIN",
   CHAPTER_ORGANIZER: "CHAPTER_ORGANIZER",
   CO_HOST: "CO_HOST", // legacy — same rank as CHAPTER_ORGANIZER
@@ -117,6 +118,7 @@ export function normalizeRole(role: string | null | undefined): Role {
   if (!role) return ROLES.MEMBER;
   const upper = role.toUpperCase();
   if (upper === "SUPER_ADMIN") return ROLES.SUPER_ADMIN;
+  if (upper === "BRAND_ADMIN") return ROLES.BRAND_ADMIN;
   if (upper === "ADMIN") return ROLES.ADMIN;
   if (upper === "CHAPTER_ORGANIZER") return ROLES.CHAPTER_ORGANIZER;
   if (upper === "CO_HOST") return ROLES.CO_HOST;
@@ -128,15 +130,25 @@ export function normalizeRole(role: string | null | undefined): Role {
 
 /**
  * Privilege rank — higher = more powerful. Used for inheritance.
- *   SUPER_ADMIN         = 4
+ *   SUPER_ADMIN         = 5  (was 4 — bumped to make room for BRAND_ADMIN above ADMIN)
+ *   BRAND_ADMIN         = 4  (new — Option 4 brand-scoped admin, 2026-09-29)
  *   ADMIN               = 3
  *   CHAPTER_ORGANIZER   = 2  (V7 — replaces CO_HOST)
  *   CO_HOST             = 2  (V6 legacy — same rank as CHAPTER_ORGANIZER)
  *   MEMBER              = 1
  *   SPEAKER             = 0  (outside inheritance — gets only explicit perms)
+ *
+ * BRAND_ADMIN is a brand-scoped admin: full admin power within their brand,
+ * zero visibility into other brands. Their User.row carries both
+ *   role       = "BRAND_ADMIN"
+ *   brandSlug  = "<slug>"   (the brand they administer)
+ * getUserScope() returns { kind: "brand", brandSlug } for them, and the
+ * scope*Where() helpers filter every admin query by User.brandSlug /
+ * Chapter.brand.slug / Event.brand.slug.
  */
 const RANK: Record<Role, number> = {
-  SUPER_ADMIN: 4,
+  SUPER_ADMIN: 5,
+  BRAND_ADMIN: 4,
   ADMIN: 3,
   CHAPTER_ORGANIZER: 2,
   CO_HOST: 2,
@@ -524,6 +536,7 @@ export function readViewAsFromSession(sessionUser: unknown): {
 
 export type UserScope =
   | { kind: "global" }
+  | { kind: "brand"; brandSlug: string }
   | { kind: "country"; countryId: string }
   | { kind: "chapter"; countryId: string; chapterId: string }
   | { kind: "none" };
@@ -557,7 +570,7 @@ export async function getUserScope(
   const { db } = await import("@/lib/db");
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { role: true, countryId: true, chapterId: true, email: true },
+    select: { role: true, countryId: true, chapterId: true, email: true, brandSlug: true },
   });
   if (!user) return { kind: "none" };
   const r = normalizeRole(user.role);
@@ -611,6 +624,24 @@ export async function getUserScope(
   }
 
   if (r === ROLES.SUPER_ADMIN) return { kind: "global" };
+
+  // ── BRAND_ADMIN (Option 4, 2026-09-29) ────────────────────────────────
+  // Brand-scoped admin: full admin power within their brand only.
+  // Returns { kind: "brand", brandSlug } — scope helpers filter every
+  // admin query by User.brandSlug / Chapter.brand.slug / Event.brand.slug.
+  // If brandSlug is missing → fail safe to "none" (a brand admin with
+  // no brand assigned can't see anything — same fail-closed pattern as
+  // ADMIN/CHAPTER_ORGANIZER below).
+  if (r === ROLES.BRAND_ADMIN) {
+    if (!user.brandSlug) {
+      console.warn(
+        `[permissions] BRAND_ADMIN ${userId} has no brandSlug — failing safe to "none" scope. Fix this user's brandSlug in /admin.`,
+      );
+      return { kind: "none" };
+    }
+    return { kind: "brand", brandSlug: user.brandSlug };
+  }
+
   if (r === ROLES.ADMIN) {
     // TSK-0056: Fail CLOSED. Previously returned { kind: "global" } when
     // an ADMIN had a missing countryId — that meant a misconfigured admin
@@ -652,6 +683,11 @@ export function scopeUserWhere(scope: UserScope): Record<string, unknown> {
   switch (scope.kind) {
     case "global":
       return {};
+    case "brand":
+      // Brand-scoped admin: only users whose brandSlug matches the brand.
+      // Users with brandSlug=null in the same country are NOT visible —
+      // they belong to the platform parent, not the brand.
+      return { brandSlug: scope.brandSlug };
     case "country":
       return { countryId: scope.countryId };
     case "chapter":
@@ -670,6 +706,11 @@ export function scopeEventWhere(scope: UserScope): Record<string, unknown> {
   switch (scope.kind) {
     case "global":
       return {};
+    case "brand":
+      // Brand-scoped admin: events whose chapter belongs to their brand.
+      // Events don't have a brandId directly — they're scoped through
+      // chapter.brand.slug.
+      return { chapterRef: { brand: { slug: scope.brandSlug } } };
     case "country":
       return { chapterRef: { countryId: scope.countryId } };
     case "chapter":
@@ -694,6 +735,9 @@ export function scopeChapterWhere(scope: UserScope): Record<string, unknown> {
   switch (scope.kind) {
     case "global":
       return {};
+    case "brand":
+      // Brand-scoped admin: filter by chapter.brand.slug.
+      return { chapter: { brand: { slug: scope.brandSlug } } };
     case "country":
       // Country scope: include rows in any chapter of this country.
       // Since we don't store countryId on these rows, we use chapter.countryId.
@@ -712,6 +756,11 @@ export function scopeChapterWhere(scope: UserScope): Record<string, unknown> {
 export function canActOnChapter(scope: UserScope, chapterId: string): boolean {
   switch (scope.kind) {
     case "global":
+      return true;
+    case "brand":
+      // Brand-scoped admin: caller must additionally verify the chapter's
+      // brand.slug === scope.brandSlug. This returns true as a role-level
+      // signal; the strict brand check happens at the data layer.
       return true;
     case "country":
       // Country scope: needs to verify the chapter belongs to their country.
@@ -732,6 +781,11 @@ export function canActOnCountry(scope: UserScope, countryId: string): boolean {
   switch (scope.kind) {
     case "global":
       return true;
+    case "brand":
+      // Brand-scoped admin: can act on any country (their brand might
+      // have chapters in multiple countries). The strict brand check
+      // happens at the chapter level, not the country level.
+      return true;
     case "country":
       return scope.countryId === countryId;
     case "chapter":
@@ -751,6 +805,19 @@ export async function getManagedChapterIds(
   const r = normalizeRole(role);
   if (r === ROLES.SUPER_ADMIN) return null;
   const { db } = await import("@/lib/db");
+  if (r === ROLES.BRAND_ADMIN) {
+    // Brand-scoped admin: all chapters whose brand.slug matches their brandSlug.
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: { brandSlug: true },
+    });
+    if (!user?.brandSlug) return [];
+    const chapters = await db.chapter.findMany({
+      where: { brand: { slug: user.brandSlug } },
+      select: { id: true },
+    });
+    return chapters.map((c) => c.id);
+  }
   if (r === ROLES.ADMIN) {
     const user = await db.user.findUnique({
       where: { id: userId },

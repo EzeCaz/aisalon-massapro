@@ -592,9 +592,15 @@ function EmailTestButtons({ brandSlug }: { brandSlug: string }) {
 interface Props {
   brandAssets: BrandAssets;
   adminEmail: string;
+  /** Whether to show the "Activate brand" button. Super Admin only. */
+  canActivate?: boolean;
 }
 
-export function OnboardingHubClient({ brandAssets, adminEmail }: Props) {
+export function OnboardingHubClient({
+  brandAssets,
+  adminEmail,
+  canActivate = false,
+}: Props) {
   // We need to keep the brand assets in client state so the tiles can
   // re-render after upload without a full page reload.
   const [assets, setAssets] = React.useState<BrandAssets>(brandAssets);
@@ -699,26 +705,38 @@ export function OnboardingHubClient({ brandAssets, adminEmail }: Props) {
           >
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
-          <button
-            type="button"
-            disabled={activating || isActive}
-            onClick={activateBrand}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {activating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Activating…
-              </>
-            ) : isActive ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" /> Live
-              </>
-            ) : (
-              <>
-                <Rocket className="h-4 w-4" /> Activate brand
-              </>
-            )}
-          </button>
+          {canActivate && (
+            <button
+              type="button"
+              disabled={activating || isActive}
+              onClick={activateBrand}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {activating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Activating…
+                </>
+              ) : isActive ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Live
+                </>
+              ) : (
+                <>
+                  <Rocket className="h-4 w-4" /> Activate brand
+                </>
+              )}
+            </button>
+          )}
+          {!canActivate && isActive && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle2 className="h-4 w-4" /> Brand is live
+            </span>
+          )}
+          {!canActivate && !isActive && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md bg-amber-50 text-amber-700 border border-amber-200" title="Only the Super Admin can activate a brand">
+              <Rocket className="h-4 w-4" /> Pending Super Admin activation
+            </span>
+          )}
         </div>
       </div>
 

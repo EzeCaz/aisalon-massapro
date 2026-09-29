@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isSuperAdmin, isSuperAdminEmail } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, normalizeRole, ROLES } from "@/lib/permissions";
 import {
   resolveBrandAssets,
   ASSET_KEYS,
@@ -33,8 +33,19 @@ import {
 
 const VALID_ASSET_KEYS = new Set<string>(ASSET_KEYS);
 
-async function requireSuperAdmin(): Promise<
-  | { ok: true; email: string; userId: string }
+/**
+ * Auth helper — authorizes Super Admin OR BRAND_ADMIN scoped to the
+ * requested brand. BRAND_ADMINs accessing a brand that doesn't match
+ * their User.brandSlug get a 403.
+ *
+ * Returns the authenticated user's email + id + a flag indicating
+ * whether they're a Super Admin (used by the PATCH endpoint to decide
+ * whether to allow the status=ACTIVE flip — only Super Admin can Activate).
+ */
+async function requireBrandAdmin(
+  brandSlug: string,
+): Promise<
+  | { ok: true; email: string; userId: string; isSuperAdmin: boolean }
   | { ok: false; response: NextResponse }
 > {
   const session = await getServerSession(authOptions);
@@ -46,7 +57,7 @@ async function requireSuperAdmin(): Promise<
   }
   const me = await db.user.findUnique({
     where: { email: session.user.email },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, brandSlug: true },
   });
   if (!me) {
     return {
@@ -54,13 +65,18 @@ async function requireSuperAdmin(): Promise<
       response: NextResponse.json({ error: "User not found" }, { status: 404 }),
     };
   }
-  if (!isSuperAdmin({ email: me.email, role: me.role }) && !isSuperAdminEmail(me.email)) {
+  const sa = isSuperAdmin({ email: me.email, role: me.role }) || isSuperAdminEmail(me.email);
+  const ba = normalizeRole(me.role) === ROLES.BRAND_ADMIN && me.brandSlug === brandSlug;
+  if (!sa && !ba) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Forbidden — Super Admin only" }, { status: 403 }),
+      response: NextResponse.json(
+        { error: "Forbidden — Super Admin or matching BRAND_ADMIN only" },
+        { status: 403 },
+      ),
     };
   }
-  return { ok: true, email: me.email, userId: me.id };
+  return { ok: true, email: me.email, userId: me.id, isSuperAdmin: sa };
 }
 
 function sanitizeSlug(slug: string): string | null {
@@ -123,20 +139,31 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ brandSlug: string }> },
 ) {
-  const auth = await requireSuperAdmin();
-  if (!auth.ok) return auth.response;
-
   const { brandSlug: rawSlug } = await ctx.params;
   const slug = sanitizeSlug(rawSlug);
   if (!slug) {
     return NextResponse.json({ error: "Invalid brand slug" }, { status: 400 });
   }
 
+  // Brand-scoped auth: Super Admin OR BRAND_ADMIN scoped to this brand.
+  const auth = await requireBrandAdmin(slug);
+  if (!auth.ok) return auth.response;
+
   let body: PatchBody;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  // BRAND_ADMIN cannot flip status — only Super Admin can Activate.
+  // If a non-super-admin tries, we silently drop the field (so their
+  // palette/copy edits still go through, but the status doesn't move).
+  if (body.status && !auth.isSuperAdmin) {
+    console.warn(
+      `[brand-assets] BRAND_ADMIN ${auth.email} attempted status=${body.status} on ${slug} — ignoring`,
+    );
+    delete body.status;
   }
 
   // Build the update payload — only allow known fields, validate hex colors.
@@ -252,14 +279,13 @@ export async function DELETE(
   req: NextRequest,
   ctx: { params: Promise<{ brandSlug: string }> },
 ) {
-  const auth = await requireSuperAdmin();
-  if (!auth.ok) return auth.response;
-
   const { brandSlug: rawSlug } = await ctx.params;
   const slug = sanitizeSlug(rawSlug);
   if (!slug) {
     return NextResponse.json({ error: "Invalid brand slug" }, { status: 400 });
   }
+  const auth = await requireBrandAdmin(slug);
+  if (!auth.ok) return auth.response;
 
   let body: DeleteBody;
   try {

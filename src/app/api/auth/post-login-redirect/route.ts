@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isBrandSlug } from "@/lib/brand/brand-config";
-import { isSuperAdmin, isSuperAdminEmail } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, normalizeRole, ROLES } from "@/lib/permissions";
 
 /**
  * GET /api/auth/post-login-redirect[?next=<relative-path>&chapterSlug=<slug>&brand=<slug>]
@@ -100,6 +100,18 @@ export async function GET(req: NextRequest) {
   if (isSuperAdmin({ email: me.email, role: me.role }) || isSuperAdminEmail(me.email)) {
     const adminNext =
       safeNext.startsWith("/admin") ? safeNext : "/admin/brands";
+    return NextResponse.redirect(new URL(adminNext, req.url));
+  }
+
+  // ── BRAND_ADMIN fast-path (Option 4, 2026-09-29) ────────────────────
+  // Brand-scoped admins also skip the member onboarding flow and land on
+  // the admin dashboard. They go to /admin (general dashboard), NOT
+  // /admin/brands (which is Super Admin only).
+  if (normalizeRole(me.role) === ROLES.BRAND_ADMIN) {
+    const adminNext =
+      safeNext.startsWith("/admin") || safeNext.startsWith("/onboarding")
+        ? safeNext
+        : "/admin";
     return NextResponse.redirect(new URL(adminNext, req.url));
   }
 

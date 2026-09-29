@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isSuperAdmin, isSuperAdminEmail } from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, normalizeRole, ROLES } from "@/lib/permissions";
 import { resolveBrandAssets } from "@/lib/brand/brand-assets-resolver";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
@@ -33,23 +33,15 @@ export async function generateMetadata({
  * /onboarding/[brandSlug]
  *
  * The brand-onboarding hub for an approved brand (e.g. "cazhype").
- * Super-Admin-only page that:
- *   - Shows the brand's current state (palette, status, mascot metadata)
- *   - Renders 6 asset tiles (logo, hero, favicon, emailLogo, mascot, brandBook)
- *     with drag/drop upload + live preview + "Replace" / "Clear" buttons
- *   - Shows live mockup previews (4 thumbnails) rendered with the brand's
- *     assets — so the admin can see how mockups will look with the new
- *     brand before going live
- *   - Triggers a test email send (Welcome / Reminder / Go-live)
- *   - Activates the brand (sets status=ACTIVE)
- *
- * Resolution:
- *   - All assets resolve through resolveBrandAssets() — if a column is
- *     null, the resolver falls back to Coma's defaults ("if blank, show
- *     coma theme images not uploaded yet" per user spec).
- *
  * Auth:
- *   - Super Admin only. Non-super-admins are redirected to /admin.
+ *   - Super Admin: full access to all brands + can Activate (DRAFT→ACTIVE).
+ *   - BRAND_ADMIN (Option 4, 2026-09-29): full edit access to their OWN
+ *     brand only (must match me.brandSlug === brandSlug). Can upload
+ *     assets, edit palette, edit mascot metadata, edit login copy. The
+ *     one thing they CANNOT do is "Activate brand" — that stays Super
+ *     Admin only because it sends the Go-live email + flips the public
+ *     status, which is a platform-level decision.
+ *   - Other roles: redirected to /admin.
  *
  * Architecture note (2026-09-29):
  *   This is a NEW route (separate from /brand-onboarding/[token] which
@@ -63,8 +55,9 @@ export default async function OnboardingHubPage({
   params: Promise<{ brandSlug: string }>;
 }) {
   const session = await getServerSession(authOptions);
+  const { brandSlug } = await params;
   if (!session?.user?.email) {
-    redirect(`/login?callbackUrl=/onboarding/${(await params).brandSlug}`);
+    redirect(`/login?callbackUrl=/onboarding/${brandSlug}`);
   }
 
   const me = await db.user.findUnique({
@@ -73,11 +66,18 @@ export default async function OnboardingHubPage({
   });
   if (!me) redirect("/login");
 
-  if (!isSuperAdmin({ email: me.email, role: me.role }) && !isSuperAdminEmail(me.email)) {
+  const isSa = isSuperAdmin({ email: me.email, role: me.role }) || isSuperAdminEmail(me.email);
+  const isBa = normalizeRole(me.role) === ROLES.BRAND_ADMIN;
+  if (!isSa && !isBa) {
     redirect("/admin");
   }
-
-  const { brandSlug } = await params;
+  // BRAND_ADMIN must be scoped to the same brand as the URL.
+  // Super Admin can visit any /onboarding/[slug].
+  if (!isSa && isBa && me.brandSlug !== brandSlug) {
+    // Wrong brand — send them to their own.
+    redirect(`/onboarding/${me.brandSlug ?? "coma"}`);
+  } // Super Admin: can Activate + edit everything.
+  // BRAND_ADMIN: can edit everything except Activate.
 
   // Resolve the brand's current asset state — this hits the DB and
   // falls back to brand-config.ts + Coma defaults for any null columns.
@@ -105,7 +105,11 @@ export default async function OnboardingHubPage({
       <AppHeader />
       <AdminTabs />
       <section className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <OnboardingHubClient brandAssets={brandAssets} adminEmail={me.email} />
+        <OnboardingHubClient
+          brandAssets={brandAssets}
+          adminEmail={me.email}
+          canActivate={isSa}
+        />
       </section>
       <footer className="mt-auto border-t border-border bg-card py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-sm text-muted-foreground">

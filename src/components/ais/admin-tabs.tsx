@@ -146,10 +146,15 @@ function filterTabsByRole(role: string | null | undefined): AdminTabDef[] {
   // SUPER_ADMIN sees everything. ADMIN sees everything EXCEPT
   // superAdminOnly tabs (e.g. /admin/brands is Super Admin only —
   // brand onboarding affects the entire platform).
+  //
+  // BRAND_ADMIN (Option 4, 2026-09-29): same as ADMIN — sees everything
+  // except superAdminOnly tabs. They access their own brand's onboarding
+  // hub at /onboarding/[brandSlug] (not /admin/brands, which is the
+  // Super Admin's brand-management page).
   if (r === "SUPER_ADMIN") {
     return ALL_TABS;
   }
-  if (r === "ADMIN") {
+  if (r === "BRAND_ADMIN" || r === "ADMIN") {
     return ALL_TABS.filter((t) => !t.superAdminOnly);
   }
 

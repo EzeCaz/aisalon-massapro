@@ -16255,3 +16255,54 @@ Stage Summary:
 - /onboarding remains the destination for genuinely new users (Google OAuth + email sign-up with no onboardedAt)
 - /events remains the destination for returning members
 - SUPER_ADMIN bypasses both — goes straight to the brand management page
+
+---
+Task ID: option-4-brand-admin-role
+Agent: main (Super Z)
+Task: "Build Option 4 — brand-scoped BRAND_ADMIN role with hierarchy, full admin within their brand only, Super Admin approval gate, can create chapters/admins within their brand"
+
+Work Log:
+- Added BRAND_ADMIN role to src/lib/permissions.ts (rank 4, between SUPER_ADMIN=5 and ADMIN=3):
+  * Added to ROLES enum + normalizeRole
+  * Extended UserScope type with kind:"brand" + brandSlug field
+  * Extended getUserScope() to return {kind:"brand", brandSlug} for BRAND_ADMIN users (fail-safe to "none" if brandSlug missing)
+  * Extended all scope helpers: scopeUserWhere, scopeEventWhere, scopeChapterWhere, canActOnChapter, canActOnCountry, getManagedChapterIds — each handles the new "brand" case with chapterRef.brand.slug filter
+- Patched src/app/admin/chapters/page.tsx: BRAND_ADMIN sees chapters filtered by brand.slug === me.brandSlug (NOT by countryId — brand admins can have chapters in multiple countries)
+- Patched src/app/admin/dashboard/page.tsx: scopeBadge function gets a "brand" case showing "<Brand> brand" label with accent color
+- Patched src/components/ais/admin-tabs.tsx: BRAND_ADMIN sees all tabs EXCEPT superAdminOnly (so /admin/brands is hidden — that's the Super Admin's brand-management page)
+- Patched src/app/onboarding/[brandSlug]/page.tsx:
+  * Allows BRAND_ADMIN access to /onboarding/[brandSlug] for their own brand only (me.brandSlug === brandSlug)
+  * If BRAND_ADMIN tries to access another brand's onboarding → redirect to their own /onboarding/<their-brand>
+  * Passes canActivate=isSa flag to client (false for BRAND_ADMIN → button hidden)
+- Patched src/app/onboarding/[brandSlug]/onboarding-hub-client.tsx:
+  * Added canActivate?: boolean prop
+  * Activate button only renders when canActivate=true
+  * Falls back to "Brand is live" badge (when ACTIVE) or "Pending Super Admin activation" badge (when DRAFT) for BRAND_ADMIN
+- Patched src/app/api/brand-assets/[brandSlug]/route.ts:
+  * Replaced requireSuperAdmin() with requireBrandAdmin(brandSlug) — authorizes Super Admin OR matching BRAND_ADMIN
+  * PATCH handler: if non-super-admin tries to set status, silently drops the status field (palette/copy edits still go through)
+  * DELETE handler: same brand-scoped auth
+- Patched src/app/api/brand-assets/[brandSlug]/upload/route.ts: same requireBrandAdmin(brandSlug) auth
+- Patched src/app/api/auth/post-login-redirect/route.ts: BRAND_ADMIN fast-path → redirects to /admin (or honors /onboarding/* deep link). Bypasses the /onboarding intake gate like Super Admin does.
+- Built scripts/seed-brand-admin-user.py — seeds eze@cazhype.com (BRAND_ADMIN, brandSlug="ch", password="Cazhype2026!") into sandbox DB. Re-runnable.
+- Lint: 0 errors across all 8 patched files (1 pre-existing warning on _assetKey unused param)
+
+Browser verification (agent-browser):
+1. Login as eze@cazhype.com / Cazhype2026! → redirects to /admin (✓)
+2. Admin nav shows Members/Speakers/Registrants/Events/Chapters/Dashboard/Email/Mockups but NOT Brands (✓)
+3. /onboarding/ch loads with full asset upload UI (✓)
+4. Activate button hidden, replaced with "Brand is live" badge (✓)
+5. /onboarding/coma redirects to /onboarding/ch (✓ — cross-brand blocked)
+6. /admin/chapters loads with brand-scope filter (✓ — only chapters under their brand)
+
+Stage Summary:
+- New BRAND_ADMIN role + UserScope.kind="brand" + brandSlug — full admin power within their brand only
+- All 6 scope helpers extended to filter by brand.slug
+- /admin/chapters + /admin/dashboard auto-filter via existing getUserScope → scopeUserWhere/scopeEventWhere chain
+- AdminTabs hide /admin/brands (superAdminOnly) from BRAND_ADMIN
+- /onboarding/[brandSlug] — full edit access for BRAND_ADMIN on their own brand; Super Admin has Activate; BRAND_ADMIN sees "Brand is live" badge instead
+- /api/brand-assets/* — Super Admin OR matching BRAND_ADMIN can PATCH/DELETE/upload; non-super-admin attempting status=ACTIVE is silently ignored (palette/copy still go through)
+- /api/auth/post-login-redirect — BRAND_ADMIN lands on /admin after login (not /onboarding intake form)
+- Test BRAND_ADMIN seeded: eze@cazhype.com / Cazhype2026! / brandSlug="ch" in sandbox DB
+- scripts/seed-brand-admin-user.py is re-runnable for future test users
+- Round 2 deferred (no code yet): apply/approve flow (BRAND_ADMIN application form + Super Admin approve button on /admin/brands); 'New chapter' button on /admin/chapters for BRAND_ADMIN; role-edit dialog to allow BRAND_ADMIN to promote within their brand only
