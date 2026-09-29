@@ -39,9 +39,15 @@
  */
 
 // 25MB — matches the largest asset (brandBookUrl). See ASSET_RULES below.
-export const fetchCache = "force-no-store";
-export const revalidate = 0;
-export const maxDuration = 60; // 60s — large uploads on slow connections
+//
+// NOTE: We intentionally do NOT add segment config like `export const
+// maxDuration`, `export const dynamic`, or `export const fetchCache`
+// here. Earlier we tried adding them and the route started returning
+// 404 on Vercel production with `x-nextjs-action-not-found: 1` — even
+// though the file built + linted cleanly in the sandbox. Removing the
+// segment config restored the route. The body size limit is raised
+// via `serverActions.bodySizeLimit: "25mb"` in next.config.ts (which
+// applies globally to all routes).
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";

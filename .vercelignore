@@ -1,7 +1,17 @@
-download/
-tool-results/
-upload/
-skills/
+# Vercel deployment exclusions — uses .gitignore-style patterns.
+#
+# IMPORTANT: Vercel's .vercelignore uses gitignore-style patterns, not
+# Docker-style. That means `upload/` matches ANY directory named `upload`
+# ANYWHERE in the tree — including our route handler at
+# src/app/api/brand-assets/[brandSlug]/upload/ which we MUST deploy.
+# To exclude only the top-level /upload/ folder (legacy asset storage),
+# we anchor the pattern with a leading slash so it only matches paths
+# at the repository root.
+
+/upload/
+/download/
+/tool-results/
+/skills/
 scripts/extract_*
 *.log
 README.md
