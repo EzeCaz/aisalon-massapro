@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isBrandSlug } from "@/lib/brand/brand-config";
+import { isSuperAdmin, isSuperAdminEmail } from "@/lib/permissions";
 
 /**
  * GET /api/auth/post-login-redirect[?next=<relative-path>&chapterSlug=<slug>&brand=<slug>]
@@ -67,6 +68,8 @@ export async function GET(req: NextRequest) {
     where: { email: session.user.email },
     select: {
       id: true,
+      email: true,
+      role: true,
       importSource: true,
       onboardedAt: true,
       brandSlug: true,
@@ -84,6 +87,21 @@ export async function GET(req: NextRequest) {
   const rawNext = req.nextUrl.searchParams.get("next") || "";
   const safeNext =
     rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/events";
+
+  // ── Super Admin fast-path ────────────────────────────────────────────
+  // Super Admins always land on /admin (the admin dashboard) after login,
+  // regardless of onboardedAt or importSource. They typically don't need
+  // the member onboarding flow, and they want immediate access to the
+  // admin shell — the /onboarding page is a dead-end for them.
+  //
+  // We DO honor explicit `next` params that look admin-relevant (start
+  // with /admin) so deep links like /admin/brands from the brands-page
+  // invite button keep working.
+  if (isSuperAdmin({ email: me.email, role: me.role }) || isSuperAdminEmail(me.email)) {
+    const adminNext =
+      safeNext.startsWith("/admin") ? safeNext : "/admin/brands";
+    return NextResponse.redirect(new URL(adminNext, req.url));
+  }
 
   // Resolve the effective brand slug for the onboarding redirect.
   //   1. URL ?brand= param (explicit, lets an admin override).
