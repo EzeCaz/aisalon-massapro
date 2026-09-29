@@ -14,7 +14,7 @@
  * Response (200):
  *   { ok: true, assetKey, url, provenance: "brand-row" }
  *
- * Auth: Super Admin only.
+ * Auth: Super Admin OR matching BRAND_ADMIN only.
  *
  * Vercel Blob storage path:
  *   brand-assets/<brandSlug>/<assetKey>/<timestamp>-<random>.<ext>
@@ -23,7 +23,25 @@
  * saving the file to /public/brand-uploads/<brandSlug>/<assetKey>/...
  * and returning the public path. This lets the onboarding funnel
  * work end-to-end in the sandbox without a Vercel Blob account.
+ *
+ * ── Body size limit (Option 4 fix, 2026-09-30) ────────────────────────
+ * Production Vercel deployments have a default 4MB body limit for
+ * route handlers. Mascot images + brand books can easily exceed that
+ * (a 5MB mascot PNG or 25MB brand book PDF), which causes Vercel to
+ * return the literal string "Server action limit reached" with a
+ * non-JSON content-type — the client then fails parsing with the
+ * cryptic error: "Unexpected token 'S', \"Server act\"... is not
+ * valid JSON".
+ *
+ * Fix: explicitly raise the body size limit via the `api.bodyParser`
+ * segment config to 25MB (the largest asset we accept — brand book).
+ * This matches the ASSET_RULES.brandBookUrl.maxMB value below.
  */
+
+// 25MB — matches the largest asset (brandBookUrl). See ASSET_RULES below.
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
+export const maxDuration = 60; // 60s — large uploads on slow connections
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";

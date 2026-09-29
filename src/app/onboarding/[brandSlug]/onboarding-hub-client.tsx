@@ -114,7 +114,26 @@ function AssetTile({
         `/api/brand-assets/${brandSlug}/upload`,
         { method: "POST", body: fd },
       );
-      const json = await res.json();
+      // Defensive parse — if Vercel returns a non-JSON error (e.g.
+      // "Server action limit reached" when the body exceeds the
+      // platform's 4MB default), res.json() would throw "Unexpected
+      // token 'S'". Read text first, then try JSON.
+      const text = await res.text();
+      let json: { ok?: boolean; error?: string; url?: string } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        // Non-JSON response — likely a platform-level error.
+        // Surface a friendlier message than the raw parse error.
+        if (res.status === 413 || /limit reached/i.test(text)) {
+          throw new Error(
+            `File too large for the platform limit. Try a smaller ${label.toLowerCase()} (under 5 MB for images, under 25 MB for brand book). Server said: "${text.slice(0, 120)}"`,
+          );
+        }
+        throw new Error(
+          `Upload failed with HTTP ${res.status}. Server response: "${text.slice(0, 120)}"`,
+        );
+      }
       if (!res.ok || !json.ok) {
         throw new Error(json.error || `Upload failed (HTTP ${res.status})`);
       }
@@ -139,7 +158,17 @@ function AssetTile({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assetKey }),
       });
-      const json = await res.json();
+      // Same defensive parse as uploadFile — Vercel can return non-JSON
+      // platform errors. Don't trust res.json() to always succeed.
+      const text = await res.text();
+      let json: { ok?: boolean; error?: string } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(
+          `Clear failed with HTTP ${res.status}. Server response: "${text.slice(0, 120)}"`,
+        );
+      }
       if (!res.ok || !json.ok) {
         throw new Error(json.error || `Clear failed (HTTP ${res.status})`);
       }

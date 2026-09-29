@@ -6,6 +6,22 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // Raise the body size limit for API routes + server actions to 25 MB.
+  //
+  // Why: the brand-onboarding upload endpoint (/api/brand-assets/[slug]/upload)
+  // accepts mascot images + brand book PDFs up to 25 MB. Without this,
+  // Vercel's default 4 MB body limit on route handlers returns the
+  // literal string "Server action limit reached" with a non-JSON
+  // content-type — the client's res.json() then fails with the cryptic
+  // error: "Unexpected token 'S', \"Server act\"... is not valid JSON".
+  //
+  // Setting this to 25MB matches the largest ASSET_RULES maxMB (brandBook).
+  // All file-type + size validation still happens in the route handler
+  // via ASSET_RULES — this config just raises the platform's hard limit
+  // so the request reaches our handler in the first place.
+  serverActions: {
+    bodySizeLimit: "25mb",
+  },
   // Allow the IM gateway preview host to talk to the dev server.
   allowedDevOrigins: [
     "https://*.space-z.ai",
