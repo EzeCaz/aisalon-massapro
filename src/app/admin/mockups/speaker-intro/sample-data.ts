@@ -1,7 +1,91 @@
 import type { SpeakerIntroData } from "./types";
+import { getMockupDefaults } from "@/lib/mockup-brand-defaults";
 
 /**
  * Sample data for the Speaker Intro mockup editor.
+ *
+ * PER USER SPEC 2026-07-31 (TSK-0024): updated to the AI Salon Tel Aviv
+ * "Marketing in the Age of AI" event with the 4-speaker lineup the user
+ * provided in their JSON example.
+ *
+ * PER USER SPEC 2026-09-30 (mockup brand leakage fix):
+ *   - AIS brand keeps its existing visuals (falafel-meerkat mascot,
+ *     TLV skyline hero, AIS logos for sponsors)
+ *   - Every other brand (Coma, Cazhype, ...) defaults to Coma visuals
+ *     (Coma logo, Coma hero banner, NO mascot) until the brand uploads
+ *     its own assets via /onboarding/[brandSlug]
+ *   - When brandAssets are passed, the brand's uploaded assets take
+ *     precedence over both AIS and Coma defaults
+ *
+ * `SAMPLE_DATA` is kept as the AIS-only default for backwards compat
+ * (legacy callers that haven't been updated to pass brand context).
+ * New callers use `buildSampleData(brandAssets)` instead.
+ */
+
+/**
+ * Build brand-aware sample data for the Speaker Intro mockup.
+ *
+ * @param brandAssets — the brand's resolved asset state (from
+ *   resolveBrandAssets(brandSlug)). When null, defaults to AIS visuals
+ *   (legacy behavior).
+ * @param brandSlug — optional slug override (e.g. from ?brand= URL param).
+ */
+export function buildSampleData(
+  brandAssets: Parameters<typeof getMockupDefaults>[0],
+  brandSlug?: string,
+): SpeakerIntroData {
+  const d = getMockupDefaults(brandAssets, brandSlug);
+
+  // Build the base data with brand-aware defaults for all image slots.
+  // Layout/style fields (sectionLayout, style2HeroGradient, heroOverlayShapeConfig)
+  // are brand-independent — they're about shape/positioning, not imagery.
+  return {
+    ...SAMPLE_DATA,
+    event: {
+      ...SAMPLE_DATA.event,
+      name: d.isAis ? "AI Salon Tel Aviv" : `${d.displayName} Tel Aviv`,
+      brandColors: [d.palette.secondary, d.palette.primary],
+    },
+    // Speaker photos default to the brand's speaker-photo placeholder
+    // (was: AIS TLV login banner URL hardcoded for all 4 speakers).
+    speakers: SAMPLE_DATA.speakers.map((s) => ({
+      ...s,
+      photoUrl: d.speakerPhotoPlaceholderUrl,
+    })),
+    // Sponsor logo placeholders default to the brand's logo
+    // (was: falafel-meerkat.png hardcoded for all sponsor slots).
+    sponsors: SAMPLE_DATA.sponsors.map((s) => ({
+      ...s,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    // Collaborator logos — also was falafel-meerkat for all slots.
+    collaborators: SAMPLE_DATA.collaborators.map((c) => ({
+      ...c,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    // Hero overlay image — was a hardcoded AIS blob URL. Now uses the
+    // brand's hero banner (AIS hero for AIS, Coma hero for everyone else,
+    // or the brand's uploaded hero when brandAssets are passed).
+    heroOverlay: {
+      ...SAMPLE_DATA.heroOverlay,
+      imageUrl: d.heroBannerUrl,
+      gradientColors: [d.palette.primary, d.palette.accent, d.palette.secondary],
+    },
+    qrCodeUrl: d.isAis ? "https://aisalon.massapro.com/events" : "/events",
+    // Mascot — empty imageUrl when the brand has no mascot; canvas should
+    // skip the mascot block via shouldRenderMascot().
+    branding: {
+      ...SAMPLE_DATA.branding,
+      imageUrl: d.mascotUrl,
+    },
+  };
+}
+
+/**
+ * Backwards-compatible AIS-only sample data.
+ *
+ * Kept for callers that haven't been updated to pass brandAssets.
+ * Equivalent to `buildSampleData(null, "aisalon")`.
  *
  * PER USER SPEC 2026-07-31 (TSK-0024): updated to the AI Salon Tel Aviv
  * "Marketing in the Age of AI" event with the 4-speaker lineup the user

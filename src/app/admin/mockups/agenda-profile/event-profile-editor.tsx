@@ -13,7 +13,7 @@ import type {
   ImageSlot,
   EventPickListItem,
 } from "./types";
-import { SAMPLE_DATA } from "./sample-data";
+import { buildSampleData } from "./sample-data";
 import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { useTaggedImageSettings } from "../shared/tagged-image";
@@ -57,9 +57,11 @@ type Props = {
 };
 
 export function EventProfileEditor({ events, brandSlug = "aisalon" }: Props) {
-  const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
+  // Build brand-aware sample data — see speaker-intro-editor.tsx.
+  const initialData = buildSampleData(null, brandSlug);
+  const [data, setData] = useState<EventProfileData>(initialData);
   const [jsonText, setJsonText] = useState<string>(() =>
-    JSON.stringify(SAMPLE_DATA, null, 2),
+    JSON.stringify(initialData, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
   /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */

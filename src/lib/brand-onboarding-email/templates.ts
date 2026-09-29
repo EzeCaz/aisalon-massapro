@@ -332,3 +332,124 @@ MassaPro · https://massapro.com`;
     html,
   });
 }
+
+// ── Promotion notification (Option 4, Path 2, 2026-09-30) ────────────────
+
+/**
+ * Notification email sent when a Super Admin promotes an existing user
+ * to BRAND_ADMIN via the /admin/brands "Invite a brand admin" form.
+ *
+ * Body:
+ *   - "You've been promoted to BRAND_ADMIN for <Brand>"
+ *   - Explains what they can now do (manage chapters, members, events,
+ *     mockups, branding within their brand)
+ *   - Direct link to /admin (their new landing page)
+ *   - Direct link to /onboarding/<brandSlug> so they can review/upload
+ *     their brand assets
+ *   - Reminder of their login URL: /login?brand=<slug>
+ *
+ * Best-effort — never fails the promotion itself. Caller catches + logs.
+ */
+export async function sendBrandAdminPromotionEmail(opts: {
+  to: string;
+  leadName?: string | null;
+  brandSlug: string;
+  brandDisplayName: string;
+  /** The Super Admin's email (for the "promoted by" footer). */
+  promotedBy: string;
+  appBaseUrl?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const brand = resolveEmailBrandContext(opts.brandSlug);
+  const firstName = opts.leadName?.split(" ")[0] || "there";
+  const base = opts.appBaseUrl || process.env.NEXT_PUBLIC_APP_URL || "https://platform.joincoma.com";
+  const adminUrl = `${base.replace(/\/$/, "")}/admin`;
+  const onboardingUrl = `${base.replace(/\/$/, "")}/onboarding/${opts.brandSlug}`;
+  const loginUrl = `${base.replace(/\/$/, "")}/login?brand=${opts.brandSlug}`;
+
+  const subject = `You're now a ${opts.brandDisplayName} admin on Coma 🎉`;
+  const text = `Hi ${firstName},
+
+You've been promoted to BRAND_ADMIN for ${opts.brandDisplayName} on the Coma
+platform by ${opts.promotedBy}.
+
+What you can do now (scoped to ${opts.brandDisplayName} only — you won't see
+data from other brands):
+  - Manage chapters in your brand (create new ones, edit existing)
+  - Add and manage members within your brand
+  - Create and edit events for your brand
+  - Send email campaigns to your brand's members
+  - Generate event mockups with your brand's branding applied
+  - Edit your brand's branding (logo, palette, mascot, login copy) at
+    the onboarding hub
+  - Promote users within your brand to CHAPTER_ORGANIZER, CO_HOST, SPEAKER,
+    or MEMBER
+
+Get started:
+  Admin dashboard: ${adminUrl}
+  Brand onboarding hub: ${onboardingUrl}
+  Login URL (share with your community): ${loginUrl}
+
+If you think this promotion was a mistake, reply to this email and we'll
+revoke it.
+
+— The ${brand.displayName} team
+MassaPro · https://massapro.com`;
+
+  const html = `
+<div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
+  <h1 style="font-size: 22px; font-weight: 800; margin: 0 0 16px; background: ${brand.gradient}; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+    You're now a ${opts.brandDisplayName} admin!
+  </h1>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 16px;">
+    Hi ${firstName} — you've been promoted to <strong>BRAND_ADMIN</strong> for
+    ${opts.brandDisplayName} on the Coma platform by ${opts.promotedBy}.
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 20px;">
+    What you can do now (scoped to ${opts.brandDisplayName} only — you won't
+    see data from other brands):
+  </p>
+  <ul style="font-size: 14px; line-height: 1.7; color: #444; margin: 0 0 24px; padding-left: 20px;">
+    <li>Manage chapters in your brand (create new ones, edit existing)</li>
+    <li>Add and manage members within your brand</li>
+    <li>Create and edit events for your brand</li>
+    <li>Send email campaigns to your brand's members</li>
+    <li>Generate event mockups with your brand's branding applied</li>
+    <li>Edit your brand's branding at the onboarding hub</li>
+    <li>Promote users within your brand to CHAPTER_ORGANIZER, CO_HOST, SPEAKER, MEMBER</li>
+  </ul>
+  <h2 style="font-size: 16px; font-weight: 700; margin: 0 0 12px;">Get started</h2>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 8px;">
+    <strong>Admin dashboard:</strong><br/>
+    <a href="${adminUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${adminUrl}</a>
+  </p>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 8px;">
+    <strong>Brand onboarding hub:</strong><br/>
+    <a href="${onboardingUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${onboardingUrl}</a>
+  </p>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 24px;">
+    <strong>Login URL (share with your community):</strong><br/>
+    <a href="${loginUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${loginUrl}</a>
+  </p>
+  <p style="font-size: 13px; line-height: 1.6; color: #777; margin: 24px 0 0;">
+    If you think this promotion was a mistake, reply to this email and we'll
+    revoke it.
+  </p>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 24px 0 0;">
+    — The ${brand.displayName} team<br/>
+    <span style="color: #777; font-size: 12px;">MassaPro · https://massapro.com</span>
+  </p>
+</div>`;
+
+  if (!emailConfigured()) {
+    console.log(`[brand-admin:promotion] SMTP not configured — would send to ${opts.to}`);
+    return { ok: true };
+  }
+
+  return sendMail({
+    to: opts.to,
+    from: brand.fromName,
+    subject,
+    text,
+    html,
+  });
+}

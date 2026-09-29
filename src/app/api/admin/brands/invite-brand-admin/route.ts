@@ -36,6 +36,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { isSuperAdmin, ROLES } from "@/lib/permissions";
+import { sendBrandAdminPromotionEmail } from "@/lib/brand-onboarding-email/templates";
 
 type Body = {
   email: string;
@@ -119,10 +120,35 @@ export async function POST(req: NextRequest) {
     `[invite-brand-admin] ${user!.email} promoted ${target.email} → BRAND_ADMIN for ${brand.slug}`,
   );
 
+  // ── Send promotion notification email ────────────────────────────────
+  // Best-effort — never fails the promotion itself. SMTP-aware: no-ops
+  // to console.log when SMTP isn't configured (sandbox).
+  let emailSent = false;
+  let emailError: string | undefined;
+  try {
+    const result = await sendBrandAdminPromotionEmail({
+      to: target.email,
+      leadName: target.name,
+      brandSlug: brand.slug,
+      brandDisplayName: brand.displayName,
+      promotedBy: user!.email,
+    });
+    emailSent = result.ok;
+    emailError = result.error;
+    if (!result.ok) {
+      console.warn(`[invite-brand-admin] Email send failed: ${result.error}`);
+    }
+  } catch (err) {
+    emailError = err instanceof Error ? err.message : String(err);
+    console.warn(`[invite-brand-admin] Email send threw: ${emailError}`);
+  }
+
   return NextResponse.json({
     ok: true,
     user: { id: target.id, email: target.email, name: target.name },
     brand: { slug: brand.slug, displayName: brand.displayName },
     previousRole: target.role,
+    emailSent,
+    emailError,
   });
 }

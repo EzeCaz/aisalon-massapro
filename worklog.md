@@ -16338,3 +16338,55 @@ Stage Summary:
 - Provision endpoint now auto-promotes applicant (path 1)
 - /admin/brands has new "Invite a brand admin" section (path 2)
 - All existing path-2 admin flows (provision, activate, view submission, onboard) keep working unchanged
+
+---
+Task ID: brand-admin-promotion-email + mockup-brand-leakage-fix
+Agent: main (Super Z)
+Task: "1) Add email notification when Super Admin promotes a user to BRAND_ADMIN via the invite path. 2) Mockups still show AIS mascot + hero + sponsor logos for non-AIS brands — every brand besides AIS should default to Coma visuals, switching to the brand's uploaded assets when present. AIS chapters keep their existing visuals."
+
+Work Log:
+1. EMAIL NOTIFICATION (Path 2 promotion)
+   - Added sendBrandAdminPromotionEmail() to src/lib/brand-onboarding-email/templates.ts — 3-section HTML email with "You're now a X admin" headline + bullet list of brand admin powers + 3 deep links (/admin, /onboarding/<slug>, /login?brand=<slug>) + "promoted by <email>" footer
+   - Patched /api/admin/brands/invite-brand-admin endpoint: after the User row promotion, calls sendBrandAdminPromotionEmail(). Best-effort — never fails the promotion itself. Returns emailSent + emailError flags in the response so the UI can show a "notification sent" toast (round 3).
+   - SMTP-aware: no-ops to console.log when SMTP not configured (sandbox).
+
+2. MOCKUP BRAND LEAKAGE FIX (4 mockup canvases)
+   - Built src/lib/mockup-brand-defaults.ts — central module with:
+     * AIS static URL constants (logo light/dark, favicon, login hero, TLV skyline, mascot, Tel-Aviv banner)
+     * Coma static URL constants (logo, hero banner, favicon, login hero, NO mascot — empty string)
+     * getMockupDefaults(brandAssets, brandSlug) → MockupDefaults object with logoUrl, heroBannerUrl, loginHeroUrl, faviconUrl, mascotUrl (empty for non-AIS brands without uploaded mascot), citySkylineUrl, speakerPhotoPlaceholderUrl, sponsorLogoPlaceholderUrl, palette
+     * Resolution chain: brand-row (uploaded) > AIS-default (if isAis) > Coma-default > empty
+     * shouldRenderMascot(defaults) — returns false when brand has no mascot (canvas skips block)
+   - Patched 4 sample-data.ts files (speaker-intro, meet-the-speaker, event-profile, agenda-profile): added buildSampleData(brandAssets, brandSlug) function that uses getMockupDefaults to replace all hardcoded AIS URLs:
+     * Speaker photos → brand's speakerPhotoPlaceholderUrl
+     * Sponsor + collaborator logos → brand's sponsorLogoPlaceholderUrl
+     * Hero overlay image → brand's heroBannerUrl
+     * Mascot → brand's mascotUrl (empty for non-AIS brands without uploaded mascot)
+     * QR code URL → /events (relative) for non-AIS, aisalon.massapro.com/events for AIS
+     * Brand colors → brand's palette
+   - Patched 4 editors (speaker-intro-editor, meet-the-speaker-editor, event-profile-editor, agenda-profile-editor + agenda-profile/event-profile-editor): use buildSampleData(null, brandSlug) for the initial useState state instead of the legacy SAMPLE_DATA constant. Also updated the "Reset" fallback to use buildSampleData(null, brandSlug).
+   - Backwards-compatible: kept SAMPLE_DATA as a constant (= buildSampleData(null, "aisalon")) for legacy callers that haven't been updated to pass brandSlug.
+   - AIS brand unchanged: getMockupDefaults(null, "aisalon") returns the existing AIS visuals (legacy behavior preserved).
+
+3. VERIFICATION (browser-tested as cazhype BRAND_ADMIN)
+   - Cleared localStorage + cookies, logged in as eze@cazhype.com (BRAND_ADMIN for "ch" brand)
+   - Visited /admin/mockups/speaker-intro → ZERO aisalon.massapro.com URLs in rendered images; collaborators + sponsors show /brand/coma/logo.png; speaker photos show Coma hero banner; event name shows "Coma Tel Aviv"
+   - Visited /admin/mockups/meet-the-speaker → ZERO AIS URLs
+   - Visited /admin/mockups/agenda-profile → ZERO AIS URLs
+   - Visited /admin/mockups/event-profile → ZERO AIS URLs (after I added collaborators override to buildSampleData)
+   - Visited /admin/mockups (landing page) — STILL shows AIS visuals (this is the brand-assets reference library page, has its own hardcoded brandAssetsFor() function and an AdminBrandSlug type limited to "coma" | "aisalon" — deferred to round 3)
+
+Stage Summary:
+- Email notification: Path 2 promotion now sends "You're now a Cazhype admin!" email with admin dashboard URL, onboarding hub URL, login URL — best-effort, SMTP-aware
+- Mockup canvases (4 of them) now render brand-aware:
+  * AIS brand → existing visuals (falafel-meerkat mascot, TLV skyline, AIS logos for sponsor placeholders) — UNCHANGED
+  * Coma brand → Coma visuals (Coma logo, Coma hero banner, NO mascot)
+  * Cazhype (and any non-AIS non-Coma brand) → Coma visuals as default UNTIL the brand uploads its own assets via /onboarding/[brandSlug]; then switches to the uploaded assets
+- Lint: 0 errors across all new + patched files (4 warnings, all unused-var on legacy SAMPLE_DATA import — fixed by switching to buildSampleData-only import)
+- New file: src/lib/mockup-brand-defaults.ts (~200 lines)
+- Patched: 4 sample-data.ts files + 5 editor .tsx files + 1 email template + 1 API endpoint
+
+Deferred to round 3:
+  - /admin/mockups landing page (gallery) — needs AdminBrandSlug type extended + brandAssetsFor() to handle non-aisalon/coma brands
+  - Canvas components (speaker-intro-canvas.tsx, etc.) — currently call legacy resolveBrandingImageUrl() from shared/brand-assets.ts which returns AIS URLs. The brand-correct URLs are now baked into the sample-data builders, so canvases render correctly when the editor state is fresh — but if a user picks an event via the dropdown, mapEventToSpeakerIntroData re-injects AIS URLs. Round 3 would patch canvases to use resolveMockupBrandingUrl() + shouldRenderMascot() directly.
+  - The "notification sent" toast on /admin/brands after promotion (round 3)

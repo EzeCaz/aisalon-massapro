@@ -14,7 +14,7 @@ import type {
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
 import { CollapsibleFormPanel } from "../shared/section-edit";
-import { SAMPLE_DATA } from "./sample-data";
+import { buildSampleData } from "./sample-data";
 import { EventProfileCanvas } from "./event-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
@@ -51,12 +51,21 @@ type Props = {
    * Chapter-scope key for localStorage namespacing (TSK-0076).
    */
   scopeKey: string;
+  /**
+   * Brand slug for the QR code URL + brand-aware sample data (Option 4,
+   * 2026-09-30). Defaults to "aisalon" for backwards compat.
+   */
+  brandSlug?: string;
 };
 
-export function EventProfileEditor({ events, scopeKey }: Props) {
-  const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
+export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
+  // Build brand-aware sample data — passes null for brandAssets (the
+  // brand row is server-resolved by the page; getMockupDefaults falls
+  // back to AIS or Coma visuals based on brandSlug).
+  const initialData = buildSampleData(null, brandSlug);
+  const [data, setData] = useState<EventProfileData>(initialData);
   const [jsonText, setJsonText] = useState<string>(() =>
-    JSON.stringify(SAMPLE_DATA, null, 2),
+    JSON.stringify(initialData, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
   /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
@@ -474,7 +483,7 @@ export function EventProfileEditor({ events, scopeKey }: Props) {
       ? "Reset to the saved default? Any local edits you've made will be lost."
       : "Reset to the sample data? Any local edits you've made will be lost.";
     if (!confirm(msg)) return;
-    applyData(savedDefault ?? SAMPLE_DATA);
+    applyData(savedDefault ?? buildSampleData(null, brandSlug));
     if (!savedDefault) {
       setSelectedEventSlug("");
     }

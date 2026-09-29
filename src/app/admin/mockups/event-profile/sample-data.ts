@@ -1,10 +1,47 @@
 import type { EventProfileData } from "./types";
+import { getMockupDefaults } from "@/lib/mockup-brand-defaults";
 
 /**
  * Sample data for the Event Profile mockup editor. Used as the initial
  * state when the user first loads the page (before they pick an event
  * from the dropdown). Mirrors the structure of a real AI Salon event.
+ *
+ * PER USER SPEC 2026-09-30 (mockup brand leakage fix):
+ *   - AIS brand keeps the falafel-meerkat + TLV skyline hero
+ *   - Every other brand defaults to Coma visuals
+ *   - Brand-uploaded assets (via /onboarding/[brandSlug]) override
+ *   - Use `buildSampleData(brandAssets)` for brand-aware defaults
  */
+
+export function buildSampleData(
+  brandAssets: Parameters<typeof getMockupDefaults>[0],
+  brandSlug?: string,
+): EventProfileData {
+  const d = getMockupDefaults(brandAssets, brandSlug);
+
+  return {
+    ...SAMPLE_DATA,
+    event: {
+      ...SAMPLE_DATA.event,
+      brandColors: [d.palette.accent, d.palette.primary],
+    },
+    heroOverlay: {
+      ...SAMPLE_DATA.heroOverlay,
+      imageUrl: d.heroBannerUrl,
+      gradientColors: [d.palette.primary, d.palette.accent, d.palette.secondary],
+    },
+    sponsors: SAMPLE_DATA.sponsors.map((s) => ({
+      ...s,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    collaborators: SAMPLE_DATA.collaborators.map((c) => ({
+      ...c,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    qrCodeUrl: d.isAis ? "https://aisalon.massapro.com/events/ai-cmo-blueprint-2026-06-18" : "/events",
+  };
+}
+
 export const SAMPLE_DATA: EventProfileData = {
   event: {
     name: "AI CMO Blueprint",

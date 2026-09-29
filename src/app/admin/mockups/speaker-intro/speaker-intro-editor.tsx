@@ -26,7 +26,7 @@ import type {
 import type { SectionId, SectionPos } from "../shared/section-edit";
 import { CollapsibleFormPanel } from "../shared/section-edit";
 import { SelectedElementPanel } from "../shared/selected-element-panel";
-import { SAMPLE_DATA } from "./sample-data";
+import { buildSampleData } from "./sample-data";
 import { SpeakerIntroCanvas } from "./speaker-intro-canvas";
 import { SpeakerIntroStyle2Canvas } from "./speaker-intro-style2-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
@@ -79,9 +79,18 @@ type Props = {
 };
 
 export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
-  const [data, setData] = useState<SpeakerIntroData>(SAMPLE_DATA);
+  // Build brand-aware sample data — passes `null` for brandAssets
+  // (the brand row is server-resolved by /admin/mockups/speaker-intro/page.tsx
+  // and we don't have it client-side here). getMockupDefaults() falls
+  // back to AIS visuals when brandSlug is "aisalon", Coma visuals
+  // otherwise. When the brand has uploaded its own assets via
+  // /onboarding/[brandSlug], those override via the canvas's
+  // resolveMockupBrandingUrl() helper (passed brandAssets through props
+  // from the page — see Option 4 spec 2026-09-30).
+  const initialData = buildSampleData(null, brandSlug);
+  const [data, setData] = useState<SpeakerIntroData>(initialData);
   const [jsonText, setJsonText] = useState<string>(() =>
-    JSON.stringify(SAMPLE_DATA, null, 2),
+    JSON.stringify(initialData, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
   /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
@@ -609,7 +618,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
     if (!confirm(msg)) {
       return;
     }
-    applyData(savedDefault ?? SAMPLE_DATA);
+    applyData(savedDefault ?? buildSampleData(null, brandSlug));
     if (!savedDefault) {
       setSelectedEventSlug("");
     }

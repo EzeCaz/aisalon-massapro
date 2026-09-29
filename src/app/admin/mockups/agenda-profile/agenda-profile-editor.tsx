@@ -14,7 +14,7 @@ import type {
 } from "./types";
 import type { SectionId, SectionPos } from "../shared/section-edit";
 import { CollapsibleFormPanel } from "../shared/section-edit";
-import { SAMPLE_DATA } from "./sample-data";
+import { buildSampleData } from "./sample-data";
 import { AgendaProfileCanvas } from "./agenda-profile-canvas";
 import { ImagePickerModalShared as ImagePickerModal } from "../shared/image-picker-modal";
 import { ShareButtons } from "../shared/share-buttons";
@@ -56,9 +56,12 @@ type Props = {
 };
 
 export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
-  const [data, setData] = useState<EventProfileData>(SAMPLE_DATA);
+  // Build brand-aware sample data — see speaker-intro-editor.tsx for the
+  // full explanation. Same pattern.
+  const initialData = buildSampleData(null, brandSlug);
+  const [data, setData] = useState<EventProfileData>(initialData);
   const [jsonText, setJsonText] = useState<string>(() =>
-    JSON.stringify(SAMPLE_DATA, null, 2),
+    JSON.stringify(initialData, null, 2),
   );
   const [parseError, setParseError] = useState<string | null>(null);
   /** View mode for the left panel: "form" (structured inputs) or "json" (raw textarea). */
@@ -458,7 +461,7 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon" }:
       ? "Reset to the saved default? Any local edits you've made will be lost."
       : "Reset to the sample data? Any local edits you've made will be lost.";
     if (!confirm(msg)) return;
-    applyData(savedDefault ?? SAMPLE_DATA);
+    applyData(savedDefault ?? buildSampleData(null, brandSlug));
     if (!savedDefault) {
       setSelectedEventSlug("");
     }

@@ -1,4 +1,5 @@
 import type { MeetTheSpeakerData } from "./types";
+import { getMockupDefaults } from "@/lib/mockup-brand-defaults";
 
 /**
  * Sample data for the Meet the Speaker mockup editor.
@@ -11,20 +12,58 @@ import type { MeetTheSpeakerData } from "./types";
  * out-of-the-box without needing a real headshot. Replace `photoUrl`
  * with the actual speaker photo URL when generating a real mockup.
  *
- * === 2026-07-13 update (per user spec, Style 1) ======================
- *   1. Topic:    fontSize 20, color #000000, align left
- *   2. Bio:      fontSize 22, color #000000, align left
- *   3. Event-meta section position → (3.1%, 64.5%)   ← X 1.9 → 3.1
- *   4. Event name / date / time / venue → align left
- *   5. Event name 22px, date 18px, time 18px, venue 20px, color #000000
- *   6. QR code position → (39.8%, 2.6%)
- *   7. Branding asset height 48px, position (2.7%, 89.576%)
- *   8. Footer credit → "MassaPro"
- *   9. Layer z-indices (both styles): hero=9, photo=3, graphic=10
- *  10. Header (speaker-info section) position X → 3.1%   ← new
- *  11. Meerkat brand graphic: imageScale 1.70, pos (100, 60)   ← new
- * =======================================================================
+ * PER USER SPEC 2026-09-30 (mockup brand leakage fix):
+ *   - AIS brand keeps the falafel-meerkat mascot + TLV skyline hero
+ *   - Every other brand (Coma, Cazhype, ...) defaults to Coma visuals
+ *     (Coma hero, NO mascot block — see shouldRenderMascot())
+ *   - Brand-uploaded assets (via /onboarding/[brandSlug]) override the
+ *     defaults when present
+ *
+ * `buildSampleData(brandAssets)` returns the brand-correct variant.
+ * `SAMPLE_DATA` is the legacy AIS-only constant (kept for callers that
+ * haven't been updated).
  */
+
+export function buildSampleData(
+  brandAssets: Parameters<typeof getMockupDefaults>[0],
+  brandSlug?: string,
+): MeetTheSpeakerData {
+  const d = getMockupDefaults(brandAssets, brandSlug);
+
+  return {
+    ...SAMPLE_DATA,
+    event: {
+      ...SAMPLE_DATA.event,
+      brandColors: [d.palette.accent, d.palette.primary],
+    },
+    speaker: {
+      ...SAMPLE_DATA.speaker,
+      photoUrl: d.speakerPhotoPlaceholderUrl,
+    },
+    // The "graphic" block — was the falafel-meerkat. Now defaults to the
+    // brand's mascot. Empty string when the brand has no mascot → canvas
+    // should skip the block entirely via shouldRenderMascot().
+    graphic: {
+      ...SAMPLE_DATA.graphic,
+      imageUrl: d.mascotUrl,
+    },
+    // Hero overlay — was a hardcoded AIS blob URL.
+    heroOverlay: {
+      ...SAMPLE_DATA.heroOverlay,
+      imageUrl: d.heroBannerUrl,
+    },
+    // Sponsor + collaborator logos — were falafel-meerkat for all 4 slots.
+    collaborators: SAMPLE_DATA.collaborators.map((c) => ({
+      ...c,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    sponsors: SAMPLE_DATA.sponsors.map((s) => ({
+      ...s,
+      logoUrl: d.sponsorLogoPlaceholderUrl,
+    })),
+    qrCodeUrl: d.isAis ? "https://aisalon.massapro.com/events" : "/events",
+  };
+}
 
 export const SAMPLE_DATA: MeetTheSpeakerData = {
   header: {
