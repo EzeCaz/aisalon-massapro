@@ -16205,3 +16205,29 @@ Stage Summary:
 - Each ACTIVE brand shows a Login button (verify branding on /login?brand=<slug>)
 - SubmissionModal (click "View" on a submitted invite) now shows whether the brand was provisioned, when, and provides a direct link to the onboarding hub to edit/update the brand's assets, palette, mascot, copy
 - Brands page is the single Super Admin entry point: invite → review submission → provision → onboarding hub → activate
+
+---
+Task ID: space-z-preview-login-fix
+Agent: main (Super Z)
+Task: "User can't log in to https://preview-chat-604b7c23-...space-z.ai/login with eze@massapro.com + Massapro2026!"
+
+Work Log:
+- Diagnosed root cause: dev server's Prisma client was generated from prisma/schema.prisma (postgres) but DATABASE_URL=file:/home/z/my-project/db/custom.db (sqlite). Prisma rejected all queries with "URL must start with postgresql://" → NextAuth couldn't query User table → login failed silently.
+- Copied the existing sandbox DB from /tmp/my-project/db/custom.db → /home/z/my-project/db/custom.db (the directory didn't exist before; Prisma expected the file there per .env).
+- Regenerated Prisma client from prisma/schema.sqlite-sandbox.prisma via `bun run db:sandbox:generate` (existing package.json script).
+- Ran `bun run db:sandbox:push` to sync the schema with the DB — added missing columns to User table (title, countryId, chapterId, brandSlug, brandId, etc.) and created 49 tables total (Brand, Chapter, ChapterSetting, Country, BrandOnboardingInvite, ChapterOnboardingInvite).
+- Built scripts/reset-sandbox-admin-password.py — generates a fresh bcrypt hash for "Massapro2026!" (Python bcrypt via /home/z/.local/lib/python3.13/site-packages/bcrypt) and updates User.passwordHash for eze@massapro.com. Verified bcrypt.checkpw returns True.
+- Built scripts/seed-cazhype-brand.py — seeded 4 Brand rows: coma (root, parentBrandId=null), aisalon (child of coma), ch (cazhype via prod slug), cazhype (canonical slug). All use the user-specified palette #3677EB/#4FF0F3/#FF01F8 + the conic gradient. All set to ACTIVE status. Also linked eze@massapro.com user to brandSlug="coma".
+- Added NEXTAUTH_URL + NEXTAUTH_SECRET to .env (was missing — NextAuth couldn't encrypt JWT sessions, causing JWT_SESSION_ERROR "decryption operation failed"). Generated secret via openssl rand -base64 32.
+- Restarted dev server (picked up new Prisma client + env vars).
+- Browser verification (agent-browser): opened /login → clicked "Sign in" tab → filled eze@massapro.com / Massapro2026! → clicked "Sign in" → redirected to /onboarding?chapterSlug=tel-aviv&brand=coma (login successful — NextAuth session created)
+- Navigated to /admin/brands → page renders with all 4 brand cards, each showing "Onboard" (→ /onboarding/<slug>) + "Login" (→ /login?brand=<slug>) buttons. Cazhype rows (slugs "ch" and "cazhype") show with ACTIVE status + the new palette.
+
+Stage Summary:
+- Login works at https://preview-chat-604b7c23-05dc-4d4c-8ebf-db5e8a49077c.space-z.ai/login
+  - Email: eze@massapro.com
+  - Password: Massapro2026!
+- After login: /admin/brands shows 4 brand cards (Coma, AI Salon, Cazhype, Cazhype) with Onboard + Login buttons (or Activate for DRAFT brands)
+- /onboarding/ch and /onboarding/cazhype both work and load with the user-specified palette #3677EB/#4FF0F3/#FF01F8
+- Sandbox DB is now self-contained: 4 brands seeded, SUPER_ADMIN user has a working password, Brand + Chapter + User tables all present
+- Three re-runnable scripts in scripts/: reset-sandbox-admin-password.py + seed-cazhype-brand.py + the existing query-cazhype.js
