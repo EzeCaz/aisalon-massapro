@@ -71,6 +71,10 @@ export function buildSampleData(
       imageUrl: d.heroBannerUrl,
       gradientColors: [d.palette.primary, d.palette.accent, d.palette.secondary],
     },
+    // Issue 6 fix (2026-09-30): set the brandingAsset imageUrl to the
+    // brand's logo so the canvas's resolveBrandingImageUrl() picks
+    // it up instead of falling back to the AIS hardcoded logo.
+    brandingAsset: { ...SAMPLE_DATA.brandingAsset, imageUrl: d.logoUrl },
     qrCodeUrl: d.isAis ? "https://aisalon.massapro.com/events" : "/events",
     // Mascot — empty imageUrl when the brand has no mascot; canvas should
     // skip the mascot block via shouldRenderMascot().

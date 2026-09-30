@@ -31,6 +31,10 @@ export function buildSampleData(
       imageUrl: d.citySkylineUrl,
       gradientColors: [d.palette.primary, d.palette.accent, d.palette.secondary],
     },
+    // Issue 6 fix (2026-09-30): set the brandingAsset imageUrl to the
+    // brand's logo so the canvas's resolveBrandingImageUrl() picks
+    // it up instead of falling back to the AIS hardcoded logo.
+    brandingAsset: { ...SAMPLE_DATA.brandingAsset, imageUrl: d.logoUrl },
     qrCodeUrl: d.isAis ? "https://aisalon.massapro.com/events/ai-cmo-blueprint-2026-06-18" : "/events",
   };
 }
