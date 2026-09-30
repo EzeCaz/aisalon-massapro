@@ -37,6 +37,7 @@ import {
   getEnvDefaultBrandSlug,
 } from "@/lib/brand/resolve-brand";
 import type { BrandConfig } from "@/lib/brand/brand-config";
+import { resolveBrandAssets } from "@/lib/brand/brand-assets-resolver";
 
 export interface BrandMetadata {
   /** Resolved brand config for this request. */
@@ -85,11 +86,63 @@ export async function resolveBrandMetadata(
   // `?brand=` header (set in src/middleware.ts) → host → env default.
   const headerBrandOverride = h.get("x-brand-override") ?? undefined;
 
-  const brand = resolveBrand({
+  const staticBrand = resolveBrand({
     urlBrandSlug: urlBrandSlug ?? headerBrandOverride,
     hostHeader: host,
     envDefaultSlug: getEnvDefaultBrandSlug(),
   });
+
+  // ── DB-AWARE OVERRIDE (2026-09-30) ────────────────────────────────────
+  // The static `resolveBrand()` only knows about the two hardcoded brands
+  // ("aisalon" + "coma"). For new brands created via /admin/brands
+  // (cazhype, danone, ...), it falls back to Coma's BrandConfig — so the
+  // admin shell + every page's metadata rendered Coma branding even
+  // when a BRAND_ADMIN had uploaded their own assets via the onboarding
+  // hub. This DB lookup overrides the static config when a Brand row
+  // exists in the DB with the requested slug.
+  //
+  // The override applies when the resolved slug (after the 4-layer chain)
+  // is NOT "aisalon" and NOT "coma" — those two still use the static
+  // brand-config.ts entries (no DB lookup needed).
+  let dbBrand: Awaited<ReturnType<typeof resolveBrandAssets>> | null = null;
+  const effectiveSlug = (urlBrandSlug ?? headerBrandOverride ?? "").trim().toLowerCase();
+  if (effectiveSlug && effectiveSlug !== "aisalon" && effectiveSlug !== "coma") {
+    try {
+      dbBrand = await resolveBrandAssets(effectiveSlug);
+      // Only override if the DB row exists — resolveBrandAssets always
+      // returns something (falls back to Coma), but dbRowExists tells us
+      // whether the brand is real.
+      if (!dbBrand.dbRowExists) dbBrand = null;
+    } catch (err) {
+      console.warn("[brand-metadata] DB brand lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Build the effective brand object — start from the static config,
+  // then overlay the DB-uploaded assets + palette + copy if available.
+  const brand: BrandConfig = dbBrand
+    ? {
+        ...staticBrand,
+        // Override identity fields from the DB row.
+        slug: dbBrand.slug as BrandConfig["slug"],
+        displayName: dbBrand.displayName,
+        wordmark: dbBrand.slug,
+        tagline: dbBrand.displayName,
+        primaryColor: dbBrand.palette.primary,
+        accentColor: dbBrand.palette.accent,
+        secondaryColor: dbBrand.palette.secondary,
+        gradient: dbBrand.palette.gradient,
+        heroBanner: dbBrand.assets.heroBannerUrl || staticBrand.heroBanner,
+        favicon: dbBrand.assets.faviconUrl || staticBrand.favicon,
+        logo: dbBrand.assets.logoUrl || staticBrand.logo,
+        loginEyebrowTemplate: dbBrand.loginCopy.eyebrow,
+        loginHeadlineTemplate: dbBrand.loginCopy.headline,
+        loginSubtitle: dbBrand.loginCopy.subtitle,
+        loginFormHeading: dbBrand.loginCopy.formHeading,
+        loginFormSubheadingTemplate: dbBrand.loginCopy.formSubheading,
+        footerCredit: dbBrand.loginCopy.footerCredit,
+      }
+    : staticBrand;
 
   // Per-host metadataBase — falls back to the brand's canonical host when
   // headers are unavailable (e.g. static export edge cases).

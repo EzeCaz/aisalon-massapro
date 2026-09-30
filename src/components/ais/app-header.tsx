@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canSeeAdminNav, getEffectiveRole, normalizeRole, ROLES } from "@/lib/permissions";
 import { getBrandConfig } from "@/lib/brand/brand-config";
+import { resolveBrandAssets } from "@/lib/brand/brand-assets-resolver";
 import { AiSalonLogoServer } from "@/components/brand/aisalon-logo-server";
 import { UserMenu } from "./user-menu";
 import { MobileNav } from "./mobile-nav";
@@ -43,7 +44,50 @@ export async function AppHeader() {
   // of the legacy "aisalon" wordmark + "Empowering AI Connections" tagline
   // + falafel-meerkat mark. Anonymous visitors and legacy users (no
   // brandSlug) fall back to AIS, preserving the original header.
-  const brand = getBrandConfig(user?.brandSlug ?? "aisalon");
+  //
+  // ── DB-AWARE OVERRIDE (2026-09-30) ────────────────────────────────
+  // The static `getBrandConfig()` only knows the two hardcoded brands
+  // ("aisalon" + "coma"). For new brands created via /admin/brands
+  // (cazhype, danone, ...), it falls back to Coma's BrandConfig — so the
+  // admin shell header rendered Coma's wordmark + Coma palette even
+  // when the brand admin had uploaded their own logo + palette via the
+  // onboarding hub. This DB lookup overrides the static config when a
+  // Brand row exists in the DB with the user's brandSlug.
+  const staticBrand = getBrandConfig(user?.brandSlug ?? "aisalon");
+  let brand = staticBrand;
+  const userBrandSlug = user?.brandSlug;
+  if (userBrandSlug && userBrandSlug !== "aisalon" && userBrandSlug !== "coma") {
+    try {
+      const dbBrand = await resolveBrandAssets(userBrandSlug);
+      if (dbBrand.dbRowExists) {
+        // Overlay the DB brand's identity + assets + palette + login copy
+        // on top of the static config (preserves defaultChapterSlug + any
+        // other static fields not stored in the DB).
+        brand = {
+          ...staticBrand,
+          slug: dbBrand.slug as typeof staticBrand.slug,
+          displayName: dbBrand.displayName,
+          wordmark: dbBrand.slug,
+          tagline: dbBrand.displayName,
+          primaryColor: dbBrand.palette.primary,
+          accentColor: dbBrand.palette.accent,
+          secondaryColor: dbBrand.palette.secondary,
+          gradient: dbBrand.palette.gradient,
+          heroBanner: dbBrand.assets.heroBannerUrl || staticBrand.heroBanner,
+          favicon: dbBrand.assets.faviconUrl || staticBrand.favicon,
+          logo: dbBrand.assets.logoUrl || staticBrand.logo,
+          loginEyebrowTemplate: dbBrand.loginCopy.eyebrow,
+          loginHeadlineTemplate: dbBrand.loginCopy.headline,
+          loginSubtitle: dbBrand.loginCopy.subtitle,
+          loginFormHeading: dbBrand.loginCopy.formHeading,
+          loginFormSubheadingTemplate: dbBrand.loginCopy.formSubheading,
+          footerCredit: dbBrand.loginCopy.footerCredit,
+        };
+      }
+    } catch (err) {
+      console.warn("[app-header] DB brand lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
   const isComa = brand.slug === "coma";
 
   // TSK-0058: Compute the EFFECTIVE role for the Admin nav gate. When a
