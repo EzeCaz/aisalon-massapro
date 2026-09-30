@@ -109,6 +109,15 @@ const NEW_MIGRATIONS = new Set([
   // becomes nullable). Idempotent ADD COLUMN IF NOT EXISTS + guarded
   // FK swap (CASCADE → SET NULL).
   '20260921000000_brand_mascot_book_apply_self_serve',
+  // 2026-09-30: Public/private chapter visibility toggle. Adds the
+  // Chapter.isPubliclyListed column (default true). Idempotent ALTER
+  // TABLE ADD COLUMN with default — Postgres safe (no table rewrite
+  // because default is a constant). MUST be in NEW_MIGRATIONS so
+  // baseline-migrations.cjs doesn't mark it as "applied" before the
+  // SQL actually runs. Without this entry, prod kept throwing
+  // "column Chapter.isPubliclyListed does not exist" on /events +
+  // /communities — the events page query references the column.
+  '20260930000000_add_chapter_is_publicly_listed',
 ]);
 
 async function main() {
