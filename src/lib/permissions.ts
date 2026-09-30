@@ -463,6 +463,7 @@ export function canSeeAdminNav(role: string | null | undefined): boolean {
   const r = normalizeRole(role);
   return (
     r === ROLES.SUPER_ADMIN ||
+    r === ROLES.BRAND_ADMIN ||
     r === ROLES.ADMIN ||
     r === ROLES.CHAPTER_ORGANIZER ||
     r === ROLES.CO_HOST

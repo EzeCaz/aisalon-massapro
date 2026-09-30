@@ -22,6 +22,8 @@ function scopeBadge(scope: UserScope): { label: string; color: string } {
   switch (scope.kind) {
     case "global":
       return { label: "Global", color: "bg-[#820A7D] text-white" };
+    case "brand":
+      return { label: "Brand", color: "bg-[#FF005A] text-white" };
     case "country":
       return { label: "Country", color: "bg-[#FF005A] text-white" };
     case "chapter":

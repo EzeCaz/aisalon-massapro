@@ -19,6 +19,8 @@ export const metadata = { title: "Analytics — Admin — AI Salon" };
 function scopeBadge(scope: UserScope): { label: string; color: string } {
   switch (scope.kind) {
     case "global":
+    case "brand":
+      return { label: "Brand", color: "bg-[#FF005A] text-white" };
       return { label: "Global scope", color: "bg-[#820A7D] text-white" };
     case "country":
       return { label: "Country scope", color: "bg-[#FF005A] text-white" };

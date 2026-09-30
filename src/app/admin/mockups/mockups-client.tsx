@@ -271,13 +271,28 @@ function AssetCardItem({ asset }: { asset: AssetCard }) {
           href={asset.editorHref!}
           className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={asset.url}
-            alt={asset.title}
-            loading="lazy"
-            className="absolute inset-0 w-full h-full object-contain transition-transform group-hover:scale-[1.02]"
-          />
+          {asset.url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={asset.url}
+              alt={asset.title}
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-contain transition-transform group-hover:scale-[1.02]"
+            />
+          ) : (
+            // Issue 4 (2026-09-30): brand-aware placeholder when the AIS
+            // reference image is hidden for non-AIS brands. Shows a
+            // "Open editor to preview" call-to-action instead.
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
+              <Wand2 className="h-8 w-8 mb-2 text-black/30" />
+              <p className="text-xs font-semibold text-black/50">
+                Open editor to preview
+              </p>
+              <p className="text-[0.65rem] text-black/30 mt-1">
+                Your brand&apos;s default assets will render in the editor
+              </p>
+            </div>
+          )}
           <span className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-md bg-black/70 text-white text-[0.65rem] font-semibold px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Wand2 className="h-3 w-3" /> Open editor
           </span>
@@ -640,9 +655,20 @@ export function MockupsClient() {
           </div>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {MOCKUP_TEMPLATES.map((asset) => (
-            <AssetCardItem key={asset.url} asset={asset} />
-          ))}
+          {MOCKUP_TEMPLATES.map((asset) => {
+            // Issue 4 (2026-09-30): for non-AIS brands, replace the AIS
+            // hardcoded reference image with a "Open editor to preview"
+            // placeholder. The actual brand-correct mockup renders in the
+            // editor (which uses buildSampleData with brand defaults).
+            const isAisRef = asset.url.includes("uojldinyokysycfc");
+            const showPlaceholder = brand !== "aisalon" && isAisRef;
+            return (
+              <AssetCardItem
+                key={asset.url + (showPlaceholder ? "-placeholder" : "")}
+                asset={showPlaceholder ? { ...asset, url: "" } : asset}
+              />
+            );
+          })}
         </div>
       </section>
 
