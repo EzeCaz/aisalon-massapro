@@ -80,17 +80,33 @@ export async function GET(req: NextRequest) {
   // the page is public).
   //
   // We use a nested author filter so Prisma joins on the User table:
-  //   - Coma user → author.brandSlug = "coma"
-  //   - AIS/legacy user → author.brandSlug IN (null, "aisalon")
-  //   - chapterId: scoped to the same chapter, or both null
+  //   - Coma user → author.brandSlug = "coma" (sees all brands' testimonials — platform parent)
+  //   - AIS user → author.brandSlug IN (null, "aisalon") (legacy chapters have brandSlug=null)
+  //   - New brand user (cazhype, danone, ...) → author.brandSlug = me.brandSlug
+  //     (no legacy fallback — new brands have no legacy rows)
+  //
+  // Round 2 fix (2026-09-30): previously, the non-Coma case used
+  // { OR: [{ brandSlug: null }, { brandSlug: "aisalon" }] } which showed
+  // AIS testimonials to every non-Coma user including cazhype. Now
+  // AIS users get the legacy fallback, new-brand users get their own
+  // brand only.
   if (me) {
     const isComa = me.brandSlug === "coma";
-    const authorBrandFilter = isComa
-      ? { brandSlug: "coma" }
-      : { OR: [{ brandSlug: null }, { brandSlug: "aisalon" }] };
+    const isAis = me.brandSlug === "aisalon";
+    let authorBrandFilter: Record<string, unknown>;
+    if (isComa) {
+      // Coma users see everything (platform parent).
+      authorBrandFilter = {};
+    } else if (isAis) {
+      // AIS users see AIS + legacy (brandSlug=null) testimonials.
+      authorBrandFilter = { OR: [{ brandSlug: null }, { brandSlug: "aisalon" }] };
+    } else {
+      // New brand users see ONLY their own brand's testimonials.
+      authorBrandFilter = { brandSlug: me.brandSlug };
+    }
     const authorChapterFilter = me.chapterId
       ? { chapterId: me.chapterId }
-      : { chapterId: null };
+      : {};
     where.author = {
       is: {
         ...authorBrandFilter,

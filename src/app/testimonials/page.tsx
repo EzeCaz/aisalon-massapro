@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/ais/site-footer";
 import { TestimonialFeed } from "@/components/testimonials/testimonial-feed";
 import type { EventOption, ChapterOption } from "@/components/testimonials/testimonial-form";
 import { getBrandConfig } from "@/lib/brand/brand-config";
+import { resolveBrandAssets } from "@/lib/brand/brand-assets-resolver";
 import { BrandGradientText } from "@/components/brand/brand-logo";
 import { MessageSquareHeart } from "lucide-react";
 
@@ -81,7 +82,33 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
   // BRAND RESOLUTION — used for the page header + footer copy. The
   // signed-in user's brandSlug drives the displayed brand; anonymous
   // visitors fall back to AIS (platform default).
-  const brand = getBrandConfig(me?.brandSlug ?? "aisalon");
+  // DB-AWARE (2026-09-30): for new brands (cazhype, danone, ...),
+  // resolve the DB brand row so we get the uploaded logo + palette.
+  const staticBrand = getBrandConfig(me?.brandSlug ?? "aisalon");
+  let brand = staticBrand;
+  const userBrandSlug = me?.brandSlug;
+  if (userBrandSlug && userBrandSlug !== "aisalon" && userBrandSlug !== "coma") {
+    try {
+      const dbBrand = await resolveBrandAssets(userBrandSlug);
+      if (dbBrand.dbRowExists) {
+        brand = {
+          ...staticBrand,
+          slug: dbBrand.slug as typeof staticBrand.slug,
+          displayName: dbBrand.displayName,
+          wordmark: dbBrand.slug,
+          tagline: dbBrand.displayName,
+          primaryColor: dbBrand.palette.primary,
+          accentColor: dbBrand.palette.accent,
+          secondaryColor: dbBrand.palette.secondary,
+          gradient: dbBrand.palette.gradient,
+          logo: dbBrand.assets.logoUrl || staticBrand.logo,
+          heroBanner: dbBrand.assets.heroBannerUrl || staticBrand.heroBanner,
+        };
+      }
+    } catch (err) {
+      console.warn("[/testimonials] DB brand lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
   const chapterName = me?.chapterName ?? "Tel Aviv";
 
   // Fetch the events catalog only when there's a signed-in user (the form
@@ -91,8 +118,18 @@ export default async function TestimonialsPage({ searchParams }: SearchParams) {
   // Fetch all active chapters (for the chapter picker). Needed for both
   // signed-in and anonymous visitors so we can validate the `?chapter=`
   // URL param and pass it through to the form.
+  // BRAND SCOPING (2026-09-30): non-Coma signed-in users see only their
+  // brand's chapters. AIS users also see legacy (brandId=null) chapters.
+  const myBrandSlug = me?.brandSlug ?? null;
+  const isComaUser = myBrandSlug === "coma";
+  const isAisUser = myBrandSlug === "aisalon";
+  const chapterWhere = me && !isComaUser
+    ? isAisUser
+      ? { isActive: true, OR: [{ brandId: null }, { brand: { slug: "aisalon" } }] }
+      : { isActive: true, brand: { slug: myBrandSlug ?? "___NEVER___" } }
+    : { isActive: true };
   const chapterRows = await db.chapter.findMany({
-    where: { isActive: true },
+    where: chapterWhere,
     select: {
       id: true,
       slug: true,

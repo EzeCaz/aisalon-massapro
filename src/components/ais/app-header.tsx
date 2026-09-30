@@ -209,13 +209,32 @@ export async function AppHeader() {
             <span className="inline-flex flex-col items-start leading-none text-black text-[1.05rem]">
               <span className="inline-flex items-end">
                 {(() => {
-                  // Resolve the actual image source: Coma uses brand.heroBanner
-                  // (now an external Vercel Blob URL); AIS uses the chapter-scoped
-                  // meerkat mark (loginHero) or the hardcoded falafel-meerkat.
-                  const headerImgSrc =
-                    isComa && brand.heroBanner
-                      ? brand.heroBanner
-                      : meerkatSrc || "/images/falafel-meerkat.jpg";
+                  // Resolve the actual image source:
+                  // - Coma brand: brand.heroBanner (transparent PNG)
+                  // - AIS brand (legacy): chapter-scoped meerkat mark (loginHero)
+                  //   or the hardcoded falafel-meerkat
+                  // - New brands (cazhype, danone, ...): brand.logo (the
+                  //   uploaded logo from /onboarding/<slug>), falling back
+                  //   to brand.heroBanner, then to a text-only wordmark
+                  //   (no image). Round 2 fix (2026-09-30).
+                  let headerImgSrc: string | null = null;
+                  if (isComa && brand.heroBanner) {
+                    headerImgSrc = brand.heroBanner;
+                  } else if (brand.slug !== "aisalon") {
+                    // New brand (not AIS, not Coma): use the uploaded logo
+                    // or hero banner. If neither exists, headerImgSrc stays
+                    // null and we render a text-only wordmark.
+                    headerImgSrc = brand.logo || brand.heroBanner || null;
+                  } else {
+                    // AIS (legacy): meerkat mark
+                    headerImgSrc = meerkatSrc || "/images/falafel-meerkat.jpg";
+                  }
+                  // If no image is available, render a styled text wordmark
+                  // only (no image placeholder). The wordmark span below
+                  // already shows the brand name in the brand's primaryColor.
+                  if (!headerImgSrc) {
+                    return null;
+                  }
                   const headerImgIsExternal = headerImgSrc.startsWith("http");
                   return (
                     <Image
@@ -223,9 +242,11 @@ export async function AppHeader() {
                       alt={
                         isComa
                           ? `${brand.displayName} brand mark`
-                          : chapterLabel
-                            ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat`
-                            : "AI Salon Falafel Meerkat"
+                          : brand.slug !== "aisalon"
+                            ? `${brand.displayName} logo`
+                            : chapterLabel
+                              ? `AI Salon "${chapterLabel.replace(/ Chapter$/, "")}" Meerkat`
+                              : "AI Salon Falafel Meerkat"
                       }
                       width={624}
                       height={1686}
@@ -263,19 +284,33 @@ export async function AppHeader() {
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-1">
-            {/* LinkedIn "Join us" pill — LEFT of WhatsApp, visible to everyone */}
-            <a
-              href={linkedInUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mr-1 inline-flex items-center gap-1.5 rounded-full bg-[#0A66C2] text-white font-semibold text-xs px-3 py-1.5 hover:bg-[#0a4e96] transition-colors whitespace-nowrap"
-              title="Join us on LinkedIn"
-            >
-              <LinkedInIcon className="h-3.5 w-3.5" />
-              Join us
-            </a>
-            {/* WhatsApp "Join our group" pill — LEFT of Events, visible to everyone */}
-            {whatsappUrl && (
+            {/* LinkedIn "Join us" pill — visible to everyone. When the
+                brand/chapter has no LinkedIn URL, show a greyed-out
+                placeholder instead of hiding it (so the layout is stable).
+                Issue 3 fix (2026-09-30). */}
+            {linkedInUrl ? (
+              <a
+                href={linkedInUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mr-1 inline-flex items-center gap-1.5 rounded-full bg-[#0A66C2] text-white font-semibold text-xs px-3 py-1.5 hover:bg-[#0a4e96] transition-colors whitespace-nowrap"
+                title="Join us on LinkedIn"
+              >
+                <LinkedInIcon className="h-3.5 w-3.5" />
+                Join us
+              </a>
+            ) : (
+              <span
+                className="mr-1 inline-flex items-center gap-1.5 rounded-full bg-black/5 text-black/30 font-semibold text-xs px-3 py-1.5 whitespace-nowrap cursor-not-allowed"
+                title="No LinkedIn page configured"
+              >
+                <LinkedInIcon className="h-3.5 w-3.5" />
+                Join us
+              </span>
+            )}
+            {/* WhatsApp "Join our group" pill — same pattern: grey when
+                empty instead of hidden. */}
+            {whatsappUrl ? (
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -286,6 +321,14 @@ export async function AppHeader() {
                 <WhatsAppIcon className="h-3.5 w-3.5" />
                 Join our group
               </a>
+            ) : (
+              <span
+                className="mr-2 inline-flex items-center gap-1.5 rounded-full bg-black/5 text-black/30 font-semibold text-xs px-3 py-1.5 whitespace-nowrap cursor-not-allowed"
+                title="No WhatsApp group configured"
+              >
+                <WhatsAppIcon className="h-3.5 w-3.5" />
+                Join our group
+              </span>
             )}
             {navLinks.map((l) => (
               <Link
@@ -312,19 +355,30 @@ export async function AppHeader() {
 
           {/* Mobile nav */}
           <div className="md:hidden flex items-center gap-1">
-            {/* LinkedIn icon-only pill on mobile (saves horizontal space) */}
-            <a
-              href={linkedInUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mr-1 inline-flex items-center justify-center rounded-full bg-[#0A66C2] text-white h-9 w-9 hover:bg-[#0a4e96] transition-colors"
-              title="Join us on LinkedIn"
-              aria-label="Join us on LinkedIn"
-            >
-              <LinkedInIcon className="h-4 w-4" />
-            </a>
-            {/* WhatsApp icon-only pill on mobile (saves horizontal space) */}
-            {whatsappUrl && (
+            {/* LinkedIn icon-only pill on mobile (saves horizontal space).
+                Grey when no URL configured (Issue 3 fix, 2026-09-30). */}
+            {linkedInUrl ? (
+              <a
+                href={linkedInUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mr-1 inline-flex items-center justify-center rounded-full bg-[#0A66C2] text-white h-9 w-9 hover:bg-[#0a4e96] transition-colors"
+                title="Join us on LinkedIn"
+                aria-label="Join us on LinkedIn"
+              >
+                <LinkedInIcon className="h-4 w-4" />
+              </a>
+            ) : (
+              <span
+                className="mr-1 inline-flex items-center justify-center rounded-full bg-black/5 text-black/30 h-9 w-9 cursor-not-allowed"
+                title="No LinkedIn page configured"
+                aria-label="No LinkedIn page configured"
+              >
+                <LinkedInIcon className="h-4 w-4" />
+              </span>
+            )}
+            {/* WhatsApp icon-only pill on mobile. Grey when empty. */}
+            {whatsappUrl ? (
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -335,6 +389,14 @@ export async function AppHeader() {
               >
                 <WhatsAppIcon className="h-4 w-4" />
               </a>
+            ) : (
+              <span
+                className="mr-1 inline-flex items-center justify-center rounded-full bg-black/5 text-black/30 h-9 w-9 cursor-not-allowed"
+                title="No WhatsApp group configured"
+                aria-label="No WhatsApp group configured"
+              >
+                <WhatsAppIcon className="h-4 w-4" />
+              </span>
             )}
             {user && <InboxButtonServer />}
             {/* TSK-0057: ViewAsSwitcher is desktop-only (the dropdown is
