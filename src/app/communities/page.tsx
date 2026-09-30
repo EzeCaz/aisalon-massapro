@@ -84,26 +84,52 @@ export default async function CommunitiesPage() {
   // Issue 3 (2026-09-30): isPubliclyListed=false chapters are private — only
   // reachable via direct URL (/c/<slug>) shared by the brand admin. They
   // do NOT appear in the /communities discover grid.
-  const chapters = await db.chapter.findMany({
-    where: { isActive: true, isPubliclyListed: true },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      city: true,
-      heroImageUrl: true,
-      country: { select: { name: true, code: true, flagEmoji: true } },
-      brand: { select: { slug: true, displayName: true } },
-      _count: {
-        select: {
-          users: true, // primary members (User.chapterId)
-          members: true, // explicit memberships (ChapterMember rows)
-          events: true,
-        },
+  //
+  // DEFENSIVE: the Chapter.isPubliclyListed column was added in migration
+  // 20260930000000_add_chapter_is_publicly_listed. If that migration
+  // hasn't applied on the current DB (e.g. baseline-migrations.cjs
+  // failed to delete the bogus row, or prisma migrate deploy was
+  // silently skipped), the column doesn't exist and the query below
+  // would throw "column Chapter.isPubliclyListed does not exist" → 500
+  // on /communities. Catch + fall back to { isActive: true } so the
+  // page keeps rendering — the public/private filter becomes a no-op
+  // until the migration actually applies.
+  const chapterSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    city: true,
+    heroImageUrl: true,
+    country: { select: { name: true, code: true, flagEmoji: true } },
+    brand: { select: { slug: true, displayName: true } },
+    _count: {
+      select: {
+        users: true, // primary members (User.chapterId)
+        members: true, // explicit memberships (ChapterMember rows)
+        events: true,
       },
     },
-    orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
-  });
+  } as const;
+  const chapterOrderBy = [{ country: { name: "asc" as const } }, { name: "asc" as const }];
+
+  let chapters;
+  try {
+    chapters = await db.chapter.findMany({
+      where: { isActive: true, isPubliclyListed: true },
+      select: chapterSelect,
+      orderBy: chapterOrderBy,
+    });
+  } catch (err) {
+    console.warn(
+      "[/communities] isPubliclyListed column missing — falling back to { isActive: true }:",
+      err instanceof Error ? err.message : err,
+    );
+    chapters = await db.chapter.findMany({
+      where: { isActive: true },
+      select: chapterSelect,
+      orderBy: chapterOrderBy,
+    });
+  }
 
   // Upcoming (future) event counts per chapter — shown as "X upcoming
   // events" on the card. Counts only, so nothing about other

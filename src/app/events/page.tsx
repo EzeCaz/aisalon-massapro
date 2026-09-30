@@ -164,6 +164,12 @@ export default async function EventsPage() {
   // users need the legacy fallback to see their own chapter. Other brands
   // (cazhype, danone, ...) only see their own brand's chapters — no
   // legacy fallback for them, so they don't discover AIS Tel Aviv.
+  //
+  // DEFENSIVE: the Chapter.isPubliclyListed column was added in migration
+  // 20260930000000_add_chapter_is_publicly_listed. If that migration
+  // hasn't applied on the current DB, the query would throw
+  // "column Chapter.isPubliclyListed does not exist" → 500 on /events.
+  // Catch + fall back to { isActive: true } so the page keeps rendering.
   let chapterVisibility: Prisma.ChapterWhereInput = {};
   if (me && !isComaUser) {
     if (isAisUser) {
@@ -181,17 +187,36 @@ export default async function EventsPage() {
       chapterVisibility = { brand: { slug: myBrandSlug ?? "aisalon" } };
     }
   }
-  const chapters = await db.chapter.findMany({
-    where: { isActive: true, isPubliclyListed: true, ...chapterVisibility },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      city: true,
-      country: { select: { name: true, code: true, flagEmoji: true } },
-    },
-    orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
-  });
+  let chapters;
+  try {
+    chapters = await db.chapter.findMany({
+      where: { isActive: true, isPubliclyListed: true, ...chapterVisibility },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        city: true,
+        country: { select: { name: true, code: true, flagEmoji: true } },
+      },
+      orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+    });
+  } catch (err) {
+    console.warn(
+      "[/events] isPubliclyListed column missing — falling back to { isActive: true, ...chapterVisibility }:",
+      err instanceof Error ? err.message : err,
+    );
+    chapters = await db.chapter.findMany({
+      where: { isActive: true, ...chapterVisibility },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        city: true,
+        country: { select: { name: true, code: true, flagEmoji: true } },
+      },
+      orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+    });
+  }
 
   // Serialize the events to plain objects with ISO string dates. Next.js
   // App Router auto-serializes Date objects when passing from Server to
