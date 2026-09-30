@@ -264,15 +264,53 @@ export async function AppHeader() {
                     />
                   );
                 })()}
-                <span
-                  className="text-[1.6em] font-extrabold tracking-tight lowercase"
-                  style={isComa ? { color: brand.primaryColor } : undefined}
-                >
-                  {brand.wordmark}
-                </span>
+                {/* Wordmark text — only render when there's NO logo image.
+                    When a brand has uploaded a logo (brand-row provenance),
+                    the logo IS the wordmark — showing text next to it is
+                    redundant (e.g. the cazhype logo PNG already says
+                    "Cazhype", so showing "ch" text next to it looks wrong).
+                    For Coma: always show the "coma" wordmark (the hero
+                    banner is a transparent mark, not a full wordmark).
+                    For AIS: always show the "aisalon" wordmark (the meerkat
+                    mark is a mascot, not a wordmark).
+                    For new brands with uploaded logo: hide the wordmark
+                    (the logo replaces it). Issue 1 fix (2026-09-30). */}
+                {(() => {
+                  // Determine if we have a real uploaded logo image.
+                  // brand.logo is set by the DB-aware override when the
+                  // brand has uploaded a logoUrl. If it's empty or a
+                  // fallback (Coma's /brand/coma/logo.png), show the wordmark.
+                  const hasUploadedLogo =
+                    brand.slug !== "aisalon" &&
+                    brand.slug !== "coma" &&
+                    !!brand.logo &&
+                    brand.logo.startsWith("http");
+                  if (hasUploadedLogo) {
+                    // The logo image is the full brand mark — no text needed.
+                    return null;
+                  }
+                  return (
+                    <span
+                      className="text-[1.6em] font-extrabold tracking-tight lowercase"
+                      style={isComa ? { color: brand.primaryColor } : undefined}
+                    >
+                      {brand.wordmark}
+                    </span>
+                  );
+                })()}
               </span>
               <span className="mt-[0.45em] pl-[1.2em] text-[0.42em] font-semibold uppercase tracking-[0.18em] text-black/80">
-                {brand.tagline}
+                {(() => {
+                  // Same hasUploadedLogo check as above — when the logo
+                  // image IS the full brand mark, the tagline is redundant.
+                  const hasUploadedLogo =
+                    brand.slug !== "aisalon" &&
+                    brand.slug !== "coma" &&
+                    !!brand.logo &&
+                    brand.logo.startsWith("http");
+                  if (hasUploadedLogo) return null;
+                  return brand.tagline;
+                })()}
               </span>
             </span>
             {chapterLabel && (
