@@ -116,6 +116,13 @@ export function CommunitiesClient({
     if (showMoreCommunities) return true;
     // Non-Coma user with brandSlug → only their brand's communities.
     if (myBrandSlug && !isComaUser) {
+      // AIS legacy chapters have brandSlug = null (predating the Brand
+      // table). Treat them as AIS communities so AIS users see their
+      // own chapter in the brand-scoped view, not hidden behind the
+      // "See more communities" button.
+      if (myBrandSlug === "aisalon" && c.brandSlug === null) {
+        return true;
+      }
       return c.brandSlug === myBrandSlug;
     }
     // Coma user or anonymous → see everything.
@@ -131,9 +138,13 @@ export function CommunitiesClient({
 
   // The "more communities" count — how many communities are hidden behind
   // the toggle for non-Coma users. Used for the button label.
-  const hiddenMoreCount = myBrandSlug && !isComaUser
-    ? communities.filter((c) => c.brandSlug !== myBrandSlug).length
-    : 0;
+  // AIS legacy chapters (brandSlug = null) count as AIS, not "other brands".
+  const isOtherBrand = (c: CommunityCard): boolean => {
+    if (!myBrandSlug || isComaUser) return false;
+    if (myBrandSlug === "aisalon" && c.brandSlug === null) return false;
+    return c.brandSlug !== myBrandSlug;
+  };
+  const hiddenMoreCount = communities.filter(isOtherBrand).length;
 
   function handleJoined(chapter: JoinChapterInfo) {
     setJoined((prev) => new Set(prev).add(chapter.id));

@@ -38,6 +38,31 @@ import {
   type BrandSlug,
 } from "./brand-config";
 
+// AIS hardcoded visual URLs — kept here because AIS is the grandfathered
+// white-label brand. Its logo / hero / favicon are NOT in brand-config.ts
+// (which intentionally leaves them empty — AIS uses chapter loginHero /
+// SiteSetting overrides instead). The brand-assets-resolver needs them
+// so AIS users don't fall through to Coma's visuals (which would be a
+// regression of the brand isolation contract: "AIS chapters must remain
+// the same as now" per user spec 2026-09-30).
+//
+// These constants mirror the AIS URLs in
+// src/app/admin/mockups/shared/brand-assets.ts (BRAND_LOGO_LIGHT_URL etc.).
+// Keeping a separate copy here avoids a circular import —
+// brand-assets.ts imports from this module for the resolveBrandingImageUrlBrand
+// helper.
+const AIS_LOGO_LIGHT_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782505047256-bpy1ln.png";
+const AIS_LOGO_DARK_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785506059156-4chc96.png";
+const AIS_FAVICON_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393850874-uwkddr.webp";
+const AIS_LOGIN_HERO_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1785654449284-sqq083.png";
+const AIS_TEL_AVIV_LOGIN_HERO_URL =
+  "https://uojldinyokysycfc.public.blob.vercel-storage.com/brand-assets/1782393632010-jeorqc.png";
+const AIS_MASCOT_URL = "https://aisalon.massapro.com/images/falafel-meerkat.png";
+
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface BrandAssets {
@@ -84,7 +109,7 @@ export interface BrandAssets {
    * Useful for the onboarding hub UI — to show "✓ uploaded by you" vs
    * "✗ using Coma fallback — upload your own".
    */
-  provenance: Record<AssetKey, "brand-row" | "brand-config" | "coma-fallback" | "hardcoded">;
+  provenance: Record<AssetKey, "brand-row" | "brand-config" | "ais-hardcoded" | "coma-fallback" | "hardcoded">;
   /** Whether the Brand row exists in the DB at all. */
   dbRowExists: boolean;
 }
@@ -242,6 +267,11 @@ export async function resolveBrandAssets(
     codeValue: string | undefined,
     fallbackCodeValue: string | undefined,
     hardcodedFallback: string,
+    /** When true, fallbackCodeValue + hardcodedFallback are AIS-specific
+     *  hardcoded URLs (not Coma-fallbacks). Used to label provenance
+     *  correctly as "ais-hardcoded" so the onboarding hub shows
+     *  "AIS legacy" instead of "Coma fallback" for AIS brand assets. */
+    isAisFallback?: boolean,
   ): { url: string; provenance: BrandAssets["provenance"][AssetKey] } => {
     if (dbValue && dbValue.trim().length > 0) {
       return { url: dbValue, provenance: "brand-row" };
@@ -250,51 +280,75 @@ export async function resolveBrandAssets(
       return { url: codeValue, provenance: "brand-config" };
     }
     if (fallbackCodeValue && fallbackCodeValue.trim().length > 0) {
-      return { url: fallbackCodeValue, provenance: "coma-fallback" };
+      return {
+        url: fallbackCodeValue,
+        provenance: isAisFallback ? "ais-hardcoded" : "coma-fallback",
+      };
     }
-    return { url: hardcodedFallback, provenance: "hardcoded" };
+    return {
+      url: hardcodedFallback,
+      provenance: isAisFallback ? "ais-hardcoded" : "hardcoded",
+    };
   };
 
   // Map each asset key to its code-level config counterpart.
   // brand-config.ts uses different field names than the DB row, so we
   // bridge them explicitly here.
+  //
+  // AIS special-casing (2026-09-30): AIS brand-config has empty logo /
+  // heroBanner / favicon (the comments in brand-config.ts say "AIS uses
+  // chapter loginHero / SiteSetting overrides instead"). Without
+  // AIS-specific hardcoded URLs here, AIS would fall through to Coma's
+  // fallback (logo, hero, favicon) — a regression of "AIS chapters must
+  // remain the same as now". So when slug === "aisalon", we use the AIS
+  // hardcoded URLs (defined above) as the fallbackCodeValue for each
+  // asset. Non-AIS brands keep the original chain (brand-row →
+  // brand-config → Coma fallback → hardcoded).
+  const isAis = slug === "aisalon";
   const logoRes = resolveAsset(
     "logoUrl",
     dbRow?.logoUrl ?? null,
     codeBrand?.logo,
-    fallbackCodeBrand?.logo,
-    comaCodeBrand?.logo || "/brand/coma/logo.png",
+    isAis ? AIS_LOGO_DARK_URL : fallbackCodeBrand?.logo,
+    isAis ? AIS_LOGO_LIGHT_URL : (comaCodeBrand?.logo || "/brand/coma/logo.png"),
+    isAis,
   );
   const heroRes = resolveAsset(
     "heroBannerUrl",
     dbRow?.heroBannerUrl ?? null,
     codeBrand?.heroBanner,
-    fallbackCodeBrand?.heroBanner,
-    comaCodeBrand?.heroBanner || "",
+    isAis ? AIS_LOGIN_HERO_URL : fallbackCodeBrand?.heroBanner,
+    isAis ? AIS_TEL_AVIV_LOGIN_HERO_URL : (comaCodeBrand?.heroBanner || ""),
+    isAis,
   );
   const faviconRes = resolveAsset(
     "faviconUrl",
     dbRow?.faviconUrl ?? null,
     codeBrand?.favicon,
-    fallbackCodeBrand?.favicon,
-    comaCodeBrand?.favicon || "/favicon.ico",
+    isAis ? AIS_FAVICON_URL : fallbackCodeBrand?.favicon,
+    isAis ? AIS_FAVICON_URL : (comaCodeBrand?.favicon || "/favicon.ico"),
+    isAis,
   );
   // Note: brand-config.ts has no emailLogoUrl / mascotImageUrl / brandBookUrl
   // fields today (those are DB-only). So those three skip the "brand-config"
   // layer and fall straight from DB → coma-fallback → hardcoded.
+  // For AIS, we still special-case the emailLogo + mascot so AIS doesn't
+  // fall through to Coma's logo/mascot.
   const emailLogoRes = resolveAsset(
     "emailLogoUrl",
     dbRow?.emailLogoUrl ?? null,
     undefined,
-    fallbackCodeBrand?.logo, // email logo defaults to the brand's square logo
-    comaCodeBrand?.logo || "/brand/coma/logo.png",
+    isAis ? AIS_LOGO_DARK_URL : fallbackCodeBrand?.logo,
+    isAis ? AIS_LOGO_LIGHT_URL : (comaCodeBrand?.logo || "/brand/coma/logo.png"),
+    isAis,
   );
   const mascotRes = resolveAsset(
     "mascotImageUrl",
     dbRow?.mascotImageUrl ?? null,
     undefined,
-    undefined,
-    "", // no hardcoded mascot — empty string means "no mascot, show wordmark"
+    isAis ? AIS_MASCOT_URL : undefined,
+    "", // no hardcoded mascot for non-AIS — empty = no mascot, show wordmark
+    isAis,
   );
   const brandBookRes = resolveAsset(
     "brandBookUrl",
@@ -302,6 +356,7 @@ export async function resolveBrandAssets(
     undefined,
     undefined,
     "",
+    isAis,
   );
 
   // Step 5: assemble the BrandAssets object
