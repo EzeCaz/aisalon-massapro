@@ -547,7 +547,10 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           canvasW={CANVAS_W}
           canvasH={CANVAS_H}
           className="absolute"
-          style={{ left: "60px", top: "40px", width: "45%", zIndex: sectionZFor("speaker-info") }}
+          // Issue 5 fix (2026-09-30): increased default width from 45% to
+          // 52% so the speaker bio text doesn't overlap/clip. The bio is
+          // ~100 words at 22px which needs more horizontal space.
+          style={{ left: "60px", top: "40px", width: "52%", zIndex: sectionZFor("speaker-info") }}
           accentColor="#FF005A"
           label="Speaker info"
           guideId="speaker-info"

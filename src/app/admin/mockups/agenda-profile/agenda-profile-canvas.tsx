@@ -559,8 +559,9 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           label="QR + Branding"
           guideId="qr-branding"
         >
-          {/* QR code (bottom-left) */}
-          <div className="flex items-center gap-3">
+          {/* QR code (bottom-right) — moved from bottom-left to avoid
+              overlapping with the branding asset. Issue 6B fix (2026-09-30). */}
+          <div className="flex items-center justify-end gap-3">
             <div
               className="rounded-md bg-white p-2 shadow-md"
               style={{ width: "84px", height: "84px" }}
