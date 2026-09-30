@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X } from "lucide-react";
+import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X, Mail } from "lucide-react";
 import { displayFlag } from "@/lib/country-flag";
 import { toast } from "sonner";
 import { ChapterBrandImagesEditor } from "./chapter-brand-images-editor";
@@ -47,6 +47,7 @@ export function ChapterEditor({
   const [error, setError] = useState<string | null>(null);
   const [copiedPublic, setCopiedPublic] = useState(false);
   const [copiedAdmin, setCopiedAdmin] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   // Hero image upload state — tracks in-progress uploads so the UI can
   // show a spinner + disables Save while an upload is in flight (so the
   // admin can't save a chapter with a half-uploaded hero URL).
@@ -81,6 +82,12 @@ export function ChapterEditor({
   const brandQs = `?brand=${encodeURIComponent(brandSlug)}`;
   const registrationUrl = form.slug ? `${siteUrl}/c/${form.slug}${brandQs}` : "";
   const adminUrl = form.slug ? `${siteUrl}/admin/c/${form.slug}${brandQs}` : "";
+  // Round 2 (2026-09-30): per-chapter invite URL — the URL the brand admin
+  // shares with people to invite them to join the brand AND get tagged with
+  // this specific chapter (auto-joins them via the signup flow).
+  const inviteUrl = form.slug
+    ? `${siteUrl}/login${brandQs}&chapterSlug=${encodeURIComponent(form.slug)}`
+    : "";
 
   async function copyToClipboard(text: string, setter: (v: boolean) => void) {
     if (!text) return;
@@ -289,6 +296,48 @@ export function ChapterEditor({
                   <ExternalLink className="h-3.5 w-3.5" /> Open
                 </a>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Round 2 (2026-09-30): per-chapter invite URL — the URL the
+            brand admin shares with people to invite them to join the
+            brand AND get tagged with this specific chapter. New users
+            signing up via this URL get tagged with:
+              brandSlug = brandSlug (from the ?brand= param)
+              chapterId = this chapter's id (from the ?chapterSlug= param)
+            so they automatically join this chapter. */}
+        {inviteUrl && (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5 mb-1">
+                <Mail className="h-3 w-3" /> Chapter invite link
+              </p>
+              <p className="text-sm font-mono text-black break-all">
+                {inviteUrl}
+              </p>
+              <p className="text-xs text-black/60 mt-1.5">
+                Share this with people you want to invite to join this chapter.
+                New users signing up via this link get tagged with your brand
+                AND auto-join this chapter.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => copyToClipboard(inviteUrl, setCopiedInvite)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 text-white font-semibold px-3 py-1.5 text-xs hover:bg-emerald-700 transition"
+              >
+                {copiedInvite ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" /> Copy invite link
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}

@@ -2595,8 +2595,23 @@ function EditMemberDialog({
                     ))}
                   </select>
                 )
+              ) : normalizeRole(currentUserRole) === ROLES.BRAND_ADMIN ? (
+                // BRAND_ADMIN editing a user (Round 2, 2026-09-30): show a
+                // limited dropdown with sub-roles only. BRAND_ADMIN +
+                // SUPER_ADMIN are excluded — they can only be granted by
+                // Super Admin via /admin/brands.
+                <select
+                  value={memberRole}
+                  onChange={(e) => setMemberRole(e.target.value)}
+                  className="w-full rounded-md border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]/40"
+                >
+                  <option value={ROLES.MEMBER}>Member</option>
+                  <option value={ROLES.CHAPTER_ORGANIZER}>Chapter Organizer</option>
+                  <option value={ROLES.CO_HOST}>Co-Host (legacy)</option>
+                  <option value={ROLES.SPEAKER}>Speaker (legacy)</option>
+                </select>
               ) : (
-                // Non-Super-Admin: read-only display of current role.
+                // Non-Super-Admin non-BRAND-ADMIN: read-only display of current role.
                 <div className="flex items-center gap-2">
                   <span
                     className={`text-[0.65rem] font-bold uppercase px-2 py-1 rounded ${roleBadgeClass(member.role)}`}
@@ -2604,7 +2619,7 @@ function EditMemberDialog({
                     {roleLabel(member.role)}
                   </span>
                   <span className="text-[0.65rem] text-black/80">
-                    Only Super Admins can change roles.
+                    Only Super Admins and Brand Admins can change roles.
                   </span>
                 </div>
               )}
@@ -2618,6 +2633,15 @@ function EditMemberDialog({
                   and re-deploying. It cannot be granted via this dialog.
                 </p>
               )}
+            {normalizeRole(currentUserRole) === ROLES.BRAND_ADMIN && (
+              <p className="text-[0.65rem] text-black/50 leading-relaxed">
+                As a <strong>Brand Admin</strong>, you can promote users within
+                your brand to <strong>Chapter Organizer</strong>, <strong>Co-Host</strong>,
+                <strong> Speaker</strong>, or <strong>Member</strong>. To add a new
+                Brand Admin, ask the platform Super Admin to use the
+                &quot;Invite a brand admin&quot; section on /admin/brands.
+              </p>
+            )}
           </div>
 
           {/* ---- V7 hierarchy assignment (Super Admin only) ----

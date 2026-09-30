@@ -453,3 +453,148 @@ MassaPro · https://massapro.com`;
     html,
   });
 }
+
+// ── Member-role promotion notification (Round 2, 2026-09-30) ──────────────
+
+/**
+ * Notification email sent when a BRAND_ADMIN promotes a member within
+ * their brand to a sub-role (CHAPTER_ORGANIZER, CO_HOST, SPEAKER, or
+ * MEMBER — though "promotion" to MEMBER is technically a demotion from
+ * a higher role, the email still fires to inform the user of their new
+ * role + permissions).
+ *
+ * Best-effort — never fails the role change itself. Caller catches + logs.
+ *
+ * @param opts.to          The promoted user's email
+ * @param opts.leadName    The promoted user's name (null = "there")
+ * @param opts.brandSlug   The brand's slug (e.g. "ch")
+ * @param opts.brandDisplayName  The brand's display name (e.g. "Cazhype")
+ * @param opts.promotedBy   The BRAND_ADMIN's email (for the footer)
+ * @param opts.newRole      The new role string (e.g. "CHAPTER_ORGANIZER")
+ * @param opts.previousRole The user's previous role (e.g. "MEMBER")
+ */
+export async function sendMemberRolePromotionEmail(opts: {
+  to: string;
+  leadName?: string | null;
+  brandSlug: string;
+  brandDisplayName: string;
+  promotedBy: string;
+  newRole: string;
+  previousRole: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const brand = resolveEmailBrandContext(opts.brandSlug);
+  const firstName = opts.leadName?.split(" ")[0] || "there";
+  const base = process.env.NEXT_PUBLIC_APP_URL || "https://platform.joincoma.com";
+  const adminUrl = `${base.replace(/\/$/, "")}/admin`;
+  const eventsUrl = `${base.replace(/\/$/, "")}/events`;
+
+  // Human-readable role label + what they can now do.
+  const roleLabelMap: Record<string, { label: string; powers: string[] }> = {
+    CHAPTER_ORGANIZER: {
+      label: "Chapter Organizer",
+      powers: [
+        "Manage your chapter's events (create, edit, delete)",
+        "Add speakers and manage agendas",
+        "View + edit your chapter's brand images",
+        "Send email campaigns to your chapter's members",
+      ],
+    },
+    CO_HOST: {
+      label: "Co-Host",
+      powers: [
+        "Co-host events explicitly assigned to you",
+        "Add speakers and edit agendas for those events",
+        "View event-scoped data (registrants, speakers, check-in)",
+      ],
+    },
+    SPEAKER: {
+      label: "Speaker",
+      powers: [
+        "View the Event Prep page for events you're speaking at (read-only)",
+      ],
+    },
+    MEMBER: {
+      label: "Member",
+      powers: [
+        "RSVP to events",
+        "Message speakers",
+        "Upload photos from events",
+        "Browse the member directory",
+      ],
+    },
+  };
+  const roleInfo = roleLabelMap[opts.newRole] || roleLabelMap.MEMBER;
+
+  const subject = `You're now a ${roleInfo.label} on ${opts.brandDisplayName}`;
+  const text = `Hi ${firstName},
+
+Your role on the ${opts.brandDisplayName} platform has been updated by
+${opts.promotedBy}.
+
+Previous role: ${opts.previousRole}
+New role:      ${roleInfo.label}
+
+What you can do now:
+${roleInfo.powers.map((p) => `  - ${p}`).join("\n")}
+
+Get started:
+  Admin dashboard (if applicable): ${adminUrl}
+  Events: ${eventsUrl}
+
+If you think this role change was a mistake, reply to this email.
+
+— The ${brand.displayName} team
+MassaPro · https://massapro.com`;
+
+  const html = `
+<div style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #0a0a0a;">
+  <h1 style="font-size: 20px; font-weight: 800; margin: 0 0 16px;">
+    You're now a ${roleInfo.label} on ${opts.brandDisplayName}
+  </h1>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 0 0 16px;">
+    Hi ${firstName} — your role on the ${opts.brandDisplayName} platform has
+    been updated by <strong>${opts.promotedBy}</strong>.
+  </p>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 8px;">
+    <strong>Previous role:</strong> ${opts.previousRole}<br/>
+    <strong>New role:</strong> ${roleInfo.label}
+  </p>
+  <p style="font-size: 15px; line-height: 1.6; color: #444; margin: 16px 0 12px;">
+    What you can do now:
+  </p>
+  <ul style="font-size: 14px; line-height: 1.7; color: #444; margin: 0 0 24px; padding-left: 20px;">
+    ${roleInfo.powers.map((p) => `<li>${p}</li>`).join("")}
+  </ul>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 0 0 8px;">
+    <strong>Get started:</strong>
+  </p>
+  <p style="font-size: 13px; line-height: 1.6; color: #444; margin: 0 0 8px;">
+    Admin dashboard (if applicable):<br/>
+    <a href="${adminUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${adminUrl}</a>
+  </p>
+  <p style="font-size: 13px; line-height: 1.6; color: #444; margin: 0 0 24px;">
+    Events:<br/>
+    <a href="${eventsUrl}" style="color: ${brand.primaryColor}; word-break: break-all;">${eventsUrl}</a>
+  </p>
+  <p style="font-size: 13px; line-height: 1.6; color: #777; margin: 24px 0 0;">
+    If you think this role change was a mistake, reply to this email.
+  </p>
+  <p style="font-size: 14px; line-height: 1.6; color: #444; margin: 24px 0 0;">
+    — The ${brand.displayName} team<br/>
+    <span style="color: #777; font-size: 12px;">MassaPro · https://massapro.com</span>
+  </p>
+</div>`;
+
+  if (!emailConfigured()) {
+    console.log(`[member-role-promotion] SMTP not configured — would send to ${opts.to} (${opts.newRole})`);
+    return { ok: true };
+  }
+
+  return sendMail({
+    to: opts.to,
+    from: brand.fromName,
+    subject,
+    text,
+    html,
+  });
+}

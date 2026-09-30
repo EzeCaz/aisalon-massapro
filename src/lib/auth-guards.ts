@@ -64,6 +64,11 @@ export async function getCurrentUser() {
       role: true,
       countryId: true,
       chapterId: true,
+      // Round 2 (2026-09-30): include brandSlug so API routes can
+      // auto-tag chapters + emails + content with the brand admin's
+      // brand. Without this, the chapter-create API couldn't auto-
+      // tag BRAND_ADMIN's chapters with the right brandId.
+      brandSlug: true,
     },
   });
   if (!user) {

@@ -210,6 +210,18 @@ export default async function ChaptersPage() {
               </Link>
             </div>
           )}
+          {/* Round 2 (2026-09-30): BRAND_ADMIN gets a simplified "Add
+              chapter" button (no country management — they can create
+              chapters in any country, but country management is Super
+              Admin only). */}
+          {!isSuperAdmin && isBrandAdmin && (
+            <Link
+              href="/admin/chapters/new"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#820A7D] text-white font-semibold px-3 py-2 text-xs hover:bg-[#820A7D]/90 whitespace-nowrap"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add chapter
+            </Link>
+          )}
         </div>
 
         {/* Stats */}

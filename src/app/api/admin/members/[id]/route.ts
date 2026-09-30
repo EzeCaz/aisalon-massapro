@@ -10,6 +10,7 @@ import {
 } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/auth-guards";
 import { isBrandSlug } from "@/lib/brand/brand-config";
+import { sendMemberRolePromotionEmail } from "@/lib/brand-onboarding-email/templates";
 
 /**
  * PATCH /api/admin/members/[id]
@@ -129,10 +130,17 @@ export async function PATCH(
   // We use isSuperAdmin() (email-based OR DB-role-based) so that an
   // admin whose DB role hasn't synced yet (stale JWT) is still
   // authorized as long as their email is in the hard-coded allowlist.
+  //
+  // Round 2 (2026-09-30): BRAND_ADMIN can ALSO change roles, but ONLY
+  // for users within their own brand, and ONLY to a subset of roles
+  // (CHAPTER_ORGANIZER, CO_HOST, SPEAKER, MEMBER — never BRAND_ADMIN or
+  // SUPER_ADMIN). The brand-scoping check happens below.
   if (body.role !== undefined && body.role !== null) {
-    if (!isSuperAdmin({ email: me.email, role: me.role })) {
+    const isSa = isSuperAdmin({ email: me.email, role: me.role });
+    const isBa = normalizeRole(me.role) === ROLES.BRAND_ADMIN;
+    if (!isSa && !isBa) {
       return NextResponse.json(
-        { error: "Only a Super Admin can change a member's role.", debug: debugInfo },
+        { error: "Only a Super Admin or a matching BRAND_ADMIN can change a member's role.", debug: debugInfo },
         { status: 403 }
       );
     }
@@ -145,6 +153,52 @@ export async function PATCH(
         { error: `Invalid role. Allowed values: ${ASSIGNABLE_ROLES.join(", ")}.` },
         { status: 400 }
       );
+    }
+    // BRAND_ADMIN security gates (Round 2):
+    //   1. Cannot promote to BRAND_ADMIN or SUPER_ADMIN — only Super Admin
+    //      can grant BRAND_ADMIN (via /admin/brands invite-brand-admin).
+    //   2. Cannot touch a user OUTSIDE their brand — the target user's
+    //      brandSlug must match the caller's brandSlug.
+    //   3. Cannot touch a user whose role is already SUPER_ADMIN or
+    //      BRAND_ADMIN (you can't demote a peer admin from your own brand
+    //      — only Super Admin can do that).
+    if (isBa && !isSa) {
+      // Gate 1: limited assignable roles for BRAND_ADMIN.
+      const brandAdminAssignable = [
+        ROLES.CHAPTER_ORGANIZER,
+        ROLES.CO_HOST,
+        ROLES.SPEAKER,
+        ROLES.MEMBER,
+      ];
+      if (!brandAdminAssignable.includes(newRole)) {
+        return NextResponse.json(
+          { error: `BRAND_ADMIN can only assign roles: ${brandAdminAssignable.join(", ")}. Use /admin/brands to invite a brand admin.` },
+          { status: 403 }
+        );
+      }
+      // Gate 2: target user must be in the same brand.
+      const callerBrandSlug = me.brandSlug;
+      if (!callerBrandSlug) {
+        return NextResponse.json(
+          { error: "Your BRAND_ADMIN account has no brandSlug — fix this in /admin/brands first." },
+          { status: 403 }
+        );
+      }
+      // `existing` was loaded earlier in this handler with brandSlug in the
+      // select — re-use it to verify the target's brand.
+      if (existing.brandSlug !== callerBrandSlug) {
+        return NextResponse.json(
+          { error: `Cannot change role — target user is in brand "${existing.brandSlug ?? "(none)"}", you are in brand "${callerBrandSlug}". BRAND_ADMIN can only promote users within their own brand.` },
+          { status: 403 }
+        );
+      }
+      // Gate 3: cannot demote a SUPER_ADMIN or peer BRAND_ADMIN.
+      if (existing.role === ROLES.SUPER_ADMIN || existing.role === ROLES.BRAND_ADMIN) {
+        return NextResponse.json(
+          { error: `Cannot change the role of a ${existing.role}. Only Super Admin can demote admins.` },
+          { status: 403 }
+        );
+      }
     }
   }
 
@@ -326,6 +380,41 @@ export async function PATCH(
     data,
     include: { tags: true },
   });
+
+  // Round 2 (2026-09-30): send a notification email if the user's role
+  // was changed AND the caller is a BRAND_ADMIN. Best-effort — never
+  // fails the PATCH itself. Caller catches in the try/catch below.
+  // Super-Admin role changes don't fire an email here (they're handled
+  // by the /admin/brands invite-brand-admin endpoint separately).
+  if (
+    body.role !== undefined &&
+    body.role !== null &&
+    normalizeRole(me.role) === ROLES.BRAND_ADMIN &&
+    body.role !== existing.role
+  ) {
+    try {
+      const brandRow = me.brandSlug
+        ? await db.brand.findUnique({
+            where: { slug: me.brandSlug },
+            select: { displayName: true },
+          })
+        : null;
+      const result = await sendMemberRolePromotionEmail({
+        to: existing.email,
+        leadName: existing.name,
+        brandSlug: me.brandSlug ?? "aisalon",
+        brandDisplayName: brandRow?.displayName ?? "the brand",
+        promotedBy: me.email,
+        newRole: normalizeRole(body.role),
+        previousRole: existing.role ?? "MEMBER",
+      });
+      if (!result.ok) {
+        console.warn(`[members PATCH] Role-promotion email send failed: ${result.error}`);
+      }
+    } catch (emailErr) {
+      console.warn(`[members PATCH] Role-promotion email send threw:`, emailErr instanceof Error ? emailErr.message : emailErr);
+    }
+  }
 
   return NextResponse.json({
     user: {

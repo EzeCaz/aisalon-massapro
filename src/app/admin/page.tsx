@@ -30,6 +30,14 @@ function scopeBadge(scope: UserScope, brand: BrandConfig): { label: string; colo
   switch (scope.kind) {
     case "global":
       return { label: "Global scope", color: `bg-[${brand.primaryColor}] text-white` };
+    case "brand":
+      // Brand-scoped admin (BRAND_ADMIN role). Shows the brand's displayName
+      // so the admin immediately sees "Cazhype brand" instead of a generic
+      // "Country scope" badge (Issue 1, round 2, 2026-09-30).
+      return {
+        label: `${brand.displayName} brand`,
+        color: `bg-[${brand.accentColor}] text-white`,
+      };
     case "country":
       return { label: "Country scope", color: `bg-[${brand.accentColor}] text-white` };
     case "chapter":
@@ -173,11 +181,14 @@ export default async function AdminPage() {
   // (denormalized from Event.chapterId), or fall back to filtering by
   // the events in scope.
   // BRAND-SCOPED: Coma admins see no speakers (no events = no speakers).
+  // BRAND_ADMIN: scoped to chapters in their brand only.
   const speakerScopeChapterIds =
     isComa
       ? []
       : scope.kind === "global"
       ? null
+      : scope.kind === "brand"
+      ? (await db.chapter.findMany({ where: { brand: { slug: scope.brandSlug } }, select: { id: true } })).map((c) => c.id)
       : scope.kind === "country"
       ? (await db.chapter.findMany({ where: { countryId: scope.countryId }, select: { id: true } })).map((c) => c.id)
       : scope.kind === "chapter"
@@ -306,6 +317,33 @@ export default async function AdminPage() {
           </div>
         </div>
 
+        {/* ── Brand-scoped dashboard panel (BRAND_ADMIN only) ──────────
+            Round 2 (2026-09-30): shows brand-specific quick actions so a
+            brand admin can immediately:
+              - Invite a member (share the brand's /login?brand=<slug> URL)
+              - Create a new chapter (links to /admin/chapters/new)
+              - Edit branding (links to /onboarding/<slug>)
+              - Promote a member to a sub-role (links to /admin/members)
+            Also shows brand-specific stats:
+              - Chapters in the brand
+              - Members in the brand
+              - Events in the brand
+              - Upcoming emails
+            This panel only renders when effectiveRole === BRAND_ADMIN —
+            Super Admins + country-scoped ADMINs see the regular Stats
+            section below. */}
+        {normalizeRole(me.role) === ROLES.BRAND_ADMIN && scope.kind === "brand" && (
+          <BrandDashboardPanel
+            brandSlug={scope.brandSlug}
+            brandDisplayName={brand.displayName}
+            brandPrimaryColor={brand.primaryColor}
+            brandAccentColor={brand.accentColor}
+            chaptersCount={await db.chapter.count({ where: { brand: { slug: scope.brandSlug } } })}
+            membersCount={members.length}
+            eventsCount={events.length}
+          />
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
           <StatCard label="Members" value={members.length} accent={brand.primaryColor} />
@@ -406,6 +444,165 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />
       </div>
       <div className="mt-1 text-3xl font-extrabold text-black">{value}</div>
+    </div>
+  );
+}
+
+// ── Brand-scoped dashboard panel (Round 2, 2026-09-30) ───────────────────
+//
+// Shown only when the signed-in user is a BRAND_ADMIN. Gives them a
+// brand-specific landing with quick actions + brand-specific stats.
+// The regular Stats section + Members table + Events list still render
+// below — the brand dashboard is additive, not replacing.
+
+function BrandDashboardPanel({
+  brandSlug,
+  brandDisplayName,
+  brandPrimaryColor,
+  brandAccentColor,
+  chaptersCount,
+  membersCount,
+  eventsCount,
+}: {
+  brandSlug: string;
+  brandDisplayName: string;
+  brandPrimaryColor: string;
+  brandAccentColor: string;
+  chaptersCount: number;
+  membersCount: number;
+  eventsCount: number;
+}) {
+  // Build the brand's public invite URL — the URL the brand admin shares
+  // with members to invite them to the brand's community.
+  const siteUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://platform.joincoma.com");
+  const inviteUrl = `${siteUrl.replace(/\/$/, "")}/login?brand=${encodeURIComponent(brandSlug)}`;
+
+  return (
+    <div className="mb-10 rounded-xl border-2 p-6"
+      style={{ borderColor: brandPrimaryColor, backgroundColor: `${brandPrimaryColor}05` }}
+    >
+      <div className="flex flex-col gap-2 mb-5">
+        <p
+          className="text-[0.7rem] font-semibold uppercase tracking-[0.3em]"
+          style={{ color: brandAccentColor }}
+        >
+          {brandDisplayName} brand admin
+        </p>
+        <h2 className="text-2xl font-extrabold text-black">
+          Welcome back to your {brandDisplayName} dashboard
+        </h2>
+        <p className="text-sm text-black/80 max-w-2xl">
+          You&apos;re signed in as a <strong>BRAND_ADMIN</strong> for the{" "}
+          <strong>{brandDisplayName}</strong> brand. You can manage your
+          chapters, invite members, promote users within your brand, and
+          edit your branding. All actions below are scoped to your brand
+          only — you won&apos;t see or affect other brands&apos; data.
+        </p>
+      </div>
+
+      {/* Quick actions row */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {/* Invite member */}
+        <Link
+          href={`/onboarding/${brandSlug}#invite-link`}
+          className="inline-flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-4 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4" style={{ color: brandPrimaryColor }} />
+            <span className="text-sm font-semibold text-black">Invite member</span>
+          </div>
+          <span className="text-xs text-black/60">
+            Copy your brand&apos;s invite link to share with new members.
+            New users signing up via the link get tagged with your brand automatically.
+          </span>
+        </Link>
+
+        {/* Create chapter */}
+        <Link
+          href="/admin/chapters/new"
+          className="inline-flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-4 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <Globe2 className="h-4 w-4" style={{ color: brandPrimaryColor }} />
+            <span className="text-sm font-semibold text-black">Create chapter</span>
+          </div>
+          <span className="text-xs text-black/60">
+            Start a new city chapter for {brandDisplayName}. Auto-tagged with
+            your brand.
+          </span>
+        </Link>
+
+        {/* Edit branding */}
+        <Link
+          href={`/onboarding/${brandSlug}`}
+          className="inline-flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-4 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" style={{ color: brandPrimaryColor }} />
+            <span className="text-sm font-semibold text-black">Edit branding</span>
+          </div>
+          <span className="text-xs text-black/60">
+            Upload logo, hero, mascot. Edit palette, login copy, mascot
+            metadata.
+          </span>
+        </Link>
+
+        {/* Manage members */}
+        <Link
+          href="#community-members"
+          className="inline-flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-4 hover:shadow-sm transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <ArrowRight className="h-4 w-4" style={{ color: brandPrimaryColor }} />
+            <span className="text-sm font-semibold text-black">Manage members</span>
+          </div>
+          <span className="text-xs text-black/60">
+            Promote users within your brand to CHAPTER_ORGANIZER, CO_HOST,
+            SPEAKER, or MEMBER.
+          </span>
+        </Link>
+      </div>
+
+      {/* Brand-specific stats */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="border border-black/10 rounded-lg p-3 bg-white">
+          <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/80">
+            Chapters
+          </span>
+          <div className="text-2xl font-extrabold" style={{ color: brandPrimaryColor }}>
+            {chaptersCount}
+          </div>
+        </div>
+        <div className="border border-black/10 rounded-lg p-3 bg-white">
+          <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/80">
+            Members
+          </span>
+          <div className="text-2xl font-extrabold" style={{ color: brandAccentColor }}>
+            {membersCount}
+          </div>
+        </div>
+        <div className="border border-black/10 rounded-lg p-3 bg-white">
+          <span className="text-[0.6rem] font-bold uppercase tracking-widest text-black/80">
+            Events
+          </span>
+          <div className="text-2xl font-extrabold" style={{ color: brandPrimaryColor }}>
+            {eventsCount}
+          </div>
+        </div>
+      </div>
+
+      {/* Brand invite link display */}
+      <div className="rounded-lg bg-white border border-black/10 p-3">
+        <span className="text-[0.65rem] font-semibold uppercase tracking-widest text-black/80 block mb-1">
+          Your brand invite link
+        </span>
+        <code className="text-xs font-mono text-black/70 break-all">{inviteUrl}</code>
+      </div>
     </div>
   );
 }

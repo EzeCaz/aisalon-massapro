@@ -37,9 +37,13 @@ export async function POST(req: Request) {
   if (!countryId) return NextResponse.json({ error: "countryId is required" }, { status: 400 });
 
   // Scope check: Super Admin can pick any country. Admin can only create
-  // chapters in their own country.
+  // chapters in their own country. BRAND_ADMIN (Round 2, 2026-09-30) can
+  // create chapters in ANY country — their brand might span multiple
+  // countries. The chapter is auto-tagged with their brandId via the
+  // brandId field on the create payload below.
+  const isBrandAdmin = normalizeRole(user.role) === ROLES.BRAND_ADMIN;
   if (!isSuperAdmin({ email: user.email, role: user.role })) {
-    if (user.role !== ROLES.ADMIN || user.countryId !== countryId) {
+    if (!isBrandAdmin && (user.role !== ROLES.ADMIN || user.countryId !== countryId)) {
       return NextResponse.json({ error: "You can only create chapters in your own country." }, { status: 403 });
     }
   }
@@ -51,6 +55,23 @@ export async function POST(req: Request) {
   // Check slug uniqueness (findFirst: slug is not a unique selector since Phase 3A)
   const existing = await db.chapter.findFirst({ where: { slug } });
   if (existing) return NextResponse.json({ error: "Slug already in use" }, { status: 409 });
+
+  // Round 2 (2026-09-30): BRAND_ADMIN's chapters are auto-tagged with
+  // their brandId. Look up the brand row by the user's brandSlug.
+  let brandId: string | undefined;
+  if (isBrandAdmin) {
+    if (!user.brandSlug) {
+      return NextResponse.json({ error: "Your user account has no brandSlug — fix this in /admin/brands first." }, { status: 403 });
+    }
+    const brandRow = await db.brand.findUnique({
+      where: { slug: user.brandSlug },
+      select: { id: true },
+    });
+    if (!brandRow) {
+      return NextResponse.json({ error: `Brand "${user.brandSlug}" not found in DB.` }, { status: 404 });
+    }
+    brandId = brandRow.id;
+  }
 
   const chapter = await db.chapter.create({
     data: {
@@ -64,6 +85,11 @@ export async function POST(req: Request) {
       heroImageUrl,
       isActive,
       isPubliclyListed,
+      // Round 2: tag with the BRAND_ADMIN's brandId. Super Admin + country
+      // ADMINs don't set this — the chapter will have brandId=null (legacy
+      // pattern; they can manually assign a brand later via SQL or via
+      // the chapter editor if we add a brand dropdown in round 3).
+      ...(brandId ? { brandId } : {}),
     },
   });
 

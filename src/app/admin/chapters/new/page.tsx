@@ -25,11 +25,18 @@ export default async function NewChapterPage() {
   const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
   const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   const isSuperAdmin = isSuperAdminEmail(me.email) || me.role === ROLES.SUPER_ADMIN;
+  const isBrandAdmin = me.role === ROLES.BRAND_ADMIN;
   // Admin can create chapters only in their own country.
-  if (!isSuperAdmin && me.role !== ROLES.ADMIN) redirect("/admin/chapters");
+  // BRAND_ADMIN (Round 2, 2026-09-30) can create chapters in ANY country
+  // — their brand might span multiple countries. Their chapters are auto-
+  // tagged with me.brandId via the chapter-create API.
+  if (!isSuperAdmin && !isBrandAdmin && me.role !== ROLES.ADMIN) redirect("/admin/chapters");
 
+  // BRAND_ADMIN sees all countries (their brand might span multiple).
+  // Country-scoped ADMINs see only their own country.
+  // Super Admin sees everything.
   const countries = await db.country.findMany({
-    where: isSuperAdmin ? {} : { id: me.countryId ?? "___NEVER___" },
+    where: isSuperAdmin || isBrandAdmin ? {} : { id: me.countryId ?? "___NEVER___" },
     select: { id: true, name: true, code: true, flagEmoji: true },
     orderBy: { name: "asc" },
   });
