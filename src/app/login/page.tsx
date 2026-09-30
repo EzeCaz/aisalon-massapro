@@ -12,6 +12,7 @@ import {
 } from "@/lib/brand/resolve-brand";
 import type { BrandConfig } from "@/lib/brand/brand-config";
 import { BrandLogo, BrandGradientText } from "@/components/brand/brand-logo";
+import { resolveBrandAssets } from "@/lib/brand/brand-assets-resolver";
 
 /**
  * /login — brand-aware login page.
@@ -69,11 +70,33 @@ export async function generateMetadata({
   // metadata runs in a separate RSC pass so we re-resolve here).
   const h = await headers();
   const host = h.get("host");
-  const brand = resolveBrand({
+  const staticBrand = resolveBrand({
     urlBrandSlug: urlBrand,
     hostHeader: host,
     envDefaultSlug: getEnvDefaultBrandSlug(),
   });
+
+  // DB-AWARE OVERRIDE — same logic as the main LoginPage function. For
+  // new brands created via /admin/brands (cazhype, ...), overlay the
+  // DB row's displayName + heroBanner on top of the static config.
+  let dbBrand: Awaited<ReturnType<typeof resolveBrandAssets>> | null = null;
+  const requestedSlug = (urlBrand ?? "").trim().toLowerCase();
+  if (requestedSlug && requestedSlug !== "aisalon" && requestedSlug !== "coma") {
+    try {
+      dbBrand = await resolveBrandAssets(requestedSlug);
+      if (!dbBrand.dbRowExists) dbBrand = null;
+    } catch (err) {
+      console.warn("[/login metadata] DB brand lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  const brand = dbBrand
+    ? {
+        ...staticBrand,
+        slug: dbBrand.slug as typeof staticBrand.slug,
+        displayName: dbBrand.displayName,
+        heroBanner: dbBrand.assets.heroBannerUrl || staticBrand.heroBanner,
+      }
+    : staticBrand;
 
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
   const settings = await getEffectiveBrandImagesBySlug(chapterSlug, brand.slug);
@@ -145,11 +168,71 @@ export default async function LoginPage({
   // Per Brand-Field Platform Plan §2.5.1: URL → host → user → env
   const h = await headers();
   const host = h.get("host");
-  const brand: BrandConfig = resolveBrand({
+  const staticBrand: BrandConfig = resolveBrand({
     urlBrandSlug: urlBrand,
     hostHeader: host,
     envDefaultSlug: getEnvDefaultBrandSlug(),
   });
+
+  // ── DB-AWARE BRAND OVERRIDE (2026-09-30) ──────────────────────────────
+  // The static `resolveBrand()` only knows about the two hardcoded brands
+  // ("aisalon" + "coma"). For new brands created via /admin/brands
+  // (cazhype, danone, hitechai, ...), it falls back to Coma's BrandConfig.
+  // That means /login?brand=ch used to render Coma's branding even when
+  // cazhype had uploaded its own logo + hero + palette via the onboarding
+  // hub. This DB lookup overrides the static config when a Brand row
+  // exists in the DB with the requested slug.
+  //
+  // Resolution chain (per asset):
+  //   1. Brand DB row column (admin-uploaded via /onboarding/[slug])
+  //   2. AIS hardcoded URL (only if the brand is "aisalon")
+  //   3. Static BrandConfig (Coma fallback for unknown slugs)
+  //
+  // We coalesce into a `brand` object that mirrors the BrandConfig shape
+  // so the rest of the page reads from a single source of truth.
+  let dbBrand: Awaited<ReturnType<typeof resolveBrandAssets>> | null = null;
+  const requestedSlug = (urlBrand ?? "").trim().toLowerCase();
+  if (requestedSlug && requestedSlug !== "aisalon" && requestedSlug !== "coma") {
+    try {
+      dbBrand = await resolveBrandAssets(requestedSlug);
+      // Only override if the DB row exists for the requested slug —
+      // resolveBrandAssets always returns something (falls back to
+      // Coma), but dbRowExists tells us whether the brand is real.
+      if (!dbBrand.dbRowExists) dbBrand = null;
+    } catch (err) {
+      console.warn("[/login] DB brand lookup failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Build the effective brand object — start from the static config,
+  // then overlay the DB-uploaded assets + palette + copy if available.
+  const brand: BrandConfig = dbBrand
+    ? {
+        ...staticBrand,
+        // Override identity fields from the DB row.
+        slug: dbBrand.slug as BrandConfig["slug"],
+        displayName: dbBrand.displayName,
+        wordmark: dbBrand.slug, // DB brands use their slug as wordmark
+        tagline: dbBrand.displayName, // DB brands don't have a separate tagline field
+        primaryColor: dbBrand.palette.primary,
+        accentColor: dbBrand.palette.accent,
+        secondaryColor: dbBrand.palette.secondary,
+        gradient: dbBrand.palette.gradient,
+        // Override asset URLs from the DB row (admin-uploaded via
+        // /onboarding/[slug]). When null in the DB, the resolver
+        // already fell back to the appropriate default (Coma or AIS).
+        heroBanner: dbBrand.assets.heroBannerUrl || staticBrand.heroBanner,
+        favicon: dbBrand.assets.faviconUrl || staticBrand.favicon,
+        logo: dbBrand.assets.logoUrl || staticBrand.logo,
+        // Override login copy templates.
+        loginEyebrowTemplate: dbBrand.loginCopy.eyebrow,
+        loginHeadlineTemplate: dbBrand.loginCopy.headline,
+        loginSubtitle: dbBrand.loginCopy.subtitle,
+        loginFormHeading: dbBrand.loginCopy.formHeading,
+        loginFormSubheadingTemplate: dbBrand.loginCopy.formSubheading,
+        footerCredit: dbBrand.loginCopy.footerCredit,
+      }
+    : staticBrand;
 
   // Use the brand's default chapter when no chapterSlug is provided.
   const chapterSlug = rawSlug || brand.defaultChapterSlug;
