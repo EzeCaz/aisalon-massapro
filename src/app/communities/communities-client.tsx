@@ -50,6 +50,8 @@ export function CommunitiesClient({
   brandName,
   brandGradient,
   brandAccentColor,
+  myBrandSlug,
+  isComaUser,
 }: {
   communities: CommunityCard[];
   myCountryCode: string | null;
@@ -57,12 +59,22 @@ export function CommunitiesClient({
   brandName: string;
   brandGradient?: string;
   brandAccentColor?: string;
+  /** The signed-in user's brand slug (e.g. "ch" for cazhype). Null for anonymous. */
+  myBrandSlug?: string | null;
+  /** Whether the signed-in user is a Coma user (sees all brands' communities). */
+  isComaUser?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [countryFilter, setCountryFilter] = React.useState<string>("all");
   const [joined, setJoined] = React.useState<Set<string>>(new Set());
   const [dialogChapter, setDialogChapter] = React.useState<CommunityCard | null>(null);
+  // Issue 2 (2026-09-30): toggle to reveal other brands' communities.
+  // Default: hidden for non-Coma users (they only see their own brand's
+  // communities first). Coma users + anonymous see everything by default.
+  const [showMoreCommunities, setShowMoreCommunities] = React.useState<boolean>(
+    !!isComaUser || !myBrandSlug,
+  );
 
   const countries = React.useMemo(() => {
     const map = new Map<string, { name: string; flag: string | null }>();
@@ -95,12 +107,33 @@ export function CommunitiesClient({
 
   const isMemberOf = (c: CommunityCard) => c.isMember || joined.has(c.id);
 
+  // Issue 2 (2026-09-30): split into "your brand's communities" + "more".
+  // - Anonymous + Coma users: see everything by default (showMoreCommunities=true).
+  // - Non-Coma users (e.g. cazhype brand admin): see only their brand's
+  //   communities first. A "See more communities" button toggles
+  //   showMoreCommunities=true to reveal everyone else's.
+  const visibleByBrandScope = (c: CommunityCard) => {
+    if (showMoreCommunities) return true;
+    // Non-Coma user with brandSlug → only their brand's communities.
+    if (myBrandSlug && !isComaUser) {
+      return c.brandSlug === myBrandSlug;
+    }
+    // Coma user or anonymous → see everything.
+    return true;
+  };
+
   const nearby = myCountryCode
-    ? communities.filter((c) => c.countryCode === myCountryCode && matches(c))
+    ? communities.filter((c) => c.countryCode === myCountryCode && matches(c) && visibleByBrandScope(c))
     : [];
   const rest = myCountryCode
-    ? communities.filter((c) => c.countryCode !== myCountryCode && matches(c))
-    : communities.filter(matches);
+    ? communities.filter((c) => c.countryCode !== myCountryCode && matches(c) && visibleByBrandScope(c))
+    : communities.filter((c) => matches(c) && visibleByBrandScope(c));
+
+  // The "more communities" count — how many communities are hidden behind
+  // the toggle for non-Coma users. Used for the button label.
+  const hiddenMoreCount = myBrandSlug && !isComaUser
+    ? communities.filter((c) => c.brandSlug !== myBrandSlug).length
+    : 0;
 
   function handleJoined(chapter: JoinChapterInfo) {
     setJoined((prev) => new Set(prev).add(chapter.id));
@@ -300,6 +333,35 @@ export function CommunitiesClient({
               </div>
             </section>
           )}
+        </div>
+      )}
+
+      {/* Issue 2 (2026-09-30): "See more communities" toggle for non-Coma users.
+          Hidden when there are no other brands' communities to reveal,
+          or when the toggle is already on (showing the full list). */}
+      {hiddenMoreCount > 0 && !showMoreCommunities && (
+        <div className="mt-12 text-center">
+          <button
+            type="button"
+            onClick={() => setShowMoreCommunities(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-black text-white font-semibold px-6 py-3 text-sm hover:bg-black/90 transition-colors"
+          >
+            See more communities ({hiddenMoreCount} other{hiddenMoreCount === 1 ? "" : "s"})
+          </button>
+          <p className="mt-2 text-xs text-black/50">
+            Browse communities from other brands on the platform.
+          </p>
+        </div>
+      )}
+      {showMoreCommunities && myBrandSlug && !isComaUser && (
+        <div className="mt-12 text-center">
+          <button
+            type="button"
+            onClick={() => setShowMoreCommunities(false)}
+            className="inline-flex items-center gap-2 rounded-md border border-black/15 bg-white text-black font-semibold px-5 py-2 text-sm hover:bg-black/5 transition-colors"
+          >
+            ← Show only my brand&apos;s communities
+          </button>
         </div>
       )}
 

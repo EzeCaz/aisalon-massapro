@@ -83,9 +83,13 @@ export interface EmailBrandContext {
 export function resolveEmailBrandContext(
   brandSlug: string | null | undefined
 ): EmailBrandContext {
-  const slug: BrandSlug = brandSlug && isBrandSlug(brandSlug)
-    ? brandSlug
-    : FALLBACK_DEFAULT_BRAND;
+  // Phase 4 (2026-09-30): isBrandSlug() now accepts any URL-safe slug
+  // (e.g. "cazhype"), not just the two hardcoded BrandSlug union members.
+  // So we narrow to the known-Brands set here before indexing BRANDS /
+  // brandSiteConfig. Unknown slugs fall back to Coma's identity.
+  const rawSlug = brandSlug && isBrandSlug(brandSlug) ? brandSlug : null;
+  const slug: BrandSlug =
+    rawSlug === "aisalon" || rawSlug === "coma" ? rawSlug : FALLBACK_DEFAULT_BRAND;
   const brand = BRANDS[slug];
 
   // Per-brand site + email config. These are hardcoded because they're

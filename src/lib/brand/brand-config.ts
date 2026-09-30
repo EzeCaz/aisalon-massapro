@@ -345,13 +345,51 @@ export const FALLBACK_DEFAULT_BRAND: BrandSlug = "coma";
  * references a deleted brand.
  */
 export function getBrandConfig(slug: string): BrandConfig {
-  if (isBrandSlug(slug)) {
+  // Known slugs ("aisalon" | "coma") → return their hardcoded config.
+  // Unknown slugs (e.g. "cazhype", "danone") → fall back to Coma,
+  // the platform parent brand. The per-brand overrides (palette,
+  // logo, mascot, login copy) are resolved from the Brand DB row by
+  // `resolveBrandAssets(slug)` in src/lib/brand/brand-assets-resolver.ts
+  // — that's the brand-aware path used by the onboarding hub + mockup
+  // canvases. getBrandConfig() here is for the static brand identity
+  // only (wordmark, palette, tagline) — DB-driven brands inherit
+  // Coma's static config and override the per-asset URLs.
+  if (slug === "aisalon" || slug === "coma") {
     return BRANDS[slug];
   }
+  // Unknown slug → fall back to Coma. Don't throw — too many call sites
+  // rely on this never failing (root layout, login page, emails).
   return BRANDS[FALLBACK_DEFAULT_BRAND];
 }
 
-/** Type guard: is the given string a valid BrandSlug? */
+/** Type guard: whether a string is a valid brand slug. See isBrandSlug below. */
+/**
+ * Whether a string is a valid brand slug.
+ *
+ * Phase 4 (2026-09-30): historically this returned true ONLY for the
+ * two hardcoded slugs in the BrandSlug union ("aisalon" | "coma").
+ * That broke new brands created via /admin/brands — when a user
+ * signed up via /login?brand=cazhype, the signup route called
+ * `isBrandSlug("cazhype")` → false → silently dropped the brandSlug
+ * to null. The user's row never got tagged with their brand, and the
+ * events page's brand-visibility filter then fell back to "no brand
+ * = show me everything" (the legacy-fallback OR clauses).
+ *
+ * Fix: accept any lowercase slug matching the URL-safe pattern
+ * `[a-z0-9][a-z0-9-]{0,31}`. The actual brand existence check happens
+ * at the data layer (e.g. `db.brand.findUnique({ where: { slug } })`
+ * in resolveBrandAssets) — `isBrandSlug` here just validates the
+ * format so we can persist it on the User row.
+ *
+ * The BrandSlug union type is kept for the two hardcoded brands
+ * (BRANDS.coma, BRANDS.aisalon) but is NOT used as a runtime gate
+ * for new brands. Code that needs the brand's static config should
+ * call `getBrandConfig(slug)` which returns the config for known
+ * slugs or null for unknown ones.
+ */
 export function isBrandSlug(s: string): s is BrandSlug {
-  return s === "aisalon" || s === "coma";
+  // Accept any URL-safe lowercase slug (1-32 chars, [a-z0-9-]).
+  // The strict union check is intentionally NOT enforced here —
+  // see the docstring above for why this was changed in Phase 4.
+  return /^[a-z0-9][a-z0-9-]{0,31}$/.test(s);
 }

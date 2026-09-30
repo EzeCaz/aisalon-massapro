@@ -30,6 +30,7 @@ export function ChapterEditor({
     linkedinUrl: string | null;
     heroImageUrl: string | null;
     isActive: boolean;
+    isPubliclyListed: boolean;
   };
   countries: Country[];
   isSuperAdmin: boolean;
@@ -61,6 +62,7 @@ export function ChapterEditor({
     linkedinUrl: initial?.linkedinUrl ?? "",
     heroImageUrl: initial?.heroImageUrl ?? "",
     isActive: initial?.isActive ?? true,
+    isPubliclyListed: initial?.isPubliclyListed ?? true,
   });
 
   // Public registration URL — derived from the slug. This is the URL
@@ -453,6 +455,25 @@ export function ChapterEditor({
             className="rounded"
           />
           Active (chapter is visible and accepting new members)
+        </label>
+
+        <label className="flex items-start gap-2 text-sm text-black/80">
+          <input
+            type="checkbox"
+            checked={form.isPubliclyListed}
+            onChange={(e) => setForm({ ...form, isPubliclyListed: e.target.checked })}
+            className="rounded mt-0.5"
+          />
+          <span>
+            <strong>Publicly listed</strong> (chapter appears in /communities
+            and the events filter dropdown).
+            <span className="block text-xs text-black/60 mt-1">
+              Uncheck to make this community <strong>private</strong> — only
+              reachable via the direct registration URL you share with
+              invited members. Hidden from /communities and the events
+              filter dropdown for non-members.
+            </span>
+          </span>
         </label>
 
         {error && (

@@ -87,6 +87,7 @@ export async function ChapterEditContent({
             linkedinUrl: true,
             heroImageUrl: true,
             isActive: true,
+            isPubliclyListed: true,
           },
         })
       : await db.chapter.findUnique({
@@ -102,6 +103,7 @@ export async function ChapterEditContent({
             linkedinUrl: true,
             heroImageUrl: true,
             isActive: true,
+            isPubliclyListed: true,
           },
         });
   if (!chapter) notFound();
@@ -149,6 +151,7 @@ export async function ChapterEditContent({
             linkedinUrl: chapter.linkedinUrl,
             heroImageUrl: chapter.heroImageUrl,
             isActive: chapter.isActive,
+            isPubliclyListed: chapter.isPubliclyListed,
           }}
           countries={countries}
           isSuperAdmin={isSuperAdmin}

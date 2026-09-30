@@ -129,6 +129,9 @@ model Chapter {
   linkedinUrl          String? // per-chapter override
   heroImageUrl         String? // shown on the right of /c/[slug] hero
   isActive             Boolean                        @default(true)
+  // Issue 3 (2026-09-30): public/private visibility toggle. See
+  // prisma/schema.prisma for full docs. Mirrored here for sandbox parity.
+  isPubliclyListed    Boolean                        @default(true)
   users                User[]
   events               Event[]
   speakers             Speaker[]

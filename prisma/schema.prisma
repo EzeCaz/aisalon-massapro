@@ -187,6 +187,15 @@ model Chapter {
   // the chapter hero image uploader. Null = render the gradient-only hero.
   heroImageUrl         String?
   isActive             Boolean                        @default(true)
+  // Issue 3 (2026-09-30): public/private visibility toggle.
+  //   - true (default) → chapter appears in /communities and is
+  //     discoverable by anyone (signed-in or anonymous).
+  //   - false → chapter is "private": only reachable via direct URL
+  //     (/c/<slug>) shared by the brand admin. NOT listed on
+  //     /communities, NOT in the events filter dropdown for non-members.
+  //   - Super Admin + brand admin can toggle this via the chapter
+  //     editor (/admin/chapters/[id]).
+  isPubliclyListed    Boolean                        @default(true)
   users                User[]
   events               Event[]
   speakers             Speaker[]

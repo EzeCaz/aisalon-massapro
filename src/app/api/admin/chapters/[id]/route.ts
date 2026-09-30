@@ -51,6 +51,8 @@ export async function PATCH(
   if (typeof body.linkedinUrl === "string") data.linkedinUrl = normalizeHttpUrl(body.linkedinUrl);
   if (typeof body.heroImageUrl === "string") data.heroImageUrl = normalizeHttpUrl(body.heroImageUrl);
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
+  // Issue 3 (2026-09-30): public/private visibility toggle.
+  if (typeof body.isPubliclyListed === "boolean") data.isPubliclyListed = body.isPubliclyListed;
 
   // Country change — only Super Admin
   if (typeof body.countryId === "string" && body.countryId.trim() && body.countryId !== chapter.countryId) {

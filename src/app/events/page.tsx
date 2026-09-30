@@ -80,32 +80,37 @@ export default async function EventsPage() {
   const brand = getBrandConfig(me?.brandSlug ?? hostBrand.slug);
   const chapterName = me?.chapterName ?? "Tel Aviv";
 
-  // ── EVENT VISIBILITY (user spec 2026-09-19) ─────────────────────────
+  // ── EVENT VISIBILITY (user spec 2026-09-19 + revised 2026-09-30) ──
   //   - Coma platform users (brandSlug "coma") can see ANY event
   //     regardless of the community it belongs to.
-  //   - Members of other communities (e.g. AI Salon) canNOT see other
-  //     communities' events (example from spec: an AIS member must not
-  //     see a Danone community event). They only see events of their OWN
-  //     brand — plus legacy rows with no linked chapter/brand (which
-  //     predate the brand system and cannot be classified).
+  //   - Members of other communities (e.g. AI Salon, Cazhype) canNOT see
+  //     other communities' events (example from spec: an AIS member must
+  //     not see a Danone community event; a Cazhype admin must not see
+  //     AIS Tel Aviv events). They ONLY see events of their OWN brand —
+  //     no legacy fallback for pre-brand rows (those are platform-level
+  //     events that should only be visible to Coma users).
   //   - Cross-chapter events (explicitly marked by a Super Admin to show
-  //     in all chapters of a country) remain visible to everyone.
+  //     in all chapters of a country) remain visible to everyone — they
+  //     are still scoped through the brand, so cross-chapter AIS events
+  //     show to AIS users, cross-chapter cazhype events show to cazhype.
   //   - Anonymous visitors keep the current public behavior (see
   //     everything; sign-in is only needed to RSVP).
+  //
+  // REVISION 2026-09-30: the original implementation included legacy
+  // fallback OR clauses (`chapterId: null`, `chapterRef: null`,
+  // `chapterRef.brandId: null`) so pre-brand events would still appear.
+  // But that meant AIS Tel Aviv events (whose chapterRef.brandId is null
+  // because they predate the brand system) leaked to every non-Coma
+  // user. Removed those fallbacks — legacy events are now Coma-only.
   const myBrandSlug = (me?.brandSlug as string | null | undefined) ?? null;
   const isComaUser = myBrandSlug === "coma";
   const visibilityFilter: Prisma.EventWhereInput = {};
   if (me && !isComaUser) {
-    visibilityFilter.OR = [
-      // Legacy events without a linked chapter — cannot be classified.
-      { chapterId: null },
-      { chapterRef: null },
-      { chapterRef: { brandId: null } },
-      // Super-Admin-marked cross-community events are open to everyone.
-      { isCrossChapter: true },
-      // Own brand's community events.
-      { chapterRef: { brand: { slug: myBrandSlug ?? "aisalon" } } },
-    ];
+    // Non-Coma users see ONLY their own brand's events.
+    // - Direct chapter-scoped events where chapterRef.brand.slug === myBrandSlug
+    // - Cross-chapter events in their brand (isCrossChapter + chapterRef.brand.slug)
+    // No legacy fallback. No other brands' events. No Coma platform events.
+    visibilityFilter.chapterRef = { brand: { slug: myBrandSlug ?? "aisalon" } };
   }
 
   const events = await db.event.findMany({
@@ -138,6 +143,8 @@ export default async function EventsPage() {
   // VISIBILITY: non-Coma users only get their own brand's chapters (they
   // must not discover other communities through the filter dropdown —
   // community discovery happens on /communities instead).
+  // Issue 3 (2026-09-30): also exclude isPubliclyListed=false chapters
+  // (private communities — only reachable via direct URL).
   const chapterVisibility: Prisma.ChapterWhereInput =
     me && !isComaUser
       ? {
@@ -148,7 +155,7 @@ export default async function EventsPage() {
         }
       : {};
   const chapters = await db.chapter.findMany({
-    where: { isActive: true, ...chapterVisibility },
+    where: { isActive: true, isPubliclyListed: true, ...chapterVisibility },
     select: {
       id: true,
       name: true,

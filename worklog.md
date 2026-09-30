@@ -16390,3 +16390,44 @@ Deferred to round 3:
   - /admin/mockups landing page (gallery) — needs AdminBrandSlug type extended + brandAssetsFor() to handle non-aisalon/coma brands
   - Canvas components (speaker-intro-canvas.tsx, etc.) — currently call legacy resolveBrandingImageUrl() from shared/brand-assets.ts which returns AIS URLs. The brand-correct URLs are now baked into the sample-data builders, so canvases render correctly when the editor state is fresh — but if a user picks an event via the dropdown, mapEventToSpeakerIntroData re-injects AIS URLs. Round 3 would patch canvases to use resolveMockupBrandingUrl() + shouldRenderMascot() directly.
   - The "notification sent" toast on /admin/brands after promotion (round 3)
+
+---
+Task ID: brand-isolation-and-invite-link
+Agent: main (Super Z)
+Task: 4 issues — (1) eze@cazhype.com brand admin sees AIS Tel Aviv events, should see only cazhype's; (2) Communities page should show user's brand communities first + 'See more communities' button for all; (3) Admin can mark community public/private; (4) Show brand invite link
+
+Work Log:
+1. EVENTS LEAKING ACROSS BRANDS — root cause was isBrandSlug("ch") returned false because the type union was hardcoded to "aisalon" | "coma". The signup route was silently dropping brandSlug=null instead of persisting "ch". Plus the events page had legacy fallback OR clauses (`chapterId: null`, `chapterRef: null`, `chapterRef.brandId: null`) that leaked pre-brand events to every non-Coma user.
+   - Patched src/lib/brand/brand-config.ts: `isBrandSlug(s)` now accepts any URL-safe slug matching `[a-z0-9][a-z0-9-]{0,31}` (the strict union check is gone). Format-only validation; brand existence is checked at the data layer.
+   - Patched `getBrandConfig(slug)`: returns the hardcoded BRANDS entry for "aisalon" | "coma", falls back to Coma for unknown slugs (no crash on `BRANDS["ch"]`).
+   - Patched src/lib/email-brand-context.ts: narrows isBrandSlug output to the union before indexing BRANDS (avoids undefined access).
+   - Patched src/app/events/page.tsx: removed the legacy fallback OR clauses for non-Coma users. Now: `visibilityFilter.chapterRef = { brand: { slug: myBrandSlug } }` — non-Coma users see ONLY their own brand's events. Coma users see everything (platform parent).
+
+2. COMMUNITIES PAGE — show brand communities first + 'See more' toggle
+   - Patched src/app/communities/page.tsx: extended user lookup to fetch brandSlug + computed isComaUser flag. Passes both to CommunitiesClient.
+   - Patched src/app/communities/communities-client.tsx: added myBrandSlug + isComaUser props, showMoreCommunities state (defaults to true for Coma users + anonymous; false for non-Coma). Added visibleByBrandScope filter — when toggle is off + non-Coma user with brandSlug, only their brand's communities show. Added "See more communities (N others)" button + "← Show only my brand's communities" toggle.
+
+3. PUBLIC/PRIVATE VISIBILITY TOGGLE
+   - Added `isPubliclyListed Boolean @default(true)` to Chapter model in both prisma/schema.prisma + prisma/schema.sqlite-sandbox.prisma
+   - Created migration: prisma/migrations/20260930000000_add_chapter_is_publicly_listed/migration.sql (ALTER TABLE Chapter ADD COLUMN isPubliclyListed BOOLEAN NOT NULL DEFAULT true)
+   - Pushed to sandbox DB via bun run db:sandbox:push
+   - Patched src/app/communities/page.tsx: query filters `{ isActive: true, isPubliclyListed: true }` — private chapters hidden from /communities
+   - Patched src/app/events/page.tsx: chapter filter dropdown excludes private chapters
+   - Patched src/app/admin/chapters/chapter-editor.tsx: added isPubliclyListed to form state + a new "Publicly listed" checkbox below the "Active" checkbox, with explanatory copy about what private means
+   - Patched src/app/api/admin/chapters/route.ts + [id]/route.ts: persist isPubliclyListed on create + update
+   - Patched src/app/admin/chapters/chapter-edit-content.tsx: includes isPubliclyListed in select + initial mapping
+
+4. BRAND INVITE LINK
+   - Added BrandInviteLink component to src/app/onboarding/[brandSlug]/onboarding-hub-client.tsx (below the email flow section)
+   - Shows two URLs with Copy buttons:
+     * Member invite link: <siteUrl>/login?brand=<slug> — for members to sign up
+     * Apply-to-bring-your-brand link: <siteUrl>/apply?brand=<slug> — for community leads
+   - Uses navigator.clipboard.writeText with input.select() fallback for older browsers
+   - Shows a tip pointing to /admin/brands "Invite a brand admin" for promoting existing users to BRAND_ADMIN
+   - Imported Link as LinkIcon + Copy as CopyIcon from lucide-react
+
+Stage Summary:
+- Issue 1: brandSlug now persists correctly for any URL-safe slug (cazhype, danone, etc.). Events page filters strictly by chapterRef.brand.slug — no legacy fallback. Verified via curl + browser that eze@cazhype.com sees "No events yet" (cazhype has no events in sandbox), no AIS events leak.
+- Issue 2: Communities page split — non-Coma users see only their brand's communities first, "See more communities (N)" button reveals everyone else's. Coma users + anonymous see everything by default.
+- Issue 3: Chapter.isPubliclyListed column added. Migration ready. Chapter editor has the "Publicly listed" checkbox. /communities + events filter dropdown both exclude private chapters.
+- Issue 4: /onboarding/[brandSlug] now shows an "Invite link for <Brand>" panel with two URLs + Copy buttons. Verified in sandbox: cazhype brand admin sees "Invite link for Cazhype" with http://localhost:3000/login?brand=ch ready to copy.

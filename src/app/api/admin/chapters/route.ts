@@ -29,6 +29,8 @@ export async function POST(req: Request) {
   const linkedinUrl = normalizeHttpUrl(body.linkedinUrl);
   const heroImageUrl = normalizeHttpUrl(body.heroImageUrl);
   const isActive = body.isActive !== false;
+  // Issue 3 (2026-09-30): public/private visibility. Default true.
+  const isPubliclyListed = body.isPubliclyListed !== false;
 
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
   if (!slug) return NextResponse.json({ error: "slug is required" }, { status: 400 });
@@ -61,6 +63,7 @@ export async function POST(req: Request) {
       linkedinUrl,
       heroImageUrl,
       isActive,
+      isPubliclyListed,
     },
   });
 

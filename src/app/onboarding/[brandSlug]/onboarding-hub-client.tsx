@@ -18,6 +18,9 @@ import {
   Sparkles,
   ImageIcon,
   FileText,
+  // Issue 4 (2026-09-30): brand invite link panel icons
+  Link as LinkIcon,
+  Copy as CopyIcon,
   Save,
   Rocket,
 } from "lucide-react";
@@ -876,6 +879,12 @@ export function OnboardingHubClient({
       {/* Email flow */}
       <EmailTestButtons brandSlug={assets.slug} />
 
+      {/* Issue 4 (2026-09-30): Brand invite link panel. Shows the brand's
+          public login URL with a copy-to-clipboard button so the admin
+          can share it with members. New users signing up via this URL
+          get tagged with brandSlug automatically. */}
+      <BrandInviteLink brandSlug={assets.slug} brandDisplayName={assets.displayName} />
+
       {/* Admin footer note */}
       <div className="text-xs text-muted-foreground border-t border-border pt-4">
         <p>
@@ -886,5 +895,135 @@ export function OnboardingHubClient({
         </p>
       </div>
     </div>
+  );
+}
+
+// ── Brand invite link panel (Issue 4, 2026-09-30) ────────────────────────
+
+function BrandInviteLink({
+  brandSlug,
+  brandDisplayName,
+}: {
+  brandSlug: string;
+  brandDisplayName: string;
+}) {
+  const [copied, setCopied] = React.useState<"login" | "apply" | null>(null);
+
+  // Build the public invite URLs.
+  // - loginUrl: for members to sign in OR sign up (new users → /signup
+  //   tab → password emailed). The ?brand= param tags the new user with
+  //   brandSlug automatically.
+  // - applyUrl: for community leads who want to apply to bring a brand
+  //   to Coma (different flow — brand-onboarding application).
+  const siteUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://platform.joincoma.com");
+  const loginUrl = `${siteUrl.replace(/\/$/, "")}/login?brand=${encodeURIComponent(brandSlug)}`;
+  const applyUrl = `${siteUrl.replace(/\/$/, "")}/apply?brand=${encodeURIComponent(brandSlug)}`;
+
+  async function copyToClipboard(url: string, which: "login" | "apply") {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      // Clipboard API not available (older browser, insecure context).
+      // Fallback: select + highlight the input.
+      const input = document.getElementById(`invite-url-${which}`) as HTMLInputElement | null;
+      if (input) {
+        input.select();
+        input.setSelectionRange(0, 99999);
+      }
+    }
+  }
+
+  return (
+    <section className="border border-border rounded-lg bg-card p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <LinkIcon className="h-4 w-4 text-muted-foreground" />
+        <h3 className="font-semibold text-sm flex-1">
+          Invite link for {brandDisplayName}
+        </h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Share this URL with people you want to invite to join the {brandDisplayName} community.
+        New users who sign up via this link get tagged with your brand automatically — they
+        see your events, your members, your branding.
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+            Member invite link (sign in / sign up)
+          </label>
+          <div className="flex items-stretch gap-2">
+            <input
+              id="invite-url-login"
+              type="text"
+              readOnly
+              value={loginUrl}
+              className="flex-1 font-mono text-xs px-3 py-2 rounded border border-border bg-background text-foreground/80"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              onClick={() => copyToClipboard(loginUrl, "login")}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {copied === "login" ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="h-3.5 w-3.5" /> Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+            Apply-to-bring-your-brand link (for community leads)
+          </label>
+          <div className="flex items-stretch gap-2">
+            <input
+              id="invite-url-apply"
+              type="text"
+              readOnly
+              value={applyUrl}
+              className="flex-1 font-mono text-xs px-3 py-2 rounded border border-border bg-background text-foreground/80"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              onClick={() => copyToClipboard(applyUrl, "apply")}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md border border-border hover:bg-accent/5"
+            >
+              {copied === "apply" ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="h-3.5 w-3.5" /> Copy
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground mt-3">
+          <strong>Tip:</strong> To invite a specific person as a brand admin
+          (not just a member), use the &quot;Invite a brand admin&quot;
+          section on <code>/admin/brands</code> instead — that promotes
+          an existing user to <code>BRAND_ADMIN</code> for this brand.
+        </p>
+      </div>
+    </section>
   );
 }

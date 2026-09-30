@@ -44,6 +44,8 @@ export default async function CommunitiesPage() {
     chapterId: string | null;
     countryId: string | null;
     primaryChapterSlug: string | null;
+    brandSlug: string | null;
+    isComaUser: boolean;
   } | null = null;
 
   if (session?.user?.email) {
@@ -56,6 +58,7 @@ export default async function CommunitiesPage() {
         onboardedAt: true,
         chapterId: true,
         countryId: true,
+        brandSlug: true,
         chapter: { select: { slug: true } },
       },
     });
@@ -68,12 +71,21 @@ export default async function CommunitiesPage() {
       chapterId: meRow.chapterId,
       countryId: meRow.countryId,
       primaryChapterSlug: meRow.chapter?.slug ?? null,
+      brandSlug: meRow.brandSlug,
+      // Coma users see every brand's communities (they're the platform parent).
+      // Non-Coma users see their own brand's communities first, then a "See
+      // more communities" button reveals everyone else's (Issue 2 fix,
+      // 2026-09-30).
+      isComaUser: meRow.brandSlug === "coma",
     };
   }
 
-  // Load every active chapter with its brand + country + counts.
+  // Load every active + publicly-listed chapter with its brand + country + counts.
+  // Issue 3 (2026-09-30): isPubliclyListed=false chapters are private — only
+  // reachable via direct URL (/c/<slug>) shared by the brand admin. They
+  // do NOT appear in the /communities discover grid.
   const chapters = await db.chapter.findMany({
-    where: { isActive: true },
+    where: { isActive: true, isPubliclyListed: true },
     select: {
       id: true,
       name: true,
@@ -172,6 +184,11 @@ export default async function CommunitiesPage() {
           brandName={brand.displayName}
           brandGradient={brand.gradient}
           brandAccentColor={brand.secondaryColor}
+          // Issue 2 fix (2026-09-30): pass the user's brandSlug + isComaUser
+          // flag so CommunitiesClient can split the grid into "Your brand's
+          // communities" + a "See more communities" expandable section.
+          myBrandSlug={me?.brandSlug ?? null}
+          isComaUser={me?.isComaUser ?? false}
         />
       </main>
       <SiteFooter brandName={brand.displayName} chapterName={city} tagline={brand.tagline} />
