@@ -16500,3 +16500,33 @@ Stage Summary:
 - All 3 user-reported issues addressed.
 - Pre-existing TS errors in agenda-profile/event-profile-canvas.tsx and
   non-member-dashboard.tsx (chart typing) remain — not caused by this task.
+
+---
+Task ID: brand-images-list-all-onboarding-uploads
+Agent: main
+Task: When logged in as ch (BRAND_ADMIN for "cazhype"), only ONE image was
+  visible on /admin/images (the mascot). Expected: ALL images uploaded via
+  the brand onboarding form (logoUrl, heroBannerUrl, faviconUrl,
+  emailLogoUrl, mascotImageUrl).
+
+Root Cause (2 issues):
+1. Vercel Blob list() used prefix="brand-assets/" (all brands combined)
+   with only 5 pages × 100 blobs = 500 max. With many AISalon legacy
+   uploads under brand-assets/, the ch/ brand's blobs were cut off by
+   the pagination limit before being reached.
+2. Local sandbox fallback only read top-level brand-assets/<brand>/
+   (one level deep), missing nested <assetKey>/ subfolders that the
+   onboarding form uploads to (e.g. brand-assets/ch/mascotImageUrl/<file>).
+
+Fix (commit 925054a):
+- Vercel Blob: when activeBrand is set, scope list() to
+  `brand-assets/<brand>/` directly. More efficient + avoids pagination
+  cutoff. list() returns all files matching prefix regardless of folder
+  depth, so nested <assetKey>/<file> uploads are included. Bumped
+  iteration limit 5→10 pages (1000 blobs) as safety margin for Super Admin.
+- Local sandbox: walk brand folder recursively (walkDir helper) so
+  nested <assetKey>/<file> uploads are picked up too. Displayed filename
+  includes subfolder path (e.g. "mascotImageUrl/<file>") so admin can
+  tell which onboarding asset each image came from.
+
+Build: ✓ Compiled successfully in 47s.
