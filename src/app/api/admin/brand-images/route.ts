@@ -95,6 +95,9 @@ export async function GET(req: NextRequest) {
   const activeBrand = brandParam && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandParam) ? brandParam : null;
 
   // 1. List stock images from the hidden .images/ folder.
+  // Phase 4 (2026-10-01): stock images are AIS-specific. Hide them
+  // for non-Coma non-AIS brands (BRAND_ADMIN users shouldn't see AIS
+  // stock images like the falafel meerkat, TLV skyline, etc.).
   const stock: Array<{
     name: string;
     size: number;
@@ -102,6 +105,9 @@ export async function GET(req: NextRequest) {
     url: string;
     kind: "stock";
   }> = [];
+  const showStockImages =
+    !activeBrand || activeBrand === "coma" || activeBrand === "aisalon";
+  if (showStockImages) {
   try {
     const dir = path.join(process.cwd(), ".images");
     const entries = await fs.readdir(dir);
@@ -128,6 +134,7 @@ export async function GET(req: NextRequest) {
     console.warn("[brand-images] could not read .images folder:", e);
     // Return empty stock list — uploaded images are still returned.
   }
+  } // end if (showStockImages)
 
   // 2. List uploaded images. Try Vercel Blob first; fall back to local disk.
   const uploaded: Array<{
@@ -156,9 +163,22 @@ export async function GET(req: NextRequest) {
           const slashIdx = rest.indexOf("/");
           const blobBrand = slashIdx > 0 ? rest.slice(0, slashIdx) : null;
           const fileName = slashIdx > 0 ? rest.slice(slashIdx + 1) : rest;
-          // Brand tab filter — legacy (brandless) uploads stay visible
-          // under every tab so nothing disappears after the split.
+          // Brand filter (Phase 4, 2026-10-01):
+          //   - Super Admin (global scope, brand=null or brand="coma"):
+          //     sees everything (all brands + legacy).
+          //   - Non-Super-Admin with a specific brand (e.g. BRAND_ADMIN
+          //     with brand="ch"): sees ONLY their brand's images. Legacy
+          //     (brandless) images are hidden — they're AIS-specific
+          //     uploads that shouldn't leak to other brands.
           if (activeBrand && blobBrand && blobBrand !== activeBrand) continue;
+          // For non-Super-Admin non-Coma users, hide legacy (brandless)
+          // images — they're all AIS uploads from before the brand split.
+          if (
+            activeBrand &&
+            activeBrand !== "coma" &&
+            activeBrand !== "aisalon" &&
+            blobBrand === null
+          ) continue;
           uploaded.push({
             name: fileName || blob.pathname,
             size: blob.size,
@@ -243,28 +263,37 @@ export async function GET(req: NextRequest) {
     }
   } else {
     // Local sandbox fallback: read /public/uploads/brand-assets/
+    // Phase 4 (2026-10-01): for non-Coma non-AIS brands, only show
+    // images in the brand-specific subfolder.
     try {
       await fs.mkdir(LOCAL_BRAND_DIR, { recursive: true });
-      const entries = await fs.readdir(LOCAL_BRAND_DIR);
       const ALLOWED_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg"]);
-      for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
-        const ext = path.extname(name).toLowerCase();
-        if (!ALLOWED_EXT.has(ext)) continue;
-        let size = 0;
+
+      // If activeBrand is set and not coma/aisalon, only read the
+      // brand-specific subfolder (LOCAL_BRAND_DIR/<brand>/).
+      // Otherwise read the top-level (legacy behavior).
+      const isBrandScoped = activeBrand && activeBrand !== "coma" && activeBrand !== "aisalon";
+      if (isBrandScoped) {
+        const brandDir = path.join(LOCAL_BRAND_DIR, activeBrand!);
         try {
-          const stat = await fs.stat(path.join(LOCAL_BRAND_DIR, name));
-          size = stat.size;
-        } catch {
-          /* ignore */
+          const entries = await fs.readdir(brandDir);
+          for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
+            const ext = path.extname(name).toLowerCase();
+            if (!ALLOWED_EXT.has(ext)) continue;
+            let size = 0;
+            try { const stat = await fs.stat(path.join(brandDir, name)); size = stat.size; } catch { /* ignore */ }
+            uploaded.push({ name, size, mimeType: extToMime(ext), url: `${LOCAL_BRAND_URL}/${activeBrand!}/${encodeURIComponent(name)}`, kind: "uploaded", brand: activeBrand });
+          }
+        } catch { /* brand dir doesn't exist yet — empty list */ }
+      } else {
+        const entries = await fs.readdir(LOCAL_BRAND_DIR);
+        for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
+          const ext = path.extname(name).toLowerCase();
+          if (!ALLOWED_EXT.has(ext)) continue;
+          let size = 0;
+          try { const stat = await fs.stat(path.join(LOCAL_BRAND_DIR, name)); size = stat.size; } catch { /* ignore */ }
+          uploaded.push({ name, size, mimeType: extToMime(ext), url: `${LOCAL_BRAND_URL}/${encodeURIComponent(name)}`, kind: "uploaded", brand: null });
         }
-        uploaded.push({
-          name,
-          size,
-          mimeType: extToMime(ext),
-          url: `${LOCAL_BRAND_URL}/${encodeURIComponent(name)}`,
-          kind: "uploaded",
-          brand: null,
-        });
       }
     } catch (e) {
       console.warn("[brand-images] could not read local brand-assets dir:", e);
@@ -483,7 +512,65 @@ export async function POST(req: NextRequest) {
 
   const buf = Buffer.from(await file.arrayBuffer());
   const ext = safeFileExtension(file.name, file.type, "bin");
-  const filename = uniqueBlobFilename(ext);
+
+  // Phase 4 (2026-10-01): keep the original filename (not a random
+  // timestamp-based name). If a file with the same name already exists
+  // in the same brand folder, append a correlative number: meerkat.jpg
+  // → meerkat01.jpg → meerkat02.jpg → meerkat03.jpg etc.
+  const originalBaseName = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 80);
+  const baseName = originalBaseName || "upload";
+  let filename = `${baseName}.${ext}`;
+
+  // Check for existing files with the same name in Vercel Blob or local.
+  // For Vercel Blob: we list the brand-assets/<brand>/ prefix and check
+  // for matching names. For local: we check the filesystem.
+  if (hasBlob()) {
+    try {
+      const listPrefix = brandSegment
+        ? `brand-assets/${brandSegment}/`
+        : "brand-assets/";
+      const existing = new Set<string>();
+      let cursor: string | undefined = undefined;
+      for (let i = 0; i < 5; i++) {
+        const result = await list({ prefix: listPrefix, limit: 100, cursor });
+        for (const blob of result.blobs) {
+          const name = blob.pathname.slice(listPrefix.length);
+          existing.add(name);
+        }
+        if (!result.hasMore || !result.cursor) break;
+        cursor = result.cursor;
+      }
+      // Find the next available correlative number
+      let counter = 1;
+      while (existing.has(filename)) {
+        const padded = String(counter).padStart(2, "0");
+        filename = `${baseName}${padded}.${ext}`;
+        counter++;
+      }
+    } catch (e) {
+      // If listing fails (rare), fall back to uniqueBlobFilename
+      console.warn("[brand-images] could not list existing files for name check:", e);
+      filename = uniqueBlobFilename(ext);
+    }
+  } else {
+    // Local sandbox: check the filesystem
+    const localDir = brandSegment
+      ? path.join(LOCAL_BRAND_DIR, brandSegment)
+      : LOCAL_BRAND_DIR;
+    try {
+      await fs.mkdir(localDir, { recursive: true });
+      const entries = await fs.readdir(localDir);
+      const existing = new Set(entries);
+      let counter = 1;
+      while (existing.has(filename)) {
+        const padded = String(counter).padStart(2, "0");
+        filename = `${baseName}${padded}.${ext}`;
+        counter++;
+      }
+    } catch {
+      // dir doesn't exist — name is available
+    }
+  }
 
   // ---- Production path: Vercel Blob ----
   if (hasBlob()) {

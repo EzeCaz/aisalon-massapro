@@ -190,7 +190,7 @@ export function ChapterEditor({
             type="text"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Tel Aviv"
+            placeholder="New York"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
@@ -364,7 +364,7 @@ export function ChapterEditor({
               type="text"
               value={form.city}
               onChange={(e) => setForm({ ...form, city: e.target.value })}
-              placeholder="Tel Aviv-Yafo"
+              placeholder="New York City"
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
             />
           </Field>
