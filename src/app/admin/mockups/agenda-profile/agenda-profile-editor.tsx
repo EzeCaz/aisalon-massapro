@@ -936,7 +936,7 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon" }:
                 height: "1500px",
               }}
             >
-              <AgendaProfileCanvas
+              <AgendaProfileCanvas brandSlug={brandSlug}
                 ref={canvasRef}
                 data={data}
                 editable={editMode}

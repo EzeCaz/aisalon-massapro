@@ -146,6 +146,7 @@ type HeroGradientConfig = NonNullable<SpeakerIntroData["style2HeroGradient"]>;
 // has its own ALL_HERO_SHAPES constant.
 
 type Props = {
+  brandSlug?: string;
   data: SpeakerIntroData;
   className?: string;
   sectionsEditable?: boolean;
@@ -1387,7 +1388,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
                 {data.brandingAsset?.imageUrl || data.brandingAsset?.theme ? (
                   <Image
-                    src={resolveBrandingImageUrl(data.brandingAsset)}
+                    src={resolveBrandingImageUrl(data.brandingAsset, undefined, brandSlug)}
                     alt="AI Salon"
                     height={36}
                     width={36}

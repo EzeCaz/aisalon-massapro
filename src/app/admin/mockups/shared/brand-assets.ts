@@ -67,21 +67,54 @@ export const TEL_AVIV_LOGIN_BANNER_URL =
  * Resolution order:
  *   1. If `imageUrl` is explicitly set on the brandingAsset, use it as-is
  *      (admin override — highest priority).
- *   2. Else if `theme === "light"`, use BRAND_LOGO_LIGHT_URL.
- *   3. Else if `theme === "dark"`, use BRAND_LOGO_DARK_URL.
- *   4. Else (no theme, no imageUrl), fall back to the dark logo (the
+ *   2. If `brandSlug` is provided AND is NOT "aisalon", return the Coma
+ *      logo URL (for non-AIS brands, the AIS hardcoded URLs are wrong).
+ *   3. Else if `theme === "light"`, use BRAND_LOGO_LIGHT_URL.
+ *   4. Else if `theme === "dark"`, use BRAND_LOGO_DARK_URL.
+ *   5. Else (no theme, no imageUrl), fall back to the dark logo (the
  *      "new" AI Salon logo per TSK-0035, previously the default across
  *      all mockups).
+ *
+ * @param brandingAsset — the per-mockup-element override (unchanged API)
+ * @param fallbackUrl — legacy fallback (defaults to BRAND_LOGO_DARK_URL)
+ * @param brandSlug — optional brand slug. When "aisalon" or null/undefined,
+ *                   the legacy AIS URLs are used (layers 3-4). When any
+ *                   other slug ("coma", "ch", "cazhype", ...), the Coma
+ *                   logo is used instead (so non-AIS brands don't get the
+ *                   AIS meerkat hardcoded logo). Issue 6 fix (2026-09-30).
  */
 export function resolveBrandingImageUrl(
   brandingAsset: { imageUrl?: string; theme?: "light" | "dark" } | undefined,
   fallbackUrl: string = BRAND_LOGO_DARK_URL,
+  brandSlug?: string | null,
 ): string {
+  // Layer 1: explicit admin override
   if (brandingAsset?.imageUrl) return brandingAsset.imageUrl;
+
+  // Layer 2: brand-aware fallback. For non-AIS brands, use the Coma logo
+  // instead of the AIS hardcoded URLs. This fixes the issue where every
+  // mockup canvas showed the AIS meerkat logo for cazhype (and any other
+  // non-AIS brand) even after the brand admin uploaded their own logo.
+  // The brandingAsset.imageUrl layer above handles the "brand has uploaded
+  // a logo" case (set by buildSampleData). This layer handles the
+  // "brandingAsset has no imageUrl but the brand isn't AIS" case — which
+  // happens when the editor loads from localStorage (old cached state
+  // without the imageUrl field set by buildSampleData).
+  if (brandSlug && brandSlug !== "aisalon") {
+    // Non-AIS brand with no explicit imageUrl → use the Coma logo as the
+    // placeholder. The brand admin can override per-mockup via the
+    // "Edit images" mode in the editor.
+    return COMA_LOGO_FALLBACK_URL;
+  }
+
+  // Layer 3-4: legacy AIS default (theme-based logo)
   if (brandingAsset?.theme === "light") return BRAND_LOGO_LIGHT_URL;
   if (brandingAsset?.theme === "dark") return BRAND_LOGO_DARK_URL;
   return fallbackUrl;
 }
+
+// Coma logo URL for non-AIS fallback. Uses the Coma brand-config logo.
+const COMA_LOGO_FALLBACK_URL = "/brand/coma/logo.png";
 
 // ── Brand-aware asset resolution (cazhype onboarding funnel, 2026-09-29) ──
 //

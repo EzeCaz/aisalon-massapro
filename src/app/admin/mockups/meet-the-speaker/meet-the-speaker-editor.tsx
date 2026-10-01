@@ -1084,7 +1084,7 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon" }
                 height: "800px",
               }}
             >
-              <MeetTheSpeakerCanvas
+              <MeetTheSpeakerCanvas brandSlug={brandSlug}
                 ref={canvasRef}
                 data={data}
                 editable={editMode}

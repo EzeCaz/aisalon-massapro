@@ -1139,7 +1139,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
                   Style 3 both use the SpeakerIntroCanvas (Style 1), not the
                   Style 2 canvas. Only Style 2 uses SpeakerIntroStyle2Canvas. */}
               {data.style === "style2" ? (
-                <SpeakerIntroStyle2Canvas
+                <SpeakerIntroStyle2Canvas brandSlug={brandSlug}
                   ref={canvasRef}
                   data={data}
                   editable={editMode}
@@ -1159,7 +1159,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
                   onSelectChange={setSelectedId}
                 />
               ) : (
-                <SpeakerIntroCanvas
+                <SpeakerIntroCanvas brandSlug={brandSlug}
                   ref={canvasRef}
                   data={data}
                   editable={editMode}

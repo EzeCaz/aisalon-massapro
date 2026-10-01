@@ -462,7 +462,7 @@ export function QrSalonEditor({ scopeKey, brandSlug = "aisalon" }: Props) {
               flexShrink: 0,
             }}
           >
-            <QrSalonCanvas
+            <QrSalonCanvas brandSlug={brandSlug}
               ref={canvasRef}
               data={data}
               editable={editImages}

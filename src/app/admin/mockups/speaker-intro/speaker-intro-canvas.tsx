@@ -58,6 +58,7 @@ const CANVAS_W = 1200;
 const CANVAS_H = 800;
 
 type Props = {
+  brandSlug?: string;
   data: SpeakerIntroData;
   className?: string;
   /** When true, image areas become interactive (drag/wheel/click). */
@@ -1112,7 +1113,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={resolveBrandingImageUrl(data.brandingAsset)}
+                src={resolveBrandingImageUrl(data.brandingAsset, undefined, brandSlug)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}

@@ -40,6 +40,7 @@ const CANVAS_W = 1200;
 const CANVAS_H = 800;
 
 type Props = {
+  brandSlug?: string;
   data: QrSalonData;
   className?: string;
   /** Edit-images mode: brand mark shows hover/replace affordances. */
@@ -110,7 +111,7 @@ export const QrSalonCanvas = forwardRef<HTMLDivElement, Props>(
     const captionDefaultTopPx = 140; // above the QR
     const brandingHeight = data.brandingAsset?.height ?? 48;
     const brandingDefaultTopPx = 620; // below the QR
-    const brandingSrc = resolveBrandingImageUrl(data.brandingAsset, DEFAULT_BRANDING_ASSET_URL);
+    const brandingSrc = resolveBrandingImageUrl(data.brandingAsset, DEFAULT_BRANDING_ASSET_URL, brandSlug);
 
     // ─── Brand mark horizontal centering ───────────────────────────
     // The brand mark's width is `auto` (driven by the image's natural

@@ -66,6 +66,7 @@ const CANVAS_W = 1200;
 const CANVAS_H = 1200;
 
 type Props = {
+  brandSlug?: string;
   data: EventProfileData;
   className?: string;
   editable?: boolean;
@@ -579,7 +580,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
               >
                 <EditableImage
                   slot={{ kind: "branding-asset" }}
-                  src={resolveBrandingImageUrl(data.brandingAsset)}
+                  src={resolveBrandingImageUrl(data.brandingAsset, undefined, brandSlug)}
                   alt="Brand mark"
                   placement={undefined}
                   editable={editable}
