@@ -85,7 +85,7 @@ export default async function AdminMockupsPage() {
           </p>
         </div>
 
-        <MockupsClient defaultBrandSlug={me.brandSlug ?? undefined} />
+        <MockupsClient defaultBrandSlug={me.brandSlug ?? "coma"} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
