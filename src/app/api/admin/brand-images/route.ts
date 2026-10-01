@@ -87,8 +87,12 @@ export async function GET(req: NextRequest) {
   //     brand split and remain visible under BOTH tabs.
   // Selections returned are brand-resolved ("<key>@<brand>" → "<key>"
   // → defaults) so the UI can highlight the right current images.
+  //
+  // Phase 4 (2026-10-01): extended to accept ANY brand slug (not just
+  // "coma" | "aisalon") so new brands like "ch" work. BRAND_ADMIN users
+  // see only their brand's images + legacy global images.
   const brandParam = req.nextUrl.searchParams.get("brand")?.toLowerCase() ?? null;
-  const activeBrand = brandParam === "coma" || brandParam === "aisalon" ? brandParam : null;
+  const activeBrand = brandParam && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandParam) ? brandParam : null;
 
   // 1. List stock images from the hidden .images/ folder.
   const stock: Array<{

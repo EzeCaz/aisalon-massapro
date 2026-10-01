@@ -95,12 +95,17 @@ export default async function AdminImagesPage({
   // specific brand. Defaults to the host-resolved brand (e.g. Coma on
   // coma.massapro.com, AIS on aisalon.massapro.com). The ImagesGallery
   // above also reads ?brand= via its own client-side hook — same flow.
+  // Phase 4 (2026-10-01): for BRAND_ADMIN users, prefer me.brandSlug
+  // over the host-resolved brand — so eze@cazhype.com sees cazhype's
+  // images, not Coma's.
   const sp = await searchParams;
   const rawBrandSlug = (sp.brand ?? "").trim().toLowerCase() || null;
   const brandSlug =
     rawBrandSlug && isBrandSlug(rawBrandSlug)
       ? rawBrandSlug
-      : (await resolveBrandMetadata()).brand.slug;
+      : me.brandSlug && isBrandSlug(me.brandSlug)
+        ? me.brandSlug
+        : (await resolveBrandMetadata()).brand.slug;
 
   // Load the current settings scoped to the resolved brand. Falls back
   // to global defaults when the brand-scoped row is missing.
@@ -184,7 +189,7 @@ export default async function AdminImagesPage({
           )}
         </div>
 
-        <ImagesGallery countries={countries} isSuperAdmin={isSuper} />
+        <ImagesGallery countries={countries} isSuperAdmin={isSuper} defaultBrandSlug={brandSlug} />
 
         {/* WhatsApp group link editor — sits below the brand images gallery.
             SUPER_ADMIN-only writes (enforced by the API), but visible to any

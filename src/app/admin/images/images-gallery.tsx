@@ -86,9 +86,11 @@ type RoleKey = (typeof ROLE_KEYS)[number];
 export function ImagesGallery({
   countries,
   isSuperAdmin,
+  defaultBrandSlug,
 }: {
   countries: Country[];
   isSuperAdmin: boolean;
+  defaultBrandSlug?: string | null;
 }) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +98,15 @@ export function ImagesGallery({
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // BRAND TAB (user spec 2026-09-19): the gallery is per brand — each
-  // brand tab lists that brand's uploads (plus legacy global ones) and
-  // shows that brand's selections. Uploads/selects are written scoped to
-  // the active brand.
-  const [brand, setBrand] = useState<AdminBrandSlug>("aisalon");
+  // BRAND TAB: per brand — each brand tab lists that brand's uploads
+  // (plus legacy global ones). For non-aisalon/non-coma brands (BRAND_ADMIN),
+  // default to their brand + hide the switch tabs.
+  // Phase 4 (2026-10-01): extended to accept any brand slug.
+  const [brand, setBrand] = useState<string>(
+    defaultBrandSlug && defaultBrandSlug !== "aisalon" && defaultBrandSlug !== "coma"
+      ? defaultBrandSlug
+      : (defaultBrandSlug as AdminBrandSlug) ?? "aisalon"
+  );
 
   // Chapter filter — when a chapter is selected, the gallery shows
   // per-chapter select buttons + the chapter's current overrides.
@@ -358,12 +364,23 @@ export function ImagesGallery({
   return (
     <div className="space-y-6">
       {/* BRAND TABS — switch which brand's gallery + selections are shown.
-          Uploads and global selects are scoped to the active brand. */}
-      <BrandSwitchTabs
-        active={brand}
-        onChange={setBrand}
-        hint={`Showing ${brand === "coma" ? "Coma" : "AI Salon"} brand images and selections.`}
-      />
+          Uploads and global selects are scoped to the active brand.
+          Hidden for non-aisalon/non-coma brands (BRAND_ADMIN is locked
+          to their own brand). Phase 4 (2026-10-01). */}
+      {(brand === "aisalon" || brand === "coma") && (
+        <BrandSwitchTabs
+          active={brand as AdminBrandSlug}
+          onChange={(b) => setBrand(b)}
+          hint={`Showing ${brand === "coma" ? "Coma" : "AI Salon"} brand images and selections.`}
+        />
+      )}
+      {brand !== "aisalon" && brand !== "coma" && (
+        <div className="mb-2">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-1">
+            {brand} brand images
+          </p>
+        </div>
+      )}
 
       {/* Upload zone — SUPER_ADMIN-only. Non-super-admins can only pick
           from the global defaults curated by the Super Admin, so they
