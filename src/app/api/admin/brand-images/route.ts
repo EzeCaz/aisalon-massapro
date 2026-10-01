@@ -159,20 +159,37 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   if (hasBlob()) {
+    // ── Vercel Blob listing ─────────────────────────────────────────────
+    // When activeBrand is set (e.g. "ch"), we scope the list call to
+    // `brand-assets/<brand>/` directly. This is more efficient (we don't
+    // iterate through every brand's uploads) AND avoids the 500-blob
+    // pagination cutoff when there are many AISalon legacy uploads.
+    // When activeBrand is null (Super Admin with no brand filter), we
+    // list everything under `brand-assets/` (legacy + all brands).
+    //
+    // The onboarding form uploads to `brand-assets/<brand>/<assetKey>/<file>`
+    // (e.g. `brand-assets/ch/mascotImageUrl/1790759181753-u5m396.jpeg`), so
+    // the per-brand prefix correctly captures those nested-asset-key
+    // uploads too — they're all under `brand-assets/<brand>/`.
+    const brandAssetsPrefix = activeBrand ? `brand-assets/${activeBrand}/` : "brand-assets/";
     try {
       let cursor: string | undefined = undefined;
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 10; i++) {
         const result = await list({
-          prefix: "brand-assets/",
+          prefix: brandAssetsPrefix,
           limit: 100,
           cursor,
         });
         for (const blob of result.blobs) {
           // Classify the blob: "brand-assets/<file>" → legacy global;
-          // "brand-assets/<brand>/<file>" → that brand only.
+          // "brand-assets/<brand>/<file>" or "brand-assets/<brand>/<assetKey>/<file>" → that brand only.
           const rest = blob.pathname.slice("brand-assets/".length);
           const slashIdx = rest.indexOf("/");
           const blobBrand = slashIdx > 0 ? rest.slice(0, slashIdx) : null;
+          // Filename = everything after the brand segment. For nested
+          // asset-key uploads (e.g. mascotImageUrl/<file>), we keep the
+          // assetKey/ prefix in the displayed name so the admin can tell
+          // which onboarding asset it came from.
           const fileName = slashIdx > 0 ? rest.slice(slashIdx + 1) : rest;
           // Brand filter (Phase 4, 2026-10-01):
           //   - Super Admin (global scope, brand=null or brand="coma"):
@@ -297,35 +314,71 @@ export async function GET(req: NextRequest) {
   } else {
     // Local sandbox fallback: read /public/uploads/brand-assets/
     // Phase 4 (2026-10-01): for non-Coma non-AIS brands, only show
-    // images in the brand-specific subfolder.
+    // images in the brand-specific subfolder (recursively — the
+    // onboarding form uploads to brand-assets/<brand>/<assetKey>/<file>,
+    // so we walk into <assetKey>/ subfolders too).
     try {
       await fs.mkdir(LOCAL_BRAND_DIR, { recursive: true });
       const ALLOWED_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp", ".svg"]);
 
-      // If activeBrand is set and not coma/aisalon, only read the
+      // Walk a directory recursively and add every image file found
+      // to the `uploaded` array. `relativeDir` is the path inside the
+      // brand folder (e.g. "mascotImageUrl" or "" for top-level).
+      async function walkDir(dirAbs: string, brand: string | null, relativeDir: string) {
+        let entries: string[];
+        try {
+          entries = await fs.readdir(dirAbs);
+        } catch {
+          return; // dir doesn't exist
+        }
+        for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
+          const childAbs = path.join(dirAbs, name);
+          let stat;
+          try { stat = await fs.stat(childAbs); } catch { continue; }
+          if (stat.isDirectory()) {
+            // Recurse into subfolder. The relative path inside the
+            // brand folder becomes "<relativeDir>/<name>" (or just
+            // "<name>" when relativeDir is empty).
+            const childRel = relativeDir ? `${relativeDir}/${name}` : name;
+            await walkDir(childAbs, brand, childRel);
+            continue;
+          }
+          const ext = path.extname(name).toLowerCase();
+          if (!ALLOWED_EXT.has(ext)) continue;
+          // Build the URL. For nested uploads, the URL includes the
+          // subfolder path (e.g. /uploads/brand-assets/ch/mascotImageUrl/<file>).
+          const relPath = relativeDir ? `${relativeDir}/${name}` : name;
+          const urlBrandSegment = brand ? `${brand}/` : "";
+          const url = `${LOCAL_BRAND_URL}/${urlBrandSegment}${relativeDir ? `${relativeDir}/` : ""}${encodeURIComponent(name)}`;
+          uploaded.push({
+            name: relPath, // includes subfolder path so admin can tell source
+            size: stat.size,
+            mimeType: extToMime(ext),
+            url,
+            kind: "uploaded",
+            brand,
+          });
+        }
+      }
+
+      // If activeBrand is set and not coma/aisalon, only walk the
       // brand-specific subfolder (LOCAL_BRAND_DIR/<brand>/).
-      // Otherwise read the top-level (legacy behavior).
+      // Otherwise read the top-level (legacy behavior — no recursion
+      // needed for legacy flat uploads).
       const isBrandScoped = activeBrand && activeBrand !== "coma" && activeBrand !== "aisalon";
       if (isBrandScoped) {
         const brandDir = path.join(LOCAL_BRAND_DIR, activeBrand!);
-        try {
-          const entries = await fs.readdir(brandDir);
-          for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
-            const ext = path.extname(name).toLowerCase();
-            if (!ALLOWED_EXT.has(ext)) continue;
-            let size = 0;
-            try { const stat = await fs.stat(path.join(brandDir, name)); size = stat.size; } catch { /* ignore */ }
-            uploaded.push({ name, size, mimeType: extToMime(ext), url: `${LOCAL_BRAND_URL}/${activeBrand!}/${encodeURIComponent(name)}`, kind: "uploaded", brand: activeBrand });
-          }
-        } catch { /* brand dir doesn't exist yet — empty list */ }
+        await walkDir(brandDir, activeBrand, "");
       } else {
         const entries = await fs.readdir(LOCAL_BRAND_DIR);
         for (const name of entries.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) {
+          const childAbs = path.join(LOCAL_BRAND_DIR, name);
+          let stat;
+          try { stat = await fs.stat(childAbs); } catch { continue; }
+          if (stat.isDirectory()) continue; // skip subfolders for the legacy flat case
           const ext = path.extname(name).toLowerCase();
           if (!ALLOWED_EXT.has(ext)) continue;
-          let size = 0;
-          try { const stat = await fs.stat(path.join(LOCAL_BRAND_DIR, name)); size = stat.size; } catch { /* ignore */ }
-          uploaded.push({ name, size, mimeType: extToMime(ext), url: `${LOCAL_BRAND_URL}/${encodeURIComponent(name)}`, kind: "uploaded", brand: null });
+          uploaded.push({ name, size: stat.size, mimeType: extToMime(ext), url: `${LOCAL_BRAND_URL}/${encodeURIComponent(name)}`, kind: "uploaded", brand: null });
         }
       }
     } catch (e) {
