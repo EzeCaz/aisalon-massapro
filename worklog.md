@@ -16579,3 +16579,71 @@ Fix (commit e1cbcda):
   to BrandOnboardingFormData with docstring.
 
 Build: ✓ Compiled successfully in 42s.
+
+---
+Task ID: brand-isolation-all-admin-tabs
+Agent: main
+Task: User reported that ch brand admin (BRAND_ADMIN) sees aisalon events on
+  /admin/event-prep — a brand leak. Asked to make sure ALL admin tabs are
+  brand-separated and not sharing data between brands.
+
+Investigation (delegated to Explore agent):
+- The audit found 13 admin pages with brand leak or over-restriction issues.
+- The correct pattern is: getUserScope(me.id) → scopeEventWhere(scope) /
+  scopeUserWhere(scope) / scopeChapterWhere(scope) → pass to db.findMany.
+- For BRAND_ADMIN, getUserScope returns { kind: "brand", brandSlug: "ch" }
+  and scopeEventWhere returns { chapterRef: { brand: { slug: "ch" } } }.
+- For SUPER_ADMIN (global scope), the scope helpers return {} (no filter).
+
+Fix (commit 7d53d46) — 15 files changed:
+
+LEAK FIXES (BRAND_ADMIN was seeing other brands' data):
+1. /admin/event-prep/page.tsx (the user's reported bug):
+   - Added getUserScope + scopeEventWhere.
+2. /admin/event-prep/[id]/page.tsx:
+   - Added BRAND_ADMIN to access gate + findUnique→findFirst defense.
+3. /admin/events/[id]/page.tsx (write surface — most severe):
+   - findUnique→findFirst + scopeEventWhere defense-in-depth. Without
+     this, a ch BRAND_ADMIN could edit any AISalon event's agenda/
+     speakers/co-hosts.
+4. /admin/event/page.tsx (legacy single-tab UI — broadest leak):
+   - Scoped both db.event.findMany + db.user.findMany. Without this,
+     BRAND_ADMIN saw every event AND every platform user (emails,
+     names, photos, companies).
+5. /admin/quiz/page.tsx:
+   - Scoped quiz sessions + events picker (quizSession uses
+     { event: scopeEventWhere } since it joins through event).
+6. /admin/chapter-onboarding/page.tsx:
+   - Scoped db.chapterOnboardingInvite.findMany by user.brandSlug.
+     Without this, BRAND_ADMIN saw EVERY onboarding invite.
+
+OVER-RESTRICTION FIXES (BRAND_ADMIN was excluded entirely):
+7. /admin/email/page.tsx, /admin/email/flows/page.tsx,
+   /admin/email/report/page.tsx:
+   - Added "brand" case to emailModelWhere: chapterId IS NULL (globals)
+     OR chapter.brand.slug = scope.brandSlug.
+8. /admin/reports/page.tsx:
+   - Added "brand" case to chapterIds + userChapterFilter + the
+     countries query.
+9. /admin/registrations/page.tsx:
+   - Replaced `me.role !== "ADMIN"` gate with `can(effectiveRole,
+     "members.view")` (allows BRAND_ADMIN + SUPER_ADMIN + ADMIN).
+   - Scoped db.event.findMany with scopeEventWhere.
+10. /admin/testimonials/page.tsx:
+    - Same gate fix as registrations.
+11. /admin/members/activity-report/page.tsx:
+    - Same gate fix.
+
+UX FIXES (BRAND_ADMIN was over-restricted on chapter actions):
+12. /admin/events/new/page.tsx:
+    - Added BRAND_ADMIN branch to chapter-loading so the event-creation
+      chapter picker shows BRAND_ADMIN's own brand's chapters (was empty).
+13. /admin/chapters/chapter-edit-content.tsx:
+    - Added BRAND_ADMIN to the gate + brand scope check on the loaded
+      chapter. BRAND_ADMIN can now edit their own brand's chapters.
+    - BRAND_ADMIN now sees all countries in the country picker.
+
+Build: ✓ Compiled successfully in 46s. No new type errors (5 pre-existing
+TS errors in admin-event-manager.tsx, registrations/page.tsx,
+api/admin/events/[id]/registrations/route.ts, api/admin/members routes
+are unrelated to this commit and existed before).
