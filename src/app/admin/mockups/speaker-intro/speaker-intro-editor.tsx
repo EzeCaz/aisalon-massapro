@@ -1024,16 +1024,13 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon", pr
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
-          className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+          className={previewMode
+            ? "relative overflow-hidden"
+            : "relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+          }
         >
-          {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
-              Per TSK-0024: Style 1/2/3 segmented buttons live here on the
-              RIGHT side (replacing the previous "{scale}% scale · PNG export
-              2400 × 1600" text).
-              Per TSK-0025: "Edit images" + "Edit sections" buttons ALSO live
-              here now, positioned to the LEFT of the Style buttons. All three
-              canvas-interaction controls (Edit images, Edit sections, Style
-              1/2/3) cluster together right above the canvas. */}
+          {/* Canvas caption — hidden in preview mode. */}
+          {!previewMode && (
           <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <div className="text-[0.7rem] font-semibold text-black/70">
               Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
@@ -1147,17 +1144,18 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon", pr
               </button>
             </div>
           </div>
+          )}
           <div
-            className="relative mx-auto"
+            className={previewMode ? "relative" : "relative mx-auto"}
             style={{
-              width: `${1200 * previewScale}px`,
-              height: `${800 * previewScale}px`,
+              width: previewMode ? "1200px" : `${1200 * previewScale}px`,
+              height: previewMode ? "800px" : `${800 * previewScale}px`,
             }}
           >
             <div
-              className="absolute top-0 left-0 origin-top-left shadow-2xl"
+              className={`absolute top-0 left-0 origin-top-left ${previewMode ? "" : "shadow-2xl"}`}
               style={{
-                transform: `scale(${previewScale})`,
+                transform: previewMode ? "scale(1)" : `scale(${previewScale})`,
                 transformOrigin: "top left",
                 width: "1200px",
                 height: "800px",

@@ -291,12 +291,20 @@ function AssetCardItem({ asset }: { asset: AssetCard }) {
           className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
         >
           {asset.iframeHref ? (
-            // Live iframe preview — loads the editor page and renders
-            // the saved default mockup at a small scale. The iframe is
-            // scaled to fit the thumbnail card. (2026-09-30)
+            // Live iframe preview — loads the editor page in preview mode
+            // which renders ONLY the 1200×800 canvas (no form, no toolbar,
+            // no padding). The iframe is scaled down to fit the thumbnail.
+            // Canvas is 1200×800 = 3:2 aspect. Thumbnail is 4:3.
+            // We scale the iframe content to fit the card width.
             <iframe
               src={asset.iframeHref}
-              className="absolute inset-0 w-[300%] h-[300%] origin-top-left scale-[0.333] pointer-events-none"
+              className="absolute inset-0 border-0 pointer-events-none"
+              style={{
+                width: "1200px",
+                height: "800px",
+                transform: "scale(0.25)",
+                transformOrigin: "top left",
+              }}
               title={asset.title}
               loading="lazy"
               sandbox="allow-same-origin"
