@@ -722,9 +722,9 @@ export function MockupsClient({
           {MOCKUP_TEMPLATES.map((asset) => {
             // Issue 4 (2026-09-30): for non-AIS brands, render a live
             // iframe preview of the editor instead of the AIS reference
-            // image or the "Open editor to preview" placeholder.
-            // The iframe loads the editor page with the brand's context
-            // and renders the saved default mockup at a small scale.
+            // image. For AIS, keep the original reference images.
+            // For Coma too: show iframe preview (the saved default
+            // per brand, not the AIS hardcoded image).
             const isAisRef = asset.url.includes("uojldinyokysycfc");
             const showIframePreview = brand !== "aisalon" && isAisRef && asset.editorHref;
             const showPlaceholder = brand !== "aisalon" && isAisRef && !asset.editorHref;
