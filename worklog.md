@@ -16530,3 +16530,52 @@ Fix (commit 925054a):
   tell which onboarding asset each image came from.
 
 Build: ✓ Compiled successfully in 47s.
+
+---
+Task ID: brand-images-fallback + timezone-picker
+Agent: main
+Task: User reported (1) brand assets still not showing on /admin/images for
+  ch brand admin (only the mascot image visible), and (2) the Timezone
+  field on the brand onboarding form should be a dropdown of IANA time
+  zones (e.g. America/New_York).
+
+Investigation (delegated to Explore agent):
+- The server-side BRAND_ADMIN activeBrand lock + scoped Vercel Blob
+  list() call are correct. The Vercel Blob list() with prefix
+  `brand-assets/ch/` should return ALL blobs in that prefix.
+- Local sandbox path mismatch: onboarding upload writes to
+  /public/brand-uploads/<slug>/<assetKey>/<file> but the GET handler
+  walks /public/uploads/brand-assets/<slug>/... (different directory).
+- The brand onboarding form had NO timezone field at all. The chapter
+  creation form had a free-text Timezone input. COMMON_TIMEZONES was
+  defined in brand-onboarding-types.ts but unused dead code.
+
+Fix (commit e1cbcda):
+- /api/admin/brand-images/route.ts GET: added Brand DB row fallback.
+  After the Vercel Blob listing, also read the Brand row's asset URL
+  columns (logoUrl, heroBannerUrl, faviconUrl, emailLogoUrl,
+  mascotImageUrl) and merge them into the `uploaded` array (dedup by
+  URL). Defense-in-depth — guarantees the brand admin sees every
+  onboarding-uploaded image even if Vercel Blob listing fails for
+  any reason. Also added a `guessMimeFromName` helper for MIME types.
+- /api/admin/brand-images/route.ts: hardened the BRAND_ADMIN
+  activeBrand lock — lowercase + regex validate user.brandSlug
+  before assigning. Vercel Blob is case-sensitive; a mixed-case
+  brandSlug would silently fail to match the lowercase prefix.
+- /api/brand-assets/[brandSlug]/upload/route.ts: aligned the local
+  sandbox fallback path. Was writing to /public/brand-uploads/...
+  but the GET handler walks /public/uploads/brand-assets/<slug>/...
+  Changed to write to /public/uploads/brand-assets/<slug>/<assetKey>/
+  <file> so sandbox uploads show up in the gallery.
+- /brand-onboarding/[token]/brand-onboarding-form-client.tsx: added
+  `firstChapterTimezone` state (defaults to "Asia/Jerusalem"), a
+  <select> with COMMON_TIMEZONES, and a hint text "IANA timezone —
+  used for event times + email scheduling. Example: America/New_York".
+  Added `firstChapterTimezone` to the submit payload.
+- /admin/chapters/chapter-editor.tsx: replaced the free-text Timezone
+  input with the same <select> + COMMON_TIMEZONES. Now both forms
+  (brand onboarding + chapter creation) use the same IANA picker.
+- /lib/brand-onboarding-types.ts: added `firstChapterTimezone?: string`
+  to BrandOnboardingFormData with docstring.
+
+Build: ✓ Compiled successfully in 42s.
