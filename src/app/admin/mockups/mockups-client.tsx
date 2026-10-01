@@ -119,6 +119,8 @@ type AssetCard = {
   /** Optional link to an interactive editor for this template. */
   editorHref?: string;
   editorLabel?: string;
+  /** Optional iframe URL for live preview rendering (2026-09-30). */
+  iframeHref?: string;
 };
 
 const BRAND_ASSETS: AssetCard[] = [
@@ -285,10 +287,21 @@ function AssetCardItem({ asset }: { asset: AssetCard }) {
       {/* Thumbnail — opens editor when available, otherwise opens image URL */}
       {hasEditor ? (
         <Link
-          href={asset.editorHref!}
+          href={asset.editorHref! + (asset.editorHref?.includes("?") ? "" : "")}
           className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
         >
-          {asset.url ? (
+          {asset.iframeHref ? (
+            // Live iframe preview — loads the editor page and renders
+            // the saved default mockup at a small scale. The iframe is
+            // scaled to fit the thumbnail card. (2026-09-30)
+            <iframe
+              src={asset.iframeHref}
+              className="absolute inset-0 w-[300%] h-[300%] origin-top-left scale-[0.333] pointer-events-none"
+              title={asset.title}
+              loading="lazy"
+              sandbox="allow-same-origin"
+            />
+          ) : asset.url ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={asset.url}
@@ -699,16 +712,18 @@ export function MockupsClient({
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {MOCKUP_TEMPLATES.map((asset) => {
-            // Issue 4 (2026-09-30): for non-AIS brands, replace the AIS
-            // hardcoded reference image with a "Open editor to preview"
-            // placeholder. The actual brand-correct mockup renders in the
-            // editor (which uses buildSampleData with brand defaults).
+            // Issue 4 (2026-09-30): for non-AIS brands, render a live
+            // iframe preview of the editor instead of the AIS reference
+            // image or the "Open editor to preview" placeholder.
+            // The iframe loads the editor page with the brand's context
+            // and renders the saved default mockup at a small scale.
             const isAisRef = asset.url.includes("uojldinyokysycfc");
-            const showPlaceholder = brand !== "aisalon" && isAisRef;
+            const showIframePreview = brand !== "aisalon" && isAisRef && asset.editorHref;
+            const showPlaceholder = brand !== "aisalon" && isAisRef && !asset.editorHref;
             return (
               <AssetCardItem
-                key={asset.url + (showPlaceholder ? "-placeholder" : "")}
-                asset={showPlaceholder ? { ...asset, url: "" } : asset}
+                key={asset.url + (showIframePreview ? "-iframe" : showPlaceholder ? "-placeholder" : "")}
+                asset={showIframePreview ? { ...asset, url: "", iframeHref: `${asset.editorHref}?brand=${brand}` } : showPlaceholder ? { ...asset, url: "" } : asset}
               />
             );
           })}

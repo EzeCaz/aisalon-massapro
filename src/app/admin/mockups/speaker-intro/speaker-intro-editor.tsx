@@ -76,9 +76,13 @@ type Props = {
   scopeKey: string;
   /** Brand slug for the QR code URL. Defaults to "aisalon". Phase 2. */
   brandSlug?: string;
+  /** When true, hides the form/JSON/toolbar and only shows the canvas
+   *  preview. Used by the /admin/mockups landing page to render a
+   *  live thumbnail of the saved default per brand. (2026-09-30) */
+  previewMode?: boolean;
 };
 
-export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
+export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon", previewMode = false }: Props) {
   // Build brand-aware sample data — passes `null` for brandAssets
   // (the brand row is server-resolved by /admin/mockups/speaker-intro/page.tsx
   // and we don't have it client-side here). getMockupDefaults() falls
@@ -726,7 +730,9 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
   // --- render ---------------------------------------------------------
 
   return (
-    <div className="space-y-4">
+    <div className={previewMode ? "preview-mode" : "space-y-4"}>
+      {!previewMode && (
+      <>
       {/* Event picker row */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
         <div className="flex items-center gap-2 text-sm font-bold text-black">
@@ -935,14 +941,18 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
           </div>
         </div>
       )}
+      </>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
+      <div className={previewMode ? "grid" : "grid gap-4 lg:grid-cols-[420px_1fr]"}>
         {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
+         *  Hidden in preview mode — only the canvas is shown.
          *  PER USER SPEC 2026-08-02 (TSK-0051): when the user clicks an
          *  element on the canvas (header, speakers, hero-image, logo, etc.),
          *  a compact "Selected Element" panel appears at the TOP of this
          *  column showing ONLY the content-specific fields for that element.
          *  The full form stays below (unchanged). */}
+        {!previewMode && (
         <div className="flex flex-col gap-3">
           {/* PER USER SPEC 2026-08-02 (TSK-0051): Selected Element panel.
            *  Renders when an element is selected AND at least one edit mode
@@ -1009,6 +1019,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
             </CollapsibleFormPanel>
           )}
         </div>
+        )}
 
         {/* Right: live preview */}
         <div

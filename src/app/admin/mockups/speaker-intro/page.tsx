@@ -40,7 +40,11 @@ export const dynamic = "force-dynamic";
  * A Montreal admin only sees Montreal events in the picker.
  */
 
-export default async function SpeakerIntroMockupPage() {
+export default async function SpeakerIntroMockupPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ preview?: string }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     redirect("/login?callbackUrl=/admin/mockups/speaker-intro");
@@ -100,13 +104,20 @@ export default async function SpeakerIntroMockupPage() {
     venue: e.venue,
   }));
 
+  // Preview mode — when ?preview=1 is in the URL, the editor hides the
+  // form/JSON/toolbar and only shows the canvas. Used by the /admin/mockups
+  // landing page iframe to render a live thumbnail. (2026-09-30)
+  const params = searchParams ? await searchParams : {};
+  const previewMode = params.preview === "1";
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <AppHeader />
+      {!previewMode && <AppHeader />}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs role={effectiveRole} />
+        {!previewMode && <AdminTabs role={effectiveRole} />}
 
         {/* Header */}
+        {!previewMode && (
         <div className="mb-6">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
             Mockup Builder · Template 1 of 4
@@ -122,10 +133,12 @@ export default async function SpeakerIntroMockupPage() {
             in the JSON on the left, then download a print-quality PNG.
           </p>
         </div>
+        )}
 
-        <SpeakerIntroEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
+        <SpeakerIntroEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} previewMode={previewMode} />
       </main>
 
+      {!previewMode && (
       <footer className="mt-auto border-t border-black/10 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 text-xs text-black/80 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>
@@ -135,6 +148,7 @@ export default async function SpeakerIntroMockupPage() {
           <a href="https://massapro.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">Platform by MassaPro</a>
         </div>
       </footer>
+      )}
     </div>
   );
 }
