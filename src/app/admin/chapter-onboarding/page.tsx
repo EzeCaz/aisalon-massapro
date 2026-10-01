@@ -11,7 +11,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, getUserScope } from "@/lib/permissions";
+import { can, getUserScope, normalizeRole, ROLES, isSuperAdmin } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
@@ -20,6 +20,12 @@ import { PreviewComaFormButton } from "./preview-coma-form-button";
 import { Globe2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+// Hardcoded Coma preview email — only used when the caller is SUPER_ADMIN.
+// The Super Admin uses this to preview the Coma-branded onboarding form
+// (the original use case for this button). For BRAND_ADMIN, we use the
+// brand admin's own email so they preview their own brand's form.
+const COMA_PREVIEW_EMAIL = "eze@cazhype.com";
 
 export default async function ChapterOnboardingAdminPage() {
   const session = await getServerSession(authOptions);
@@ -91,6 +97,38 @@ export default async function ChapterOnboardingAdminPage() {
     invitedByName: i.invitedBy?.name ?? i.invitedBy?.email ?? null,
   }));
 
+  // ── Phase 4 (2026-10-02): brand-aware preview button props ───────────
+  // For SUPER_ADMIN: preview the Coma-branded form (the original use case).
+  // For BRAND_ADMIN: preview their own brand's form. We look up the brand's
+  // display name from the DB so the button label is "Preview Cazhype
+  // onboarding form" (not "Preview ch onboarding form"). Falls back to the
+  // slug-based label if the brand row doesn't exist.
+  const isBa = normalizeRole(me.role) === ROLES.BRAND_ADMIN && !!me.brandSlug;
+  const isSa = isSuperAdmin({ email: me.email, role: me.role });
+  let previewEmail: string | null = null;
+  let previewBrandSlug: string | null = null;
+  let previewBrandDisplayName: string | null = null;
+  if (isSa) {
+    // Super Admin: preview Coma.
+    previewEmail = COMA_PREVIEW_EMAIL;
+    previewBrandSlug = "coma";
+    previewBrandDisplayName = "Coma";
+  } else if (isBa && me.brandSlug) {
+    // Brand Admin: preview their own brand using their own email.
+    previewEmail = me.email;
+    previewBrandSlug = me.brandSlug;
+    try {
+      const dbBrand = await db.brand.findUnique({
+        where: { slug: me.brandSlug },
+        select: { displayName: true },
+      });
+      previewBrandDisplayName = dbBrand?.displayName ?? me.brandSlug;
+    } catch {
+      // DB lookup failed (sandbox) — fall back to the slug.
+      previewBrandDisplayName = me.brandSlug;
+    }
+  }
+
   return (
     <>
       <AppHeader />
@@ -105,12 +143,20 @@ export default async function ChapterOnboardingAdminPage() {
             Track every chapter onboarding form you&apos;ve sent. Click a row to see the full submission.
           </p>
 
-          {/* Quick preview button — opens the Coma-branded onboarding
-              form in a new tab without sending an email. Useful for the
-              Super Admin to review the Coma brand experience. */}
-          <div className="mb-4">
-            <PreviewComaFormButton />
-          </div>
+          {/* Quick preview button — opens the brand-aware onboarding form
+              in a new tab without sending an email. For Super Admin this
+              previews the Coma-branded form (eze@cazhype.com); for
+              BRAND_ADMIN this previews their own brand's form using
+              their own email. Phase 4 (2026-10-02). */}
+          {previewEmail && previewBrandSlug && (
+            <div className="mb-4">
+              <PreviewComaFormButton
+                previewEmail={previewEmail}
+                brandSlug={previewBrandSlug}
+                brandDisplayName={previewBrandDisplayName ?? undefined}
+              />
+            </div>
+          )}
 
           <ChapterOnboardingAdminList invites={serialized} currentAdminEmail={me.email} brandSlug={me.brandSlug ?? "aisalon"} />
         </div>

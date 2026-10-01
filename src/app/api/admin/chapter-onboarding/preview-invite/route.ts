@@ -2,10 +2,16 @@
  * POST /api/admin/chapter-onboarding/preview-invite
  *
  * Creates a chapter onboarding invite WITHOUT sending an email. Returns
- * the formUrl so the Super Admin can open it in a browser to preview
- * the brand-aware onboarding form (e.g. for Coma).
+ * the formUrl so the admin can open it in a browser to preview the
+ * brand-aware onboarding form.
  *
- * Auth: SUPER_ADMIN only.
+ * Auth: SUPER_ADMIN OR BRAND_ADMIN (2026-10-02 — was SUPER_ADMIN only).
+ *   - SUPER_ADMIN can preview the form for ANY user (any brand).
+ *   - BRAND_ADMIN can preview the form only for users in their OWN brand.
+ *     If a BRAND_ADMIN tries to preview a form for a user outside their
+ *     brand, the endpoint returns 403 (defense-in-depth — the button is
+ *     also dynamically scoped on the client side, but the server-side
+ *     check is authoritative).
  *
  * Body:
  *   { email: string }   — the email of the user to create an invite for.
@@ -15,7 +21,9 @@
  *
  * Response:
  *   200 { ok: true, invite: { token, formUrl, sentTo, expiresAt } }
- *   403 { error: "Forbidden" }     — caller is not SUPER_ADMIN
+ *   403 { error: "Forbidden" }     — caller is not SUPER_ADMIN/BRAND_ADMIN,
+ *                                     OR BRAND_ADMIN trying to preview a user
+ *                                     outside their own brand
  *   404 { error: "User not found" } — email doesn't match a user row
  *
  * NOTE: This endpoint is for previewing the form only. To actually send
@@ -25,7 +33,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { isSuperAdmin } from "@/lib/permissions";
+import { isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { generateOnboardingToken } from "@/lib/chapter-onboarding-types";
 import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url";
@@ -33,11 +41,13 @@ import { resolveBrandSiteUrl, appendBrandParam } from "@/lib/brand/coma-site-url
 const EXPIRES_DAYS = 30;
 
 export async function POST(req: NextRequest) {
-  // ── Auth: SUPER_ADMIN only ──
+  // ── Auth: SUPER_ADMIN OR BRAND_ADMIN ──
   const { user: me, error: authError } = await getCurrentUser();
   if (authError) return authError;
   if (!me) return NextResponse.json({ error: "User not found" }, { status: 403 });
-  if (!isSuperAdmin({ email: me.email, role: me.role })) {
+  const isSa = isSuperAdmin({ email: me.email, role: me.role });
+  const isBa = normalizeRole(me.role) === ROLES.BRAND_ADMIN;
+  if (!isSa && !isBa) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -65,6 +75,20 @@ export async function POST(req: NextRequest) {
   });
   if (!target) {
     return NextResponse.json({ error: `User not found: ${email}` }, { status: 404 });
+  }
+
+  // ── BRAND_ADMIN brand-scope guard (defense in depth, 2026-10-02) ──
+  // A BRAND_ADMIN can only preview the form for users in their own brand.
+  // The target's brandSlug must match the caller's brandSlug. Without
+  // this, a ch BRAND_ADMIN could preview the form for an aisalon user
+  // and see aisalon branding in their browser.
+  if (isBa && !isSa) {
+    if (!me.brandSlug || target.brandSlug !== me.brandSlug) {
+      return NextResponse.json(
+        { error: "Forbidden — brand admin can only preview forms for users in their own brand" },
+        { status: 403 },
+      );
+    }
   }
 
   // ── Check for an existing PENDING invite for this user. If found,
@@ -106,7 +130,12 @@ export async function POST(req: NextRequest) {
   // Phase 2 (joincoma.com): brand-aware URL — uses the target's brand
   // host + appends ?brand=<slug>. The target.brandSlug is already loaded
   // earlier in the route (line ~56). Local dev keeps env fallback.
-  const previewBrandSlug = target.brandSlug === "coma" ? "coma" : "aisalon";
+  // Phase 4 (2026-10-02): for non-Coma non-AIS brands (e.g. "ch"), use
+  // the platform host (platform.joincoma.com) with ?brand=<slug> —
+  // resolveBrandSiteUrl falls back to platform.joincoma.com for unknown
+  // brands, which is the correct behavior (new brands live on the
+  // platform host, not on per-brand DNS).
+  const previewBrandSlug = target.brandSlug ?? "aisalon";
   const isLocalDev =
     process.env.NODE_ENV !== "production" &&
     (process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http://localhost") ||
