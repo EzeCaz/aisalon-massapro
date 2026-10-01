@@ -119,11 +119,9 @@ const STYLE2_DEFAULTS: Record<string, SectionLayoutEntry> = {
   // the image inside the hero-image SectionBox (DOM order), so they
   // naturally render on top of the image within this section.
   "hero-image":  { pos: { x: 26.6, y: -2.8 }, boxSize: { width: 1012, height: 875 }, scale: 0.74, z: 50 },
-  // PER USER SPEC 2026-08-02 (TSK-0048): speakers z lowered from 60 → 30
-  // so the hero-image (z=50) is on top of ALL other sections.
-  // Position/size values (X=-7.7, Y=-2.8, W=658, H=auto, Scale=67%)
-  // unchanged from TSK-0045.
-  speakers:     { pos: { x: -7.7, y: -2.8 }, boxSize: { width: 658 }, scale: 0.67, z: 30 },
+  // PER USER SPEC 2026-09-30: speakers Position X=-8.5, Y=-1.9,
+  // W=769, H=auto, Scale=67%, z=30.
+  speakers:     { pos: { x: -8.5, y: -1.9 }, boxSize: { width: 769 }, scale: 0.67, z: 30 },
   // PER USER SPEC 2026-08-02 (TSK-0048): style2-footer z lowered from
   // 50 → 30 so the hero-image (z=50) is on top of ALL other sections.
   // Position/size values (X=-0.1, Y=92.5, W=auto, H=auto, Scale=100%)

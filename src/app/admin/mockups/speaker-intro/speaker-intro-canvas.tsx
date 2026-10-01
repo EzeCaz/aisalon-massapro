@@ -251,14 +251,10 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
-      // defaults updated to Position X=-8.5 Y=23.7, Size W=891 H=381,
-      // Scale=76% (was X=-7.9, Y=17.6, H=auto per TSK-0034).
-      // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
-      // and above the branding asset (52) — same z as the previous defaults
-      // in sample-data + event-mapper, so existing user drag/resize edits
-      // continue to layer correctly.
-      speakers: { pos: { x: -8.5, y: 23.7 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
+      // PER USER SPEC 2026-09-30: Style 1 speakers Properties
+      // defaults updated to Position X=-4 Y=30.3, Size W=891 H=381,
+      // Scale=76%, z=60.
+      speakers: { pos: { x: -4, y: 30.3 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
     };
 
     // PER USER SPEC 2026-08-02 (TSK-0044): Style 3 now has its OWN defaults
@@ -278,7 +274,10 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      speakers: { pos: { x: -6.1, y: 26.2 }, boxSize: { width: 653 }, scale: 0.76, z: 50 },
+      // PER USER SPEC 2026-09-30: Style 3 speakers Properties
+      // defaults updated to Position X=-6.2 Y=26.7, Size W=769 H=auto,
+      // Scale=76%, z=50.
+      speakers: { pos: { x: -6.2, y: 26.7 }, boxSize: { width: 769 }, scale: 0.76, z: 50 },
     };
 
     // PER USER SPEC 2026-08-02 (TSK-0044): select defaults based on the
