@@ -564,7 +564,9 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", pr
   }
 
   return (
-    <div className="space-y-4">
+    <div className={previewMode ? "" : "space-y-4"}>
+      {!previewMode && (
+      <>
       {/* Event picker row */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
         <div className="flex items-center gap-2 text-sm font-bold text-black">
@@ -806,6 +808,8 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", pr
               })}
           </div>
         </div>
+      )}
+      </>
       )}
 
       <div className={previewMode ? "grid" : "grid gap-4 lg:grid-cols-[420px_1fr]"}>

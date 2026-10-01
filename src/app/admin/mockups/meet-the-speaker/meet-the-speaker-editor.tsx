@@ -676,7 +676,9 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
   // --- render ---------------------------------------------------------
 
   return (
-    <div className="space-y-4">
+    <div className={previewMode ? "" : "space-y-4"}>
+      {!previewMode && (
+      <>
       {/* Event + speaker picker — stacked on two rows so each dropdown
           gets the full width. Event picker on top, speaker picker below. */}
       <div className="space-y-2 rounded-lg border border-[#FF005A]/20 bg-gradient-to-r from-[#FF005A]/[0.03] to-transparent p-3">
@@ -926,6 +928,8 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       <div className={previewMode ? "grid" : "grid gap-4 lg:grid-cols-[420px_1fr]"}>
