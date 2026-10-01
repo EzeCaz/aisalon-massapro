@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { list, put } from "@vercel/blob";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { isSuperAdmin, canSeeAdminNav } from "@/lib/permissions";
+import { isSuperAdmin, canSeeAdminNav, normalizeRole, ROLES } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/blob-paths";
 import { getPublicSettings, getPublicSettingsForBrand } from "@/lib/site-settings";
@@ -480,7 +480,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { user, error } = await getCurrentUser();
   if (error) return error;
-  if (!isSuperAdmin({ email: user!.email, role: user!.role })) {
+  // Phase 4 (2026-10-01): allow BRAND_ADMIN to upload images too —
+  // they need to upload images for their brand's mockups + branding.
+  // Super Admin can upload for any brand; BRAND_ADMIN can upload only
+  // for their own brand.
+  const isSa = isSuperAdmin({ email: user!.email, role: user!.role });
+  const isBa = normalizeRole(user!.role) === ROLES.BRAND_ADMIN;
+  if (!isSa && !isBa) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -493,9 +499,16 @@ export async function POST(req: NextRequest) {
   // Brand tab the upload belongs to — uploads land under
   // "brand-assets/<brand>/" so each brand's gallery stays separate
   // (legacy uploads without a brand remain visible everywhere).
+  // Phase 4 (2026-10-01): accept ANY valid brand slug (not just
+  // "coma" | "aisalon") so BRAND_ADMIN can upload to their brand folder.
+  // For BRAND_ADMIN, force the upload to their own brandSlug.
   const brandRaw = formData.get("brand");
-  const brand = typeof brandRaw === "string" ? brandRaw.toLowerCase() : null;
-  const brandSegment = brand === "coma" || brand === "aisalon" ? brand : null;
+  let brand = typeof brandRaw === "string" ? brandRaw.toLowerCase() : null;
+  // BRAND_ADMIN can only upload to their own brand
+  if (isBa && !isSa) {
+    brand = user!.brandSlug ?? null;
+  }
+  const brandSegment = brand && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brand) ? brand : null;
 
   const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif", "image/avif"];
   if (!allowed.includes(file.type)) {

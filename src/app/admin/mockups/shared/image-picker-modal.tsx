@@ -56,7 +56,8 @@ export function ImagePickerModalShared({
   eventSlug,
   currentUrl,
   accept = "all",
-}: Props) {
+  brandSlug,
+}: Props & { brandSlug?: string }) {
   const [tab, setTab] = useState<Tab>(eventSlug ? "event" : "brand");
   const [brandImages, setBrandImages] = useState<BrandImage[]>([]);
   const [eventImages, setEventImages] = useState<EventImage[]>([]);
@@ -71,10 +72,10 @@ export function ImagePickerModalShared({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/admin/brand-images", { cache: "no-store" });
+      const res = await fetch(`/api/admin/brand-images${brandSlug ? `?brand=${encodeURIComponent(brandSlug)}` : ""}`, { cache: "no-store" });
       if (!res.ok) {
         if (res.status === 403) {
-          setError("You need Super Admin rights to view the brand library.");
+          setError("You need admin rights to view the brand library.");
           setBrandImages([]);
           return;
         }
@@ -135,6 +136,7 @@ export function ImagePickerModalShared({
     try {
       const fd = new FormData();
       fd.append("file", file);
+      if (brandSlug) fd.append("brand", brandSlug);
       const res = await fetch("/api/admin/brand-images", {
         method: "POST",
         body: fd,

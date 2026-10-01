@@ -1006,13 +1006,10 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
-          className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+          className={previewMode ? "relative overflow-hidden" : "relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"}
         >
-          {/* Canvas caption — moved ABOVE the canvas frame per TSK-0023 Phase 1.
-              PER USER SPEC 2026-08-02 (TSK-0053): Edit images / Edit sections /
-              Set as default buttons now live here (matching speaker-intro's
-              placement). Style 1/2/3 segmented buttons stay in the top toolbar. */}
-          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          {!previewMode && (
+            <>
             <div className="text-[0.7rem] font-semibold text-black/70">
               Canvas: 1200 × 800 (3:2) · Edits auto-saved to this browser
               <span className="ml-2 text-black/40 font-normal">
@@ -1071,6 +1068,8 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
               </button>
             </div>
           </div>
+            </>
+          )}
           <div
             className="relative mx-auto"
             style={{
@@ -1152,7 +1151,7 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
       </details>
 
       {/* Image picker modal */}
-      <ImagePickerModalShared
+      <ImagePickerModalShared brandSlug={brandSlug} brandSlug={brandSlug}
         open={pickerSlot !== null}
         onClose={() => setPickerSlot(null)}
         onPick={handlePickerSelect}

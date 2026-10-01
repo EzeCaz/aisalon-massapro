@@ -1241,7 +1241,7 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon", pr
       </details>
 
       {/* Image picker modal */}
-      <ImagePickerModal
+      <ImagePickerModal brandSlug={brandSlug} brandSlug={brandSlug}
         open={pickerSlot !== null}
         onClose={() => setPickerSlot(null)}
         onPick={handlePickerSelect}

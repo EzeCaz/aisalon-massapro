@@ -878,12 +878,11 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", pr
         {/* Right: live preview */}
         <div
           ref={previewContainerRef}
-          className="relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"
+          className={previewMode ? "relative overflow-hidden" : "relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"}
         >
-        {/* Canvas caption — moved ABOVE the canvas per TSK-0053.
-            Edit images + Edit sections + Set as default cluster together
-            right above the canvas (mirrors speaker-intro pattern). */}
+          {!previewMode && (
         <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+        <>
           <div className="text-[0.7rem] font-semibold text-black/70">
             Canvas: 1200 × 1200 (1:1 square) · Edits auto-saved to this browser
             <span className="ml-2 text-black/40 font-normal">
@@ -942,6 +941,8 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", pr
             </button>
           </div>
         </div>
+        </>
+          )}
           <div
             className="relative mx-auto"
             style={{
@@ -985,7 +986,7 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", pr
         </div>
       </div>
 
-      <ImagePickerModal
+      <ImagePickerModal brandSlug={brandSlug} brandSlug={brandSlug}
         open={pickerSlot !== null}
         onClose={() => setPickerSlot(null)}
         onPick={handlePickerSelect}

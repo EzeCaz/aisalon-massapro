@@ -605,7 +605,7 @@ export function QrSalonEditor({ scopeKey, brandSlug = "aisalon" }: Props) {
       </div>
 
       {/* ===== IMAGE PICKER MODAL ===== */}
-      <ImagePickerModalShared
+      <ImagePickerModalShared brandSlug={brandSlug} brandSlug={brandSlug}
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onPick={handleBrandingPick}
