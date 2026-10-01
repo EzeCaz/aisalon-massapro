@@ -248,7 +248,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       // Scale=124% per TSK-0034). The QR code moves from the top-right
       // to the BOTTOM-right of the canvas, and the scale resets to 100%
       // (was 124% which made it overflow the canvas top edge).
-      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
+      qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
       // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
@@ -275,7 +275,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const STYLE3_DEFAULTS: Record<string, SectionLayoutEntry> = {
       header:   { pos: { x: -0.6, y: 1.2 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
       topic:    { pos: { x: -12.7, y: 15.7 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
-      qr:       { pos: { x: 91.6, y: 84.9 }, scale: 1, z: 50 },
+      qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
       speakers: { pos: { x: -6.1, y: 26.2 }, boxSize: { width: 653 }, scale: 0.76, z: 50 },
@@ -1097,7 +1097,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           const pos = data.brandingAsset?.pos;
           // Per user spec 2026-07-09 (item H): default bottom-left corner
           // position is X=3.1021447721179625%, Y=87.5656836461126%.
-          const leftPct = pos ? pos.x : 3.1021447721179625;
+          const leftPct = pos ? pos.x : 88;
           const topPct = pos ? pos.y : 87.5656836461126;
           return (
             <DraggablePhotoContainer

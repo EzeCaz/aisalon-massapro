@@ -499,7 +499,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
           const height = data.brandingAsset?.height ?? 48;
           const pos = data.brandingAsset?.pos;
           // Default: bottom-left corner with 32px margin = ~2.7% left, ~94% top.
-          const leftPct = pos ? pos.x : 2.7;
+          const leftPct = pos ? pos.x : 88;
           const topPct = pos ? pos.y : 94;
           return (
             <DraggablePhotoContainer

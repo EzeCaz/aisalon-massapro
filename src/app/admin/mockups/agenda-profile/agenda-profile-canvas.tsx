@@ -561,9 +561,11 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
           label="QR + Branding"
           guideId="qr-branding"
         >
-          {/* QR code (bottom-right) — moved from bottom-left to avoid
-              overlapping with the branding asset. Issue 6B fix (2026-09-30). */}
-          <div className="flex items-center justify-end gap-3">
+          {/* QR code (bottom-LEFT) — swapped from right to left per user
+              request (2026-09-30): logo should be on the RIGHT, QR on
+              the LEFT. The branding asset (DraggablePhotoContainer) below
+              renders at the bottom-right by default. */}
+          <div className="flex items-center gap-3">
             <div
               className="rounded-md bg-white p-2 shadow-md"
               style={{ width: "84px", height: "84px" }}
@@ -650,8 +652,9 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
         {(() => {
           const height = data.brandingAsset?.height ?? 48;
           const pos = data.brandingAsset?.pos;
-          // Default: bottom-left corner with 32px margin = ~2.7% left, ~94% top.
-          const leftPct = pos ? pos.x : 2.7;
+          // Default: bottom-RIGHT corner with 32px margin = ~88% left, ~94% top.
+          // (Swapped from bottom-left to bottom-right per user request 2026-09-30.)
+          const leftPct = pos ? pos.x : 88;
           const topPct = pos ? pos.y : 94;
           return (
             <DraggablePhotoContainer
