@@ -58,7 +58,6 @@ const CANVAS_W = 1200;
 const CANVAS_H = 800;
 
 type Props = {
-  brandSlug?: string;
   data: SpeakerIntroData;
   className?: string;
   /** When true, image areas become interactive (drag/wheel/click). */
@@ -129,7 +128,6 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
   function SpeakerIntroCanvas(
     {
       data,
-      brandSlug,
       className,
       editable,
       sectionsEditable,
@@ -248,12 +246,16 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
       // Scale=124% per TSK-0034). The QR code moves from the top-right
       // to the BOTTOM-right of the canvas, and the scale resets to 100%
       // (was 124% which made it overflow the canvas top edge).
-      qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
+      qr:       { pos: { x: 91.4, y: 82.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      // PER USER SPEC 2026-09-30: Style 1 speakers Properties
-      // defaults updated to Position X=-4 Y=30.3, Size W=891 H=381,
-      // Scale=76%, z=60.
+      // PER USER SPEC 2026-07-31 (TSK-0036): Style 1/3 speakers Properties
+      // defaults updated to Position X=-8.5 Y=23.7, Size W=891 H=381,
+      // Scale=76% (was X=-7.9, Y=17.6, H=auto per TSK-0034).
+      // z=60 keeps the speakers grid above other text sections (TEXT_Z=50)
+      // and above the branding asset (52) — same z as the previous defaults
+      // in sample-data + event-mapper, so existing user drag/resize edits
+      // continue to layer correctly.
       speakers: { pos: { x: -4, y: 30.3 }, boxSize: { width: 891, height: 381 }, scale: 0.76, z: 60 },
     };
 
@@ -271,12 +273,9 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
     const STYLE3_DEFAULTS: Record<string, SectionLayoutEntry> = {
       header:   { pos: { x: -0.6, y: 1.2 }, boxSize: { width: 1100 }, scale: 0.97, z: 50 },
       topic:    { pos: { x: -12.7, y: 15.7 }, boxSize: { width: 864, height: 45 }, scale: 0.65, z: 50 },
-      qr:       { pos: { x: 3.1, y: 84.9 }, scale: 1, z: 50 },
+      qr:       { pos: { x: 91.4, y: 82.9 }, scale: 1, z: 50 },
       sponsors: { pos: { x: 23.8, y: 82.6 }, scale: 1, z: 1 },
       "hero-image": { pos: { x: 42, y: 0 }, scale: 1, z: 2 },
-      // PER USER SPEC 2026-09-30: Style 3 speakers Properties
-      // defaults updated to Position X=-6.2 Y=26.7, Size W=769 H=auto,
-      // Scale=76%, z=50.
       speakers: { pos: { x: -6.2, y: 26.7 }, boxSize: { width: 769 }, scale: 0.76, z: 50 },
     };
 
@@ -1096,7 +1095,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
           const pos = data.brandingAsset?.pos;
           // Per user spec 2026-07-09 (item H): default bottom-left corner
           // position is X=3.1021447721179625%, Y=87.5656836461126%.
-          const leftPct = pos ? pos.x : 88;
+          const leftPct = pos ? pos.x : 3.1021447721179625;
           const topPct = pos ? pos.y : 87.5656836461126;
           return (
             <DraggablePhotoContainer
@@ -1113,7 +1112,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
             >
               <EditableImage
                 slot={{ kind: "branding-asset" }}
-                src={resolveBrandingImageUrl(data.brandingAsset, undefined, brandSlug)}
+                src={resolveBrandingImageUrl(data.brandingAsset)}
                 alt="Brand mark"
                 placement={undefined}
                 editable={editable}
