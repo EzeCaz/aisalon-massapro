@@ -287,7 +287,7 @@ function AssetCardItem({ asset }: { asset: AssetCard }) {
       {/* Thumbnail — opens editor when available, otherwise opens image URL */}
       {hasEditor ? (
         <Link
-          href={asset.editorHref! + (asset.editorHref?.includes("?") ? "" : "")}
+          href={asset.editorHref! + (brand !== "aisalon" && brand !== "coma" ? `?brand=${brand}` : "")}
           className="block relative aspect-[4/3] bg-black/[0.02] overflow-hidden"
         >
           {asset.iframeHref ? (
@@ -731,7 +731,7 @@ export function MockupsClient({
             return (
               <AssetCardItem
                 key={asset.url + (showIframePreview ? "-iframe" : showPlaceholder ? "-placeholder" : "")}
-                asset={showIframePreview ? { ...asset, url: "", iframeHref: `${asset.editorHref}?brand=${brand}` } : showPlaceholder ? { ...asset, url: "" } : asset}
+                asset={showIframePreview ? { ...asset, url: "", iframeHref: `${asset.editorHref}?brand=${brand}&preview=1` } : showPlaceholder ? { ...asset, url: "" } : asset}
               />
             );
           })}
