@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isEventCoHost, isSuperAdminEmail, isSuperAdmin, ROLES, getEffectiveRole} from "@/lib/permissions";
+import { can, isEventCoHost, isSuperAdminEmail, isSuperAdmin, ROLES, getEffectiveRole, getUserScope, scopeEventWhere} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { EventEditor, type EventForEditor } from "@/components/admin/event-editor";
@@ -41,8 +41,19 @@ export default async function EditEventPage({ params }: Params) {
     redirect("/events");
   }
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
+  // BRAND-SCOPE GUARD (defense in depth, 2026-10-02): even if the role
+  // check above passes (e.g. BRAND_ADMIN has events.edit), the actual
+  // event fetch must be scoped to the user's brand. Without this, a ch
+  // BRAND_ADMIN could navigate to /admin/events/<aisalon-event-id> and
+  // edit agenda, speakers, co-hosts, etc. — a critical write-surface leak.
+  // Switched from findUnique to findFirst because Prisma's findUnique
+  // only accepts unique identifier fields in `where` and can't combine
+  // `id` with a relation filter like `chapterRef: { brand: { slug: ... } }`.
+  const scope = await getUserScope(me.id);
+  const scopeEventFilter = scopeEventWhere(scope);
+
+  const event = await db.event.findFirst({
+    where: { id: eventId, ...scopeEventFilter },
     include: {
       coHosts: {
         include: {

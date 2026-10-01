@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLES, getEffectiveRole} from "@/lib/permissions";
+import { can, ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ActivityReportClient } from "./activity-report-client";
@@ -18,7 +18,9 @@ export const metadata = { title: "Member Activity Report — Admin — AI Salon 
  * platform records for a single user (looked up by primary or secondary
  * email) and renders it as a chronological feed.
  *
- * Auth: ADMIN or SUPER_ADMIN only.
+ * Auth: ADMIN, SUPER_ADMIN, or BRAND_ADMIN (2026-10-02). The activity-report
+ * API applies brand-scope filtering on the server side so BRAND_ADMIN only
+ * sees activity for their own brand's members.
  */
 export default async function ActivityReportPage({
   searchParams,
@@ -38,7 +40,11 @@ export default async function ActivityReportPage({
   // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
   const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
   const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
-  if (effectiveRole !== ROLES.ADMIN && effectiveRole !== ROLES.SUPER_ADMIN) {
+  // Phase 4 (2026-10-02): allow BRAND_ADMIN to view member activity reports
+  // (was ADMIN-only — excluded BRAND_ADMIN entirely). The API applies
+  // brand-scope filtering on the server side so BRAND_ADMIN only sees
+  // activity for their own brand's members.
+  if (!can(effectiveRole, "members.view")) {
     redirect("/admin");
   }
 

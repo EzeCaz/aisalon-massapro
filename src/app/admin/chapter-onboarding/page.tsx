@@ -11,7 +11,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can } from "@/lib/permissions";
+import { can, getUserScope } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
@@ -36,8 +36,27 @@ export default async function ChapterOnboardingAdminPage() {
     redirect("/admin");
   }
 
+  // BRAND-SCOPE GUARD (2026-10-02): BRAND_ADMIN sees only invites sent to
+  // users in their own brand. ChapterOnboardingInvite has no direct brand
+  // relation, but it has userId → User.brandSlug. For SUPER_ADMIN (global
+  // scope) the filter is {} (no restriction). For BRAND_ADMIN we filter
+  // by user.brandSlug === me.brandSlug. Without this, BRAND_ADMIN sees
+  // EVERY onboarding invite on the platform — a brand leak.
+  const scope = await getUserScope(me.id);
+  const inviteWhere =
+    scope.kind === "global"
+      ? {}
+      : scope.kind === "brand"
+      ? { user: { brandSlug: scope.brandSlug } }
+      : scope.kind === "country"
+      ? { user: { countryId: scope.countryId } }
+      : scope.kind === "chapter"
+      ? { user: { chapterId: scope.chapterId } }
+      : { id: "___NEVER___" };
+
   // Load all invites (newest first).
   const invites = await db.chapterOnboardingInvite.findMany({
+    where: inviteWhere,
     orderBy: { createdAt: "desc" },
     select: {
       id: true,

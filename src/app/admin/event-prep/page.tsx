@@ -7,6 +7,8 @@ import {
   canSeeAdminNav,
   getCoHostedEventIds,
   getSpeakerEventIds,
+  getUserScope,
+  scopeEventWhere,
   isSuperAdminEmail,
   ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
@@ -69,16 +71,29 @@ export default async function EventPrepPage() {
   //   - ADMIN+       → all events (null scope)
   //   - CO_HOST      → events they co-host
   //   - SPEAKER      → events they speak at
+  // BRAND-SCOPE GUARD (2026-10-02): even for ADMIN+, we apply scopeEventWhere
+  // so BRAND_ADMIN only sees their own brand's events. For SUPER_ADMIN (global
+  // scope), scopeEventWhere returns {} — no behavior change. For BRAND_ADMIN
+  // (kind: "brand"), it returns { chapterRef: { brand: { slug: "ch" } } }
+  // so only the ch brand's events come back. Fixes the "ch brand admin sees
+  // aisalon event prep" leak.
   let eventIds: string[] | null = null;
   if (me.role === ROLES.SPEAKER) {
     eventIds = await getSpeakerEventIds(me.id);
   } else if (me.role === ROLES.CO_HOST) {
     eventIds = await getCoHostedEventIds(me.id, me.role);
   }
-  // ADMIN+ leaves eventIds = null (no filter)
+  // ADMIN+ leaves eventIds = null (no per-event filter)
+
+  // Build the scope where filter. For BRAND_ADMIN this is
+  // { chapterRef: { brand: { slug: "ch" } } }; for SUPER_ADMIN it's {}.
+  const scope = await getUserScope(me.id);
+  const scopeWhere = scopeEventWhere(scope);
 
   const events = await db.event.findMany({
-    where: eventIds === null ? undefined : { id: { in: eventIds } },
+    where: eventIds === null
+      ? scopeWhere
+      : { id: { in: eventIds }, ...scopeWhere },
     orderBy: { startsAt: "desc" },
     select: {
       id: true,

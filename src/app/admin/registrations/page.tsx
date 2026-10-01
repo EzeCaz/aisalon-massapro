@@ -2,6 +2,14 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import {
+  can,
+  getEffectiveRole,
+  getUserScope,
+  scopeEventWhere,
+  isSuperAdminEmail,
+  ROLES,
+} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminNavCards } from "@/components/ais/admin-nav-cards";
 import { AdminRegistrations } from "./admin-registrations";
@@ -17,14 +25,35 @@ export default async function AdminRegistrationsPage({
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/registrations");
 
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
+  let me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  // Auto-sync SUPER_ADMIN role from email allowlist
+  if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
+    await db.user.update({
+      where: { id: me.id },
+      data: { role: ROLES.SUPER_ADMIN },
+    });
+    me = { ...me, role: ROLES.SUPER_ADMIN };
+  }
+
+  // Phase 4 (2026-10-02): allow BRAND_ADMIN + SUPER_ADMIN + ADMIN to view
+  // the registrations page (was ADMIN-only — excluded BRAND_ADMIN entirely).
+  if (!can(effectiveRole, "members.view")) redirect("/events");
 
   const sp = await searchParams;
   const preselectedEventId = sp.event;
 
+  // BRAND-SCOPE GUARD (2026-10-02): scope events to the user's brand/country/
+  // chapter so BRAND_ADMIN only sees their own brand's events + registrations.
+  const scope = await getUserScope(me.id);
+  const eventScopeWhere = scopeEventWhere(scope);
+
   const events = await db.event.findMany({
+    where: eventScopeWhere,
     orderBy: { startsAt: "desc" },
     select: {
       id: true,

@@ -69,9 +69,14 @@ export default async function EmailTabPage({
   // (including chapterId=null globals). "Country scope" = rows where
   // chapterId IS NULL (global templates) OR chapter.countryId = scope.countryId.
   // "Chapter scope" = rows where chapterId IS NULL OR chapterId = scope.chapterId.
+  // "Brand scope" (BRAND_ADMIN, 2026-10-02) = rows where chapterId IS NULL (global
+  // templates) OR chapter.brand.slug = scope.brandSlug. BRAND_ADMIN needs to see
+  // their brand's templates + the global templates they inherit from.
   const emailModelWhere =
     scope.kind === "global"
       ? {}
+      : scope.kind === "brand"
+      ? { OR: [{ chapterId: null }, { chapter: { brand: { slug: scope.brandSlug } } }] }
       : scope.kind === "country"
       ? { OR: [{ chapterId: null }, { chapter: { countryId: scope.countryId } }] }
       : scope.kind === "chapter"

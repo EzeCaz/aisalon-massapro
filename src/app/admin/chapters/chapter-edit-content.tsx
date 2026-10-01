@@ -64,63 +64,63 @@ export async function ChapterEditContent({
   const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
   const isSuperAdmin = isSuperAdminEmail(me.email) || me.role === ROLES.SUPER_ADMIN;
   const isAdmin = me.role === ROLES.ADMIN;
+  // Phase 4 (2026-10-02): BRAND_ADMIN can edit chapters in their own brand.
+  const isBrandAdmin = me.role === ROLES.BRAND_ADMIN && !!me.brandSlug;
 
-  if (!isSuperAdmin && !isAdmin && effectiveRole !== ROLES.CHAPTER_ORGANIZER) {
+  if (!isSuperAdmin && !isAdmin && !isBrandAdmin && effectiveRole !== ROLES.CHAPTER_ORGANIZER) {
     redirect("/admin/chapters");
   }
 
   // ── 2. RESOLVE CHAPTER ─────────────────────────────────────────────
   // Lookup by slug OR by ID. Both return the same shape; if not found,
-  // 404.
+  // 404. Phase 4 (2026-10-02): include the brand relation so we can verify
+  // that BRAND_ADMIN only edits their own brand's chapter.
+  const chapterSelect = {
+    id: true,
+    name: true,
+    slug: true,
+    city: true,
+    timezone: true,
+    countryId: true,
+    whatsappGroupUrl: true,
+    linkedinUrl: true,
+    heroImageUrl: true,
+    isActive: true,
+    isPubliclyListed: true,
+    brand: { select: { slug: true } },
+  } as const;
   const chapter =
     "bySlug" in lookup
       ? await db.chapter.findFirst({
           where: { slug: lookup.bySlug },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            city: true,
-            timezone: true,
-            countryId: true,
-            whatsappGroupUrl: true,
-            linkedinUrl: true,
-            heroImageUrl: true,
-            isActive: true,
-            isPubliclyListed: true,
-          },
+          select: chapterSelect,
         })
       : await db.chapter.findUnique({
           where: { id: lookup.byId },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            city: true,
-            timezone: true,
-            countryId: true,
-            whatsappGroupUrl: true,
-            linkedinUrl: true,
-            heroImageUrl: true,
-            isActive: true,
-            isPubliclyListed: true,
-          },
+          select: chapterSelect,
         });
   if (!chapter) notFound();
 
   // ── 3. SCOPE CHECK ─────────────────────────────────────────────────
   // Admin can only edit chapters in their country. Chapter Organizer
-  // can only edit their own chapter.
+  // can only edit their own chapter. BRAND_ADMIN can only edit chapters
+  // in their own brand. Phase 4 (2026-10-02).
   if (!isSuperAdmin) {
     if (isAdmin && chapter.countryId !== me.countryId) redirect("/admin/chapters");
     if (me.role === ROLES.CHAPTER_ORGANIZER && chapter.id !== me.chapterId) {
       redirect("/admin/chapters");
     }
+    if (isBrandAdmin && chapter.brand?.slug !== me.brandSlug) {
+      redirect("/admin/chapters");
+    }
   }
 
   // ── 4. LOAD COUNTRIES (for the country <select>) ───────────────────
+  // Phase 4 (2026-10-02): BRAND_ADMIN sees all countries (their brand
+  // might span multiple countries). Super Admin sees all. Country-scoped
+  // ADMIN sees their own country only.
   const countries = await db.country.findMany({
-    where: isSuperAdmin ? {} : { id: me.countryId ?? "___NEVER___" },
+    where: isSuperAdmin || isBrandAdmin ? {} : { id: me.countryId ?? "___NEVER___" },
     select: { id: true, name: true, code: true, flagEmoji: true },
     orderBy: { name: "asc" },
   });

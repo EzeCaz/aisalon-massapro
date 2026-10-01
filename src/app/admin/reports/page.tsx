@@ -41,10 +41,15 @@ export default async function ReportsPage() {
   const scope = await getUserScope(me.id);
   const isGlobal = scope.kind === "global";
 
-  // Build scope filter for chapter-scoped queries
+  // Build scope filter for chapter-scoped queries. Phase 4 (2026-10-02):
+  // added the "brand" case so BRAND_ADMIN sees their own brand's chapters
+  // + counts (was fail-closed — they saw nothing because chapterIds = []
+  // for the brand scope).
   const chapterIds =
     scope.kind === "global"
       ? null
+      : scope.kind === "brand"
+      ? (await db.chapter.findMany({ where: { brand: { slug: scope.brandSlug } }, select: { id: true } })).map((c) => c.id)
       : scope.kind === "country"
       ? (await db.chapter.findMany({ where: { countryId: scope.countryId }, select: { id: true } })).map((c) => c.id)
       : scope.kind === "chapter"
@@ -56,9 +61,13 @@ export default async function ReportsPage() {
   const eventChapterFilter = chapterIds === null
     ? {}
     : { chapterRef: { id: { in: chapterIds } } };
+  // Phase 4 (2026-10-02): added brand case so BRAND_ADMIN sees their own
+  // brand's members (filter by brandSlug).
   const userChapterFilter =
     scope.kind === "global"
       ? {}
+      : scope.kind === "brand"
+      ? { brandSlug: scope.brandSlug }
       : scope.kind === "country"
       ? { countryId: scope.countryId }
       : scope.kind === "chapter"
@@ -94,9 +103,18 @@ export default async function ReportsPage() {
     orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
   });
 
-  // Breakdown by country (one level up)
+  // Breakdown by country (one level up). For brand scope (2026-10-02):
+  // only countries whose chapters belong to the user's brand. For
+  // global scope: all countries. For country/chapter scope: their own
+  // country only.
   const countries = await db.country.findMany({
-    where: scope.kind === "global" ? {} : { id: scope.kind === "country" ? scope.countryId : scope.kind === "chapter" ? scope.countryId : "___NEVER___" },
+    where: scope.kind === "global"
+      ? {}
+      : scope.kind === "brand"
+      ? { chapters: { some: { brand: { slug: scope.brandSlug } } } }
+      : scope.kind === "country" || scope.kind === "chapter"
+      ? { id: scope.countryId }
+      : { id: "___NEVER___" },
     include: {
       _count: { select: { users: true } },
       chapters: { select: { id: true, _count: { select: { users: true, events: true } } } },

@@ -7,6 +7,8 @@ import {
   isEventCoHost,
   isEventSpeaker,
   isSuperAdminEmail,
+  getUserScope,
+  scopeEventWhere,
   ROLES, getEffectiveRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
@@ -84,9 +86,16 @@ export default async function EventPrepDetailPage({ params }: Params) {
   // - ADMIN+ always passes
   // - CO_HOST must be co-host of this event
   // - SPEAKER must be speaker of this event
+  // - BRAND_ADMIN must own the event's brand (verified via scopeEventWhere
+  //   in the db.event.findFirst call below — defense in depth)
   const r = me.role;
+  // Build the scope where filter for the data-layer brand isolation.
+  // For BRAND_ADMIN this returns { chapterRef: { brand: { slug: "ch" } } };
+  // for SUPER_ADMIN it returns {} (no filter).
+  const scope = await getUserScope(me.id);
+  const scopeEventFilter = scopeEventWhere(scope);
   let hasAccess = false;
-  if (r === ROLES.SUPER_ADMIN || r === ROLES.ADMIN) {
+  if (r === ROLES.SUPER_ADMIN || r === ROLES.ADMIN || r === ROLES.BRAND_ADMIN) {
     hasAccess = true;
   } else if (r === ROLES.CO_HOST) {
     hasAccess = await isEventCoHost(me.id, eventId);
@@ -98,8 +107,16 @@ export default async function EventPrepDetailPage({ params }: Params) {
   }
 
   // Load the event with everything a speaker would need to prep:
-  const event = await db.event.findUnique({
-    where: { id: eventId },
+  // BRAND-SCOPE GUARD (2026-10-02): switch from findUnique to findFirst
+  // so we can apply the scope filter. Prisma's findUnique only accepts
+  // unique identifier fields in `where` — it can't combine `id` with a
+  // relation filter like `chapterRef: { brand: { slug: ... } }`. Using
+  // findFirst with both conditions preserves the not-found → 404
+  // semantics. This is defense-in-depth: even if the role check above
+  // were bypassed, the query itself would only return events in the
+  // user's brand.
+  const event = await db.event.findFirst({
+    where: { id: eventId, ...scopeEventFilter },
     select: {
       id: true,
       slug: true,

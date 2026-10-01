@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { can, getEffectiveRole, isSuperAdminEmail, ROLES } from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminNavCards } from "@/components/ais/admin-nav-cards";
 import { AdminTestimonials } from "./admin-testimonials";
@@ -13,9 +14,26 @@ export default async function AdminTestimonialsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) redirect("/login?callbackUrl=/admin/testimonials");
 
-  const me = await db.user.findUnique({ where: { email: session.user.email } });
+  let me = await db.user.findUnique({ where: { email: session.user.email } });
   if (!me) redirect("/login");
-  if (me.role !== "ADMIN") redirect("/events");
+
+  // TSK-0058: Resolve EFFECTIVE role (honors "View as" override for SUPER_ADMIN).
+  const viewAsRole = (session.user as { viewAsRole?: string | null }).viewAsRole ?? null;
+  const effectiveRole = getEffectiveRole(me.role, me.email, viewAsRole);
+  // Auto-sync SUPER_ADMIN role from email allowlist
+  if (isSuperAdminEmail(me.email) && me.role !== ROLES.SUPER_ADMIN) {
+    await db.user.update({
+      where: { id: me.id },
+      data: { role: ROLES.SUPER_ADMIN },
+    });
+    me = { ...me, role: ROLES.SUPER_ADMIN };
+  }
+
+  // Phase 4 (2026-10-02): allow BRAND_ADMIN to moderate testimonials too
+  // (was ADMIN-only — excluded BRAND_ADMIN entirely). The testimonials API
+  // at /api/testimonials applies its own brand-scope filtering on the
+  // server side, so BRAND_ADMIN only sees their own brand's testimonials.
+  if (!can(effectiveRole, "members.view")) redirect("/events");
 
   return (
     <div className="min-h-screen flex flex-col bg-white">

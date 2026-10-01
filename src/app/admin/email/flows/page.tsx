@@ -72,9 +72,13 @@ export default async function FlowBuilderPage() {
   // Global templates (chapterId=null) are visible to all admins.
   // Events are scoped via scopeEventWhere (chapterRef.countryId / chapterId).
   const scope = await getUserScope(me.id);
+  // Brand scope (BRAND_ADMIN, 2026-10-02): chapterId IS NULL (globals)
+  // OR chapter.brand.slug = scope.brandSlug.
   const emailModelWhere =
     scope.kind === "global"
       ? {}
+      : scope.kind === "brand"
+      ? { OR: [{ chapterId: null }, { chapter: { brand: { slug: scope.brandSlug } } }] }
       : scope.kind === "country"
       ? { OR: [{ chapterId: null }, { chapter: { countryId: scope.countryId } }] }
       : scope.kind === "chapter"

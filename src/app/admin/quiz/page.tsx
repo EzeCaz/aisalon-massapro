@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, getCoHostedEventIds, getEffectiveRole} from "@/lib/permissions";
+import { can, getCoHostedEventIds, getEffectiveRole, getUserScope, scopeEventWhere} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { QuizAdminList } from "./quiz-admin-list";
@@ -27,9 +27,22 @@ export default async function QuizAdminPage() {
   // Admins+ see all quizzes.
   const scopedEventIds = await getCoHostedEventIds(me.id, me.role);
 
+  // BRAND-SCOPE GUARD (2026-10-02): scope quiz sessions + events picker
+  // to the user's brand. For BRAND_ADMIN (kind: "brand"), scopeEventWhere
+  // returns { chapterRef: { brand: { slug: "ch" } } }. We need to apply
+  // it as `{ event: scopeWhere }` for quizSession (which joins through
+  // event) and directly for the events picker. For SUPER_ADMIN it's {} —
+  // no behavior change. Fixes the "ch brand admin sees aisalon quizzes"
+  // leak — without this, scopedEventIds === null for BRAND_ADMIN and
+  // the where clause becomes {} (no filter).
+  const scope = await getUserScope(me.id);
+  const eventScopeWhere = scopeEventWhere(scope);
+
+  // For quizSession: filter by event relation (quizSession.eventId → event).
+  // For the events picker: filter directly with scopeEventWhere.
   const where =
     scopedEventIds === null
-      ? {}
+      ? { event: eventScopeWhere }
       : scopedEventIds.length === 0
       ? { id: "____never____" } // force empty result for non-cohost users
       : { eventId: { in: scopedEventIds } };
@@ -47,11 +60,12 @@ export default async function QuizAdminPage() {
       },
     }),
     // Events picker for the create form — admins see all, co-hosts see
-    // only their events.
+    // only their events. Apply brand scope so BRAND_ADMIN only picks
+    // from their own brand's events.
     db.event.findMany({
       where:
         scopedEventIds === null
-          ? {}
+          ? eventScopeWhere
           : scopedEventIds.length === 0
           ? { id: "____never____" }
           : { id: { in: scopedEventIds } },

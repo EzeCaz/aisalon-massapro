@@ -64,9 +64,13 @@ export default async function EmailReportPage({
 
   // Fetch all audiences in scope so the batch-action "Send to audience"
   // picker has the full list. Same scoping as the main email page.
+  // Brand scope (BRAND_ADMIN, 2026-10-02): chapterId IS NULL (globals)
+  // OR chapter.brand.slug = scope.brandSlug.
   const emailModelWhere =
     scope.kind === "global"
       ? {}
+      : scope.kind === "brand"
+      ? { OR: [{ chapterId: null }, { chapter: { brand: { slug: scope.brandSlug } } }] }
       : scope.kind === "country"
       ? { OR: [{ chapterId: null }, { chapter: { countryId: scope.countryId } }] }
       : scope.kind === "chapter"

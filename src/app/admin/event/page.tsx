@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { can, isSuperAdminEmail, ROLES, roleLabel, getEffectiveRole} from "@/lib/permissions";
+import { can, isSuperAdminEmail, ROLES, roleLabel, getEffectiveRole, getUserScope, scopeEventWhere, scopeUserWhere} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { AdminEventManager } from "./admin-event-manager";
@@ -51,8 +51,21 @@ export default async function AdminEventPage() {
     redirect("/events");
   }
 
+  // BRAND-SCOPE GUARD (2026-10-02): scope events + members to the user's
+  // brand/country/chapter. Without this, a BRAND_ADMIN sees every event AND
+  // every platform user (emails, names, photos, companies) across every
+  // brand — the broadest leak surface in the admin panel. For SUPER_ADMIN
+  // (global scope), scopeEventWhere + scopeUserWhere both return {} (no
+  // filter — same behavior as before). For BRAND_ADMIN (kind: "brand"),
+  // events filter to { chapterRef: { brand: { slug: "ch" } } } and users
+  // filter to { brandSlug: "ch" }.
+  const scope = await getUserScope(me.id);
+  const eventScopeWhere = scopeEventWhere(scope);
+  const userScopeWhere = scopeUserWhere(scope);
+
   // Load all events with counts + main image for the searchable list.
   const events = await db.event.findMany({
+    where: eventScopeWhere,
     orderBy: { startsAt: "desc" },
     include: {
       _count: { select: { images: true, speakers: true, agenda: true, coHosts: true, rsvps: true } },
@@ -71,6 +84,7 @@ export default async function AdminEventPage() {
   // picker (they already have access to every event) and exclude the
   // current user (no point in adding yourself).
   const members = await db.user.findMany({
+    where: userScopeWhere,
     orderBy: [{ name: "asc" }, { email: "asc" }],
     select: {
       id: true,

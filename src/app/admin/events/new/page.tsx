@@ -81,6 +81,22 @@ export default async function AdminNewEventPage() {
       },
       orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
     });
+  } else if (myRole === ROLES.BRAND_ADMIN && me.brandSlug) {
+    // Phase 4 (2026-10-02): BRAND_ADMIN sees their own brand's active chapters
+    // (their brand might span multiple countries — e.g. a Cazhype brand admin
+    // creating events in NYC + Tel Aviv). The brand filter is on chapter.brand.slug.
+    rawChapters = await db.chapter.findMany({
+      where: { brand: { slug: me.brandSlug }, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        city: true,
+        countryId: true,
+        country: { select: { name: true, code: true, flagEmoji: true } },
+      },
+      orderBy: [{ country: { name: "asc" } }, { name: "asc" }],
+    });
   } else if (myRole === ROLES.ADMIN && me.countryId) {
     rawChapters = await db.chapter.findMany({
       where: { countryId: me.countryId, isActive: true },
