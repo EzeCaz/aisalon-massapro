@@ -271,7 +271,7 @@ const MOCKUP_TEMPLATES: AssetCard[] = [
   },
 ];
 
-function AssetCardItem({ asset }: { asset: AssetCard }) {
+function AssetCardItem({ asset, brand }: { asset: AssetCard; brand?: string }) {
   const [expanded, setExpanded] = useState(false);
 
   // PER USER SPEC 2026-07-31 (TSK-0028): "on the admin/mockups page when
@@ -732,6 +732,7 @@ export function MockupsClient({
               <AssetCardItem
                 key={asset.url + (showIframePreview ? "-iframe" : showPlaceholder ? "-placeholder" : "")}
                 asset={showIframePreview ? { ...asset, url: "", iframeHref: `${asset.editorHref}?brand=${brand}&preview=1` } : showPlaceholder ? { ...asset, url: "" } : asset}
+                brand={brand}
               />
             );
           })}
@@ -777,6 +778,7 @@ export function MockupsClient({
                   ? `${asset.editorHref}?brand=${brand}`
                   : undefined,
               }}
+              brand={brand}
             />
           ))}
         </div>
