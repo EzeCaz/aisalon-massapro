@@ -16647,3 +16647,40 @@ Build: ✓ Compiled successfully in 46s. No new type errors (5 pre-existing
 TS errors in admin-event-manager.tsx, registrations/page.tsx,
 api/admin/events/[id]/registrations/route.ts, api/admin/members routes
 are unrelated to this commit and existed before).
+
+---
+Task ID: preview-invite-brand-admin
+Agent: main
+Task: User signed in as ch brand admin (eze@cazhype.com) clicked "Preview
+  Coma onboarding form" on /admin/chapter-onboarding → got error
+  "Couldn't create Coma invite: Forbidden".
+
+Root causes:
+1. /api/admin/chapter-onboarding/preview-invite was gated to SUPER_ADMIN
+   only. BRAND_ADMIN got 403.
+2. The button was hardcoded to email="eze@cazhype.com" (Coma preview).
+   For a ch brand admin this is misleading — they want to preview their
+   own brand's form, not Coma's.
+
+Fix (commit 69ccb96) — 3 files:
+1. /api/admin/chapter-onboarding/preview-invite/route.ts:
+   - Allow SUPER_ADMIN OR BRAND_ADMIN.
+   - Brand-scope guard: BRAND_ADMIN can only preview the form for users
+     in their OWN brand (target.brandSlug === me.brandSlug). 403 otherwise.
+   - Form URL now uses the target's actual brandSlug (was hardcoded
+     to "coma"|"aisalon" — falling back to aisalon for new brands like
+     "ch"). resolveBrandSiteUrl handles the platform fallback.
+2. /admin/chapter-onboarding/preview-coma-form-button.tsx:
+   - Now accepts props: previewEmail, brandSlug, brandDisplayName.
+   - Button label is dynamic: "Preview Coma onboarding form" for Coma,
+     "Preview Cazhype onboarding form" for non-Coma brands.
+3. /admin/chapter-onboarding/page.tsx:
+   - Computes the right props based on caller's role:
+     - SUPER_ADMIN: previewEmail = "eze@cazhype.com", brand = "coma"
+       (preserves the original use case).
+     - BRAND_ADMIN: previewEmail = me.email, brandSlug = me.brandSlug,
+       brandDisplayName looked up from the Brand DB row.
+   - The preview button only renders when previewEmail + previewBrandSlug
+     are both set.
+
+Build: ✓ Compiled successfully in 43s.
