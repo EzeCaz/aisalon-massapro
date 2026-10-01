@@ -244,13 +244,19 @@ export async function POST(
       );
     }
   } else {
-    // Sandbox fallback — save to /public/brand-uploads/<slug>/<assetKey>/...
+    // Sandbox fallback — save to /public/uploads/brand-assets/<slug>/<assetKey>/...
+    // (aligned with the admin-images GET handler's walkDir path so uploads
+    // from the onboarding form show up on /admin/images immediately. Phase
+    // 4 fix, 2026-10-02 — was previously /public/brand-uploads/... which
+    // the GET handler didn't walk, so onboarding uploads were invisible
+    // in the gallery in the local sandbox.)
     const fs = await import("fs/promises");
     const path = await import("path");
     const publicDir = path.join(
       process.cwd(),
       "public",
-      "brand-uploads",
+      "uploads",
+      "brand-assets",
       slug,
       assetKey,
     );
@@ -259,7 +265,7 @@ export async function POST(
     const localPath = path.join(publicDir, localName);
     const arrayBuf = await file.arrayBuffer();
     await fs.writeFile(localPath, Buffer.from(arrayBuf));
-    publicUrl = `/brand-uploads/${slug}/${assetKey}/${localName}`;
+    publicUrl = `/uploads/brand-assets/${slug}/${assetKey}/${localName}`;
     storageBackend = "local-public";
     console.warn(
       `[brand-assets:upload] BLOB_READ_WRITE_TOKEN not set — saved to ${localPath} (sandbox mode)`,

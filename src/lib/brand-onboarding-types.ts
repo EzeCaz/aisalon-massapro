@@ -104,6 +104,12 @@ export type BrandOnboardingFormData = {
   firstChapterCity?: string;
   /** Which country? ISO 3166-1 alpha-2 code (e.g. "FR", "CA", "IL"). */
   firstChapterCountryCode?: string;
+  /** IANA timezone for the first chapter (e.g. "America/New_York",
+   *  "Asia/Jerusalem", "Europe/Paris"). Stored on the chapter row at
+   *  provisioning time so event times render correctly for the brand's
+   *  first chapter. Skipped → defaults to "Asia/Jerusalem" (the original
+   *  AISalon chapter timezone). Phase 4 (2026-10-02). */
+  firstChapterTimezone?: string;
   /** Free-text launch plan notes. */
   launchNotes?: string;
 

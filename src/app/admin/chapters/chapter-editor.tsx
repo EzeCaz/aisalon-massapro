@@ -17,6 +17,7 @@ import { displayFlag } from "@/lib/country-flag";
 import { toast } from "sonner";
 import { ChapterBrandImagesEditor } from "./chapter-brand-images-editor";
 import { ImagePickerModalShared } from "../mockups/shared/image-picker-modal";
+import { COMMON_TIMEZONES } from "@/lib/brand-onboarding-types";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -516,13 +517,19 @@ export function ChapterEditor({
             />
           </Field>
           <Field label="Timezone">
-            <input
-              type="text"
+            <select
               value={form.timezone}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-              placeholder="Asia/Jerusalem"
               className="w-full rounded-md border border-black/15 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
-            />
+            >
+              {COMMON_TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-black/50">
+              IANA timezone — used for event times + email scheduling. Example:{" "}
+              <code className="font-mono">America/New_York</code>.
+            </p>
           </Field>
         </div>
 

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { Loader2, Send, CheckCircle2, AlertCircle, Lock } from "lucide-react";
+import { COMMON_TIMEZONES } from "@/lib/brand-onboarding-types";
 
 type Props = {
   token: string;
@@ -117,6 +118,10 @@ function Form({
   const [targetLaunchDate, setTargetLaunchDate] = React.useState("");
   const [firstChapterCity, setFirstChapterCity] = React.useState("");
   const [firstChapterCountryCode, setFirstChapterCountryCode] = React.useState("");
+  // Phase 4 (2026-10-02): IANA timezone picker (select with common IANA
+  // zones like "America/New_York", "Asia/Jerusalem", "Europe/Paris").
+  // Defaults to "Asia/Jerusalem" — the original AISalon chapter timezone.
+  const [firstChapterTimezone, setFirstChapterTimezone] = React.useState("Asia/Jerusalem");
   const [launchNotes, setLaunchNotes] = React.useState("");
 
   // Section 9: Notes
@@ -197,6 +202,7 @@ function Form({
           targetLaunchDate: targetLaunchDate || undefined,
           firstChapterCity: firstChapterCity.trim() || undefined,
           firstChapterCountryCode: firstChapterCountryCode.trim().toUpperCase() || undefined,
+          firstChapterTimezone: firstChapterTimezone || undefined,
           launchNotes: launchNotes.trim() || undefined,
           operationalNotes: operationalNotes.trim() || undefined,
           partnershipOpportunities: partnershipOpportunities.trim() || undefined,
@@ -406,7 +412,21 @@ function Form({
               </Field>
             </div>
             <Field label="First chapter city">
-              <input type="text" value={firstChapterCity} onChange={(e) => setFirstChapterCity(e.target.value)} placeholder="Tel Aviv" className={inputCls} />
+              <input type="text" value={firstChapterCity} onChange={(e) => setFirstChapterCity(e.target.value)} placeholder="New York City" className={inputCls} />
+            </Field>
+            <Field label="First chapter timezone">
+              <select
+                value={firstChapterTimezone}
+                onChange={(e) => setFirstChapterTimezone(e.target.value)}
+                className={`${inputCls} font-mono`}
+              >
+                {COMMON_TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-black/50">
+                IANA timezone — used for event times + email scheduling. Example: <code className="font-mono">America/New_York</code>.
+              </p>
             </Field>
             <Field label="Launch plan notes">
               <textarea

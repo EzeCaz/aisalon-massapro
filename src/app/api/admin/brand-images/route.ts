@@ -98,11 +98,17 @@ export async function GET(req: NextRequest) {
   // this server-side lock is the authoritative enforcement — a BRAND_ADMIN
   // hitting /api/admin/brand-images?brand=coma directly gets only their
   // own brand's images, never Coma's.
+  //
+  // Hardening (2026-10-02): also normalize the slug — Vercel Blob is
+  // case-sensitive, so a mixed-case brandSlug (e.g. "CH" or "Cazhype")
+  // would silently fail to match the lowercase prefix `brand-assets/ch/`.
+  // Lowercase + regex-validate before assigning.
   const brandParam = req.nextUrl.searchParams.get("brand")?.toLowerCase() ?? null;
   let activeBrand = brandParam && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandParam) ? brandParam : null;
-  // BRAND_ADMIN: force activeBrand to user.brandSlug, ignore URL param.
+  // BRAND_ADMIN: force activeBrand to user.brandSlug (normalized), ignore URL param.
   if (normalizeRole(user!.role) === ROLES.BRAND_ADMIN && user!.brandSlug) {
-    activeBrand = user!.brandSlug;
+    const normalizedSlug = user!.brandSlug.toLowerCase();
+    activeBrand = /^[a-z0-9][a-z0-9-]{0,31}$/.test(normalizedSlug) ? normalizedSlug : null;
   }
 
   // 1. List stock images from the hidden .images/ folder.
@@ -453,6 +459,82 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── BRAND DB ROW FALLBACK (2026-10-02) ──────────────────────────────────
+  // The brand onboarding form uploads 5+ images (logo, heroBanner, favicon,
+  // emailLogo, mascot) to Vercel Blob at `brand-assets/<slug>/<assetKey>/<file>`.
+  // The Vercel Blob `list({ prefix: "brand-assets/<slug>/" })` should return
+  // ALL of them (including nested subfolders), but if the listing fails for
+  // any reason (pagination, blob API issue, deployment cache), we still
+  // want the brand admin to see their onboarding-uploaded images.
+  //
+  // Solution: ALSO read the Brand DB row's asset URL columns
+  // (logoUrl, heroBannerUrl, faviconUrl, emailLogoUrl, mascotImageUrl) and
+  // merge them into the `uploaded` array (dedup by URL). This is a
+  // defense-in-depth measure — the Vercel Blob listing is the primary
+  // source, but the DB row is a guaranteed fallback.
+  if (activeBrand) {
+    try {
+      const brandRow = await db.brand.findUnique({
+        where: { slug: activeBrand },
+        select: {
+          logoUrl: true,
+          heroBannerUrl: true,
+          faviconUrl: true,
+          emailLogoUrl: true,
+          mascotImageUrl: true,
+          brandBookUrl: true,
+        },
+      });
+      if (brandRow) {
+        const existingUrls = new Set(uploaded.map((u) => u.url));
+        const brandAssets: Array<[string, string | null]> = [
+          ["logoUrl", brandRow.logoUrl],
+          ["heroBannerUrl", brandRow.heroBannerUrl],
+          ["faviconUrl", brandRow.faviconUrl],
+          ["emailLogoUrl", brandRow.emailLogoUrl],
+          ["mascotImageUrl", brandRow.mascotImageUrl],
+          // brandBookUrl is intentionally NOT included — it's a PDF/DOC,
+          // not an image, so it doesn't belong in the image gallery.
+        ];
+        for (const [assetKey, url] of brandAssets) {
+          if (!url) continue;
+          if (existingUrls.has(url)) continue; // already in the list
+          // Derive a friendly name from the URL path. For Vercel Blob
+          // URLs, the path looks like brand-assets/<slug>/<assetKey>/<file>
+          // — we want to display "<assetKey>/<file>" so the admin can tell
+          // which onboarding asset it came from. For non-Blob URLs (e.g.
+          // local sandbox), just use the last segment.
+          let friendlyName = assetKey;
+          try {
+            const u = new URL(url);
+            const parts = u.pathname.split("/").filter(Boolean);
+            // Expect: ["brand-assets", "<slug>", "<assetKey>", "<file>"]
+            if (parts.length >= 4 && parts[0] === "brand-assets") {
+              friendlyName = `${parts[2]}/${parts[parts.length - 1]}`;
+            } else {
+              friendlyName = parts[parts.length - 1] ?? assetKey;
+            }
+          } catch {
+            // Not a URL — use the last path segment
+            const seg = url.split("/").filter(Boolean).pop();
+            friendlyName = seg ?? assetKey;
+          }
+          uploaded.push({
+            name: friendlyName,
+            size: 0, // unknown — Vercel Blob size not in the DB row
+            mimeType: guessMimeFromName(friendlyName),
+            url,
+            kind: "uploaded",
+            brand: activeBrand,
+          });
+          existingUrls.add(url);
+        }
+      }
+    } catch (e) {
+      console.warn("[brand-images] could not read Brand DB row for fallback:", e);
+    }
+  }
+
   // 3. Current selections for each role — brand-resolved when the request
   // is scoped to a brand tab ("<key>@<brand>" → "<key>" → DEFAULTS).
   const settings = activeBrand
@@ -759,4 +841,11 @@ function extToMime(ext: string): string {
     default:
       return "application/octet-stream";
   }
+}
+
+/** Guess a MIME type from a filename (used by the Brand DB row fallback
+ *  where we only have the URL, not the file extension explicitly). */
+function guessMimeFromName(name: string): string {
+  const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+  return extToMime(ext || ".bin");
 }
