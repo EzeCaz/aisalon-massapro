@@ -1070,7 +1070,25 @@ export function SpeakerIntroEditor({ events, scopeKey, brandSlug = "aisalon" }: 
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setData((prev) => ({ ...prev, style: opt.value }))}
+                      onClick={() => setData((prev) => {
+                      // When switching styles, clear the per-style section
+                      // overrides that have different defaults per style.
+                      // This unlinks the styles so switching from Style 3
+                      // (speakers X=-6.2) to Style 2 (speakers X=-8.5)
+                      // actually shows Style 2's canvas defaults instead
+                      // of the cached Style 3 values. (2026-09-30)
+                      const newSectionLayout = { ...prev.sectionLayout };
+                      // Clear speakers — each style has different default
+                      // position/size/scale.
+                      delete newSectionLayout?.speakers;
+                      // Also clear qr — moved to different position per style.
+                      delete newSectionLayout?.qr;
+                      return {
+                        ...prev,
+                        style: opt.value,
+                        sectionLayout: newSectionLayout,
+                      };
+                    })}
                       className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold transition ${
                         i > 0 ? "border-l border-black/10" : ""
                       } ${
