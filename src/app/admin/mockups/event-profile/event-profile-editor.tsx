@@ -56,9 +56,10 @@ type Props = {
    * 2026-09-30). Defaults to "aisalon" for backwards compat.
    */
   brandSlug?: string;
+  previewMode?: boolean;
 };
 
-export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
+export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon", previewMode = false }: Props) {
   // Build brand-aware sample data — passes null for brandAssets (the
   // brand row is server-resolved by the page; getMockupDefaults falls
   // back to AIS or Coma visuals based on brandSlug).
@@ -807,19 +808,9 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: 
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
-         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
-         *  canvas, a compact "Selected Element" panel appears at the TOP
-         *  of this column showing ONLY the content-specific fields for
-         *  that element. The full form stays below (collapsed by default). */}
-        <div className="flex flex-col gap-3">
-          {/* PER USER SPEC 2026-08-02: Selected Element panel.
-           *  Renders when an element is selected AND at least one edit
-           *  mode is on. PER USER SPEC 2026-08-02 (TSK-0055-extend): now
-           *  also renders in image-edit mode — clicking a specific image
-           *  on the canvas (hero image, branding asset, sponsor logo)
-           *  triggers this panel with per-image edit fields. */}
+      <div className={previewMode ? "grid" : "grid gap-4 lg:grid-cols-[420px_1fr]"}>
+        {!previewMode && (
+        <>
           {(sectionsEditMode || editMode) && selectedId && (
             <EventProfileSelectedPanel
               selectedId={selectedId}
@@ -877,6 +868,8 @@ export function EventProfileEditor({ events, scopeKey, brandSlug = "aisalon" }: 
           </CollapsibleFormPanel>
         )}
         </div>
+        </>
+        )}
 
         {/* Right: live preview */}
         <div

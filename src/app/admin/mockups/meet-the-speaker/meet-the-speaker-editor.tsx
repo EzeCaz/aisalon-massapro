@@ -78,9 +78,10 @@ type Props = {
   /** Brand slug for the QR code URL — drives host + ?brand= param.
    *  Defaults to "aisalon" for backward compat. Phase 2 (2026-09-17). */
   brandSlug?: string;
+  previewMode?: boolean;
 };
 
-export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon" }: Props) {
+export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", previewMode = false }: Props) {
   // Build brand-aware sample data — see speaker-intro-editor.tsx for the
   // full explanation. Same pattern: getMockupDefaults(null, brandSlug)
   // returns AIS visuals when brandSlug="aisalon", Coma visuals otherwise.
@@ -927,12 +928,8 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon" }
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[420px_1fr]">
-        {/* Left column: Selected Element panel (top) + Form/JSON editor (below).
-         *  PER USER SPEC 2026-08-02: when the user clicks an element on the
-         *  canvas, a compact "Selected Element" panel appears at the TOP
-         *  of this column showing ONLY the content-specific fields for
-         *  that element. The full form stays below (collapsed by default). */}
+      <div className={previewMode ? "grid" : "grid gap-4 lg:grid-cols-[420px_1fr]"}>
+        {!previewMode && (
         <div className="flex flex-col gap-3">
           {/* PER USER SPEC 2026-08-02: Selected Element panel.
            *  Renders when an element is selected AND at least one edit
@@ -999,6 +996,8 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon" }
           </CollapsibleFormPanel>
         )}
         </div>
+
+        )}
 
         {/* Right: live preview */}
         <div

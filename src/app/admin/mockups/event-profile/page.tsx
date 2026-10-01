@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
  * Permission gate: ADMIN + SUPER_ADMIN (same as /admin/mockups).
  */
 
-export default async function EventProfileMockupPage() {
+export default async function EventProfileMockupPage({ searchParams }: { searchParams?: Promise<{ preview?: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     redirect("/login?callbackUrl=/admin/mockups/event-profile");
@@ -82,11 +82,14 @@ export default async function EventProfileMockupPage() {
     venue: e.venue,
   }));
 
+  const params = searchParams ? await searchParams : {};
+  const previewMode = params.preview === "1";
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <AppHeader />
+      {!previewMode && <AppHeader />}
       <main className="flex-1 mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <AdminTabs role={effectiveRole} />
+          {!previewMode && <AdminTabs role={effectiveRole} />}
 
         <div className="mb-6">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-2">
@@ -107,7 +110,7 @@ export default async function EventProfileMockupPage() {
           </p>
         </div>
 
-        <EventProfileEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} />
+        <EventProfileEditor events={events} scopeKey={scopeKey} brandSlug={me.brandSlug ?? "aisalon"} previewMode={previewMode} />
       </main>
 
       <footer className="mt-auto border-t border-black/10 bg-white">
