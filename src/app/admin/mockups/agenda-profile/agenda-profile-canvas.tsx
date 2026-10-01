@@ -95,6 +95,7 @@ export const AgendaProfileCanvas = forwardRef<HTMLDivElement, Props>(
   function AgendaProfileCanvas(
     {
       data,
+      brandSlug,
       className,
       editable,
       sectionsEditable,

@@ -128,6 +128,7 @@ export const MeetTheSpeakerCanvas = forwardRef<HTMLDivElement, Props>(
   function MeetTheSpeakerCanvas(
     {
       data,
+      brandSlug,
       className,
       editable,
       sectionsEditable,

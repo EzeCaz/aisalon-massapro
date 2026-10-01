@@ -129,6 +129,7 @@ export const SpeakerIntroCanvas = forwardRef<HTMLDivElement, Props>(
   function SpeakerIntroCanvas(
     {
       data,
+      brandSlug,
       className,
       editable,
       sectionsEditable,

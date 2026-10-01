@@ -802,6 +802,7 @@ export const SpeakerIntroStyle2Canvas = forwardRef<HTMLDivElement, Props>(
   function SpeakerIntroStyle2Canvas(
     {
       data,
+      brandSlug,
       className,
       sectionsEditable = false,
       editable = false,

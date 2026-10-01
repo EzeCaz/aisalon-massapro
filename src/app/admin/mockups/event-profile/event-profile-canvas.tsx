@@ -115,6 +115,7 @@ export const EventProfileCanvas = forwardRef<HTMLDivElement, Props>(
   function EventProfileCanvas(
     {
       data,
+      brandSlug,
       className,
       editable,
       sectionsEditable,
