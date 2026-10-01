@@ -91,8 +91,19 @@ export async function GET(req: NextRequest) {
   // Phase 4 (2026-10-01): extended to accept ANY brand slug (not just
   // "coma" | "aisalon") so new brands like "ch" work. BRAND_ADMIN users
   // see only their brand's images + legacy global images.
+  //
+  // STRICT BRAND LOCK (2026-10-02): BRAND_ADMIN users are LOCKED to their
+  // own brand regardless of the URL `?brand=` param. The page-level lock
+  // (in /admin/images/page.tsx) prevents the URL from being crafted, but
+  // this server-side lock is the authoritative enforcement — a BRAND_ADMIN
+  // hitting /api/admin/brand-images?brand=coma directly gets only their
+  // own brand's images, never Coma's.
   const brandParam = req.nextUrl.searchParams.get("brand")?.toLowerCase() ?? null;
-  const activeBrand = brandParam && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandParam) ? brandParam : null;
+  let activeBrand = brandParam && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandParam) ? brandParam : null;
+  // BRAND_ADMIN: force activeBrand to user.brandSlug, ignore URL param.
+  if (normalizeRole(user!.role) === ROLES.BRAND_ADMIN && user!.brandSlug) {
+    activeBrand = user!.brandSlug;
+  }
 
   // 1. List stock images from the hidden .images/ folder.
   // Phase 4 (2026-10-01): stock images are AIS-specific. Hide them
@@ -212,7 +223,13 @@ export async function GET(req: NextRequest) {
                 // filter client-side. This is fine — chapter-brand/ is
                 // typically a small set.)
                 "chapter-brand/"
-              : null;
+              : scope?.kind === "brand"
+                ? // BRAND_ADMIN — list all chapter-brand/ entries; we'll
+                  // filter by chapter.brand.slug below. Same reasoning as
+                  // country scope: Vercel Blob list() doesn't support OR
+                  // prefixes, so we list everything and filter.
+                  "chapter-brand/"
+                : null;
 
       if (chapterBrandPrefix) {
         // For country scope, pre-load the chapter IDs in this country so
@@ -224,6 +241,17 @@ export async function GET(req: NextRequest) {
             select: { id: true },
           });
           countryChapterIds = new Set(chaptersInCountry.map((c) => c.id));
+        }
+
+        // For brand scope, pre-load the chapter IDs in this brand so
+        // we can filter the list results.
+        let brandChapterIds: Set<string> | null = null;
+        if (scope?.kind === "brand") {
+          const chaptersInBrand = await db.chapter.findMany({
+            where: { brand: { slug: scope.brandSlug } },
+            select: { id: true },
+          });
+          brandChapterIds = new Set(chaptersInBrand.map((c) => c.id));
         }
 
         let cbCursor: string | undefined = undefined;
@@ -242,6 +270,11 @@ export async function GET(req: NextRequest) {
 
             // Filter for country scope
             if (countryChapterIds && !countryChapterIds.has(blobChapterId)) {
+              continue;
+            }
+            // Filter for brand scope (BRAND_ADMIN — only their brand's
+            // chapter-scoped uploads).
+            if (brandChapterIds && !brandChapterIds.has(blobChapterId)) {
               continue;
             }
 
@@ -320,7 +353,12 @@ export async function GET(req: NextRequest) {
                   where: { countryId: scope.countryId },
                   select: { id: true },
                 }).then((cs) => cs.map((c) => c.id))
-              : null;
+              : scope?.kind === "brand"
+                ? await db.chapter.findMany({
+                    where: { brand: { slug: scope.brandSlug } },
+                    select: { id: true },
+                  }).then((cs) => cs.map((c) => c.id))
+                : null;
 
       for (const dir of chapterDirs) {
         // Skip if not in scope
@@ -374,6 +412,12 @@ export async function GET(req: NextRequest) {
   // chapter) sees the full library — both stock images and every
   // uploaded brand asset in Vercel Blob.
   //
+  // BRAND_ADMIN (scope.kind === "brand", 2026-10-02) sees the FULL
+  // library of their own brand's uploads (every image in
+  // brand-assets/<theirBrand>/) — NOT the curated-only filter. They
+  // are the admin for their brand; they need to manage all of their
+  // brand's images, not just the curated ones.
+  //
   // Non-global callers (ADMIN, CHAPTER_ORGANIZER, CO_HOST, or a
   // SUPER_ADMIN viewing-as one of those) see:
   //   - The 3 globally-selected images (favicon, loginHero, loginBanner)
@@ -393,7 +437,7 @@ export async function GET(req: NextRequest) {
   // (/api/admin/hidden-images/[name]) never match a selection URL
   // (which is always a Vercel Blob URL), so they're filtered out
   // naturally.
-  if (!isGlobalScope) {
+  if (!isGlobalScope && scope?.kind !== "brand") {
     const allowedUrls = new Set<string>();
     if (settings.favicon) allowedUrls.add(settings.favicon);
     if (settings.loginHero) allowedUrls.add(settings.loginHero);

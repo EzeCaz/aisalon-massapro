@@ -4,7 +4,7 @@ import path from "path";
 import { Readable } from "stream";
 import { put } from "@vercel/blob";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { isSuperAdmin } from "@/lib/permissions";
+import { isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import {
   ALL_KEYS,
   setSetting,
@@ -42,7 +42,14 @@ import { safeFileExtension, safeBlobPathname, uniqueBlobFilename } from "@/lib/b
 export async function POST(req: NextRequest) {
   const { user, error } = await getCurrentUser();
   if (error) return error;
-  if (!isSuperAdmin({ email: user!.email, role: user!.role })) {
+  // Phase 4 (2026-10-02): allow BRAND_ADMIN to select images for their
+  // own brand. The brand-scoped key ("<key>@<brand>") is written only
+  // when the brand param is set, AND for BRAND_ADMIN we force the brand
+  // param to their own brandSlug (defense-in-depth — a BRAND_ADMIN for
+  // "cazhype" can never set Coma's favicon by passing ?brand=coma).
+  const isSa = isSuperAdmin({ email: user!.email, role: user!.role });
+  const isBa = normalizeRole(user!.role) === ROLES.BRAND_ADMIN;
+  if (!isSa && !isBa) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -59,8 +66,16 @@ export async function POST(req: NextRequest) {
   // selection is written to the brand-scoped key ("<key>@<brand>") so
   // each brand renders its own images. Reads resolve brand → global →
   // defaults (see getPublicSettingsForBrand in site-settings.ts).
-  const brandRaw = typeof body.brand === "string" ? body.brand.toLowerCase() : null;
-  const brand = brandRaw === "coma" || brandRaw === "aisalon" ? brandRaw : null;
+  //
+  // Phase 4 (2026-10-02): accept any URL-safe brand slug, not just
+  // coma/aisalon — new brands like "cazhype" need their own brand-
+  // scoped selections.
+  let brandRaw = typeof body.brand === "string" ? body.brand.toLowerCase() : null;
+  // BRAND_ADMIN: force brand to their own brandSlug — ignore client.
+  if (isBa && !isSa && user!.brandSlug) {
+    brandRaw = user!.brandSlug;
+  }
+  const brand = brandRaw && /^[a-z0-9][a-z0-9-]{0,31}$/.test(brandRaw) ? brandRaw : null;
 
   if (!key || !ALL_KEYS.has(key)) {
     return NextResponse.json(

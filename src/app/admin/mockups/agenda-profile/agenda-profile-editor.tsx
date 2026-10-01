@@ -845,7 +845,6 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon", p
             )}
           </CollapsibleFormPanel>
         )}
-        </div>
         </>
         )}
 
@@ -855,8 +854,8 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon", p
           className={previewMode ? "relative overflow-hidden" : "relative rounded-lg border border-black/15 bg-gradient-to-br from-black/[0.03] to-black/[0.06] p-4 overflow-hidden"}
         >
           {!previewMode && (
-        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <>
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <div className="text-[0.7rem] font-semibold text-black/70">
             Canvas: 1200 × 1500 (4:5 portrait) · Edits auto-saved to this browser
             <span className="ml-2 text-black/40 font-normal">
@@ -959,7 +958,7 @@ export function AgendaProfileEditor({ events, scopeKey, brandSlug = "aisalon", p
         </div>
       </div>
 
-      <ImagePickerModal brandSlug={brandSlug} brandSlug={brandSlug}
+      <ImagePickerModal brandSlug={brandSlug}
         open={pickerSlot !== null}
         onClose={() => setPickerSlot(null)}
         onPick={handlePickerSelect}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { can, isSuperAdmin, ROLES } from "@/lib/permissions";
+import { can, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 import { normalizeHttpUrl } from "@/lib/normalize-url";
 
 function slugify(s: string): string {

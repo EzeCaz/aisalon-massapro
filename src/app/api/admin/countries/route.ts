@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth-guards";
-import { can, isSuperAdmin } from "@/lib/permissions";
+import { can, isSuperAdmin, normalizeRole, ROLES } from "@/lib/permissions";
 
 function slugify(s: string): string {
   return s
@@ -82,9 +82,18 @@ export async function POST(req: Request) {
   if ("error" in me && me.error) return me.error;
   const user = me.user!;
 
-  if (!isSuperAdmin({ email: user.email, role: user.role })) {
+  // Phase 4 (2026-10-02): allow BRAND_ADMIN to create countries too —
+  // they need to create chapters in countries that don't exist yet in
+  // the platform (e.g. a Cazhype brand admin creating their first
+  // chapter in a new country). Super Admin can still create countries
+  // (full platform authority). The country is created as a generic
+  // platform-wide country — it's NOT brand-scoped (countries are
+  // shared, chapters belong to brands within countries).
+  const isSa = isSuperAdmin({ email: user.email, role: user.role });
+  const isBa = normalizeRole(user.role) === ROLES.BRAND_ADMIN;
+  if (!isSa && !isBa) {
     return NextResponse.json(
-      { error: "Only Super Admin can create countries." },
+      { error: "Only Super Admin or Brand Admin can create countries." },
       { status: 403 }
     );
   }

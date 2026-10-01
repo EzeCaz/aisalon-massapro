@@ -1067,7 +1067,6 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
                 )}
               </button>
             </div>
-          </div>
             </>
           )}
           <div
@@ -1151,7 +1150,7 @@ export function MeetTheSpeakerEditor({ events, scopeKey, brandSlug = "aisalon", 
       </details>
 
       {/* Image picker modal */}
-      <ImagePickerModalShared brandSlug={brandSlug} brandSlug={brandSlug}
+      <ImagePickerModalShared brandSlug={brandSlug}
         open={pickerSlot !== null}
         onClose={() => setPickerSlot(null)}
         onPick={handlePickerSelect}

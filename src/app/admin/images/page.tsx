@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isSuperAdmin, isSuperAdminEmail, canSeeAdminNav, ROLES, getEffectiveRole} from "@/lib/permissions";
+import { isSuperAdmin, isSuperAdminEmail, canSeeAdminNav, ROLES, getEffectiveRole, normalizeRole} from "@/lib/permissions";
 import { AppHeader } from "@/components/ais/app-header";
 import { AdminTabs } from "@/components/ais/admin-tabs";
 import { ImagesGallery } from "./images-gallery";
@@ -89,6 +89,12 @@ export default async function AdminImagesPage({
   }
 
   const isSuper = isSuperAdmin({ email: me.email, role: me.role });
+  // BRAND_ADMIN can also upload images (only to their own brand's folder).
+  // The brand-images POST endpoint enforces server-side that BRAND_ADMIN
+  // uploads land in their own brand's folder, regardless of the ?brand=
+  // URL param the client sends.
+  const isBa = normalizeRole(me.role) === ROLES.BRAND_ADMIN;
+  const canUpload = isSuper || isBa;
 
   // BRAND-AWARE (2026-09-19): the page reads ?brand=<slug> so the Super
   // Admin can scope the WhatsApp/LinkedIn/Analytics editors to a
@@ -98,18 +104,53 @@ export default async function AdminImagesPage({
   // Phase 4 (2026-10-01): for BRAND_ADMIN users, prefer me.brandSlug
   // over the host-resolved brand — so eze@cazhype.com sees cazhype's
   // images, not Coma's.
+  //
+  // STRICT BRAND LOCK (2026-10-02): BRAND_ADMIN users are LOCKED to their
+  // own brand regardless of the URL `?brand=` param. This is a defense-
+  // in-depth measure against accidental brand leakage — without this,
+  // a BRAND_ADMIN for "cazhype" who lands on /admin/images?brand=coma
+  // (e.g. via a stale bookmark, an old link, or the host default) would
+  // see Coma's images and could even upload to Coma's folder. Locking
+  // the brand on the server side guarantees that BRAND_ADMIN's scope
+  // is always their own brand.
   const sp = await searchParams;
   const rawBrandSlug = (sp.brand ?? "").trim().toLowerCase() || null;
-  const brandSlug =
-    rawBrandSlug && isBrandSlug(rawBrandSlug)
-      ? rawBrandSlug
-      : me.brandSlug && isBrandSlug(me.brandSlug)
-        ? me.brandSlug
-        : (await resolveBrandMetadata()).brand.slug;
+  let brandSlug: string;
+  if (isBa && me.brandSlug && isBrandSlug(me.brandSlug)) {
+    // BRAND_ADMIN: lock to user's own brand — ignore URL ?brand= override.
+    brandSlug = me.brandSlug;
+  } else if (rawBrandSlug && isBrandSlug(rawBrandSlug)) {
+    // Super Admin / regular Admin: honor the URL ?brand= override.
+    brandSlug = rawBrandSlug;
+  } else if (me.brandSlug && isBrandSlug(me.brandSlug)) {
+    // No URL override — fall back to me.brandSlug (if set).
+    brandSlug = me.brandSlug;
+  } else {
+    // Last-resort fallback: host-resolved brand.
+    brandSlug = (await resolveBrandMetadata()).brand.slug;
+  }
 
   // Load the current settings scoped to the resolved brand. Falls back
   // to global defaults when the brand-scoped row is missing.
   const settings = await getPublicSettingsForBrand(brandSlug);
+
+  // Look up the brand row from the DB so we can display the brand's
+  // display name (not just the slug) in the page header + ImagesGallery
+  // heading. For AIS + Coma (no DB row, static-only brands), fall back
+  // to the BrandConfig displayName.
+  let brandDisplayName: string;
+  if (brandSlug === "aisalon") {
+    brandDisplayName = "AI Salon";
+  } else if (brandSlug === "coma") {
+    brandDisplayName = "Coma";
+  } else {
+    const dbBrand = await db.brand.findUnique({
+      where: { slug: brandSlug },
+      select: { displayName: true },
+    });
+    brandDisplayName = dbBrand?.displayName
+      ?? brandSlug.charAt(0).toUpperCase() + brandSlug.slice(1);
+  }
 
   // Load countries + chapters for the new chapter-scoped image filter.
   // Scope: Super Admin sees all; Admin sees own country; Chapter
@@ -189,7 +230,7 @@ export default async function AdminImagesPage({
           )}
         </div>
 
-        <ImagesGallery countries={countries} isSuperAdmin={isSuper} defaultBrandSlug={brandSlug} />
+        <ImagesGallery countries={countries} isSuperAdmin={isSuper} canUpload={canUpload} defaultBrandSlug={brandSlug} brandDisplayName={brandDisplayName} />
 
         {/* WhatsApp group link editor — sits below the brand images gallery.
             SUPER_ADMIN-only writes (enforced by the API), but visible to any

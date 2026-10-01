@@ -86,11 +86,16 @@ type RoleKey = (typeof ROLE_KEYS)[number];
 export function ImagesGallery({
   countries,
   isSuperAdmin,
+  canUpload,
   defaultBrandSlug,
+  brandDisplayName,
 }: {
   countries: Country[];
   isSuperAdmin: boolean;
+  /** True if user can upload (Super Admin OR BRAND_ADMIN). */
+  canUpload?: boolean;
   defaultBrandSlug?: string | null;
+  brandDisplayName?: string | null;
 }) {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -351,7 +356,7 @@ export function ImagesGallery({
         <Images className="h-8 w-8 mx-auto text-black/30 mb-3" />
         <p className="text-sm font-semibold text-black/70">No images available</p>
         <p className="text-xs text-black/50 mt-1">
-          {isSuperAdmin
+          {isSuperAdmin || canUpload
             ? "Upload your first brand image using the button above."
             : "No global brand defaults have been set yet. Please ask a Super Admin to set the favicon, login hero, and login banner before configuring chapter overrides."}
         </p>
@@ -375,17 +380,27 @@ export function ImagesGallery({
         />
       )}
       {brand !== "aisalon" && brand !== "coma" && (
-        <div className="mb-2">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-1">
-            {brand} brand images
-          </p>
+        <div className="mb-4 rounded-lg border border-[#FF005A]/20 bg-[#FF005A]/[0.03] px-4 py-3 flex items-center gap-3">
+          <span
+            aria-hidden
+            className="inline-block h-3 w-3 rounded-full bg-[#FF005A]"
+          />
+          <div>
+            <p className="text-sm font-semibold text-black">
+              {brandDisplayName ?? brand} brand images
+            </p>
+            <p className="text-xs text-black/60 mt-0.5">
+              You are viewing images for the <strong>{brandDisplayName ?? brand}</strong> brand only.
+              Uploads are scoped to the <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-[0.85em]">brand-assets/{brand}/</code> folder.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Upload zone — SUPER_ADMIN-only. Non-super-admins can only pick
-          from the global defaults curated by the Super Admin, so they
-          don't need (and can't use) the upload zone. */}
-      {isSuperAdmin && (
+      {/* Upload zone — Super Admin OR BRAND_ADMIN (both can upload).
+          BRAND_ADMIN uploads are locked to their own brand's folder by
+          the brand-images POST endpoint (server-side enforcement). */}
+      {(isSuperAdmin || canUpload) && (
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -679,7 +694,7 @@ export function ImagesGallery({
                           key={`g-btn-${role}`}
                           type="button"
                           onClick={() => handleSelect(img, role)}
-                          disabled={!isSuperAdmin || busyKey !== null}
+                          disabled={!(isSuperAdmin || canUpload) || busyKey !== null}
                           className={`inline-flex items-center justify-center gap-1 rounded px-1.5 py-1.5 text-[0.65rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                             isSelected
                               ? "bg-[#FF005A] text-white hover:bg-[#D8004D]"

@@ -3,10 +3,20 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X, Mail } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Copy, Check, ExternalLink, Globe2, ShieldCheck, Upload, Loader2, X, Mail, Plus } from "lucide-react";
 import { displayFlag } from "@/lib/country-flag";
 import { toast } from "sonner";
 import { ChapterBrandImagesEditor } from "./chapter-brand-images-editor";
+import { ImagePickerModalShared } from "../mockups/shared/image-picker-modal";
 
 type Country = { id: string; name: string; code: string; flagEmoji: string | null };
 
@@ -53,6 +63,17 @@ export function ChapterEditor({
   // admin can't save a chapter with a half-uploaded hero URL).
   const [uploadingHero, setUploadingHero] = useState(false);
   const heroInputRef = useRef<HTMLInputElement>(null);
+  // Inline country creation state — when "Add new country…" is chosen
+  // from the dropdown, we open a dialog to collect name + code + flag.
+  const [countryList, setCountryList] = useState<Country[]>(countries);
+  const [showAddCountry, setShowAddCountry] = useState(false);
+  const [newCountryName, setNewCountryName] = useState("");
+  const [newCountryCode, setNewCountryCode] = useState("");
+  const [newCountryFlag, setNewCountryFlag] = useState("");
+  const [creatingCountry, setCreatingCountry] = useState(false);
+  // Inline image picker state — opens a modal to pick a hero image
+  // from the brand library (/admin/images) without leaving the form.
+  const [showHeroPicker, setShowHeroPicker] = useState(false);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     slug: initial?.slug ?? "",
@@ -114,6 +135,57 @@ export function ChapterEditor({
       setForm((f) => ({ ...f, slug: f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") }));
     }
   }, [form.name, form.slug, mode]);
+
+  /**
+   * Inline country creation — opens the dialog when "Add new country…"
+   * is selected from the country dropdown. The dialog collects name +
+   * 2-letter ISO code + optional flag emoji, then POSTs to
+   * /api/admin/countries. On success, the new country is appended to
+   * the local countryList and pre-selected as the chapter's countryId.
+   *
+   * Phase 4 (2026-10-02): BRAND_ADMIN users can also create countries
+   * (the API was updated to allow it). This unblocks brand admins who
+   * need a chapter in a country that doesn't exist in the platform yet
+   * (e.g. a Cazhype brand admin creating their first US chapter).
+   */
+  async function handleCreateCountry() {
+    const n = newCountryName.trim();
+    const c = newCountryCode.trim().toUpperCase();
+    if (!n) return toast.error("Country name is required");
+    if (c.length !== 2) return toast.error("Country code must be 2 letters");
+    setCreatingCountry(true);
+    try {
+      const res = await fetch("/api/admin/countries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: n,
+          code: c,
+          flagEmoji: newCountryFlag.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { country: Country };
+      setCountryList((prev) =>
+        [...prev, data.country].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setForm((f) => ({ ...f, countryId: data.country.id }));
+      setShowAddCountry(false);
+      setNewCountryName("");
+      setNewCountryCode("");
+      setNewCountryFlag("");
+      toast.success(`Country "${n}" created`);
+    } catch (e) {
+      toast.error("Country creation failed", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setCreatingCountry(false);
+    }
+  }
 
   /**
    * Upload a hero image file to Vercel Blob via the chapter hero-image
@@ -190,17 +262,17 @@ export function ChapterEditor({
             type="text"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="New York"
+            placeholder="New York City"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
 
-        <Field label="Slug" required hint="Used in URLs: /c/tel-aviv">
+        <Field label="Slug" required hint="Used in URLs: /c/new-york">
           <input
             type="text"
             value={form.slug}
             onChange={(e) => setForm({ ...form, slug: e.target.value })}
-            placeholder="tel-aviv"
+            placeholder="new-york"
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
         </Field>
@@ -345,18 +417,93 @@ export function ChapterEditor({
         <Field label="Country" required>
           <select
             value={form.countryId}
-            onChange={(e) => setForm({ ...form, countryId: e.target.value })}
+            onChange={(e) => {
+              if (e.target.value === "__ADD_NEW__") {
+                setShowAddCountry(true);
+                // Keep the previously selected value (don't clear it)
+                return;
+              }
+              setForm({ ...form, countryId: e.target.value });
+            }}
             disabled={!isSuperAdmin && mode === "edit"}
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           >
             <option value="">Select country…</option>
-            {countries.map((c) => (
+            {countryList.map((c) => (
               <option key={c.id} value={c.id}>
                 {displayFlag(c.code, c.flagEmoji)} {c.name} ({c.code})
               </option>
             ))}
+            <option value="__ADD_NEW__">➕ Add new country…</option>
           </select>
         </Field>
+
+        {/* Inline "Add new country" dialog — opens when "➕ Add new
+            country…" is selected from the dropdown above. Lets the
+            brand admin / super admin create a new country without
+            leaving the chapter creation form. Phase 4 (2026-10-02). */}
+        <Dialog open={showAddCountry} onOpenChange={setShowAddCountry}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create a new country</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-black/70 -mt-2">
+              Add a new country to the platform. After creating it, the
+              chapter will be attached to this country.
+            </p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-semibold text-black/80 mb-1 block">Name *</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. United States"
+                    value={newCountryName}
+                    onChange={(e) => setNewCountryName(e.target.value)}
+                    className="w-full rounded-md border border-black/15 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-black/80 mb-1 block">Code (ISO 3166-1 alpha-2) *</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. US"
+                    maxLength={2}
+                    value={newCountryCode}
+                    onChange={(e) => setNewCountryCode(e.target.value)}
+                    className="w-full rounded-md border border-black/15 px-3 py-2 text-sm uppercase"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold text-black/80 mb-1 block">Flag emoji</span>
+                <input
+                  type="text"
+                  placeholder="🇺🇸"
+                  value={newCountryFlag}
+                  onChange={(e) => setNewCountryFlag(e.target.value)}
+                  className="w-full rounded-md border border-black/15 px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button
+                disabled={creatingCountry}
+                onClick={handleCreateCountry}
+                className="bg-[#FF005A] hover:bg-[#FF005A]/90 text-white"
+              >
+                {creatingCountry ? (
+                  <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Creating…</>
+                ) : (
+                  <><Plus className="h-4 w-4 mr-1.5" /> Create country</>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="City">
@@ -409,8 +556,8 @@ export function ChapterEditor({
             Hero image <span className="text-black/40 normal-case font-normal">— shown on /c/{form.slug || "slug"}</span>
           </label>
           <p className="text-xs text-black/50 mb-2">
-            Upload a new image, or paste an existing https:// URL (e.g. from
-            the /admin/images gallery). Renders on the right side of the
+            Upload a new image, pick one from the brand gallery, or paste
+            an existing https:// URL. Renders on the right side of the
             chapter landing page hero.
           </p>
 
@@ -447,54 +594,86 @@ export function ChapterEditor({
             className="w-full rounded-md border border-black/15 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF005A]"
           />
 
-          {/* Upload button — only in edit mode (needs chapterId) */}
-          {mode === "edit" && (
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => heroInputRef.current?.click()}
-                disabled={uploadingHero || saving}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploadingHero ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-3.5 w-3.5" /> Upload new image
-                  </>
-                )}
-              </button>
-              <input
-                ref={heroInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) uploadHeroImage(f);
-                  e.target.value = "";
-                }}
-              />
-              {form.heroImageUrl && (
-                <a
-                  href={form.heroImageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+          {/* Action buttons — Pick from gallery (any mode) + Upload
+              (edit mode only — needs chapterId to scope the upload). */}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {/* Pick from gallery — works in BOTH new + edit mode. The
+                picker just sets form.heroImageUrl to an existing URL,
+                so no chapterId is required. */}
+            <button
+              type="button"
+              onClick={() => setShowHeroPicker(true)}
+              disabled={uploadingHero || saving}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[#FF005A] text-[#FF005A] font-semibold px-3 py-1.5 text-xs hover:bg-[#FF005A] hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Globe2 className="h-3.5 w-3.5" /> Pick from gallery
+            </button>
+
+            {/* Upload — only in edit mode (needs chapterId) */}
+            {mode === "edit" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => heroInputRef.current?.click()}
+                  disabled={uploadingHero || saving}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#820A7D] text-[#820A7D] font-semibold px-3 py-1.5 text-xs hover:bg-[#820A7D] hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ExternalLink className="h-3.5 w-3.5" /> Open
-                </a>
-              )}
-            </div>
-          )}
+                  {uploadingHero ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5" /> Upload new image
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={heroInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadHeroImage(f);
+                    e.target.value = "";
+                  }}
+                />
+              </>
+            )}
+
+            {form.heroImageUrl && (
+              <a
+                href={form.heroImageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-black/15 text-black/70 font-semibold px-3 py-1.5 text-xs hover:bg-black/5"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Open
+              </a>
+            )}
+          </div>
           {mode === "new" && (
             <p className="mt-2 text-[0.7rem] text-black/50">
-              Save the chapter first, then upload a hero image.
+              Pick from the gallery now (or save the chapter first, then upload a custom hero image).
             </p>
           )}
         </div>
+
+        {/* Hero image picker modal — shared component from the mockups
+            toolkit. Pulls from /api/admin/brand-images (the same image
+            gallery as /admin/images), scoped to the chapter's brand.
+            On pick, sets form.heroImageUrl to the chosen URL. */}
+        <ImagePickerModalShared
+          open={showHeroPicker}
+          onClose={() => setShowHeroPicker(false)}
+          onPick={(url) => {
+            setForm((f) => ({ ...f, heroImageUrl: url }));
+            setShowHeroPicker(false);
+          }}
+          currentUrl={form.heroImageUrl}
+          brandSlug={brandSlug}
+        />
 
         <label className="flex items-center gap-2 text-sm text-black/80">
           <input

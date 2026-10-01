@@ -20,6 +20,7 @@ import { PhotoUploadField } from "@/components/ais/photo-upload-field";
 import {
   ASSIGNABLE_ROLES,
   isSuperAdminEmail,
+  normalizeRole,
   ROLES,
   roleBadgeClass,
   roleLabel,
