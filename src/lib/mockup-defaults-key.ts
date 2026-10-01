@@ -38,13 +38,19 @@
  *   - "none"                            (no admin access — shouldn't happen in mockup pages)
  */
 export function buildScopeKey(scope: {
-  kind: "global" | "country" | "chapter" | "none";
+  kind: "global" | "brand" | "country" | "chapter" | "none";
   countryId?: string;
   chapterId?: string;
+  brandSlug?: string;
 }): string {
   switch (scope.kind) {
     case "global":
       return "global";
+    case "brand":
+      // Brand-scoped admin: namespace by brandSlug so each brand's
+      // defaults are isolated. e.g. "brand_ch" vs "brand_cazhype".
+      // Round 2 fix (2026-09-30).
+      return `brand_${scope.brandSlug ?? "unknown"}`;
     case "country":
       return `country_${scope.countryId ?? "unknown"}`;
     case "chapter":

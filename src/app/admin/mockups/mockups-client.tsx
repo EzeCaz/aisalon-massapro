@@ -162,7 +162,7 @@ const BRAND_ASSETS: AssetCard[] = [
  *     plus a pointer to /admin/images (Coma tab) where the Super Admin
  *     can upload more Coma assets into the brand-images gallery.
  */
-function brandAssetsFor(brand: AdminBrandSlug): AssetCard[] {
+function brandAssetsFor(brand: string): AssetCard[] {
   if (brand === "coma") {
     const coma = getBrandConfig("coma");
     const cards: AssetCard[] = [];
@@ -201,7 +201,24 @@ function brandAssetsFor(brand: AdminBrandSlug): AssetCard[] {
     });
     return cards;
   }
-  return BRAND_ASSETS;
+  if (brand === "aisalon") {
+    return BRAND_ASSETS;
+  }
+  // Round 2 fix (2026-09-30): for new brands (ch, cazhype, danone, ...),
+  // show a placeholder card pointing to the onboarding hub where the
+  // brand admin can upload their assets. The actual brand assets are
+  // resolved from the DB by the mockup editors.
+  return [
+    {
+      title: "Upload brand assets",
+      description:
+        "Use the onboarding hub to upload your brand's logo, hero banner, mascot, and more. Once uploaded, they'll appear in mockup editors automatically.",
+      url: "",
+      kind: "brand",
+      editorHref: `/onboarding/${brand}`,
+      editorLabel: "Open onboarding hub",
+    },
+  ];
 }
 
 const MOCKUP_TEMPLATES: AssetCard[] = [
@@ -587,13 +604,23 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function MockupsClient() {
+export function MockupsClient({
+  defaultBrandSlug,
+}: {
+  defaultBrandSlug?: string;
+} = {}) {
   const [copied, setCopied] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   // BRAND TABS (user spec 2026-09-19): the Brand Assets library switches
   // per brand; template editors open with ?brand= so the selected brand's
   // context carries through.
-  const [brand, setBrand] = useState<AdminBrandSlug>("aisalon");
+  // Round 2 fix (2026-09-30): when a BRAND_ADMIN visits this page, default
+  // to their brand instead of "aisalon". Super Admins default to "aisalon"
+  // (or "coma" — they can switch via the tabs). The brand state is typed
+  // as string (not AdminBrandSlug) so new brands (ch, cazhype) work.
+  const [brand, setBrand] = useState<string>(
+    defaultBrandSlug ?? "aisalon"
+  );
   const assets = brandAssetsFor(brand);
 
   async function copyPrompt() {
@@ -623,12 +650,28 @@ export function MockupsClient() {
 
   return (
     <div className="space-y-12">
-      {/* BRAND TABS — switch the asset library + editor brand context. */}
-      <BrandSwitchTabs
-        active={brand}
-        onChange={setBrand}
-        hint={`Showing the ${brand === "coma" ? "Coma" : "AI Salon"} asset library.`}
-      />
+      {/* BRAND TABS — switch the asset library + editor brand context.
+          Hidden for non-aisalon/non-coma brands (BRAND_ADMIN is locked
+          to their own brand — no switching needed). Round 2 (2026-09-30). */}
+      {(brand === "aisalon" || brand === "coma") && (
+        <BrandSwitchTabs
+          active={brand as AdminBrandSlug}
+          onChange={(b) => setBrand(b)}
+          hint={`Showing the ${brand === "coma" ? "Coma" : "AI Salon"} asset library.`}
+        />
+      )}
+      {brand !== "aisalon" && brand !== "coma" && (
+        <div className="mb-6">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-[#FF005A] mb-1">
+            {brand} brand assets
+          </p>
+          <p className="text-sm text-black/70">
+            Showing assets for the <strong>{brand}</strong> brand. Use the
+            onboarding hub to upload or update your brand&apos;s logo, hero,
+            mascot, and more.
+          </p>
+        </div>
+      )}
 
       {/* SECTION 1 — Mockup Templates (FIRST, per user request) */}
       <section aria-labelledby="templates-title">
