@@ -16431,3 +16431,72 @@ Stage Summary:
 - Issue 2: Communities page split — non-Coma users see only their brand's communities first, "See more communities (N)" button reveals everyone else's. Coma users + anonymous see everything by default.
 - Issue 3: Chapter.isPubliclyListed column added. Migration ready. Chapter editor has the "Publicly listed" checkbox. /communities + events filter dropdown both exclude private chapters.
 - Issue 4: /onboarding/[brandSlug] now shows an "Invite link for <Brand>" panel with two URLs + Copy buttons. Verified in sandbox: cazhype brand admin sees "Invite link for Cazhype" with http://localhost:3000/login?brand=ch ready to copy.
+
+---
+Task ID: brand-isolation-fix-2026-10-02
+Agent: main
+Task: User reported 3 issues still present from previous task:
+  1. eze@cazhype.com (BRAND_ADMIN for cazhype) sees a "Coma | AI Salon" brand
+     switcher on /admin/images — should only see cazhype images.
+  2. Chapter creation form has Tel Aviv placeholders, only Canada/Israel in
+     country dropdown (no way to add a new country), and hero image field
+     only supports URL paste (no upload or gallery picker).
+  3. (Pre-existing) Mockup preview iframe issues from previewMode JSX
+     fragment nesting errors.
+
+Work Log:
+- /admin/images/page.tsx:
+  - Added STRICT BRAND LOCK for BRAND_ADMIN users — they are now locked
+    to me.brandSlug regardless of the URL ?brand= param. Defense-in-depth
+    against stale bookmarks, host default, or crafted URLs.
+  - Look up the brand's display name from the DB (for non-Coma/AIS brands)
+    and pass it to ImagesGallery so the heading shows "Cazhype brand images"
+    instead of the raw slug.
+  - Pass canUpload flag (Super Admin OR BRAND_ADMIN) to ImagesGallery
+    so BRAND_ADMIN sees the upload zone.
+- /admin/images/images-gallery.tsx:
+  - Added canUpload prop + brandDisplayName prop.
+  - BrandSwitchTabs is now properly hidden for non-Coma/non-AIS brands
+    (already true, but now displays a proper brand header card).
+  - Upload zone + select buttons gated on (isSuperAdmin || canUpload).
+- /api/admin/brand-images/route.ts GET:
+  - Defense-in-depth: server-side forces activeBrand = user.brandSlug
+    for BRAND_ADMIN (ignores URL ?brand=).
+  - scope.kind === "brand" now skips the curated-only filter so
+    BRAND_ADMIN sees ALL their own brand's uploads (not just curated).
+  - Added brand-scope handling for chapter-brand/ listing (Vercel Blob +
+    local sandbox).
+- /api/admin/brand-images/select/route.ts POST:
+  - BRAND_ADMIN can now select brand defaults (was Super-Admin-only).
+  - Brand param is forced to user.brandSlug server-side.
+- /api/admin/countries/route.ts POST:
+  - Now allows BRAND_ADMIN (was Super-Admin-only) so brand admins can
+    create chapters in countries not yet in the platform.
+- /admin/chapters/chapter-editor.tsx:
+  - Placeholders changed: name "New York" → "New York City", slug
+    "tel-aviv" → "new-york", hint "/c/tel-aviv" → "/c/new-york".
+  - Country dropdown: added "➕ Add new country…" option that opens an
+    inline Dialog to create a country (name + 2-letter code + flag emoji).
+    The new country is appended to the local countryList + auto-selected.
+  - Hero image: added "Pick from gallery" button using ImagePickerModalShared
+    from the mockups toolkit. Works in BOTH new + edit mode (no chapterId
+    needed — just sets form.heroImageUrl). Upload button remains
+    edit-mode-only.
+- Mockup preview JSX fixes (agenda-profile, event-profile, meet-the-speaker):
+  - Removed stray </div> that was inside {!previewMode && (<> ... </>)}
+    fragments — left over from the sed-based previewMode wrapping in the
+    previous task. Build was failing with "Expected corresponding closing
+    tag for JSX fragment" errors.
+  - Also fixed duplicate brandSlug attributes on the <ImagePickerModal>
+    / <ImagePickerModalShared> components in all 3 editors.
+- admin-members-table.tsx + api/admin/chapters/route.ts:
+  - Added missing normalizeRole import (was referenced but not imported —
+    pre-existing TS errors).
+
+Stage Summary:
+- Build: ✓ Compiled successfully in 44s (next build).
+- Commit: 185df10 "fix(brand-isolation): strict brand lock for BRAND_ADMIN + chapter editor polish"
+- 11 files changed, 389 insertions(+), 88 deletions(-)
+- All 3 user-reported issues addressed.
+- Pre-existing TS errors in agenda-profile/event-profile-canvas.tsx and
+  non-member-dashboard.tsx (chart typing) remain — not caused by this task.
