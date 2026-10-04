@@ -47,6 +47,10 @@ const PROVENANCE_BADGE: Record<
     label: "Code default",
     cls: "bg-blue-100 text-blue-800 border-blue-200",
   },
+  "ais-hardcoded": {
+    label: "AIS legacy",
+    cls: "bg-slate-100 text-slate-800 border-slate-200",
+  },
   "coma-fallback": {
     label: "⚠ Coma fallback",
     cls: "bg-amber-100 text-amber-800 border-amber-200",
@@ -320,6 +324,24 @@ function AssetTile({
 
 // ── Palette Editor ─────────────────────────────────────────────────────────
 
+/**
+ * Derive the brand gradient from the 3 palette colors. Mirrors the Coma
+ * brand-config pattern (conic gradient starting + ending with the
+ * secondary color for a seamless loop):
+ *   coma: "conic-gradient(from 180deg at 50% 50%, #E84855, #0A1F44, #F5A623, #E84855)"
+ *          → secondary, primary, accent, secondary
+ *
+ * Phase 4 (2026-10-02): the palette editor previously kept the gradient
+ * as a separate stored string — changing the colors did NOT update the
+ * gradient, so after saving the login page still showed the old colors
+ * in its gradient ornaments. Now the gradient auto-derives from the
+ * current 3 colors on every change (WYSIWYG: the preview swatch shows
+ * exactly what will be saved).
+ */
+function deriveGradient(p: { primary: string; accent: string; secondary: string }): string {
+  return `conic-gradient(from 180deg at 50% 50%, ${p.secondary}, ${p.primary}, ${p.accent}, ${p.secondary})`;
+}
+
 interface PaletteEditorProps {
   brandSlug: string;
   initial: BrandAssets["palette"];
@@ -334,13 +356,46 @@ function PaletteEditor({ brandSlug, initial, onSaved }: PaletteEditorProps) {
   // PATCH round-trip refresh).
   React.useEffect(() => setPalette(initial), [initial]);
 
+  /** Update one color + re-derive the gradient from the new palette. */
+  function updateColor(key: "primary" | "accent" | "secondary", value: string) {
+    setPalette((p) => {
+      const next = { ...p, [key]: value };
+      return { ...next, gradient: deriveGradient(next) };
+    });
+  }
+
   async function save() {
     setSaving(true);
     try {
+      // Validate that all 3 colors are COMPLETE 6-digit hex values before
+      // sending. The hex text field allows partial values while typing
+      // (e.g. "#4FF0F") — sending one would be silently dropped by the
+      // API's isHex() check (or worse, embedded in the derived gradient),
+      // producing the "saved but reverted" symptom again. Block the save
+      // with a clear message instead.
+      const incomplete = PALETTE_FIELDS.find(({ key }) => !/^#[0-9A-Fa-f]{6}$/.test(palette[key]));
+      if (incomplete) {
+        throw new Error(
+          `${incomplete.label} color is incomplete — use a full 6-digit hex like #4FF0F3.`,
+        );
+      }
       const res = await fetch(`/api/brand-assets/${brandSlug}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(palette),
+        // NOTE (2026-10-02): the PATCH endpoint expects the LONG-FORM keys
+        // (primaryColor / accentColor / secondaryColor) matching the Brand
+        // DB columns. This editor previously sent the SHORT-FORM keys
+        // (primary / accent / secondary) — the API silently dropped them
+        // (isHex(undefined) === false) while still returning ok:true, so
+        // the toast said "Palette saved" but the colors reverted on
+        // refresh. Only `gradient` happened to match. Fixed by sending
+        // the long-form keys.
+        body: JSON.stringify({
+          primaryColor: palette.primary,
+          accentColor: palette.accent,
+          secondaryColor: palette.secondary,
+          gradient: palette.gradient,
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Save failed");
@@ -385,9 +440,7 @@ function PaletteEditor({ brandSlug, initial, onSaved }: PaletteEditorProps) {
               <input
                 type="color"
                 value={palette[key]}
-                onChange={(e) =>
-                  setPalette((p) => ({ ...p, [key]: e.target.value }))
-                }
+                onChange={(e) => updateColor(key, e.target.value)}
                 className="h-9 w-12 rounded border border-border cursor-pointer p-0.5 bg-transparent"
                 aria-label={`${label} color picker`}
               />
@@ -397,7 +450,7 @@ function PaletteEditor({ brandSlug, initial, onSaved }: PaletteEditorProps) {
                 onChange={(e) => {
                   const v = e.target.value;
                   if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) {
-                    setPalette((p) => ({ ...p, [key]: v }));
+                    updateColor(key, v);
                   }
                 }}
                 className="flex-1 font-mono text-xs px-2 py-1.5 rounded border border-border bg-background"

@@ -156,6 +156,24 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  // ── KEY ALIASING (2026-10-02) ──────────────────────────────────────────
+  // The onboarding hub's PaletteEditor previously sent the SHORT-FORM keys
+  // (primary / accent / secondary) while this endpoint expects the
+  // LONG-FORM keys (primaryColor / accentColor / secondaryColor) that match
+  // the Brand DB columns. The colors were silently dropped (isHex(undefined)
+  // === false) while the API still returned ok:true — the "palette saved
+  // but reverts on refresh" bug. The client is now fixed to send long-form
+  // keys, but we ALSO accept the short-form aliases here so any other
+  // caller (or a stale cached client bundle) still saves correctly.
+  const shortForm = body as unknown as {
+    primary?: string;
+    accent?: string;
+    secondary?: string;
+  };
+  const primaryColorRaw = body.primaryColor ?? shortForm.primary;
+  const accentColorRaw = body.accentColor ?? shortForm.accent;
+  const secondaryColorRaw = body.secondaryColor ?? shortForm.secondary;
+
   // BRAND_ADMIN cannot flip status — only Super Admin can Activate.
   // If a non-super-admin tries, we silently drop the field (so their
   // palette/copy edits still go through, but the status doesn't move).
@@ -174,9 +192,9 @@ export async function PATCH(
   if (typeof body.tagline === "string") {
     data.tagline = body.tagline.trim().slice(0, 200);
   }
-  if (isHex(body.primaryColor)) data.primaryColor = body.primaryColor;
-  if (isHex(body.accentColor)) data.accentColor = body.accentColor;
-  if (isHex(body.secondaryColor)) data.secondaryColor = body.secondaryColor;
+  if (isHex(primaryColorRaw)) data.primaryColor = primaryColorRaw;
+  if (isHex(accentColorRaw)) data.accentColor = accentColorRaw;
+  if (isHex(secondaryColorRaw)) data.secondaryColor = secondaryColorRaw;
   if (typeof body.gradient === "string" && body.gradient.length <= 500) {
     data.gradient = body.gradient;
   }
